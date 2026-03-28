@@ -1,0 +1,63 @@
+# Example task definition — this is the reference format for all EnterpriseBench tasks.
+# See schemas/task.schema.json for the full schema.
+
+[task]
+id = "dep-mgmt-grpc-proto-bump-001"
+suite = "dependency_management"
+difficulty = "hard"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "gRPC protobuf v2 migration breaks etcd client"
+prompt = """
+The grpc-go library has upgraded from protobuf v1 to v2 (google.golang.org/protobuf).
+The etcd project depends on grpc-go but still uses protobuf v1 APIs in its client package.
+
+Your task:
+1. Identify all files in etcd that use deprecated protobuf v1 APIs
+2. Update them to use the protobuf v2 equivalents
+3. Ensure etcd's client package tests pass with the updated grpc-go dependency
+
+Both repositories are available under /workspace/.
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.60.0"
+path = "grpc-go"
+role = "dependency"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.5.10"
+path = "etcd"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+total_loc = 1_400_000
+max_complexity = 38
+dependency_depth = 2
+frameworks = ["grpc", "protobuf", "etcd"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_affected_files"
+weight = 0.20
+verifier = "checks/check_identification.sh"
+description = "Agent correctly identifies all files using deprecated protobuf v1 APIs"
+
+[[checkpoints]]
+name = "update_protobuf_apis"
+weight = 0.45
+verifier = "checks/check_api_migration.sh"
+description = "Protobuf v1 calls replaced with v2 equivalents"
+
+[[checkpoints]]
+name = "tests_pass"
+weight = 0.35
+verifier = "checks/check_tests.sh"
+description = "etcd client package tests pass with updated dependencies"
+
+[artifacts]
+required = ["code_patch"]
+optional = ["migration_guide"]

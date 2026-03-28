@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnterpriseBench Task Definition",
+  "description": "Schema for task.toml files defining benchmark tasks",
+  "type": "object",
+  "required": ["task", "repos", "checkpoints", "artifacts"],
+  "properties": {
+    "task": {
+      "type": "object",
+      "required": ["id", "suite", "difficulty", "session_type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique task identifier: {suite_prefix}-{description}-{number}",
+          "pattern": "^[a-z][a-z0-9-]+-\\d{3}$"
+        },
+        "suite": {
+          "type": "string",
+          "enum": [
+            "dependency_management",
+            "incident_response",
+            "platform_engineering",
+            "security_operations",
+            "customer_escalation",
+            "feature_delivery",
+            "technical_debt"
+          ]
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["medium", "hard", "expert"]
+        },
+        "estimated_duration_minutes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 480
+        },
+        "session_type": {
+          "type": "string",
+          "enum": ["single", "chain", "event_replay", "resume"]
+        },
+        "session_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Only for session_type=chain"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable task description"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "The instruction given to the agent"
+        }
+      }
+    },
+    "repos": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["url", "rev", "path"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Repository URL (github.com/org/repo)"
+          },
+          "rev": {
+            "type": "string",
+            "description": "Pinned revision (tag, commit hash, or branch)"
+          },
+          "path": {
+            "type": "string",
+            "description": "Directory name under /workspace/"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["primary", "dependency", "consumer"],
+            "description": "Repo's role in the task"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "total_loc": {
+          "type": "integer",
+          "description": "Combined lines of code across all repos"
+        },
+        "max_complexity": {
+          "type": "number",
+          "description": "Highest cyclomatic complexity score"
+        },
+        "dependency_depth": {
+          "type": "integer",
+          "description": "Depth of dependency chain (1 = single repo)"
+        },
+        "frameworks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "multi_repo_pattern": {
+          "type": "string",
+          "enum": ["propagate", "investigate", "enforce", "orchestrate"],
+          "description": "Primary multi-repo interaction pattern"
+        }
+      }
+    },
+    "checkpoints": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["name", "weight", "verifier"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable checkpoint name"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Score weight (all weights must sum to 1.0)"
+          },
+          "verifier": {
+            "type": "string",
+            "description": "Path to checkpoint verifier script"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this checkpoint validates"
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "code_patch",
+              "config",
+              "incident_report",
+              "runbook",
+              "reproduction_script",
+              "kb_article",
+              "security_assessment",
+              "migration_guide",
+              "answer"
+            ]
+          }
+        },
+        "optional": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "events": {
+      "type": "object",
+      "description": "Only for session_type=event_replay",
+      "properties": {
+        "event_file": {
+          "type": "string",
+          "description": "Path to events.jsonl"
+        },
+        "oracle_actions": {
+          "type": "string",
+          "description": "Path to oracle actions.jsonl for scoring"
+        }
+      }
+    },
+    "resume_state": {
+      "type": "object",
+      "description": "Only for session_type=resume",
+      "properties": {
+        "branch": {
+          "type": "string",
+          "description": "Pre-generated branch with partial progress"
+        },
+        "progress_doc": {
+          "type": "string",
+          "description": "Path to progress notes left by 'previous developer'"
+        }
+      }
+    }
+  }
+}
