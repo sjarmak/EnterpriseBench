@@ -61,3 +61,52 @@ description = "etcd client package tests pass with updated dependencies"
 [artifacts]
 required = ["code_patch"]
 optional = ["migration_guide"]
+
+# --- New fields from convergence report ---
+
+difficulty_stratum = "dual_repo"
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo protobuf usage requires searching grpc-go for v2 API patterns and etcd for v1 call sites — MCP cross-repo search significantly accelerates discovery"
+
+[[tool_access.sourcegraph_mirrors]]
+repo = "github.com/grpc/grpc-go"
+mirror_id = "sg-mirror-grpc-go-v1.60.0"
+
+[[tool_access.sourcegraph_mirrors]]
+repo = "github.com/etcd-io/etcd"
+mirror_id = "sg-mirror-etcd-v3.5.10"
+
+[ground_truth]
+tiers = ["deterministic", "curator"]
+
+[[ground_truth.required_files]]
+path = "clientv3/client.go"
+repo = "etcd"
+line_range = "45-120"
+confidence = 0.95
+source = "both"
+
+[[ground_truth.required_files]]
+path = "clientv3/lease.go"
+repo = "etcd"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "api/etcdserverpb/rpc.pb.go"
+repo = "etcd"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "clientv3/config.go"
+repo = "etcd"
+confidence = 0.65
+
+[[ground_truth.sufficient_files]]
+path = "encoding/proto/proto.go"
+repo = "grpc-go"
+line_range = "1-80"
+confidence = 0.70

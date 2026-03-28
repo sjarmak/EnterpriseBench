@@ -195,6 +195,124 @@
           "description": "Path to progress notes left by 'previous developer'"
         }
       }
+    },
+    "tool_access": {
+      "type": "object",
+      "description": "MCP tool access configuration and expected impact",
+      "properties": {
+        "expected_mcp_benefit": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "Expected benefit from MCP tools (high = multi-repo cross-reference, low = single-file fix)"
+        },
+        "mcp_benefit_rationale": {
+          "type": "string",
+          "description": "Why MCP tools are expected to help (or not) for this task"
+        },
+        "sourcegraph_mirrors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "repo": {
+                "type": "string",
+                "description": "Repository identifier in sg-evals mirror"
+              },
+              "mirror_id": {
+                "type": "string",
+                "description": "sg-evals mirror identifier"
+              }
+            }
+          },
+          "description": "Sourcegraph sg-evals mirror references for this task's repos"
+        }
+      }
+    },
+    "difficulty_stratum": {
+      "type": "string",
+      "enum": [
+        "calibration",
+        "large_single",
+        "dual_repo",
+        "multi_repo",
+        "monorepo_cross_package"
+      ],
+      "description": "Task mix stratum for benchmark distribution (15% calibration, 25% large_single, 30% dual_repo, 20% multi_repo, 10% monorepo)"
+    },
+    "ground_truth": {
+      "type": "object",
+      "description": "Layered ground truth for context retrieval evaluation",
+      "properties": {
+        "tiers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["deterministic", "curator", "solve_verified"]
+          },
+          "description": "Which ground truth tiers have been completed for this task"
+        },
+        "required_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "File path relative to /workspace/{repo}/"
+              },
+              "repo": {
+                "type": "string",
+                "description": "Which repo this file belongs to"
+              },
+              "line_range": {
+                "type": "string",
+                "description": "Relevant line range (e.g., '45-120'), null for entire file"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Confidence score from ground truth pipeline"
+              },
+              "source": {
+                "type": "string",
+                "enum": ["deterministic", "curator", "both"],
+                "description": "Which tier identified this file as required"
+              }
+            },
+            "required": ["path", "repo"]
+          },
+          "description": "Files that MUST be found — missing = significant penalty"
+        },
+        "sufficient_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "File path relative to /workspace/{repo}/"
+              },
+              "repo": {
+                "type": "string",
+                "description": "Which repo this file belongs to"
+              },
+              "line_range": {
+                "type": "string",
+                "description": "Relevant line range, null for entire file"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Confidence score from ground truth pipeline"
+              }
+            },
+            "required": ["path", "repo"]
+          },
+          "description": "Files that help but are not essential — missing = small penalty"
+        }
+      }
     }
   }
 }
