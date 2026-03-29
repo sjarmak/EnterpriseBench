@@ -11,7 +11,7 @@ description = "Map customer-reported 'upstream connect error, reset reason: over
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/envoyproxy/envoy"
+url = "https://github.com/envoyproxy/envoy"
 rev = "v1.31.2"
 path = "envoy"
 role = "primary"

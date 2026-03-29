@@ -31,13 +31,13 @@ Write your plan to /workspace/REFACTOR_PLAN.md with:
 """
 
 [[repos]]
-url = "github.com/spf13/cobra"
+url = "https://github.com/spf13/cobra"
 rev = "v1.10.2"
 path = "cobra"
 role = "upstream"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.33.0"
 path = "kubernetes"
 role = "consumer"

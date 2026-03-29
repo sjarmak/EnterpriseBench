@@ -31,19 +31,19 @@ Write your analysis to /workspace/BLAST_RADIUS.md with:
 """
 
 [[repos]]
-url = "github.com/lodash/lodash"
+url = "https://github.com/lodash/lodash"
 rev = "4.17.20"
 path = "lodash"
 role = "primary"
 
 [[repos]]
-url = "github.com/webpack/webpack"
+url = "https://github.com/webpack/webpack"
 rev = "v5.64.0"
 path = "webpack"
 role = "consumer"
 
 [[repos]]
-url = "github.com/jestjs/jest"
+url = "https://github.com/jestjs/jest"
 rev = "v29.0.0"
 path = "jest"
 role = "consumer"

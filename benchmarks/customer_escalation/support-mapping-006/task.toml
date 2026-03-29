@@ -11,7 +11,7 @@ description = "Map Firefox crash on pages with complex CSS calc() expressions to
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/mozilla/gecko-dev"
+url = "https://github.com/mozilla/gecko-dev"
 rev = "1a843e2167f97a3789f9d8a7a9772586f0e1c16f"
 path = "gecko-dev"
 role = "primary"

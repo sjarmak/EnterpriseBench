@@ -247,7 +247,7 @@ def check_mcp(task: TaskInfo) -> None:
         # strata legitimately benefit from MCP even with 1 repo, so only flag
         # plain large_single tasks.
         monorepo_strata = {
-            "monorepo_cross_package", "monorepo_cross_pkg",
+            "monorepo_cross_package",
         }
         is_monorepo = task.difficulty_stratum in monorepo_strata
         if expected == "high" and task.repos_count == 1 and not is_monorepo:
@@ -429,7 +429,7 @@ def generate_mcp_report(tasks: list[TaskInfo]) -> str:
         rat = t.mcp_benefit_rationale[:60] + "..." if len(t.mcp_benefit_rationale) > 60 else t.mcp_benefit_rationale
         # Assess plausibility
         plausible = "yes"
-        monorepo_s = {"monorepo_cross_package", "monorepo_cross_pkg"}
+        monorepo_s = {"monorepo_cross_package"}
         is_mr = t.difficulty_stratum in monorepo_s
         if t.expected_mcp_benefit == "high" and t.repos_count == 1 and not is_mr:
             plausible = "REVIEW"

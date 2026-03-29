@@ -26,7 +26,7 @@ Write your analysis to /workspace/zulip/SCHEMA_IMPACT.md.
 """
 
 [[repos]]
-url = "github.com/zulip/zulip"
+url = "https://github.com/zulip/zulip"
 rev = "912c1b598458f89afa6814b3a19b95d4648e2371"
 path = "zulip"
 role = "primary"

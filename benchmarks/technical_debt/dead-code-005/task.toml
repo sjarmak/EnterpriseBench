@@ -49,7 +49,7 @@ Write your findings to `/workspace/angular/dead_code_report.json` as a JSON arra
 """
 
 [[repos]]
-url = "github.com/angular/angular"
+url = "https://github.com/angular/angular"
 rev = "891318e805da3cdfb9839bf6cb3412c15c146253"
 path = "angular"
 role = "primary"

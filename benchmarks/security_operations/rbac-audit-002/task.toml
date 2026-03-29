@@ -51,8 +51,8 @@ authorization boundary that is violated.
 """
 
 [[repos]]
-url = "github.com/keycloak/keycloak"
-rev = "bfcb150e312362fa6fd9c6ac080bf58989949d93~1"
+url = "https://github.com/keycloak/keycloak"
+rev = "c8428c040a896696d9d0e99b37df509e59c6c7a4"
 path = "keycloak"
 role = "primary"
 

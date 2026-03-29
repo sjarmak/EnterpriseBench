@@ -11,7 +11,7 @@ description = "Map persistent false unread indicators in Element Web to thread v
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/element-hq/element-web"
+url = "https://github.com/element-hq/element-web"
 rev = "526645c79160ab1ad4b4c3845de27d51263a405e"
 path = "element-web"
 role = "primary"

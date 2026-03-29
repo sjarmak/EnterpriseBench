@@ -11,7 +11,7 @@ description = "Map customer-reported spurious pod evictions to Kubernetes evicti
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.28.0"
 path = "kubernetes"
 role = "primary"

@@ -39,13 +39,13 @@ Write your incident report to /workspace/grafana/INCIDENT_REPORT.md.
 """
 
 [[repos]]
-url = "github.com/grafana/grafana"
+url = "https://github.com/grafana/grafana"
 rev = "v10.1.0"
 path = "grafana"
 role = "primary"
 
 [[repos]]
-url = "github.com/prometheus/prometheus"
+url = "https://github.com/prometheus/prometheus"
 rev = "v2.46.0"
 path = "prometheus"
 role = "dependency"

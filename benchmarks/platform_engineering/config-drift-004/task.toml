@@ -48,7 +48,7 @@ structure:
 """
 
 [[repos]]
-url = "github.com/argoproj/argo-cd"
+url = "https://github.com/argoproj/argo-cd"
 rev = "v2.14.0-rc3"
 path = "argo-cd"
 role = "primary"

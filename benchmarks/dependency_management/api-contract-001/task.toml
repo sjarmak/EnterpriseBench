@@ -30,13 +30,13 @@ Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
 """
 
 [[repos]]
-url = "github.com/grpc/grpc-go"
+url = "https://github.com/grpc/grpc-go"
 rev = "v1.4.0"
 path = "grpc-go"
 role = "primary"
 
 [[repos]]
-url = "github.com/etcd-io/etcd"
+url = "https://github.com/etcd-io/etcd"
 rev = "v3.3.0"
 path = "etcd"
 role = "consumer"

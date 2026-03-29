@@ -42,13 +42,13 @@ Session 3 — Apply fix and write runbook (final session):
 """
 
 [[repos]]
-url = "github.com/grpc/grpc-go"
+url = "https://github.com/grpc/grpc-go"
 rev = "v1.60.0"
 path = "grpc-go"
 role = "primary"
 
 [[repos]]
-url = "github.com/prometheus/prometheus"
+url = "https://github.com/prometheus/prometheus"
 rev = "v2.48.0"
 path = "prometheus"
 role = "dependency"

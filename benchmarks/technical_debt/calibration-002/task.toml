@@ -11,7 +11,7 @@ description = "Identify unused exports and dead helper functions in Flask's modu
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/pallets/flask"
+url = "https://github.com/pallets/flask"
 rev = "3.1.0"
 path = "flask"
 role = "primary"

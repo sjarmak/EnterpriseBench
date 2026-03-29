@@ -29,19 +29,19 @@ Write your analysis to /workspace/BLAST_RADIUS.md.
 """
 
 [[repos]]
-url = "github.com/grpc/grpc-go"
+url = "https://github.com/grpc/grpc-go"
 rev = "v1.62.0"
 path = "grpc-go"
 role = "consumer"
 
 [[repos]]
-url = "github.com/istio/istio"
+url = "https://github.com/istio/istio"
 rev = "1.20.0"
 path = "istio"
 role = "consumer"
 
 [[repos]]
-url = "github.com/envoyproxy/go-control-plane"
+url = "https://github.com/envoyproxy/go-control-plane"
 rev = "v0.12.0"
 path = "go-control-plane"
 role = "consumer"

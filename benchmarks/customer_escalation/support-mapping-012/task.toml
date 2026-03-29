@@ -11,7 +11,7 @@ description = "Map messages appearing on wrong Kafka topic during broker restart
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/apache/kafka"
+url = "https://github.com/apache/kafka"
 rev = "3.7.0"
 path = "kafka"
 role = "primary"

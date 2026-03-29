@@ -11,7 +11,7 @@ description = "Trace Click flag_value with default=True having undocumented orde
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/pallets/click"
+url = "https://github.com/pallets/click"
 rev = "8.2.1"
 path = "click"
 role = "primary"

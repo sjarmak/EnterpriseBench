@@ -25,19 +25,19 @@ Write your analysis to /workspace/BLAST_RADIUS.md.
 """
 
 [[repos]]
-url = "github.com/axios/axios"
+url = "https://github.com/axios/axios"
 rev = "v0.21.1"
 path = "axios"
 role = "primary"
 
 [[repos]]
-url = "github.com/grafana/grafana"
+url = "https://github.com/grafana/grafana"
 rev = "v9.5.0"
 path = "grafana"
 role = "consumer"
 
 [[repos]]
-url = "github.com/apache/druid"
+url = "https://github.com/apache/druid"
 rev = "druid-26.0.0"
 path = "druid"
 role = "consumer"

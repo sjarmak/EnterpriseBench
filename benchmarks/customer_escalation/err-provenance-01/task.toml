@@ -11,7 +11,7 @@ description = "Trace misleading Job validation error about startTime removal"
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.33.0-alpha.1"
 path = "kubernetes"
 role = "primary"

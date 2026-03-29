@@ -11,7 +11,7 @@ description = "Map qutebrowser startup crash after power outage to corrupted ad-
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/qutebrowser/qutebrowser"
+url = "https://github.com/qutebrowser/qutebrowser"
 rev = "v3.0.0"
 path = "qutebrowser"
 role = "primary"

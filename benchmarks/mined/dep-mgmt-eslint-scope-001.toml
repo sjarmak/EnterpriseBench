@@ -35,13 +35,13 @@ then adapt it for typescript-eslint's scope manager architecture.
 """
 
 [[repos]]
-url = "github.com/eslint/eslint"
+url = "https://github.com/eslint/eslint"
 rev = "v10.0.0"
 path = "eslint"
 role = "dependency"
 
 [[repos]]
-url = "github.com/typescript-eslint/typescript-eslint"
+url = "https://github.com/typescript-eslint/typescript-eslint"
 rev = "v8.20.0"
 path = "typescript-eslint"
 role = "primary"

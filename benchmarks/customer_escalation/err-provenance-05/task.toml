@@ -11,7 +11,7 @@ description = "Trace spurious SessionAffinity warning for headless services"
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.32.0"
 path = "kubernetes"
 role = "primary"

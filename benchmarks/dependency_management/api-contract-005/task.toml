@@ -33,7 +33,7 @@ Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
 """
 
 [[repos]]
-url = "github.com/grpc/grpc-go"
+url = "https://github.com/grpc/grpc-go"
 rev = "v1.70.0"
 path = "grpc-go"
 role = "primary"

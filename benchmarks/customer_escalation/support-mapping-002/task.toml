@@ -11,7 +11,7 @@ description = "Map CI build crash with 'Cannot expand this type' to LLVM type le
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/llvm/llvm-project"
+url = "https://github.com/llvm/llvm-project"
 rev = "llvmorg-18.1.0"
 path = "llvm-project"
 role = "primary"

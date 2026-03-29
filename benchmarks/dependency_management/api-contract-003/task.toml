@@ -30,19 +30,19 @@ Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
 """
 
 [[repos]]
-url = "github.com/grpc/grpc-go"
+url = "https://github.com/grpc/grpc-go"
 rev = "v1.14.0"
 path = "grpc-go"
 role = "primary"
 
 [[repos]]
-url = "github.com/etcd-io/etcd"
+url = "https://github.com/etcd-io/etcd"
 rev = "v3.3.10"
 path = "etcd"
 role = "consumer"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.13.0"
 path = "kubernetes"
 role = "consumer"

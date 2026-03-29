@@ -28,19 +28,19 @@ Write your analysis to /workspace/BLAST_RADIUS.md.
 """
 
 [[repos]]
-url = "github.com/psf/requests"
+url = "https://github.com/psf/requests"
 rev = "v2.28.0"
 path = "requests"
 role = "primary"
 
 [[repos]]
-url = "github.com/boto/boto3"
+url = "https://github.com/boto/boto3"
 rev = "1.26.0"
 path = "boto3"
 role = "consumer"
 
 [[repos]]
-url = "github.com/aws/aws-cli"
+url = "https://github.com/aws/aws-cli"
 rev = "2.11.0"
 path = "awscli"
 role = "consumer"

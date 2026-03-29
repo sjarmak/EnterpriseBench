@@ -26,13 +26,13 @@ Write your analysis to /workspace/BLAST_RADIUS.md.
 """
 
 [[repos]]
-url = "github.com/grpc/grpc-node"
+url = "https://github.com/grpc/grpc-node"
 rev = "v1.8.0"
 path = "grpc-node"
 role = "consumer"
 
 [[repos]]
-url = "github.com/kubernetes-client/javascript"
+url = "https://github.com/kubernetes-client/javascript"
 rev = "0.18.0"
 path = "kubernetes-client-js"
 role = "consumer"

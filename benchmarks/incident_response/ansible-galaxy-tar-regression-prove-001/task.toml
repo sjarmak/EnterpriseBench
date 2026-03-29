@@ -14,7 +14,7 @@ description = "Write a regression test proving Galaxy collection tar extraction 
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/ansible/ansible"
+url = "https://github.com/ansible/ansible"
 rev = "v2.16.0"
 path = "ansible"
 role = "primary"

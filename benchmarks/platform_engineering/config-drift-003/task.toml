@@ -43,8 +43,8 @@ structure:
 """
 
 [[repos]]
-url = "github.com/bitnami/charts"
-rev = "36231~1"
+url = "https://github.com/bitnami/charts"
+rev = "478a81c9e91d2c2cf867e70aeea81e10cbcab9ce"
 path = "charts"
 role = "primary"
 

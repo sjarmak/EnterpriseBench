@@ -33,19 +33,19 @@ Write your analysis to /workspace/BLAST_RADIUS.md.
 """
 
 [[repos]]
-url = "github.com/spring-projects/spring-boot"
+url = "https://github.com/spring-projects/spring-boot"
 rev = "v2.6.1"
 path = "spring-boot"
 role = "consumer"
 
 [[repos]]
-url = "github.com/apache/kafka"
+url = "https://github.com/apache/kafka"
 rev = "3.1.0"
 path = "kafka"
 role = "consumer"
 
 [[repos]]
-url = "github.com/apache/logging-log4j2"
+url = "https://github.com/apache/logging-log4j2"
 rev = "rel/2.14.1"
 path = "log4j2"
 role = "primary"

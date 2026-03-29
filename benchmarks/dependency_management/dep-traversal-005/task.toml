@@ -29,19 +29,19 @@ Write your analysis to /workspace/BLAST_RADIUS.md.
 """
 
 [[repos]]
-url = "github.com/prometheus/prometheus"
+url = "https://github.com/prometheus/prometheus"
 rev = "v2.45.0"
 path = "prometheus"
 role = "consumer"
 
 [[repos]]
-url = "github.com/hashicorp/consul"
+url = "https://github.com/hashicorp/consul"
 rev = "v1.16.0"
 path = "consul"
 role = "consumer"
 
 [[repos]]
-url = "github.com/hashicorp/vault"
+url = "https://github.com/hashicorp/vault"
 rev = "v1.14.0"
 path = "vault"
 role = "consumer"

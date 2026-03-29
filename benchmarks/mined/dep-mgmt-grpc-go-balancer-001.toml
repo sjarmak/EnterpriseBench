@@ -31,13 +31,13 @@ and picker sub-packages.
 """
 
 [[repos]]
-url = "github.com/grpc/grpc-go"
+url = "https://github.com/grpc/grpc-go"
 rev = "v1.27.0"
 path = "grpc-go"
 role = "dependency"
 
 [[repos]]
-url = "github.com/etcd-io/etcd"
+url = "https://github.com/etcd-io/etcd"
 rev = "v3.4.7"
 path = "etcd"
 role = "primary"

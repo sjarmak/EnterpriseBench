@@ -11,7 +11,7 @@ description = "Trace container restart failure when sidecar is running"
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.33.0-alpha.2"
 path = "kubernetes"
 role = "primary"

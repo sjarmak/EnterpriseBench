@@ -16,7 +16,7 @@ description = "Trace GCC optimization pass registration and execution chain"
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/gcc-mirror/gcc"
+url = "https://github.com/gcc-mirror/gcc"
 rev = "a8f3c97d"
 path = "gcc"
 role = "primary"

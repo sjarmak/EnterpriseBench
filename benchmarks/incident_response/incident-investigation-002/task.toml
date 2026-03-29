@@ -42,7 +42,7 @@ Write your incident report to /workspace/kubernetes/INCIDENT_REPORT.md.
 """
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.9.1"
 path = "kubernetes"
 role = "primary"

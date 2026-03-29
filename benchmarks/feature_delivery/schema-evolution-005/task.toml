@@ -27,7 +27,7 @@ Write your analysis to /workspace/discourse/SCHEMA_IMPACT.md.
 """
 
 [[repos]]
-url = "github.com/discourse/discourse"
+url = "https://github.com/discourse/discourse"
 rev = "e7c3abb94b1db0ff811f991b873dcca9d589cd3a"
 path = "discourse"
 role = "primary"

@@ -31,13 +31,13 @@ Write your plan to /workspace/REFACTOR_PLAN.md with:
 """
 
 [[repos]]
-url = "github.com/etcd-io/etcd"
+url = "https://github.com/etcd-io/etcd"
 rev = "v3.6.0"
 path = "etcd"
 role = "upstream"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.32.0"
 path = "kubernetes"
 role = "consumer"

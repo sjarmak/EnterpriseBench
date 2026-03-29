@@ -93,7 +93,14 @@
           },
           "role": {
             "type": "string",
-            "enum": ["primary", "dependency", "consumer", "upstream", "intermediary", "deprecated_upstream"],
+            "enum": [
+              "primary",
+              "dependency",
+              "consumer",
+              "upstream",
+              "intermediary",
+              "deprecated_upstream"
+            ],
             "description": "Repo's role in the task"
           }
         }
@@ -259,8 +266,7 @@
         "dual_repo",
         "multi_repo",
         "monorepo_cross_package",
-        "tri_repo",
-        "monorepo_cross_pkg"
+        "tri_repo"
       ],
       "description": "Task mix stratum for benchmark distribution (15% calibration, 25% large_single, 30% dual_repo, 20% multi_repo, 10% monorepo)"
     },
@@ -353,7 +359,13 @@
         },
         "migration_status": {
           "type": "string",
-          "enum": ["pending", "schema_mapped", "metadata_merged", "verified", "complete"],
+          "enum": [
+            "pending",
+            "schema_mapped",
+            "metadata_merged",
+            "verified",
+            "complete"
+          ],
           "description": "Current stage in the CSB-to-EnterpriseBench migration pipeline"
         },
         "bugs_fixed": {

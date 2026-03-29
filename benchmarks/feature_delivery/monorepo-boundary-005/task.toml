@@ -30,7 +30,7 @@ Write your analysis to /workspace/pnpm/IMPACT_REPORT.md.
 """
 
 [[repos]]
-url = "github.com/pnpm/pnpm"
+url = "https://github.com/pnpm/pnpm"
 rev = "v8.15.9"
 path = "pnpm"
 role = "primary"

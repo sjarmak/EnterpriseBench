@@ -39,19 +39,19 @@ Write your plan to /workspace/REFACTOR_PLAN.md with:
 """
 
 [[repos]]
-url = "github.com/grpc/grpc-go"
+url = "https://github.com/grpc/grpc-go"
 rev = "v1.72.1"
 path = "grpc-go"
 role = "upstream"
 
 [[repos]]
-url = "github.com/etcd-io/etcd"
+url = "https://github.com/etcd-io/etcd"
 rev = "v3.5.17"
 path = "etcd"
 role = "intermediary"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.32.0"
 path = "kubernetes"
 role = "consumer"

@@ -11,7 +11,7 @@ description = "Map customer-reported dashboard formatting loss after import to G
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/grafana/grafana"
+url = "https://github.com/grafana/grafana"
 rev = "v10.2.0"
 path = "grafana"
 role = "primary"

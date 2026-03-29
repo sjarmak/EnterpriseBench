@@ -1,13 +1,13 @@
 # Cross-Task Consistency Audit
 
-Generated: 2026-03-29 17:38:05 UTC
+Generated: 2026-03-29 18:35:09 UTC
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
-| Tasks scanned | 97 |
-| Check scripts scanned | 337 |
+| Tasks scanned | 109 |
+| Check scripts scanned | 371 |
 | Tasks with violations | 0 |
 | Total violations | 0 |
 

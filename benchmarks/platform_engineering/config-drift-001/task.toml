@@ -41,8 +41,8 @@ structure for each drift point:
 """
 
 [[repos]]
-url = "github.com/bitnami/charts"
-rev = "33114~1"
+url = "https://github.com/bitnami/charts"
+rev = "130ffd163382dffd5762034291203a3ac2792fba"
 path = "charts"
 role = "primary"
 

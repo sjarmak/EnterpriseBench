@@ -14,7 +14,7 @@ description = "Refactor Apache Beam PipelineOptions validation to use the Builde
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/apache/beam"
+url = "https://github.com/apache/beam"
 rev = "v2.55.0"
 path = "beam"
 role = "primary"

@@ -45,7 +45,7 @@ structure:
 """
 
 [[repos]]
-url = "github.com/bitnami/charts"
+url = "https://github.com/bitnami/charts"
 rev = "53aca51120f86086e6780dc0453b93fbf49766b4"
 path = "charts"
 role = "primary"

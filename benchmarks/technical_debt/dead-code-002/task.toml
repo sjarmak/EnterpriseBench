@@ -50,7 +50,7 @@ Write your findings to `/workspace/react/dead_code_report.json` as a JSON array:
 """
 
 [[repos]]
-url = "github.com/facebook/react"
+url = "https://github.com/facebook/react"
 rev = "56408a5b12fa4099e9dbbeca7f6bc59e1307e507"
 path = "react"
 role = "primary"

@@ -35,13 +35,13 @@ compatibility with urllib3 1.26.x where feasible.
 """
 
 [[repos]]
-url = "github.com/urllib3/urllib3"
+url = "https://github.com/urllib3/urllib3"
 rev = "2.0.0"
 path = "urllib3"
 role = "dependency"
 
 [[repos]]
-url = "github.com/psf/requests"
+url = "https://github.com/psf/requests"
 rev = "v2.28.2"
 path = "requests"
 role = "primary"

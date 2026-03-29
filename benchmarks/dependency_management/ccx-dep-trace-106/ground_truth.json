@@ -2,6 +2,37 @@
   "repo": "gcc-mirror/gcc",
   "repo_rev": "a8f3c97d",
   "difficulty": "hard",
-  "required_files": [],
+  "required_files": [
+    {
+      "path": "gcc/passes.def",
+      "repo": "gcc",
+      "confidence": 0.8,
+      "source": "curator"
+    },
+    {
+      "path": "gcc/passes.cc",
+      "repo": "gcc",
+      "confidence": 0.8,
+      "source": "curator"
+    },
+    {
+      "path": "gcc/pass_manager.h",
+      "repo": "gcc",
+      "confidence": 0.8,
+      "source": "curator"
+    },
+    {
+      "path": "gcc/tree-ssa-dce.cc",
+      "repo": "gcc",
+      "confidence": 0.8,
+      "source": "curator"
+    },
+    {
+      "path": "gcc/tree-pass.h",
+      "repo": "gcc",
+      "confidence": 0.8,
+      "source": "curator"
+    }
+  ],
   "sufficient_files": []
 }

@@ -14,7 +14,7 @@ description = "Trace Apache Camel message routing from endpoint reception throug
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/apache/camel"
+url = "https://github.com/apache/camel"
 rev = "camel-4.4.0"
 path = "camel"
 role = "primary"

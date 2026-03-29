@@ -1,6 +1,6 @@
 # Refactor Orchestration: Babel 8 plugin-transform removal cascade
 
-difficulty_stratum = "monorepo_cross_pkg"
+difficulty_stratum = "monorepo_cross_package"
 
 [task]
 id = "refactor-orch-005"
@@ -40,7 +40,7 @@ Write your plan to /workspace/REFACTOR_PLAN.md with:
 """
 
 [[repos]]
-url = "github.com/babel/babel"
+url = "https://github.com/babel/babel"
 rev = "v7.25.0"
 path = "babel"
 role = "primary"

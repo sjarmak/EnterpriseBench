@@ -54,7 +54,7 @@ the line `hash = ((hash << 5) ^ (hash >> 27)) ^ bytes[i];` in your local file
 """
 
 [[repos]]
-url = "github.com/unknown/repo"
+url = "https://github.com/unknown/repo"
 rev = "HEAD"
 path = "repo"
 role = "primary"

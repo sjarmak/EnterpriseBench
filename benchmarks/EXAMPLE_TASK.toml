@@ -24,13 +24,13 @@ Both repositories are available under /workspace/.
 """
 
 [[repos]]
-url = "github.com/grpc/grpc-go"
+url = "https://github.com/grpc/grpc-go"
 rev = "v1.60.0"
 path = "grpc-go"
 role = "dependency"
 
 [[repos]]
-url = "github.com/etcd-io/etcd"
+url = "https://github.com/etcd-io/etcd"
 rev = "v3.5.10"
 path = "etcd"
 role = "primary"

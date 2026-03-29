@@ -29,7 +29,7 @@ Write your analysis to /workspace/rust/IMPACT_REPORT.md.
 """
 
 [[repos]]
-url = "github.com/rust-lang/rust"
+url = "https://github.com/rust-lang/rust"
 rev = "1.76.0"
 path = "rust"
 role = "primary"

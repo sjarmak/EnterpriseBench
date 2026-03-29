@@ -14,7 +14,7 @@ description = "Audit and harden S3 authentication in Ceph RADOS Gateway"
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/ceph/ceph"
+url = "https://github.com/ceph/ceph"
 rev = "v19.2.0"
 path = "ceph"
 role = "primary"

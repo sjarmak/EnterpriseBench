@@ -11,7 +11,7 @@ description = "Trace invalid UTF-8 gRPC error from env var expansion byte trunca
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.33.0-alpha.1"
 path = "kubernetes"
 role = "primary"

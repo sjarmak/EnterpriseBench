@@ -11,7 +11,7 @@ description = "Map empty notification dropdown and misplaced category selector t
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/NodeBB/NodeBB"
+url = "https://github.com/NodeBB/NodeBB"
 rev = "8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7"
 path = "NodeBB"
 role = "primary"

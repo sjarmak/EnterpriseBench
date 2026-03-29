@@ -11,7 +11,7 @@ description = "Identify parameter source drift between Click env var, default, a
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/pallets/click"
+url = "https://github.com/pallets/click"
 rev = "8.2.1"
 path = "click"
 role = "primary"

@@ -11,7 +11,7 @@ description = "Map Element Web white screen crash when opening threads panel to 
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/element-hq/element-web"
+url = "https://github.com/element-hq/element-web"
 rev = "8ebdcab7d92f90422776c4390363338dcfd98ba5"
 path = "element-web"
 role = "primary"

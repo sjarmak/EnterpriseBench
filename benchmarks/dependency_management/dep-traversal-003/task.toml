@@ -27,13 +27,13 @@ Write your analysis to /workspace/BLAST_RADIUS.md.
 """
 
 [[repos]]
-url = "github.com/go-chi/chi"
+url = "https://github.com/go-chi/chi"
 rev = "v5.0.8"
 path = "chi"
 role = "consumer"
 
 [[repos]]
-url = "github.com/gohugoio/hugo"
+url = "https://github.com/gohugoio/hugo"
 rev = "v0.111.0"
 path = "hugo"
 role = "consumer"

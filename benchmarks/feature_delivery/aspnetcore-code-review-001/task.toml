@@ -14,7 +14,7 @@ description = "Review ASP.NET Core Blazor DisplayName PR for injected bugs and c
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/dotnet/aspnetcore"
+url = "https://github.com/dotnet/aspnetcore"
 rev = "v9.0.0"
 path = "aspnetcore"
 role = "primary"

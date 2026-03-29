@@ -31,13 +31,13 @@ The repos under /workspace/ contain the payment-service and api-gateway code.
 """
 
 [[repos]]
-url = "github.com/stripe/stripe-go"
+url = "https://github.com/stripe/stripe-go"
 rev = "v76.0.0"
 path = "payment-service"
 role = "primary"
 
 [[repos]]
-url = "github.com/gin-gonic/gin"
+url = "https://github.com/gin-gonic/gin"
 rev = "v1.9.1"
 path = "api-gateway"
 role = "dependency"

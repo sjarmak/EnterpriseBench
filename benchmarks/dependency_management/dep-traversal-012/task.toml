@@ -33,19 +33,19 @@ Write your analysis to /workspace/BLAST_RADIUS.md.
 """
 
 [[repos]]
-url = "github.com/curl/curl"
+url = "https://github.com/curl/curl"
 rev = "curl-7_82_0"
 path = "curl"
 role = "consumer"
 
 [[repos]]
-url = "github.com/git/git"
+url = "https://github.com/git/git"
 rev = "v2.35.0"
 path = "git"
 role = "consumer"
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.24.0"
 path = "kubernetes"
 role = "consumer"

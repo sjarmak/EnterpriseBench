@@ -51,8 +51,8 @@ RFC 6750 compliance violations and document the attack surface.
 """
 
 [[repos]]
-url = "github.com/keycloak/keycloak"
-rev = "05ff44b8a0ea57ba9c68c4b416f8b90f5116bb83~1"
+url = "https://github.com/keycloak/keycloak"
+rev = "6fd372cbe60dff025c30da9d69da00f74097b1b9"
 path = "keycloak"
 role = "primary"
 

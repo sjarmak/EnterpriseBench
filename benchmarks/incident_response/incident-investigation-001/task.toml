@@ -39,7 +39,7 @@ sections: Root Cause, Error Chain, Affected Components, Remediation.
 """
 
 [[repos]]
-url = "github.com/kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes"
 rev = "v1.7.3"
 path = "kubernetes"
 role = "primary"

@@ -30,19 +30,19 @@ Write your analysis to /workspace/BLAST_RADIUS.md.
 """
 
 [[repos]]
-url = "github.com/FasterXML/jackson-databind"
+url = "https://github.com/FasterXML/jackson-databind"
 rev = "jackson-databind-2.13.2"
 path = "jackson-databind"
 role = "primary"
 
 [[repos]]
-url = "github.com/spring-projects/spring-boot"
+url = "https://github.com/spring-projects/spring-boot"
 rev = "v2.7.0"
 path = "spring-boot"
 role = "consumer"
 
 [[repos]]
-url = "github.com/dropwizard/dropwizard"
+url = "https://github.com/dropwizard/dropwizard"
 rev = "v2.1.0"
 path = "dropwizard"
 role = "consumer"

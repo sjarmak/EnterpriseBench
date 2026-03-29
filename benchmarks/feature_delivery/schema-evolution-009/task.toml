@@ -26,7 +26,7 @@ Write your analysis to /workspace/sentry/SCHEMA_IMPACT.md.
 """
 
 [[repos]]
-url = "github.com/getsentry/sentry"
+url = "https://github.com/getsentry/sentry"
 rev = "fad1fc61366a8162823603a9e86eafd96faa9c00"
 path = "sentry"
 role = "primary"

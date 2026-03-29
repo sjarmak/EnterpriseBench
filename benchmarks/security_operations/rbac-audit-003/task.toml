@@ -49,7 +49,7 @@ permission gap between system-level and project-level robot authorization.
 """
 
 [[repos]]
-url = "github.com/goharbor/harbor"
+url = "https://github.com/goharbor/harbor"
 rev = "v2.12.0"
 path = "harbor"
 role = "primary"

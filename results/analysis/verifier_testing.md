@@ -1,6 +1,6 @@
 # Verifier Testing Report
 
-Generated: 2026-03-29 16:01:37 UTC
+Generated: 2026-03-29 18:34:06 UTC
 
 ## Summary
 
@@ -41,7 +41,7 @@ Generated: 2026-03-29 16:01:37 UTC
 | refactor-orchestration-001 | check_parallelism | good | 0 | yes | 0.8 | True | OK |
 | refactor-orchestration-001 | check_repo_set | good | 0 | yes | 1.0 | True | OK |
 | refactor-orchestration-001 | check_topo_order | good | 0 | yes | 2.0 | True | OK |
-| dead-code-001 | check_dead_code | good | 0 | yes | 1.0 | N/A | OK |
+| dead-code-001 | check_dead_code | good | 0 | yes | 0.8889 | N/A | OK |
 | dead-code-001 | check_evidence | good | 0 | yes | 1.0 | N/A | OK |
 | dead-code-001 | check_feature_flags | good | 0 | yes | 1.0 | N/A | OK |
 | incident-investigation-001 | check_affected_services | good | 0 | yes | 1.0 | True | OK |
@@ -76,7 +76,7 @@ Generated: 2026-03-29 16:01:37 UTC
 | refactor-orchestration-001 | check_parallelism | partial | 0 | yes | 1.0 | True | OK |
 | refactor-orchestration-001 | check_repo_set | partial | 0 | yes | 1.0 | True | OK |
 | refactor-orchestration-001 | check_topo_order | partial | 0 | yes | 0.0 | False | OK |
-| dead-code-001 | check_dead_code | partial | 0 | yes | 0.4048 | N/A | OK |
+| dead-code-001 | check_dead_code | partial | 0 | yes | 0.25 | N/A | OK |
 | dead-code-001 | check_evidence | partial | 0 | yes | 1.0 | N/A | OK |
 | dead-code-001 | check_feature_flags | partial | 0 | yes | 0.0 | N/A | OK |
 | incident-investigation-001 | check_affected_services | partial | 0 | yes | 0.67 | True | OK |

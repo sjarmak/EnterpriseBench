@@ -29,19 +29,19 @@ Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
 """
 
 [[repos]]
-url = "github.com/envoyproxy/envoy"
+url = "https://github.com/envoyproxy/envoy"
 rev = "v1.18.0"
 path = "envoy"
 role = "primary"
 
 [[repos]]
-url = "github.com/envoyproxy/go-control-plane"
+url = "https://github.com/envoyproxy/go-control-plane"
 rev = "v0.9.8"
 path = "go-control-plane"
 role = "consumer"
 
 [[repos]]
-url = "github.com/istio/istio"
+url = "https://github.com/istio/istio"
 rev = "1.6.0"
 path = "istio"
 role = "consumer"

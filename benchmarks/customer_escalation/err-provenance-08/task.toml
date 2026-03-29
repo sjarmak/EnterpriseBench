@@ -11,7 +11,7 @@ description = "Trace nil pointer panic during backend migration with permission 
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/hashicorp/terraform"
+url = "https://github.com/hashicorp/terraform"
 rev = "v1.10.0"
 path = "terraform"
 role = "primary"
