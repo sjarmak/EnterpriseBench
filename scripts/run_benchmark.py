@@ -275,6 +275,15 @@ def build_parser() -> argparse.ArgumentParser:
     runner_group.add_argument("--source", choices=["mirror", "upstream"])
     runner_group.add_argument("--agent", type=str)
     runner_group.add_argument("--timeout", type=int)
+    runner_group.add_argument(
+        "--account",
+        type=int,
+        default=None,
+        help=(
+            "OAuth account number N (loads token from "
+            "~/.claude-homes/accountN/.claude/.credentials.json)"
+        ),
+    )
     runner_group.add_argument("--dry-run", action="store_true", help="List tasks without running")
 
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -290,6 +299,8 @@ def collect_passthrough_args(args: argparse.Namespace) -> list[str]:
         result.extend(["--agent", args.agent])
     if args.timeout:
         result.extend(["--timeout", str(args.timeout)])
+    if args.account is not None:
+        result.extend(["--account", str(args.account)])
     if args.dry_run:
         result.append("--dry-run")
     return result

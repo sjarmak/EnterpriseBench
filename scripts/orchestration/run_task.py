@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -52,6 +53,7 @@ class TaskRunConfig:
     no_build: bool = False
     keep_container: bool = False
     verbose: bool = False
+    account: int | None = None
 
 
 @dataclass
@@ -67,6 +69,60 @@ class TaskRunResult:
     scores: dict = field(default_factory=dict)
     timing: dict = field(default_factory=dict)
     output_dir: str = ""
+
+
+def _load_oauth_token(account: int) -> str:
+    """Load and validate an OAuth access token for the given account number.
+
+    Reads credentials from ~/.claude-homes/account{N}/.claude/.credentials.json,
+    checks the token has not expired, and returns the access token string.
+
+    Raises:
+        FileNotFoundError: If the credentials file does not exist.
+        ValueError: If the token is expired or the credentials are malformed.
+    """
+    real_home = Path(os.environ.get("HOME", str(Path.home())))
+    creds_path = real_home / ".claude-homes" / f"account{account}" / ".claude" / ".credentials.json"
+
+    if not creds_path.is_file():
+        raise FileNotFoundError(
+            f"Credentials file not found for account {account}: {creds_path}"
+        )
+
+    try:
+        creds = json.loads(creds_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(
+            f"Failed to read credentials for account {account}: {exc}"
+        ) from exc
+
+    oauth = creds.get("claudeAiOauth")
+    if not oauth or not isinstance(oauth, dict):
+        raise ValueError(
+            f"Missing or invalid claudeAiOauth section in {creds_path}"
+        )
+
+    access_token = oauth.get("accessToken")
+    if not access_token:
+        raise ValueError(f"No accessToken found in {creds_path}")
+
+    expires_at_ms = oauth.get("expiresAt", 0)
+    now_ms = int(time.time() * 1000)
+    if expires_at_ms <= now_ms:
+        expired_at = datetime.fromtimestamp(expires_at_ms / 1000, tz=timezone.utc)
+        raise ValueError(
+            f"OAuth token for account {account} expired at {expired_at.isoformat()}. "
+            f"Run: python3 scripts/infra/headless_login.py --account {account}"
+        )
+
+    remaining_min = (expires_at_ms - now_ms) // 60000
+    logger.info("Account %d: token valid, %d minutes remaining", account, remaining_min)
+    return access_token
+
+
+DEFAULT_OAUTH_AGENT_COMMAND = (
+    "claude --dangerously-skip-permissions --max-turns 30 --output-format json -p"
+)
 
 
 def _parse_task(toml_path: Path) -> dict:
@@ -276,6 +332,7 @@ def _run_agent(
     agent_command: str,
     timeout: int,
     output_dir: Path,
+    env_extra: dict[str, str] | None = None,
 ) -> tuple[int, float]:
     """Execute the agent command inside the container.
 
@@ -283,11 +340,23 @@ def _run_agent(
     """
     logger.info("Running agent: %s (timeout=%ds)", agent_command, timeout)
 
+    # Build env flags for docker exec
+    env_flags: list[str] = []
+    for key, value in (env_extra or {}).items():
+        env_flags.extend(["-e", f"{key}={value}"])
+
     start = time.monotonic()
     try:
-        result = _docker_exec(
-            container_id,
-            ["bash", "-c", f"{agent_command} < /workspace/instruction.md"],
+        full_cmd = (
+            ["docker", "exec"]
+            + env_flags
+            + ["-w", "/workspace", container_id]
+            + ["bash", "-c", f"{agent_command} < /workspace/instruction.md"]
+        )
+        result = subprocess.run(
+            full_cmd,
+            capture_output=True,
+            text=True,
             timeout=timeout,
         )
         duration = time.monotonic() - start
@@ -452,10 +521,21 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             return result
 
         # --- Phase 4: Agent ---
-        if config.agent_command:
+        # Resolve OAuth token if --account was specified
+        env_extra: dict[str, str] = {}
+        agent_command = config.agent_command
+        if config.account is not None:
+            oauth_token = _load_oauth_token(config.account)
+            env_extra["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
+            # Use default OAuth agent command if none was explicitly provided
+            if not agent_command:
+                agent_command = DEFAULT_OAUTH_AGENT_COMMAND
+
+        if agent_command:
             t0 = time.monotonic()
             agent_exit, agent_duration = _run_agent(
-                container_id, config.agent_command, config.timeout, output_dir,
+                container_id, agent_command, config.timeout, output_dir,
+                env_extra=env_extra,
             )
             timings["agent"] = agent_duration
         else:
@@ -553,6 +633,16 @@ Examples:
         help="Keep container after run for debugging",
     )
     parser.add_argument(
+        "--account",
+        type=int,
+        default=None,
+        help=(
+            "OAuth account number N (loads token from "
+            "~/.claude-homes/accountN/.claude/.credentials.json). "
+            "When set, CLAUDE_CODE_OAUTH_TOKEN is passed into the container."
+        ),
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable debug logging",
@@ -575,6 +665,7 @@ Examples:
         no_build=args.no_build,
         keep_container=args.keep_container,
         verbose=args.verbose,
+        account=args.account,
     )
 
     result = run_task(config)
