@@ -269,11 +269,35 @@ def _setup_container(
     - test_runner.sh -> /workspace/test.sh
     - eb_verify library -> /workspace/.eb_verify/ (if needed by check scripts)
     """
-    # Copy instruction.md
+    # Copy instruction.md with output format appendix
     instruction = task_dir / "instruction.md"
     if instruction.exists():
-        _docker_cp(str(instruction), f"{container_id}:/workspace/instruction.md")
-        logger.info("Copied instruction.md into container")
+        import tempfile
+        instruction_text = instruction.read_text()
+        output_appendix = (
+            "\n\n---\n\n## Output Requirements\n\n"
+            "Write your findings as a JSON file to `/workspace/agent_output/answer.json`.\n"
+            "Create the directory first: `mkdir -p /workspace/agent_output`\n\n"
+            "Include all relevant fields for this task type. Example structure:\n"
+            "```json\n"
+            "{\n"
+            '  "source_files": [{"path": "relative/path/to/file"}],\n'
+            '  "error_chain": ["Step 1", "Step 2"],\n'
+            '  "trigger_conditions": ["Condition 1"],\n'
+            '  "code_paths": [{"path": "relative/path"}],\n'
+            '  "ownership": "subsystem description",\n'
+            '  "severity": {"level": "high", "rationale": "..."}\n'
+            "}\n```\n"
+            "Include only the fields relevant to this task. "
+            "Your answer is evaluated against a closed-world oracle — completeness matters.\n"
+        )
+        combined = instruction_text + output_appendix
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(combined)
+            tmp_path = f.name
+        _docker_cp(tmp_path, f"{container_id}:/workspace/instruction.md")
+        os.unlink(tmp_path)
+        logger.info("Copied instruction.md with output appendix into container")
     else:
         logger.warning("No instruction.md found in %s", task_dir)
 
@@ -305,6 +329,48 @@ def _setup_container(
     if EB_VERIFY_LIB.is_dir():
         _docker_cp(str(EB_VERIFY_LIB), f"{container_id}:/workspace/.eb_verify")
         logger.info("Copied eb_verify library into container")
+
+    # Copy ground_truth.json into a task metadata directory for verifiers
+    gt_file = task_dir / "ground_truth.json"
+    _docker_exec(container_id, ["mkdir", "-p", "/workspace/.task"])
+    if gt_file.exists():
+        _docker_cp(str(gt_file), f"{container_id}:/workspace/.task/ground_truth.json")
+        logger.info("Copied ground_truth.json into container")
+
+
+def _install_claude_cli(container_id: str) -> bool:
+    """Install Claude Code CLI and create non-root agent user. Returns True on success."""
+    logger.info("Installing Claude Code CLI...")
+    # Ensure Node.js is available (node:20 and python:3.11 images have it,
+    # others may need it installed first)
+    check_node = _docker_exec(container_id, ["which", "node"])
+    if check_node.returncode != 0:
+        logger.info("Node.js not found, installing via apt...")
+        _docker_exec(container_id, [
+            "bash", "-c",
+            "apt-get update -qq && apt-get install -y -qq nodejs npm >/dev/null 2>&1"
+        ])
+    result = _docker_exec(container_id, [
+        "bash", "-c",
+        "npm install -g @anthropic-ai/claude-code@latest 2>&1 | tail -3"
+    ])
+    if result.returncode != 0:
+        logger.error("Failed to install Claude Code CLI: %s", result.stderr)
+        return False
+    # Create non-root user for agent execution (Claude Code refuses
+    # --dangerously-skip-permissions as root)
+    _docker_exec(container_id, [
+        "bash", "-c",
+        "useradd -m -s /bin/bash agent 2>/dev/null; "
+        "chown -R agent:agent /workspace"
+    ])
+    # Verify
+    ver = _docker_exec(container_id, ["claude", "--version"])
+    if ver.returncode == 0:
+        logger.info("Claude Code CLI installed: %s", ver.stdout.strip())
+        return True
+    logger.error("Claude Code CLI not found after install")
+    return False
 
 
 def _run_health_check(container_id: str, repos: list[dict]) -> bool:
@@ -350,8 +416,11 @@ def _run_agent(
         full_cmd = (
             ["docker", "exec"]
             + env_flags
-            + ["-w", "/workspace", container_id]
-            + ["bash", "-c", f"{agent_command} < /workspace/instruction.md"]
+            + ["-u", "agent", "-e", "HOME=/home/agent",
+               "-w", "/workspace", container_id]
+            + ["bash", "-c",
+               "mkdir -p /workspace/agent_output && "
+               f"{agent_command} < /workspace/instruction.md"]
         )
         result = subprocess.run(
             full_cmd,
@@ -383,7 +452,10 @@ def _run_scoring(container_id: str) -> dict:
 
     result = _docker_exec(
         container_id,
-        ["bash", "/workspace/test.sh"],
+        ["bash", "-c",
+         "export WORKSPACE=/workspace TASK_DIR=/workspace/.task "
+         "PYTHONPATH=/workspace/.eb_verify:${PYTHONPATH:-}; "
+         "bash /workspace/test.sh"],
         timeout=300,
     )
 
@@ -530,6 +602,11 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # Use default OAuth agent command if none was explicitly provided
             if not agent_command:
                 agent_command = DEFAULT_OAUTH_AGENT_COMMAND
+            # Install Claude Code CLI inside the container
+            if not _install_claude_cli(container_id):
+                result.phase = "setup_failed"
+                result.error = "Failed to install Claude Code CLI"
+                return result
 
         if agent_command:
             t0 = time.monotonic()
