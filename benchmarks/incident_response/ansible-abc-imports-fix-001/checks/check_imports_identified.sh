@@ -14,8 +14,8 @@ if find "$WORKSPACE/ansible" -name "*.py" -newer "$WORKSPACE/.task_start" 2>/dev
     FOUND=$((FOUND + 1))
 fi
 
-# Check if _collections_compat.py was identified (referenced in any output)
-if grep -rq "_collections_compat" "$WORKSPACE/ansible/lib/ansible/module_utils/common/_collections_compat.py" 2>/dev/null; then
+# Check if _collections_compat.py was identified in agent's output (answer.json, patches, or logs)
+if grep -rq "_collections_compat" "$WORKSPACE/agent_output/" 2>/dev/null; then
     FOUND=$((FOUND + 1))
 fi
 

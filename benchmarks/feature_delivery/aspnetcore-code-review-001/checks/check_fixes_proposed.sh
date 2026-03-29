@@ -4,15 +4,15 @@ set -euo pipefail
 
 WORKSPACE="${WORKSPACE:-/workspace}"
 
-REVIEW_FILE="$WORKSPACE/review.json"
+export REVIEW_FILE="$WORKSPACE/agent_output/answer.json"
 if [[ ! -f "$REVIEW_FILE" ]]; then
-    printf '{"score": 0.0, "passed": false, "detail": "No review.json found"}\n'
+    printf '{"score": 0.0, "passed": false, "detail": "No answer.json found"}\n'
     exit 0
 fi
 
 python3 -c "
-import json
-review = json.load(open('$REVIEW_FILE'))
+import json, os
+review = json.load(open(os.environ['REVIEW_FILE']))
 if not isinstance(review, list):
     print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'review.json is not a JSON array'}))
 else:

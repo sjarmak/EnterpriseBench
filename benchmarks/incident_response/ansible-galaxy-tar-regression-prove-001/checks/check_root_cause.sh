@@ -10,11 +10,14 @@ FOUND=0
 TOTAL=2
 
 # Look for any agent output referencing the key files
-AGENT_OUTPUT=$(find "$WORKSPACE" -maxdepth 1 -name "*.py" -o -name "*.md" -o -name "*.json" 2>/dev/null | head -5)
 ALL_TEXT=""
-for f in $AGENT_OUTPUT; do
+while IFS= read -r f; do
     ALL_TEXT="$ALL_TEXT $(cat "$f" 2>/dev/null)"
-done
+done < <(find "$WORKSPACE" -maxdepth 1 \( -name "*.py" -o -name "*.md" -o -name "*.json" \) 2>/dev/null | head -5)
+# Also check agent_output/ directory
+if [[ -d "$WORKSPACE/agent_output" ]]; then
+    ALL_TEXT="$ALL_TEXT $(cat "$WORKSPACE/agent_output"/* 2>/dev/null)"
+fi
 
 if echo "$ALL_TEXT" | grep -qi "concrete_artifact_manager\|tar.*member\|getmember\|_tar_member"; then
     FOUND=$((FOUND + 1))
