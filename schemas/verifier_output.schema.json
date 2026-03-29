@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verifier_output.schema.json",
+  "title": "EnterpriseBench Verifier Output",
+  "description": "Standardized output contract for all checkpoint verifiers. Verifiers MUST write JSON to stdout. Fallback: exit 0 = {score: 1.0, passed: true}, exit nonzero = {score: 0.0, passed: false}.",
+  "type": "object",
+  "required": ["score", "passed"],
+  "properties": {
+    "score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Normalized score. 0.0 = complete failure, 1.0 = full credit. Partial credit allowed."
+    },
+    "passed": {
+      "type": "boolean",
+      "description": "Whether the checkpoint met its minimum passing threshold"
+    },
+    "detail": {
+      "type": "string",
+      "description": "Human-readable explanation of the result"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["file_match", "test_result", "ast_check", "content_check", "custom"]
+          },
+          "path": { "type": "string" },
+          "expected": { "type": "string" },
+          "actual": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      },
+      "description": "Structured evidence supporting the score. Optional but recommended for debugging."
+    }
+  }
+}

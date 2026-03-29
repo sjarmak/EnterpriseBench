@@ -1,0 +1,132 @@
+# Example 2-session chain task: Investigate breaking change, then fix it.
+#
+# Session 1: Agent investigates a protobuf v2 migration breaking etcd's client,
+#   identifies affected files, and writes an investigation report.
+# Session 2: Agent receives the investigation (via git branch) and implements the fix.
+
+[task]
+id = "dep-mgmt-proto-v2-chain-001"
+suite = "dependency_management"
+difficulty = "hard"
+estimated_duration_minutes = 60
+session_type = "chain"
+session_count = 2
+description = "Two-session protobuf v2 migration: investigate then fix"
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.60.0"
+path = "grpc-go"
+role = "dependency"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.5.10"
+path = "etcd"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+total_loc = 1_400_000
+max_complexity = 38
+dependency_depth = 2
+frameworks = ["grpc", "protobuf", "etcd"]
+multi_repo_pattern = "propagate"
+
+# --- Per-session definitions ---
+
+[[sessions]]
+prompt = """
+The grpc-go library is migrating from protobuf v1 to v2. The etcd project
+depends on grpc-go and still uses protobuf v1 APIs.
+
+YOUR TASK (Investigation Phase):
+1. Examine both repositories under /workspace/
+2. Identify ALL files in etcd that use deprecated protobuf v1 APIs
+3. For each file, note the specific v1 API calls and their v2 replacements
+4. Write your findings to /workspace/etcd/INVESTIGATION.md with:
+   - List of affected files
+   - For each file: v1 API used, v2 replacement, estimated complexity
+   - Recommended migration order
+   - Risk assessment
+
+Do NOT make code changes yet. Investigation only.
+"""
+
+[[sessions.milestones]]
+name = "investigation_report_exists"
+verifier = "checks/check_investigation.sh"
+
+[[sessions.milestones]]
+name = "affected_files_identified"
+verifier = "checks/check_file_list.sh"
+
+[[sessions]]
+prompt = """
+You are continuing work on the protobuf v2 migration for etcd.
+
+A previous investigation was completed (see /workspace/etcd/INVESTIGATION.md).
+Review the investigation report, then:
+
+1. Update all identified files to use protobuf v2 APIs
+2. Update go.mod dependencies as needed
+3. Ensure the etcd client package compiles with the new APIs
+4. Write a brief MIGRATION_SUMMARY.md noting what was changed and any caveats
+
+The investigation from the previous session is available on the current branch.
+"""
+
+[[sessions.milestones]]
+name = "code_changes_applied"
+verifier = "checks/check_migration.sh"
+
+# --- Final checkpoints (run after all sessions) ---
+
+[[checkpoints]]
+name = "investigation_quality"
+weight = 0.20
+verifier = "checks/check_investigation.sh"
+description = "Investigation report is complete and accurate"
+
+[[checkpoints]]
+name = "api_migration_correct"
+weight = 0.45
+verifier = "checks/check_migration.sh"
+description = "All protobuf v1 calls correctly replaced with v2"
+
+[[checkpoints]]
+name = "compilation_succeeds"
+weight = 0.35
+verifier = "checks/check_compilation.sh"
+description = "etcd client package compiles with updated dependencies"
+
+[artifacts]
+required = ["code_patch"]
+optional = ["migration_guide"]
+
+# --- Simulation data (for --simulate mode) ---
+
+[simulation.session_1]
+actions = [
+    { repo = "etcd", file = "INVESTIGATION.md", content = """# Protobuf v2 Migration Investigation
+
+## Affected Files
+1. client/v3/client.go - uses github.com/golang/protobuf/proto.Marshal
+2. client/v3/naming/resolver.go - uses ptypes.MarshalAny
+3. server/etcdserver/api/v3rpc/util.go - uses proto.MessageV1
+
+## Migration Order
+1. client/v3/client.go (most dependencies)
+2. server/etcdserver/api/v3rpc/util.go
+3. client/v3/naming/resolver.go
+
+## Risk Assessment
+Medium - well-documented migration path exists.
+""" },
+]
+
+[simulation.session_2]
+actions = [
+    { repo = "etcd", file = "client/v3/client_updated.go", content = "// Updated to use google.golang.org/protobuf/proto\npackage clientv3\n" },
+    { repo = "etcd", file = "MIGRATION_SUMMARY.md", content = "# Migration Summary\n\nUpdated 3 files from protobuf v1 to v2 APIs.\n" },
+]

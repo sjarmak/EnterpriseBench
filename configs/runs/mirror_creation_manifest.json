@@ -1,0 +1,25 @@
+{
+  "_description": "Mirrors needed for reproducible Sourcegraph indexing (EnterpriseBench)",
+  "_generated": "2026-03-28",
+  "_status": "2 mirrors from 1 task files",
+  "mirrors": [
+    {
+      "upstream": "github.com/etcd-io/etcd",
+      "commit": "v3.5.10",
+      "mirror": "sg-evals/etcd--v3.5.10",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-mgmt-grpc-proto-bump-001"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.60.0",
+      "mirror": "sg-evals/grpc-go--v1.60.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-mgmt-grpc-proto-bump-001"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+# Chain session task — requires session_count
+
+[task]
+id = "chain-task-001"
+suite = "feature_delivery"
+difficulty = "hard"
+session_type = "chain"
+session_count = 3
+description = "A multi-session chain task"
+prompt = "Implement across multiple sessions."
+
+[[repos]]
+url = "github.com/example/app"
+rev = "main"
+path = "app"
+role = "primary"
+
+[[checkpoints]]
+name = "session_one_complete"
+weight = 0.50
+verifier = "checks/session1.sh"
+
+[[checkpoints]]
+name = "session_two_complete"
+weight = 0.50
+verifier = "checks/session2.sh"
+
+[artifacts]
+required = []
+optional = ["code_patch"]

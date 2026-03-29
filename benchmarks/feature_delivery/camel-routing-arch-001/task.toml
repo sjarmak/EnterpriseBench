@@ -1,0 +1,129 @@
+# Migrated from CodeScaleBench: camel-routing-arch-001
+# Origin suite: csb_sdlc_design
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "camel-routing-arch-001"
+suite = "feature_delivery"
+difficulty = "hard"
+estimated_duration_minutes = 20
+session_type = "single"
+description = "Trace how Apache Camel routes a message from endpoint reception through the EIP pipeline to a destination"
+prompt = """
+# big-code-camel-arch-001: Apache Camel Message Routing Architecture
+
+## Task
+
+Trace how Apache Camel routes a message from endpoint reception through the EIP pipeline to a destination. Map the complete Component→Endpoint→Consumer→Processor→Producer hierarchy, including the Pipeline processor chain, Channel interceptor wiring, and the RouteReifier model-to-runtime bridge.
+
+## Context
+
+- **Repository**: apache/camel (Java, ~2.8M LOC)
+- **Category**: Architectural Understanding
+- **Difficulty**: hard
+- **Subsystem Focus**: core/ — the Camel core routing engine (camel-api, camel-support, camel-core-processor, camel-base-engine, camel-core-reifier)
+
+## Requirements
+
+1. Identify all relevant components in the Component→Endpoint→Consumer→Processor→Producer hierarchy (API interfaces + base implementations)
+2. Trace the dependency chain from route definition through reification to runtime message processing
+3. Document the Pipeline and Channel architecture (how processors are chained and intercepted)
+4. Explain how the RouteReifier bridges the DSL model (RouteDefinition) to the runtime Route
+
+## Expected Output
+
+Write your analysis to `/logs/agent/solution.md` with the following structure:
+
+```
+## Files Examined
+- path/to/file1.ext — role in architecture
+- path/to/file2.ext — role in architecture
+...
+
+## Dependency Chain
+1. Entry point: path/to/entry.ext
+2. Calls: path/to/next.ext (via function/method name)
+3. Delegates to: path/to/impl.ext
+...
+
+## Analysis
+[Detailed architectural analysis including:
+- Design patterns identified
+- Component responsibilities
+- Data flow description
+- Interface contracts between components]
+
+## Summary
+[Concise 2-3 sentence summary answering the task question]
+```
+
+## Evaluation Criteria
+
+- File recall: Did you find the correct set of architecturally relevant files?
+- Dependency accuracy: Did you trace the correct dependency/call chain?
+- Architectural coherence: Did you correctly identify the design patterns and component relationships?
+"""
+
+[[repos]]
+url = "github.com/apache/camel"
+rev = "HEAD"
+path = "camel"
+role = "primary"
+
+[metadata]
+languages = ["java"]
+dependency_depth = 1
+
+[[checkpoints]]
+name = "primary_verification"
+weight = 1.0
+verifier = "tests/test.sh"
+description = "Primary verification: Trace how Apache Camel routes a message from endpoint reception through the EIP pipeline to a destination"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+
+[ground_truth]
+tiers = ["curator"]
+
+[[ground_truth.required_files]]
+path = "core/camel-api/src/main/java/org/apache/camel/Component.java"
+repo = "camel"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "core/camel-api/src/main/java/org/apache/camel/Endpoint.java"
+repo = "camel"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "core/camel-api/src/main/java/org/apache/camel/Consumer.java"
+repo = "camel"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "core/camel-api/src/main/java/org/apache/camel/Processor.java"
+repo = "camel"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "core/camel-api/src/main/java/org/apache/camel/Producer.java"
+repo = "camel"
+confidence = 0.8
+source = "curator"
+
+[csb_lineage]
+parent_csb_id = "camel-routing-arch-001"
+origin_suite = "csb_sdlc_design"
+migration_status = "metadata_merged"
+metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "instruction.md", "ground_truth.json"]
+

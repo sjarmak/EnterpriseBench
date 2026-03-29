@@ -1,0 +1,39 @@
+# Invalid task — multiple deliberate errors:
+#   1. weights do not sum to 1.0 (0.30 + 0.30 = 0.60)
+#   2. duplicate checkpoint name
+#   3. ground_truth.required_files refs a repo not in repos[]
+
+[task]
+id = "bad-task-001"
+suite = "dependency_management"
+difficulty = "medium"
+session_type = "single"
+description = "Bad task for testing"
+prompt = "Do something bad."
+
+[[repos]]
+url = "github.com/example/repo"
+rev = "v1.0.0"
+path = "repo"
+role = "primary"
+
+[[checkpoints]]
+name = "duplicate_step"
+weight = 0.30
+verifier = "checks/check.sh"
+
+[[checkpoints]]
+name = "duplicate_step"
+weight = 0.30
+verifier = "checks/check2.sh"
+
+[artifacts]
+required = ["code_patch"]
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/main.py"
+repo = "nonexistent_repo"
+confidence = 0.9

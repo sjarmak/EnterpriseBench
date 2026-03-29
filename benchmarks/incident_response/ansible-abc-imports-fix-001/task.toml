@@ -1,0 +1,90 @@
+# Migrated from CodeScaleBench: ansible-abc-imports-fix-001
+# Origin suite: csb_sdlc_fix
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "ansible-abc-imports-fix-001"
+suite = "incident_response"
+difficulty = "hard"
+estimated_duration_minutes = 15
+session_type = "single"
+description = "Fraction of repository tests passing after agent changes"
+prompt = """
+# Inconsistent Use and Dependencies on the Internal Shim for Importing Collection ABCs
+
+**Repository:** ansible/ansible
+**Language:** Python
+**Difficulty:** hard
+
+## Problem
+
+In various parts of the Ansible codebase (modules, `module_utils`, and controller code), abstract collection classes (ABCs such as `Mapping`, `Sequence`, etc.) continue to be imported from the internal compatibility module `ansible.module_utils.common._collections_compat`. This shim was created for temporary compatibility, and its continued direct use promotes undesired internal paths. The coexistence of internal and supported paths creates inconsistency, confusion for contributors, and conflicting signals in style/sanity checks, in addition to increasing technical debt.
+
+## Key Components
+
+- `lib/ansible/module_utils/common/_collections_compat.py` — the internal shim being migrated away from
+- Module and utility files under `lib/ansible/modules/` and `lib/ansible/module_utils/` that import ABCs
+- Sanity/lint check configuration that may still reference or allow internal paths
+
+## Task
+
+1. Identify all imports of `ansible.module_utils.common._collections_compat` across modules, `module_utils`, and controller code
+2. Replace those imports with the supported canonical path (e.g., direct `collections.abc` imports)
+3. Ensure the compatibility shim remains as a re-export layer for backward compatibility but is no longer directly imported internally
+4. Verify that style/sanity checks are aligned with the new policy and do not recommend the obsolete internal path
+5. Run the existing test suite to ensure no regressions
+
+## Success Criteria
+
+- No internal code directly imports from `_collections_compat` (only external consumers via backward compatibility)
+- All ABCs are imported from the supported canonical path consistently
+- Sanity checks are aligned with the updated import policy
+- All existing tests pass
+
+"""
+
+[[repos]]
+url = "github.com/ansible/ansible"
+rev = "HEAD"
+path = "ansible"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+dependency_depth = 1
+
+[[checkpoints]]
+name = "primary_verification"
+weight = 1.0
+verifier = "tests/test.sh"
+description = "Primary verification: Fraction of repository tests passing after agent changes"
+timeout_seconds = 120
+
+[artifacts]
+required = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+
+[ground_truth]
+tiers = ["curator"]
+
+[[ground_truth.required_files]]
+path = "lib/ansible/module_utils/common/_collections_compat.py"
+repo = "ansible"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "test/lib/ansible_test/_util/controller/sanity/pylint/plugins/unwanted.py"
+repo = "ansible"
+confidence = 0.8
+source = "curator"
+
+[csb_lineage]
+parent_csb_id = "ansible-abc-imports-fix-001"
+origin_suite = "csb_sdlc_fix"
+migration_status = "metadata_merged"
+metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "instruction.md", "ground_truth.json"]
+

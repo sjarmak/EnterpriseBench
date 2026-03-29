@@ -1,0 +1,124 @@
+# Migrated from CodeScaleBench: CCX-dep-trace-106
+# Origin suite: csb_org_crossrepo
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "ccx-dep-trace-106"
+suite = "dependency_management"
+difficulty = "hard"
+estimated_duration_minutes = 15
+session_type = "single"
+description = "GCC Optimization Pass Registration and Execution Chain"
+prompt = """
+# GCC Optimization Pass Registration and Execution Chain
+
+## Your Task
+
+Trace how GCC's optimization passes are registered and executed during compilation. Find all C/C++ source files in `gcc-mirror/gcc` that: 1. Define the pass execution order (`gcc/passes.def` — the master list of all passes). 2. Implement the pass manager that orchestrates pass execution (`gcc/passes.cc`). 3. Define the `opt_pass` base class and pass manager interface (`gcc/pass_manager.h`). 4. Implement a concrete GIMPLE optimization pass — specifically dead code elimination (`gcc/tree-ssa-dce.cc`). 5. Define the tree-SSA pass header (`gcc/tree-pass.h`) that declares pass registration macros. Report the repo, file path, and key struct/function name for each file.
+
+## Context
+
+You are working on a codebase task involving repos from the crossrepo domain.
+
+## Available Resources
+
+## Output Format
+
+Use the published task contract:
+
+- `TASK_WORKDIR=/workspace`
+- `TASK_REPO_ROOT=/workspace`
+- `TASK_OUTPUT=/workspace/answer.json`
+
+Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
+
+```json
+{
+  "files": [
+    {"repo": "repo-name", "path": "relative/path/to/file.go"}
+  ],
+  "symbols": [
+    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
+  ],
+  "chain": [
+    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "FunctionName"}
+  ],
+  "text": "Narrative explanation of your findings, citing repos and file paths."
+}
+```
+
+Include only the fields relevant to this task. Your answer is evaluated against a closed-world oracle — completeness matters.
+
+## Evaluation
+
+Your answer will be scored on:
+- **File recall and precision**: Did you find all relevant files?
+"""
+
+[[repos]]
+url = "github.com/sg-evals/llvm-project"
+rev = "a8f3c97d"
+path = "llvm-project"
+role = "primary"
+
+[metadata]
+languages = ["cpp"]
+dependency_depth = 1
+
+[[checkpoints]]
+name = "primary_verification"
+weight = 1.0
+verifier = "tests/test.sh"
+description = "Primary verification: GCC Optimization Pass Registration and Execution Chain"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+
+[[tool_access.sourcegraph_mirrors]]
+repo = "github.com/sg-evals/llvm-project"
+mirror_id = "sg-evals/llvm-project--a8f3c97d"
+
+[ground_truth]
+tiers = ["curator"]
+
+[[ground_truth.required_files]]
+path = "gcc/passes.def"
+repo = "llvm-project"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "gcc/passes.cc"
+repo = "llvm-project"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "gcc/pass_manager.h"
+repo = "llvm-project"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "gcc/tree-ssa-dce.cc"
+repo = "llvm-project"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "gcc/tree-pass.h"
+repo = "llvm-project"
+confidence = 0.8
+source = "curator"
+
+[csb_lineage]
+parent_csb_id = "CCX-dep-trace-106"
+origin_suite = "csb_org_crossrepo"
+migration_status = "metadata_merged"
+metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "task_spec.json", "instruction.md", "ground_truth.json"]
+

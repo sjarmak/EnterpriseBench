@@ -1,0 +1,333 @@
+#!/usr/bin/env python3
+"""
+extract_task.py — Extract a benchmark task from a breaking change candidate.
+
+Given a breaking change candidate (from mine_breaking_changes.py output or
+manual specification), this script:
+1. Pins the "before" revision of the downstream repo (just before the fix)
+2. Pins the "breaking" revision of the upstream repo
+3. Generates a task.toml file with repos, checkpoints, and metadata
+4. Generates checkpoint verifier stubs
+
+Usage:
+    python extract_task.py --candidate candidates.json --index 0 --output-dir benchmarks/mined/
+    python extract_task.py --upstream grpc/grpc-go --upstream-rev v1.27.0 \
+                           --downstream etcd-io/etcd --downstream-rev v3.4.7 \
+                           --fix-rev v3.4.8 --suite dependency_management \
+                           --output-dir benchmarks/mined/
+"""
+
+import argparse
+import json
+import os
+import sys
+import textwrap
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass
+class TaskSpec:
+    """Specification for generating a task.toml."""
+    task_id: str
+    suite: str
+    difficulty: str
+    estimated_duration_minutes: int
+    session_type: str
+    description: str
+    prompt: str
+    upstream_url: str
+    upstream_rev: str
+    downstream_url: str
+    downstream_rev: str
+    languages: list[str]
+    frameworks: list[str]
+    multi_repo_pattern: str
+    checkpoints: list[dict]
+    artifacts_required: list[str]
+    artifacts_optional: list[str]
+    ground_truth_notes: str
+
+
+def generate_task_id(suite: str, description: str, number: int = 1) -> str:
+    """Generate a task ID from suite and description."""
+    # Map suite to prefix
+    prefix_map = {
+        "dependency_management": "dep-mgmt",
+        "incident_response": "inc-resp",
+        "platform_engineering": "plat-eng",
+        "security_operations": "sec-ops",
+        "customer_escalation": "cust-esc",
+        "feature_delivery": "feat-del",
+        "technical_debt": "tech-debt",
+    }
+    prefix = prefix_map.get(suite, suite[:8])
+
+    # Slugify description
+    slug = description.lower()
+    slug = "".join(c if c.isalnum() or c == " " else "" for c in slug)
+    slug = "-".join(slug.split()[:4])
+
+    return f"{prefix}-{slug}-{number:03d}"
+
+
+def estimate_difficulty(candidate: dict) -> tuple[str, int]:
+    """Estimate difficulty and duration from candidate metadata."""
+    num_files = len(candidate.get("affected_files", []))
+    num_api_changes = len(candidate.get("breaking_api_changes", []))
+    confidence = candidate.get("confidence", "medium")
+
+    if num_files <= 3 and num_api_changes <= 2:
+        return "medium", 30
+    elif num_files <= 6 and num_api_changes <= 5:
+        return "hard", 45
+    else:
+        return "expert", 90
+
+
+def generate_prompt(candidate: dict) -> str:
+    """Generate the agent prompt from a candidate."""
+    upstream = candidate["upstream_repo"].split("/")[-1]
+    downstream = candidate["downstream_repo"].split("/")[-1]
+    breaking_ver = candidate["upstream_breaking_version"]
+
+    api_changes = "\n".join(f"- {c}" for c in candidate.get("breaking_api_changes", []))
+
+    return textwrap.dedent(f"""\
+        The {upstream} library has released {breaking_ver} which contains breaking API changes.
+        The {downstream} project depends on {upstream} and is currently broken by these changes.
+
+        Known breaking changes in {upstream} {breaking_ver}:
+        {api_changes}
+
+        Your task:
+        1. Identify all files in {downstream} affected by the breaking API changes
+        2. Update the affected code to work with {upstream} {breaking_ver}
+        3. Ensure the {downstream} tests pass with the updated dependency
+
+        Both repositories are available under /workspace/.
+    """)
+
+
+def generate_checkpoints(candidate: dict) -> list[dict]:
+    """Generate checkpoint definitions from a candidate."""
+    downstream = candidate["downstream_repo"].split("/")[-1]
+
+    checkpoints = [
+        {
+            "name": "identify_affected_files",
+            "weight": 0.20,
+            "verifier": "checks/check_identification.sh",
+            "description": f"Agent correctly identifies files affected by the breaking change in {downstream}",
+        },
+        {
+            "name": "apply_api_updates",
+            "weight": 0.45,
+            "verifier": "checks/check_api_migration.sh",
+            "description": "Breaking API calls replaced with updated equivalents",
+        },
+        {
+            "name": "tests_pass",
+            "weight": 0.35,
+            "verifier": "checks/check_tests.sh",
+            "description": f"{downstream} tests pass with the updated dependency",
+        },
+    ]
+    return checkpoints
+
+
+def render_task_toml(spec: TaskSpec) -> str:
+    """Render a TaskSpec as TOML content."""
+    # We generate TOML manually to control formatting (no toml lib dependency)
+    lines = []
+
+    # Ground truth notes as comment
+    lines.append(f"# Ground truth: {spec.ground_truth_notes}")
+    lines.append(f"# Generated by extract_task.py from OSS mining pipeline")
+    lines.append("")
+
+    # [task] section
+    lines.append("[task]")
+    lines.append(f'id = "{spec.task_id}"')
+    lines.append(f'suite = "{spec.suite}"')
+    lines.append(f'difficulty = "{spec.difficulty}"')
+    lines.append(f"estimated_duration_minutes = {spec.estimated_duration_minutes}")
+    lines.append(f'session_type = "{spec.session_type}"')
+    lines.append(f'description = "{spec.description}"')
+
+    # Multi-line prompt
+    lines.append('prompt = """')
+    lines.append(spec.prompt.rstrip())
+    lines.append('"""')
+    lines.append("")
+
+    # [[repos]] — upstream
+    lines.append("[[repos]]")
+    lines.append(f'url = "{spec.upstream_url}"')
+    lines.append(f'rev = "{spec.upstream_rev}"')
+    upstream_path = spec.upstream_url.split("/")[-1]
+    lines.append(f'path = "{upstream_path}"')
+    lines.append('role = "dependency"')
+    lines.append("")
+
+    # [[repos]] — downstream
+    lines.append("[[repos]]")
+    lines.append(f'url = "{spec.downstream_url}"')
+    lines.append(f'rev = "{spec.downstream_rev}"')
+    downstream_path = spec.downstream_url.split("/")[-1]
+    lines.append(f'path = "{downstream_path}"')
+    lines.append('role = "primary"')
+    lines.append("")
+
+    # [metadata]
+    lines.append("[metadata]")
+    langs = ", ".join(f'"{l}"' for l in spec.languages)
+    lines.append(f"languages = [{langs}]")
+    lines.append(f"dependency_depth = 2")
+    fws = ", ".join(f'"{f}"' for f in spec.frameworks)
+    lines.append(f"frameworks = [{fws}]")
+    lines.append(f'multi_repo_pattern = "{spec.multi_repo_pattern}"')
+    lines.append("")
+
+    # [[checkpoints]]
+    for cp in spec.checkpoints:
+        lines.append("[[checkpoints]]")
+        lines.append(f'name = "{cp["name"]}"')
+        lines.append(f'weight = {cp["weight"]:.2f}')
+        lines.append(f'verifier = "{cp["verifier"]}"')
+        lines.append(f'description = "{cp["description"]}"')
+        lines.append("")
+
+    # [artifacts]
+    lines.append("[artifacts]")
+    req = ", ".join(f'"{a}"' for a in spec.artifacts_required)
+    lines.append(f"required = [{req}]")
+    if spec.artifacts_optional:
+        opt = ", ".join(f'"{a}"' for a in spec.artifacts_optional)
+        lines.append(f"optional = [{opt}]")
+
+    return "\n".join(lines) + "\n"
+
+
+def candidate_to_task_spec(candidate: dict, task_number: int = 1) -> TaskSpec:
+    """Convert a mining candidate dict to a TaskSpec."""
+    difficulty, duration = estimate_difficulty(candidate)
+
+    # Determine languages from chain
+    chain = candidate.get("chain_name", "")
+    if "grpc" in chain or "etcd" in chain:
+        languages = ["go"]
+        frameworks = ["grpc", "protobuf"]
+    elif "urllib3" in chain or "requests" in chain or "boto" in chain:
+        languages = ["python"]
+        frameworks = ["urllib3", "requests"]
+    elif "eslint" in chain or "typescript" in chain:
+        languages = ["typescript"]
+        frameworks = ["eslint"]
+    else:
+        languages = []
+        frameworks = []
+
+    task_id = generate_task_id("dependency_management", candidate["description"], task_number)
+
+    return TaskSpec(
+        task_id=task_id,
+        suite="dependency_management",
+        difficulty=difficulty,
+        estimated_duration_minutes=duration,
+        session_type="single",
+        description=candidate["description"][:80],
+        prompt=generate_prompt(candidate),
+        upstream_url=candidate["upstream_repo"],
+        upstream_rev=candidate["upstream_breaking_version"],
+        downstream_url=candidate["downstream_repo"],
+        downstream_rev=candidate["downstream_affected_version"],
+        languages=languages,
+        frameworks=frameworks,
+        multi_repo_pattern="propagate",
+        checkpoints=generate_checkpoints(candidate),
+        artifacts_required=["code_patch"],
+        artifacts_optional=["migration_guide"],
+        ground_truth_notes=(
+            f"Fix: {candidate.get('fix_pr_url', 'N/A')} "
+            f"Commit: {candidate.get('fix_commit', 'N/A')}"
+        ),
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Extract a benchmark task from a breaking change candidate"
+    )
+    parser.add_argument(
+        "--candidate",
+        help="Path to candidates JSON file (from mine_breaking_changes.py --output)",
+    )
+    parser.add_argument(
+        "--index", type=int, default=0,
+        help="Index of candidate in JSON array",
+    )
+    parser.add_argument(
+        "--output-dir", default="benchmarks/mined",
+        help="Output directory for generated task.toml",
+    )
+    parser.add_argument(
+        "--task-number", type=int, default=1,
+        help="Task number for ID generation",
+    )
+
+    # Manual specification (alternative to --candidate)
+    parser.add_argument("--upstream", help="Upstream repo (e.g., grpc/grpc-go)")
+    parser.add_argument("--upstream-rev", help="Upstream breaking version")
+    parser.add_argument("--downstream", help="Downstream repo")
+    parser.add_argument("--downstream-rev", help="Downstream affected version")
+    parser.add_argument("--suite", default="dependency_management")
+
+    args = parser.parse_args()
+
+    if args.candidate:
+        with open(args.candidate) as f:
+            candidates = json.load(f)
+        if args.index >= len(candidates):
+            print(f"Index {args.index} out of range (have {len(candidates)} candidates)")
+            sys.exit(1)
+        candidate = candidates[args.index]
+    elif args.upstream and args.downstream:
+        candidate = {
+            "chain_name": "manual",
+            "upstream_repo": f"github.com/{args.upstream}",
+            "upstream_breaking_version": args.upstream_rev or "HEAD",
+            "upstream_previous_version": "unknown",
+            "downstream_repo": f"github.com/{args.downstream}",
+            "downstream_affected_version": args.downstream_rev or "HEAD",
+            "downstream_fix_version": "unknown",
+            "fix_pr_url": None,
+            "fix_commit": None,
+            "issue_url": None,
+            "description": f"Breaking change in {args.upstream} affecting {args.downstream}",
+            "breaking_api_changes": [],
+            "affected_files": [],
+            "confidence": "low",
+            "notes": "Manually specified candidate — needs validation",
+        }
+    else:
+        parser.error("Provide --candidate or --upstream + --downstream")
+
+    spec = candidate_to_task_spec(candidate, args.task_number)
+    toml_content = render_task_toml(spec)
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    output_path = os.path.join(args.output_dir, f"{spec.task_id}.toml")
+
+    with open(output_path, "w") as f:
+        f.write(toml_content)
+
+    print(f"Generated task: {output_path}")
+    print(f"  ID:         {spec.task_id}")
+    print(f"  Difficulty:  {spec.difficulty}")
+    print(f"  Duration:    {spec.estimated_duration_minutes} min")
+    print(f"  Checkpoints: {len(spec.checkpoints)}")
+
+
+if __name__ == "__main__":
+    main()

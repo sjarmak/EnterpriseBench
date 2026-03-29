@@ -1,0 +1,135 @@
+# Chain task example — multi-session incident response.
+# Session 1: triage the goroutine leak alert; Session 2: root cause and draft fix;
+# Session 3: apply fix, write runbook, verify metrics recover.
+# See schemas/task.schema.json for the full schema.
+
+# Top-level fields (must precede all section headers in TOML)
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "inc-grpc-goroutine-leak-001"
+suite = "incident_response"
+difficulty = "hard"
+estimated_duration_minutes = 90
+session_type = "chain"
+session_count = 3
+description = "Goroutine leak in gRPC keepalive handler causes Prometheus-monitored service degradation"
+prompt = """
+A production alert has fired: the go_goroutines metric for a gRPC-based service has been growing
+monotonically for six hours and is now at 48,000 (baseline ~200). The service handles internal
+RPC traffic and uses Prometheus for instrumentation.
+
+Both repositories are cloned under /workspace/:
+  - /workspace/grpc-go/   (github.com/grpc/grpc-go @ v1.60.0)
+  - /workspace/prometheus/ (github.com/prometheus/prometheus @ v2.48.0)
+
+Session 1 — Triage (this session):
+  1. Identify which gRPC sub-system is responsible for the goroutine growth.
+  2. Locate the keepalive transport handler files in grpc-go that spawn goroutines.
+  3. Write a triage report to /workspace/triage_report.md (affected files, initial hypothesis).
+
+Session 2 — Root cause and fix design (next session, picks up from triage_report.md):
+  4. Confirm the keepalive loop exit condition that causes goroutine accumulation.
+  5. Design a minimal patch (do not apply yet). Write patch design to /workspace/fix_design.md.
+  6. Identify the Prometheus metric + scrape path that surfaces goroutine counts so the fix
+     can be validated by observing metric recovery.
+
+Session 3 — Apply fix and write runbook (final session):
+  7. Apply the patch from fix_design.md to the relevant grpc-go source files.
+  8. Verify the patched code compiles: cd /workspace/grpc-go && go build ./...
+  9. Write a runbook to /workspace/runbook.md: trigger conditions, diagnosis steps, fix procedure,
+     and a rollback plan if the patch causes regressions.
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.60.0"
+path = "grpc-go"
+role = "primary"
+
+[[repos]]
+url = "github.com/prometheus/prometheus"
+rev = "v2.48.0"
+path = "prometheus"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 950_000
+max_complexity = 29
+dependency_depth = 2
+frameworks = ["grpc", "prometheus", "opentelemetry"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "triage_complete"
+weight = 0.25
+verifier = "checks/check_triage_report.sh"
+description = "triage_report.md exists and identifies the keepalive transport subsystem and affected files"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "root_cause_and_fix_design"
+weight = 0.40
+verifier = "checks/check_fix_design.sh"
+description = "fix_design.md correctly identifies the loop exit condition and specifies the patch"
+timeout_seconds = 90
+
+[[checkpoints]]
+name = "patch_applied_and_runbook"
+weight = 0.35
+verifier = "checks/check_patch_and_runbook.sh"
+description = "Patch applied, go build ./... passes, runbook.md contains rollback procedure"
+timeout_seconds = 120
+
+[artifacts]
+required = ["incident_report", "runbook", "code_patch"]
+optional = ["reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Goroutine leak root cause requires cross-searching grpc-go transport, keepalive, and clientconn packages — MCP symbol search and cross-reference accelerates narrowing the leak site from ~50 candidate goroutine-spawning calls to the exact keepalive loop"
+
+[[tool_access.sourcegraph_mirrors]]
+repo = "github.com/grpc/grpc-go"
+mirror_id = "sg-mirror-grpc-go-v1.60.0"
+
+[[tool_access.sourcegraph_mirrors]]
+repo = "github.com/prometheus/prometheus"
+mirror_id = "sg-mirror-prometheus-v2.48.0"
+
+[ground_truth]
+tiers = ["deterministic", "curator"]
+
+[[ground_truth.required_files]]
+path = "internal/transport/http2_client.go"
+repo = "grpc-go"
+line_range = "1-50"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "internal/transport/keepalive.go"
+repo = "grpc-go"
+confidence = 0.98
+source = "both"
+
+[[ground_truth.required_files]]
+path = "internal/transport/http2_server.go"
+repo = "grpc-go"
+line_range = "280-420"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "clientconn.go"
+repo = "grpc-go"
+confidence = 0.65
+
+[[ground_truth.sufficient_files]]
+path = "web/ui/mantine-ui/src/pages/metrics/MetricsExplorerPage.tsx"
+repo = "prometheus"
+confidence = 0.40
+
+[csb_lineage]
+migration_status = "pending"

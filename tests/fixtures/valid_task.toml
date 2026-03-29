@@ -1,0 +1,31 @@
+# Minimal valid task — passes schema + semantic validation
+
+[task]
+id = "test-task-001"
+suite = "dependency_management"
+difficulty = "medium"
+session_type = "single"
+description = "A minimal test task"
+prompt = "Do something."
+
+[[repos]]
+url = "github.com/example/repo"
+rev = "v1.0.0"
+path = "repo"
+role = "primary"
+
+[[checkpoints]]
+name = "step_one"
+weight = 0.60
+verifier = "checks/check_one.sh"
+description = "First step"
+
+[[checkpoints]]
+name = "step_two"
+weight = 0.40
+verifier = "checks/check_two.sh"
+description = "Second step"
+
+[artifacts]
+required = ["code_patch"]
+optional = []

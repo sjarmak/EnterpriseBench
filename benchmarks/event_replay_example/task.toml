@@ -1,0 +1,83 @@
+# Event-replay example task: deploy causes error spike, agent must respond.
+#
+# Scenario: A new version of a payment service is deployed. Shortly after,
+# error rates spike and latency increases. The agent must investigate the
+# root cause, roll back the bad deploy, communicate status, and set up
+# monitoring before re-deploying.
+
+[task]
+id = "ir-deploy-error-spike-001"
+suite = "incident_response"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "event_replay"
+description = "Bad deploy causes error spike — investigate, rollback, communicate, remediate"
+prompt = """
+You are an on-call SRE for the payments platform. You will receive a stream of
+events in /workspace/events.jsonl representing real-time alerts, CI/CD
+notifications, and team communications.
+
+Read the event stream and respond with appropriate actions in
+/workspace/actions.jsonl. Each action should be a JSON object on its own line
+with fields: timestamp_ms, action_type, target, description.
+
+Valid action_types: investigate, escalate, remediate, communicate, deploy,
+rollback, triage, monitor, no_op.
+
+Your goal: minimize customer impact by quickly identifying the issue, taking
+the right corrective actions, and communicating status to stakeholders.
+
+The repos under /workspace/ contain the payment-service and api-gateway code.
+"""
+
+[[repos]]
+url = "github.com/stripe/stripe-go"
+rev = "v76.0.0"
+path = "payment-service"
+role = "primary"
+
+[[repos]]
+url = "github.com/gin-gonic/gin"
+rev = "v1.9.1"
+path = "api-gateway"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 180_000
+max_complexity = 25
+dependency_depth = 2
+frameworks = ["gin", "stripe-go"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_root_cause"
+weight = 0.25
+verifier = "checks/check_investigation.sh"
+description = "Agent investigates and identifies the bad deploy as root cause"
+
+[[checkpoints]]
+name = "rollback_deploy"
+weight = 0.30
+verifier = "checks/check_rollback.sh"
+description = "Agent rolls back the payment-service to the previous version"
+
+[[checkpoints]]
+name = "stakeholder_communication"
+weight = 0.20
+verifier = "checks/check_communication.sh"
+description = "Agent communicates incident status to stakeholders"
+
+[[checkpoints]]
+name = "prevent_recurrence"
+weight = 0.25
+verifier = "checks/check_remediation.sh"
+description = "Agent sets up monitoring or guard to prevent recurrence"
+
+[artifacts]
+required = ["incident_report"]
+optional = ["runbook"]
+
+[events]
+event_file = "events.jsonl"
+oracle_actions = "oracle_actions.jsonl"

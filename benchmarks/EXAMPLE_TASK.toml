@@ -1,6 +1,9 @@
 # Example task definition — this is the reference format for all EnterpriseBench tasks.
 # See schemas/task.schema.json for the full schema.
 
+# Top-level fields (must precede all section headers in TOML)
+difficulty_stratum = "dual_repo"
+
 [task]
 id = "dep-mgmt-grpc-proto-bump-001"
 suite = "dependency_management"
@@ -45,6 +48,7 @@ name = "identify_affected_files"
 weight = 0.20
 verifier = "checks/check_identification.sh"
 description = "Agent correctly identifies all files using deprecated protobuf v1 APIs"
+timeout_seconds = 60
 
 [[checkpoints]]
 name = "update_protobuf_apis"
@@ -63,8 +67,6 @@ required = ["code_patch"]
 optional = ["migration_guide"]
 
 # --- New fields from convergence report ---
-
-difficulty_stratum = "dual_repo"
 
 [tool_access]
 expected_mcp_benefit = "high"
@@ -110,3 +112,12 @@ path = "encoding/proto/proto.go"
 repo = "grpc-go"
 line_range = "1-80"
 confidence = 0.70
+
+# --- CSB migration provenance ---
+
+[csb_lineage]
+parent_csb_id = "csb_org_dependency_grpc_proto_bump_042"
+origin_suite = "csb_org_dependency_management"
+migration_status = "verified"
+bugs_fixed = ["csb-bug-007", "csb-bug-011"]
+metadata_sources = ["task.toml", "ground_truth_meta.json"]

@@ -1,0 +1,124 @@
+# Migrated from CodeScaleBench: CCX-compliance-053
+# Origin suite: csb_org_compliance
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "ccx-compliance-053"
+suite = "security_operations"
+difficulty = "hard"
+estimated_duration_minutes = 15
+session_type = "single"
+description = "Compliance Audit: Kafka Audit Logging and Authorization Events"
+prompt = """
+# Compliance Audit: Kafka Audit Logging and Authorization Events
+
+## Your Task
+
+Find all Java source files in `apache/kafka` that produce audit log entries for authorization decisions. Search `core/src/main/scala/` and `clients/src/main/java/` for files that log `ALLOWED` or `DENIED` authorization events, reference `AuditLogger`, or implement audit trail functionality for ACL decisions. Report the file path and the class name producing audit events.
+
+## Context
+
+You are working on a codebase task involving repos from the compliance domain.
+
+## Available Resources
+
+## Output Format
+
+Use the published task contract:
+
+- `TASK_WORKDIR=/workspace`
+- `TASK_REPO_ROOT=/workspace`
+- `TASK_OUTPUT=/workspace/answer.json`
+
+Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
+
+```json
+{
+  "files": [
+    {"repo": "repo-name", "path": "relative/path/to/file.go"}
+  ],
+  "symbols": [
+    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
+  ],
+  "chain": [
+    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "FunctionName"}
+  ],
+  "text": "Narrative explanation of your findings, citing repos and file paths."
+}
+```
+
+Include only the fields relevant to this task. Your answer is evaluated against a closed-world oracle — completeness matters.
+
+## Evaluation
+
+Your answer will be scored on:
+- **File recall and precision**: Did you find all relevant files?
+"""
+
+[[repos]]
+url = "github.com/sg-evals/kafka"
+rev = "0753c489"
+path = "kafka"
+role = "primary"
+
+[metadata]
+languages = ["java"]
+dependency_depth = 1
+
+[[checkpoints]]
+name = "primary_verification"
+weight = 1.0
+verifier = "tests/test.sh"
+description = "Primary verification: Compliance Audit: Kafka Audit Logging and Authorization Events"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+
+[[tool_access.sourcegraph_mirrors]]
+repo = "github.com/sg-evals/kafka"
+mirror_id = "sg-evals/kafka--0753c489"
+
+[ground_truth]
+tiers = ["curator"]
+
+[[ground_truth.required_files]]
+path = "metadata/src/main/java/org/apache/kafka/metadata/authorizer/StandardAuthorizerData.java"
+repo = "kafka"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "metadata/src/main/java/org/apache/kafka/metadata/authorizer/StandardAuthorizer.java"
+repo = "kafka"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "core/src/main/scala/kafka/server/AuthHelper.scala"
+repo = "kafka"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "clients/src/main/java/org/apache/kafka/server/authorizer/AuthorizationResult.java"
+repo = "kafka"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "clients/src/main/java/org/apache/kafka/server/authorizer/Action.java"
+repo = "kafka"
+confidence = 0.8
+source = "curator"
+
+[csb_lineage]
+parent_csb_id = "CCX-compliance-053"
+origin_suite = "csb_org_compliance"
+migration_status = "metadata_merged"
+metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "task_spec.json", "instruction.md", "ground_truth.json"]
+

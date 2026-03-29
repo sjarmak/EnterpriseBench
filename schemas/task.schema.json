@@ -133,11 +133,17 @@
           },
           "verifier": {
             "type": "string",
-            "description": "Path to checkpoint verifier script"
+            "description": "Path to checkpoint verifier script. Must write JSON conforming to verifier_output.schema.json to stdout. Fallback: exit 0 = {score: 1.0, passed: true}, exit nonzero = {score: 0.0, passed: false}."
           },
           "description": {
             "type": "string",
             "description": "What this checkpoint validates"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 120,
+            "description": "Maximum seconds to wait for this checkpoint verifier before timing out (default: 120)"
           }
         }
       }
@@ -311,6 +317,35 @@
             "required": ["path", "repo"]
           },
           "description": "Files that help but are not essential — missing = small penalty"
+        }
+      }
+    },
+    "csb_lineage": {
+      "type": "object",
+      "description": "Provenance tracking for tasks migrated from CodeScaleBench (CSB)",
+      "properties": {
+        "parent_csb_id": {
+          "type": "string",
+          "description": "Original CSB task ID"
+        },
+        "origin_suite": {
+          "type": "string",
+          "description": "Original CSB suite (e.g., csb_org_compliance)"
+        },
+        "migration_status": {
+          "type": "string",
+          "enum": ["pending", "schema_mapped", "metadata_merged", "verified", "complete"],
+          "description": "Current stage in the CSB-to-EnterpriseBench migration pipeline"
+        },
+        "bugs_fixed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "CSB bug IDs fixed during migration (cross-ref docs/csb_bugs.md)"
+        },
+        "metadata_sources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "CSB files merged into this task (e.g., task.toml, ground_truth_meta.json)"
         }
       }
     }

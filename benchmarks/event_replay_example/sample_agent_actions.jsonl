@@ -1,0 +1,7 @@
+{"timestamp_ms": 100000, "action_type": "investigate", "target": "payment-service", "description": "Check payment-service error rate spike and recent deployments"}
+{"timestamp_ms": 115000, "action_type": "communicate", "target": "#incidents", "description": "Acknowledging alert — payment-service error rate elevated after v2.14.0 deploy"}
+{"timestamp_ms": 200000, "action_type": "investigate", "target": "payment-service/commit/abc123f", "description": "Reviewing commit abc123f — found connection pool size reduced from 100 to 10"}
+{"timestamp_ms": 210000, "action_type": "rollback", "target": "payment-service", "description": "Rolling back payment-service to v2.13.2"}
+{"timestamp_ms": 215000, "action_type": "communicate", "target": "#payments-eng", "description": "Root cause: connection pool misconfiguration in v2.14.0. Rollback initiated."}
+{"timestamp_ms": 370000, "action_type": "communicate", "target": "#incidents", "description": "Rollback complete. Error rates back to normal."}
+{"timestamp_ms": 430000, "action_type": "remediate", "target": "payment-service", "description": "Opening PR to fix connection pool size and add load test"}
