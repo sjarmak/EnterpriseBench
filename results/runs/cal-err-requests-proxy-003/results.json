@@ -1,0 +1,63 @@
+{
+  "task_id": "cal-err-requests-proxy-003",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "image_tag": "eb-cal-err-requests-proxy-003",
+  "scores": {
+    "task_score": 1.72,
+    "all_passed": false,
+    "checkpoints_passed": 2,
+    "checkpoints_total": 3,
+    "repos": [
+      "requests"
+    ],
+    "checkpoints": [
+      {
+        "name": "error_chain",
+        "weight": 1.0,
+        "score": 0.78,
+        "passed": true,
+        "duration_ms": 90,
+        "exit_code": 0
+      },
+      {
+        "name": "error_source",
+        "weight": 1.0,
+        "score": 0.0,
+        "passed": false,
+        "duration_ms": 15,
+        "exit_code": 0
+      },
+      {
+        "name": "trigger_conditions",
+        "weight": 1.0,
+        "score": 0.94,
+        "passed": true,
+        "duration_ms": 15,
+        "exit_code": 0
+      }
+    ]
+  },
+  "timing": {
+    "parse": 0.00034213700564578176,
+    "build": 0.3009480419859756,
+    "setup": 0.3193214109924156,
+    "agent": 133.4751454119978,
+    "scoring": 0.1756249839963857
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 300,
+    "dry_run": false
+  },
+  "task_metadata": {
+    "suite": "customer_escalation",
+    "task_type": "error_provenance",
+    "difficulty": "medium",
+    "languages": [
+      "python"
+    ]
+  }
+}

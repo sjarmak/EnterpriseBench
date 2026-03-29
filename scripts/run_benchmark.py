@@ -189,14 +189,19 @@ def run_task(
             result.status = "error"
             return result
 
-        # Try to read results.json from task directory
-        results_file = task.toml_path.parent / "results.json"
-        if results_file.exists():
-            try:
-                rdata = json.loads(results_file.read_text())
-                result.score = rdata.get("score")
-            except (json.JSONDecodeError, OSError):
-                pass
+        # Try to read results.json from the run output directory
+        for results_file in [
+            REPO_ROOT / "results" / "runs" / task.task_id / "results.json",
+            task.toml_path.parent / "results.json",
+        ]:
+            if results_file.exists():
+                try:
+                    rdata = json.loads(results_file.read_text())
+                    result.score = rdata.get("scores", {}).get("task_score",
+                                  rdata.get("score"))
+                    break
+                except (json.JSONDecodeError, OSError):
+                    pass
 
         result.status = "completed"
 
