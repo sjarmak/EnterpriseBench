@@ -226,7 +226,7 @@ def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinitio
 
     # Final checkpoints have explicit weights; milestones are equal-weighted
     final_cp_names = {cp["name"] for cp in task_def.final_checkpoints}
-    final_cp_weights = {cp["name"]: cp["weight"] for cp in task_def.final_checkpoints}
+    final_cp_weights = {cp["name"]: cp.get("weight", 1.0) for cp in task_def.final_checkpoints}
 
     weighted_sum = 0.0
     weight_sum = 0.0

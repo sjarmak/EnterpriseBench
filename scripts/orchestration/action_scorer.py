@@ -21,7 +21,10 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
 
-from event_schema import Action, Event, load_actions, load_events
+try:
+    from .event_schema import Action, Event, load_actions, load_events
+except ImportError:
+    from event_schema import Action, Event, load_actions, load_events
 
 
 # ---------------------------------------------------------------------------

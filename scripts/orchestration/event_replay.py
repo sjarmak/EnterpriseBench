@@ -32,16 +32,18 @@ import json
 import sys
 from pathlib import Path
 
-# Allow running from scripts/orchestration/ directory
-sys.path.insert(0, str(Path(__file__).parent))
-
-from event_schema import (
-    load_events,
-    load_actions,
-    validate_event_file,
-    validate_action_file,
-)
-from action_scorer import score, ScoringConfig, ScoreResult
+# Support both package import and standalone execution
+try:
+    from .event_schema import (
+        load_events, load_actions, validate_event_file, validate_action_file,
+    )
+    from .action_scorer import score, ScoringConfig, ScoreResult
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent))
+    from event_schema import (
+        load_events, load_actions, validate_event_file, validate_action_file,
+    )
+    from action_scorer import score, ScoringConfig, ScoreResult
 
 
 def load_task_config(task_dir: Path) -> dict:
