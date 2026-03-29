@@ -1,0 +1,10 @@
+{
+  "task_id": "cal-err-requests-proxy-003",
+  "mirrors": [
+    {
+      "repo": "github.com/psf/requests",
+      "rev": "v2.32.3",
+      "mirror_id": "psf/requests--v2.32.3"
+    }
+  ]
+}

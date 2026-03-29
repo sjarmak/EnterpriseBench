@@ -1,0 +1,10 @@
+{
+  "task_id": "schema-evolution-008",
+  "mirrors": [
+    {
+      "repo": "github.com/discourse/discourse",
+      "rev": "168de52538632ae18b95c0757ab2ae5e21ff240c",
+      "mirror_id": "discourse/discourse--168de525"
+    }
+  ]
+}

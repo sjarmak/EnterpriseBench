@@ -1,0 +1,10 @@
+{
+  "task_id": "schema-evolution-002",
+  "mirrors": [
+    {
+      "repo": "github.com/zulip/zulip",
+      "rev": "912c1b598458f89afa6814b3a19b95d4648e2371",
+      "mirror_id": "zulip/zulip--912c1b59"
+    }
+  ]
+}

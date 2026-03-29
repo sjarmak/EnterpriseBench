@@ -1,0 +1,10 @@
+{
+  "task_id": "schema-evolution-010",
+  "mirrors": [
+    {
+      "repo": "github.com/mattermost/mattermost",
+      "rev": "1349899f42212aab066a8d1a6caed08b7d3d2b53",
+      "mirror_id": "mattermost/mattermost--1349899f"
+    }
+  ]
+}

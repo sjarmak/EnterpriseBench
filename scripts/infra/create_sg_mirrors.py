@@ -222,6 +222,7 @@ def extract_mirrors_from_task(task_data: dict, task_file: Path) -> list[dict]:
         # For tags like v1.60.0, use as-is; for hashes, use first 8 chars
         is_tag = not all(c in "0123456789abcdef" for c in rev.lower())
         ref_suffix = rev if is_tag else rev[:8]
+        ref_suffix = ref_suffix.replace("/", "_")
         mirror_name = f"{repo_name}--{ref_suffix}"
 
         mirrors.append({

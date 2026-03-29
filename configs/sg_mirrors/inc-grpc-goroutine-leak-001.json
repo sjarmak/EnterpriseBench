@@ -1,0 +1,15 @@
+{
+  "task_id": "inc-grpc-goroutine-leak-001",
+  "mirrors": [
+    {
+      "repo": "github.com/grpc/grpc-go",
+      "rev": "v1.60.0",
+      "mirror_id": "grpc/grpc-go--v1.60.0"
+    },
+    {
+      "repo": "github.com/prometheus/prometheus",
+      "rev": "v2.48.0",
+      "mirror_id": "prometheus/prometheus--v2.48.0"
+    }
+  ]
+}

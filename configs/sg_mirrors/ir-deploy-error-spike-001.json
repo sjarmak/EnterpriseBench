@@ -1,0 +1,15 @@
+{
+  "task_id": "ir-deploy-error-spike-001",
+  "mirrors": [
+    {
+      "repo": "github.com/gin-gonic/gin",
+      "rev": "v1.9.1",
+      "mirror_id": "gin-gonic/gin--v1.9.1"
+    },
+    {
+      "repo": "github.com/stripe/stripe-go",
+      "rev": "v76.0.0",
+      "mirror_id": "stripe/stripe-go--v76.0.0"
+    }
+  ]
+}

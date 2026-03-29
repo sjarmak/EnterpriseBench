@@ -1,0 +1,10 @@
+{
+  "task_id": "cal-drift-flask-config-001",
+  "mirrors": [
+    {
+      "repo": "github.com/pallets/flask",
+      "rev": "3.1.0",
+      "mirror_id": "pallets/flask--3.1.0"
+    }
+  ]
+}

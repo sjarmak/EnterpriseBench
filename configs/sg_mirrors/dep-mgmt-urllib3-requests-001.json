@@ -1,0 +1,15 @@
+{
+  "task_id": "dep-mgmt-urllib3-requests-001",
+  "mirrors": [
+    {
+      "repo": "github.com/psf/requests",
+      "rev": "v2.28.2",
+      "mirror_id": "psf/requests--v2.28.2"
+    },
+    {
+      "repo": "github.com/urllib3/urllib3",
+      "rev": "2.0.0",
+      "mirror_id": "urllib3/urllib3--2.0.0"
+    }
+  ]
+}

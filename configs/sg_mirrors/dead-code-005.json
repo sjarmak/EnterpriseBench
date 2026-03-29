@@ -1,0 +1,10 @@
+{
+  "task_id": "dead-code-005",
+  "mirrors": [
+    {
+      "repo": "github.com/angular/angular",
+      "rev": "891318e805da3cdfb9839bf6cb3412c15c146253",
+      "mirror_id": "angular/angular--891318e8"
+    }
+  ]
+}

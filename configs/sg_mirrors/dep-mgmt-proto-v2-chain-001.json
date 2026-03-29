@@ -1,0 +1,15 @@
+{
+  "task_id": "dep-mgmt-proto-v2-chain-001",
+  "mirrors": [
+    {
+      "repo": "github.com/etcd-io/etcd",
+      "rev": "v3.5.10",
+      "mirror_id": "etcd-io/etcd--v3.5.10"
+    },
+    {
+      "repo": "github.com/grpc/grpc-go",
+      "rev": "v1.60.0",
+      "mirror_id": "grpc/grpc-go--v1.60.0"
+    }
+  ]
+}

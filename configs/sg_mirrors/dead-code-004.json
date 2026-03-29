@@ -1,0 +1,10 @@
+{
+  "task_id": "dead-code-004",
+  "mirrors": [
+    {
+      "repo": "github.com/microsoft/TypeScript",
+      "rev": "f7833b2a72309dd695b45cf2cf2187e2f2f264df",
+      "mirror_id": "microsoft/TypeScript--f7833b2a"
+    }
+  ]
+}

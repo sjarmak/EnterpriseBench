@@ -13,10 +13,12 @@ Usage:
     python3 scripts/sandbox/dockerfile_generator.py benchmarks/EXAMPLE_TASK.toml
     python3 scripts/sandbox/dockerfile_generator.py benchmarks/EXAMPLE_TASK.toml --output-dir /tmp/out
     python3 scripts/sandbox/dockerfile_generator.py benchmarks/ --all
+    python3 scripts/sandbox/dockerfile_generator.py benchmarks/EXAMPLE_TASK.toml --upstream
 """
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -43,6 +45,7 @@ def mirror_name_for_repo(url: str, rev: str) -> str:
 
     is_tag = not all(c in "0123456789abcdef" for c in rev.lower())
     ref_suffix = rev if is_tag else rev[:8]
+    ref_suffix = ref_suffix.replace("/", "_")
     return f"{repo_name}--{ref_suffix}"
 
 
@@ -73,6 +76,41 @@ def sourcegraph_env_var(repos: list[dict]) -> tuple[str, str]:
 
 
 # ═══════════════════════════════════════════════════════════════
+#  CLONE COMMAND GENERATION
+# ═══════════════════════════════════════════════════════════════
+
+_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def _is_sha(rev: str) -> bool:
+    """Return True if *rev* looks like a hex SHA (not a tag/branch)."""
+    return bool(_SHA_RE.match(rev))
+
+
+def _clone_commands(url: str, rev: str, path: str, source: str) -> list[str]:
+    """Return the RUN line(s) to clone a repo into /workspace/{path}.
+
+    When *source* is ``"mirror"`` (default), clone from the sg-evals mirror.
+    When *source* is ``"upstream"``, clone from the original URL at the pinned
+    rev — using ``--branch`` for tags and a full clone + checkout for SHAs
+    (because ``--branch`` does not accept arbitrary commit SHAs).
+    """
+    if source == "mirror":
+        mirror = mirror_name_for_repo(url, rev)
+        mirror_url = f"https://github.com/{ORG}/{mirror}.git"
+        return [f"RUN git clone --depth 1 {mirror_url} /workspace/{path}"]
+
+    # source == "upstream"
+    if _is_sha(rev):
+        return [
+            f"RUN git clone {url} /workspace/{path} && "
+            f"cd /workspace/{path} && git checkout {rev}"
+        ]
+    # tag or branch — shallow clone is fine
+    return [f"RUN git clone --depth 1 --branch {rev} {url} /workspace/{path}"]
+
+
+# ═══════════════════════════════════════════════════════════════
 #  DOCKERFILE GENERATION
 # ═══════════════════════════════════════════════════════════════
 
@@ -95,8 +133,8 @@ def _base_image_for_languages(languages: list[str]) -> str:
     return "ubuntu:22.04"
 
 
-def generate_standard_dockerfile(task_data: dict) -> str:
-    """Generate standard Dockerfile: local clone from sg-evals mirrors."""
+def generate_standard_dockerfile(task_data: dict, *, source: str = "mirror") -> str:
+    """Generate standard Dockerfile: local clone from sg-evals mirrors (or upstream)."""
     repos = task_data.get("repos", [])
     task_info = task_data.get("task", {})
     languages = task_data.get("metadata", {}).get("languages", [])
@@ -104,9 +142,10 @@ def generate_standard_dockerfile(task_data: dict) -> str:
     # Choose base image based on primary language
     base_image = _base_image_for_languages(languages)
 
+    clone_label = "upstream repos" if source == "upstream" else "sg-evals mirrors"
     lines = [
         f"# EnterpriseBench task: {task_info.get('id', 'unknown')}",
-        f"# Standard Dockerfile: local clone from sg-evals mirrors",
+        f"# Standard Dockerfile: local clone from {clone_label}",
         f"FROM {base_image}",
         "",
         "RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*",
@@ -115,7 +154,6 @@ def generate_standard_dockerfile(task_data: dict) -> str:
         "",
     ]
 
-    # Clone each repo from its sg-evals mirror
     for repo in repos:
         url = repo.get("url", "")
         rev = repo.get("rev", "")
@@ -125,11 +163,8 @@ def generate_standard_dockerfile(task_data: dict) -> str:
         if not url or not rev or not path:
             continue
 
-        mirror = mirror_name_for_repo(url, rev)
-        mirror_url = f"https://github.com/{ORG}/{mirror}.git"
-
         lines.append(f"# {role}: {url} @ {rev}")
-        lines.append(f"RUN git clone --depth 1 {mirror_url} /workspace/{path}")
+        lines.extend(_clone_commands(url, rev, path, source))
         lines.append("")
 
     lines.append("WORKDIR /workspace")
@@ -163,7 +198,7 @@ def generate_sg_only_dockerfile(task_data: dict) -> str:
     return "\n".join(lines)
 
 
-def generate_hybrid_dockerfile(task_data: dict) -> str:
+def generate_hybrid_dockerfile(task_data: dict, *, source: str = "mirror") -> str:
     """Generate Dockerfile.hybrid: local clone + MCP available."""
     repos = task_data.get("repos", [])
     task_info = task_data.get("task", {})
@@ -196,11 +231,8 @@ def generate_hybrid_dockerfile(task_data: dict) -> str:
         if not url or not rev or not path:
             continue
 
-        mirror = mirror_name_for_repo(url, rev)
-        mirror_url = f"https://github.com/{ORG}/{mirror}.git"
-
         lines.append(f"# {role}: {url} @ {rev}")
-        lines.append(f"RUN git clone --depth 1 {mirror_url} /workspace/{path}")
+        lines.extend(_clone_commands(url, rev, path, source))
         lines.append("")
 
     lines.append("# MCP also available via SOURCEGRAPH_REPOS env var")
@@ -214,8 +246,19 @@ def generate_hybrid_dockerfile(task_data: dict) -> str:
 #  MAIN
 # ═══════════════════════════════════════════════════════════════
 
-def generate_for_task(task_file: Path, output_dir: Path | None = None) -> dict[str, Path]:
+def generate_for_task(
+    task_file: Path,
+    output_dir: Path | None = None,
+    *,
+    source: str = "mirror",
+) -> dict[str, Path]:
     """Generate all Dockerfile variants for a single task.
+
+    Args:
+        task_file: Path to a task.toml file.
+        output_dir: Where to write Dockerfiles (default: task_file/../environment).
+        source: ``"mirror"`` (default) clones from sg-evals mirrors;
+                ``"upstream"`` clones directly from the original repo URL.
 
     Returns dict of variant name -> output path.
     """
@@ -231,19 +274,19 @@ def generate_for_task(task_file: Path, output_dir: Path | None = None) -> dict[s
     results = {}
 
     # Standard
-    content = generate_standard_dockerfile(task_data)
+    content = generate_standard_dockerfile(task_data, source=source)
     path = output_dir / "Dockerfile"
     path.write_text(content)
     results["standard"] = path
 
-    # SG-only
+    # SG-only (no cloning — unaffected by source)
     content = generate_sg_only_dockerfile(task_data)
     path = output_dir / "Dockerfile.sg_only"
     path.write_text(content)
     results["sg_only"] = path
 
     # Hybrid
-    content = generate_hybrid_dockerfile(task_data)
+    content = generate_hybrid_dockerfile(task_data, source=source)
     path = output_dir / "Dockerfile.hybrid"
     path.write_text(content)
     results["hybrid"] = path
@@ -261,6 +304,15 @@ def main():
                         help="Output directory for Dockerfiles (default: alongside task.toml)")
     parser.add_argument("--all", action="store_true",
                         help="Process all task files in directory")
+    # --upstream: clone from original repo URLs instead of sg-evals mirrors.
+    # Useful for local testing when mirrors haven't been created yet
+    # (only 6 of ~120 required mirrors exist as of March 2026).
+    parser.add_argument("--upstream", dest="source", action="store_const",
+                        const="upstream", default="mirror",
+                        help="Clone from upstream repos instead of sg-evals mirrors")
+    parser.add_argument("--source", dest="source", choices=["mirror", "upstream"],
+                        default="mirror",
+                        help="Clone source: 'mirror' (default) or 'upstream'")
     args = parser.parse_args()
 
     if not args.path.exists():
@@ -281,7 +333,7 @@ def main():
     for task_file in task_files:
         print(f"\nProcessing: {task_file}")
         try:
-            results = generate_for_task(task_file, args.output_dir)
+            results = generate_for_task(task_file, args.output_dir, source=args.source)
             for variant, path in results.items():
                 print(f"  {variant:12s} -> {path}")
             total_generated += len(results)

@@ -1,15 +1,593 @@
 {
   "_description": "Mirrors needed for reproducible Sourcegraph indexing (EnterpriseBench)",
-  "_generated": "2026-03-28",
-  "_status": "2 mirrors from 1 task files",
+  "_generated": "2026-03-29",
+  "_status": "131 mirrors from 117 task files",
   "mirrors": [
+    {
+      "upstream": "github.com/NodeBB/NodeBB",
+      "commit": "8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7",
+      "mirror": "sg-evals/NodeBB--8fd8079a",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-nodebb-notif-011"
+      ]
+    },
+    {
+      "upstream": "github.com/microsoft/TypeScript",
+      "commit": "f7833b2a72309dd695b45cf2cf2187e2f2f264df",
+      "mirror": "sg-evals/TypeScript--f7833b2a",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-004"
+      ]
+    },
+    {
+      "upstream": "github.com/angular/angular",
+      "commit": "891318e805da3cdfb9839bf6cb3412c15c146253",
+      "mirror": "sg-evals/angular--891318e8",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-005"
+      ]
+    },
+    {
+      "upstream": "github.com/ansible/ansible",
+      "commit": "v2.16.0",
+      "mirror": "sg-evals/ansible--v2.16.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "ansible-abc-imports-fix-001",
+        "ansible-galaxy-tar-regression-prove-001"
+      ]
+    },
+    {
+      "upstream": "github.com/argoproj/argo-cd",
+      "commit": "v2.14.0-rc3",
+      "mirror": "sg-evals/argo-cd--v2.14.0-rc3",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-argocd-redis-ha-004"
+      ]
+    },
+    {
+      "upstream": "github.com/dotnet/aspnetcore",
+      "commit": "v9.0.0",
+      "mirror": "sg-evals/aspnetcore--v9.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "aspnetcore-code-review-001"
+      ]
+    },
+    {
+      "upstream": "github.com/aws/aws-cli",
+      "commit": "2.11.0",
+      "mirror": "sg-evals/aws-cli--2.11.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-008"
+      ]
+    },
+    {
+      "upstream": "github.com/axios/axios",
+      "commit": "v0.21.1",
+      "mirror": "sg-evals/axios--v0.21.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-002"
+      ]
+    },
+    {
+      "upstream": "github.com/babel/babel",
+      "commit": "v7.22.20",
+      "mirror": "sg-evals/babel--v7.22.20",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "monorepo-boundary-babel-metadata-003"
+      ]
+    },
+    {
+      "upstream": "github.com/babel/babel",
+      "commit": "v7.23.5",
+      "mirror": "sg-evals/babel--v7.23.5",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "monorepo-boundary-babel-ts-init-001",
+        "monorepo-boundary-babel-forof-004"
+      ]
+    },
+    {
+      "upstream": "github.com/babel/babel",
+      "commit": "v7.23.9",
+      "mirror": "sg-evals/babel--v7.23.9",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "monorepo-boundary-babel-decorators-002"
+      ]
+    },
+    {
+      "upstream": "github.com/babel/babel",
+      "commit": "v7.25.0",
+      "mirror": "sg-evals/babel--v7.25.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-005"
+      ]
+    },
+    {
+      "upstream": "github.com/apache/beam",
+      "commit": "v2.55.0",
+      "mirror": "sg-evals/beam--v2.55.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "beam-pipeline-builder-refac-001"
+      ]
+    },
+    {
+      "upstream": "github.com/boto/boto3",
+      "commit": "1.26.0",
+      "mirror": "sg-evals/boto3--1.26.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-008",
+        "dep-traversal-009"
+      ]
+    },
+    {
+      "upstream": "github.com/projectcalico/calico",
+      "commit": "70ebb8c4fd8cd32233afce241f013d484b4bb860",
+      "mirror": "sg-evals/calico--70ebb8c4",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "rbac-audit-001"
+      ]
+    },
+    {
+      "upstream": "github.com/apache/camel",
+      "commit": "camel-4.4.0",
+      "mirror": "sg-evals/camel--camel-4.4.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "camel-routing-arch-001"
+      ]
+    },
+    {
+      "upstream": "github.com/ceph/ceph",
+      "commit": "v19.2.0",
+      "mirror": "sg-evals/ceph--v19.2.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "ceph-rgw-auth-secure-001"
+      ]
+    },
+    {
+      "upstream": "github.com/bitnami/charts",
+      "commit": "130ffd163382dffd5762034291203a3ac2792fba",
+      "mirror": "sg-evals/charts--130ffd16",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-consul-serf-port-001"
+      ]
+    },
+    {
+      "upstream": "github.com/bitnami/charts",
+      "commit": "478a81c9e91d2c2cf867e70aeea81e10cbcab9ce",
+      "mirror": "sg-evals/charts--478a81c9",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-redis-password-003"
+      ]
+    },
+    {
+      "upstream": "github.com/bitnami/charts",
+      "commit": "53aca51120f86086e6780dc0453b93fbf49766b4",
+      "mirror": "sg-evals/charts--53aca511",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-scdf-rabbitmq-002"
+      ]
+    },
+    {
+      "upstream": "github.com/go-chi/chi",
+      "commit": "v5.0.8",
+      "mirror": "sg-evals/chi--v5.0.8",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-003"
+      ]
+    },
+    {
+      "upstream": "github.com/pallets/click",
+      "commit": "8.2.1",
+      "mirror": "sg-evals/click--8.2.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "cal-err-click-flagval-002",
+        "cal-sup-click-sentinel-005",
+        "cal-sup-click-clirunner-008",
+        "cal-drift-click-envvar-002",
+        "cal-dead-click-legacy-001"
+      ]
+    },
+    {
+      "upstream": "github.com/spf13/cobra",
+      "commit": "v1.10.2",
+      "mirror": "sg-evals/cobra--v1.10.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-002"
+      ]
+    },
+    {
+      "upstream": "github.com/hashicorp/consul",
+      "commit": "v1.16.0",
+      "mirror": "sg-evals/consul--v1.16.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-005"
+      ]
+    },
+    {
+      "upstream": "github.com/LibreOffice/core",
+      "commit": "61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e",
+      "mirror": "sg-evals/core--61f8fb64",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-libreoffice-formula-007"
+      ]
+    },
+    {
+      "upstream": "github.com/curl/curl",
+      "commit": "curl-7_82_0",
+      "mirror": "sg-evals/curl--curl-7_82_0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-012"
+      ]
+    },
+    {
+      "upstream": "github.com/discourse/discourse",
+      "commit": "168de52538632ae18b95c0757ab2ae5e21ff240c",
+      "mirror": "sg-evals/discourse--168de525",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-008"
+      ]
+    },
+    {
+      "upstream": "github.com/discourse/discourse",
+      "commit": "290b435a727ed1d95aef554d60d8572eba7e818a",
+      "mirror": "sg-evals/discourse--290b435a",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-006"
+      ]
+    },
+    {
+      "upstream": "github.com/discourse/discourse",
+      "commit": "5d603ece49a296da47197bc91ea8e1d178d5772c",
+      "mirror": "sg-evals/discourse--5d603ece",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-007"
+      ]
+    },
+    {
+      "upstream": "github.com/discourse/discourse",
+      "commit": "e7c3abb94b1db0ff811f991b873dcca9d589cd3a",
+      "mirror": "sg-evals/discourse--e7c3abb9",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-005"
+      ]
+    },
+    {
+      "upstream": "github.com/dropwizard/dropwizard",
+      "commit": "v2.1.0",
+      "mirror": "sg-evals/dropwizard--v2.1.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-010"
+      ]
+    },
+    {
+      "upstream": "github.com/apache/druid",
+      "commit": "druid-26.0.0",
+      "mirror": "sg-evals/druid--druid-26.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-002"
+      ]
+    },
+    {
+      "upstream": "github.com/element-hq/element-web",
+      "commit": "526645c79160ab1ad4b4c3845de27d51263a405e",
+      "mirror": "sg-evals/element-web--526645c7",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-element-unread-010"
+      ]
+    },
+    {
+      "upstream": "github.com/element-hq/element-web",
+      "commit": "8ebdcab7d92f90422776c4390363338dcfd98ba5",
+      "mirror": "sg-evals/element-web--8ebdcab7",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-element-threads-009"
+      ]
+    },
+    {
+      "upstream": "github.com/envoyproxy/envoy",
+      "commit": "v1.18.0",
+      "mirror": "sg-evals/envoy--v1.18.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-envoy-xds-v2-006"
+      ]
+    },
+    {
+      "upstream": "github.com/envoyproxy/envoy",
+      "commit": "v1.31.2",
+      "mirror": "sg-evals/envoy--v1.31.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-envoy-connpool-001",
+        "ccx-incident-032",
+        "ccx-compliance-052"
+      ]
+    },
+    {
+      "upstream": "github.com/eslint/eslint",
+      "commit": "v10.0.0",
+      "mirror": "sg-evals/eslint--v10.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-mgmt-eslint-scope-001"
+      ]
+    },
+    {
+      "upstream": "github.com/etcd-io/etcd",
+      "commit": "v3.3.0",
+      "mirror": "sg-evals/etcd--v3.3.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-grpc-metadata-001"
+      ]
+    },
+    {
+      "upstream": "github.com/etcd-io/etcd",
+      "commit": "v3.3.10",
+      "mirror": "sg-evals/etcd--v3.3.10",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-grpc-transport-003"
+      ]
+    },
+    {
+      "upstream": "github.com/etcd-io/etcd",
+      "commit": "v3.4.3",
+      "mirror": "sg-evals/etcd--v3.4.3",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-grpc-balancer-002"
+      ]
+    },
+    {
+      "upstream": "github.com/etcd-io/etcd",
+      "commit": "v3.4.7",
+      "mirror": "sg-evals/etcd--v3.4.7",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-mgmt-grpc-go-balancer-001"
+      ]
+    },
     {
       "upstream": "github.com/etcd-io/etcd",
       "commit": "v3.5.10",
       "mirror": "sg-evals/etcd--v3.5.10",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
-        "dep-mgmt-grpc-proto-bump-001"
+        "dep-mgmt-grpc-proto-bump-001",
+        "dep-mgmt-proto-v2-chain-001"
+      ]
+    },
+    {
+      "upstream": "github.com/etcd-io/etcd",
+      "commit": "v3.5.12",
+      "mirror": "sg-evals/etcd--v3.5.12",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-004"
+      ]
+    },
+    {
+      "upstream": "github.com/etcd-io/etcd",
+      "commit": "v3.5.17",
+      "mirror": "sg-evals/etcd--v3.5.17",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-grpc-clientconn-004",
+        "refactor-orch-003",
+        "refactor-orch-007",
+        "refactor-orch-008"
+      ]
+    },
+    {
+      "upstream": "github.com/etcd-io/etcd",
+      "commit": "v3.5.9",
+      "mirror": "sg-evals/etcd--v3.5.9",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-004"
+      ]
+    },
+    {
+      "upstream": "github.com/etcd-io/etcd",
+      "commit": "v3.6.0",
+      "mirror": "sg-evals/etcd--v3.6.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-001"
+      ]
+    },
+    {
+      "upstream": "github.com/pallets/flask",
+      "commit": "3.1.0",
+      "mirror": "sg-evals/flask--3.1.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "cal-err-flask-blueprint-001",
+        "cal-err-flask-endpoint-004",
+        "cal-sup-flask-errhandler-006",
+        "cal-drift-flask-config-001",
+        "cal-dead-flask-legacy-002"
+      ]
+    },
+    {
+      "upstream": "github.com/gcc-mirror/gcc",
+      "commit": "a8f3c97d",
+      "mirror": "sg-evals/gcc--a8f3c97d",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "ccx-dep-trace-106"
+      ]
+    },
+    {
+      "upstream": "github.com/mozilla/gecko-dev",
+      "commit": "1a843e2167f97a3789f9d8a7a9772586f0e1c16f",
+      "mirror": "sg-evals/gecko-dev--1a843e21",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-firefox-css-crash-006"
+      ]
+    },
+    {
+      "upstream": "github.com/gin-gonic/gin",
+      "commit": "v1.9.1",
+      "mirror": "sg-evals/gin--v1.9.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "ir-deploy-error-spike-001"
+      ]
+    },
+    {
+      "upstream": "github.com/git/git",
+      "commit": "v2.35.0",
+      "mirror": "sg-evals/git--v2.35.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-012"
+      ]
+    },
+    {
+      "upstream": "github.com/envoyproxy/go-control-plane",
+      "commit": "v0.12.0",
+      "mirror": "sg-evals/go-control-plane--v0.12.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-006"
+      ]
+    },
+    {
+      "upstream": "github.com/envoyproxy/go-control-plane",
+      "commit": "v0.13.2",
+      "mirror": "sg-evals/go-control-plane--v0.13.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-gocp-module-007"
+      ]
+    },
+    {
+      "upstream": "github.com/envoyproxy/go-control-plane",
+      "commit": "v0.9.8",
+      "mirror": "sg-evals/go-control-plane--v0.9.8",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-envoy-xds-v2-006"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc-ecosystem/go-grpc-middleware",
+      "commit": "v1.4.0",
+      "mirror": "sg-evals/go-grpc-middleware--v1.4.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-008"
+      ]
+    },
+    {
+      "upstream": "github.com/grafana/grafana",
+      "commit": "v10.1.0",
+      "mirror": "sg-evals/grafana--v10.1.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-inv-prom-parse-003"
+      ]
+    },
+    {
+      "upstream": "github.com/grafana/grafana",
+      "commit": "v10.2.0",
+      "mirror": "sg-evals/grafana--v10.2.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "error-trace-grafana-jaeger-panic-001",
+        "support-map-grafana-import-003",
+        "support-map-grafana-alerts-004"
+      ]
+    },
+    {
+      "upstream": "github.com/grafana/grafana",
+      "commit": "v9.5.0",
+      "mirror": "sg-evals/grafana--v9.5.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-002"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.14.0",
+      "mirror": "sg-evals/grpc-go--v1.14.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-grpc-transport-003"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.27.0",
+      "mirror": "sg-evals/grpc-go--v1.27.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-grpc-balancer-002",
+        "dep-mgmt-grpc-go-balancer-001"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.4.0",
+      "mirror": "sg-evals/grpc-go--v1.4.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-grpc-metadata-001"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.46.0",
+      "mirror": "sg-evals/grpc-go--v1.46.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-celgo-program-008"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.58.0",
+      "mirror": "sg-evals/grpc-go--v1.58.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-004"
       ]
     },
     {
@@ -18,7 +596,625 @@
       "mirror": "sg-evals/grpc-go--v1.60.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
-        "dep-mgmt-grpc-proto-bump-001"
+        "inc-grpc-goroutine-leak-001",
+        "dep-mgmt-grpc-proto-bump-001",
+        "dep-mgmt-proto-v2-chain-001"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.62.0",
+      "mirror": "sg-evals/grpc-go--v1.62.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-006",
+        "refactor-orch-004"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.68.0",
+      "mirror": "sg-evals/grpc-go--v1.68.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-gocp-module-007"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.70.0",
+      "mirror": "sg-evals/grpc-go--v1.70.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-protobuf-v2-005"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.71.0",
+      "mirror": "sg-evals/grpc-go--v1.71.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-grpc-clientconn-004"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.72.1",
+      "mirror": "sg-evals/grpc-go--v1.72.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-003"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-go",
+      "commit": "v1.79.0",
+      "mirror": "sg-evals/grpc-go--v1.79.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-007"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc-node",
+      "commit": "v1.8.0",
+      "mirror": "sg-evals/grpc-node--v1.8.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-007"
+      ]
+    },
+    {
+      "upstream": "github.com/goharbor/harbor",
+      "commit": "v2.12.0",
+      "mirror": "sg-evals/harbor--v2.12.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "rbac-audit-003"
+      ]
+    },
+    {
+      "upstream": "github.com/gohugoio/hugo",
+      "commit": "v0.111.0",
+      "mirror": "sg-evals/hugo--v0.111.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-003"
+      ]
+    },
+    {
+      "upstream": "github.com/istio/istio",
+      "commit": "1.20.0",
+      "mirror": "sg-evals/istio--1.20.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-006"
+      ]
+    },
+    {
+      "upstream": "github.com/istio/istio",
+      "commit": "1.24.0",
+      "mirror": "sg-evals/istio--1.24.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-gocp-module-007"
+      ]
+    },
+    {
+      "upstream": "github.com/istio/istio",
+      "commit": "1.6.0",
+      "mirror": "sg-evals/istio--1.6.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-envoy-xds-v2-006"
+      ]
+    },
+    {
+      "upstream": "github.com/FasterXML/jackson-databind",
+      "commit": "jackson-databind-2.13.2",
+      "mirror": "sg-evals/jackson-databind--jackson-databind-2.13.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-010"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes-client/javascript",
+      "commit": "0.18.0",
+      "mirror": "sg-evals/javascript--0.18.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-007"
+      ]
+    },
+    {
+      "upstream": "github.com/jestjs/jest",
+      "commit": "v29.0.0",
+      "mirror": "sg-evals/jest--v29.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-001"
+      ]
+    },
+    {
+      "upstream": "github.com/apache/kafka",
+      "commit": "0753c489",
+      "mirror": "sg-evals/kafka--0753c489",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "ccx-compliance-053"
+      ]
+    },
+    {
+      "upstream": "github.com/apache/kafka",
+      "commit": "3.1.0",
+      "mirror": "sg-evals/kafka--3.1.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-011"
+      ]
+    },
+    {
+      "upstream": "github.com/apache/kafka",
+      "commit": "3.7.0",
+      "mirror": "sg-evals/kafka--3.7.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-kafka-bufpool-012"
+      ]
+    },
+    {
+      "upstream": "github.com/keycloak/keycloak",
+      "commit": "6fd372cbe60dff025c30da9d69da00f74097b1b9",
+      "mirror": "sg-evals/keycloak--6fd372cb",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "rbac-audit-004"
+      ]
+    },
+    {
+      "upstream": "github.com/keycloak/keycloak",
+      "commit": "c8428c040a896696d9d0e99b37df509e59c6c7a4",
+      "mirror": "sg-evals/keycloak--c8428c04",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "rbac-audit-002"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.13.0",
+      "mirror": "sg-evals/kubernetes--v1.13.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-grpc-transport-003"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.24.0",
+      "mirror": "sg-evals/kubernetes--v1.24.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-012"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.28.0",
+      "mirror": "sg-evals/kubernetes--v1.28.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-k8s-eviction-005",
+        "dep-traversal-004"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.32.0",
+      "mirror": "sg-evals/kubernetes--v1.32.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "error-trace-k8s-poststarthook-001",
+        "error-trace-k8s-sessionaffinity-001",
+        "refactor-orch-001",
+        "refactor-orch-003"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.33.0",
+      "mirror": "sg-evals/kubernetes--v1.33.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-002",
+        "refactor-orch-007",
+        "refactor-orch-008"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.33.0-alpha.1",
+      "mirror": "sg-evals/kubernetes--v1.33.0-alpha.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "error-trace-k8s-job-starttime-001",
+        "error-trace-k8s-utf8-envvar-001"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.33.0-alpha.2",
+      "mirror": "sg-evals/kubernetes--v1.33.0-alpha.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "error-trace-k8s-nftables-sync-001",
+        "error-trace-k8s-sidecar-restart-001"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.34.0",
+      "mirror": "sg-evals/kubernetes--v1.34.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-006"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.7.3",
+      "mirror": "sg-evals/kubernetes--v1.7.3",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-inv-watch-cache-001"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes/kubernetes",
+      "commit": "v1.9.1",
+      "mirror": "sg-evals/kubernetes--v1.9.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-inv-watch-delete-002"
+      ]
+    },
+    {
+      "upstream": "github.com/llvm/llvm-project",
+      "commit": "llvmorg-18.1.0",
+      "mirror": "sg-evals/llvm-project--llvmorg-18.1.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-llvm-assertion-002"
+      ]
+    },
+    {
+      "upstream": "github.com/lodash/lodash",
+      "commit": "4.17.20",
+      "mirror": "sg-evals/lodash--4.17.20",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-001"
+      ]
+    },
+    {
+      "upstream": "github.com/apache/logging-log4j2",
+      "commit": "rel/2.14.1",
+      "mirror": "sg-evals/logging-log4j2--rel/2.14.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-011"
+      ]
+    },
+    {
+      "upstream": "github.com/mattermost/mattermost",
+      "commit": "1349899f42212aab066a8d1a6caed08b7d3d2b53",
+      "mirror": "sg-evals/mattermost--1349899f",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-010"
+      ]
+    },
+    {
+      "upstream": "github.com/moby/moby",
+      "commit": "v28.0.0",
+      "mirror": "sg-evals/moby--v28.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-inv-docker-shutdown-004"
+      ]
+    },
+    {
+      "upstream": "github.com/vercel/next.js",
+      "commit": "v13.5.6",
+      "mirror": "sg-evals/next.js--v13.5.6",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "monorepo-boundary-nextjs-og-008"
+      ]
+    },
+    {
+      "upstream": "github.com/pnpm/pnpm",
+      "commit": "v8.15.9",
+      "mirror": "sg-evals/pnpm--v8.15.9",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "monorepo-boundary-pnpm-lockfile-005"
+      ]
+    },
+    {
+      "upstream": "github.com/pnpm/pnpm",
+      "commit": "v9.15.0",
+      "mirror": "sg-evals/pnpm--v9.15.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "monorepo-boundary-pnpm-lifecycle-006",
+        "monorepo-boundary-pnpm-sha256-007"
+      ]
+    },
+    {
+      "upstream": "github.com/prometheus/prometheus",
+      "commit": "v2.45.0",
+      "mirror": "sg-evals/prometheus--v2.45.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-005"
+      ]
+    },
+    {
+      "upstream": "github.com/prometheus/prometheus",
+      "commit": "v2.46.0",
+      "mirror": "sg-evals/prometheus--v2.46.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-inv-prom-parse-003"
+      ]
+    },
+    {
+      "upstream": "github.com/prometheus/prometheus",
+      "commit": "v2.48.0",
+      "mirror": "sg-evals/prometheus--v2.48.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "inc-grpc-goroutine-leak-001"
+      ]
+    },
+    {
+      "upstream": "github.com/protocolbuffers/protobuf-go",
+      "commit": "v1.32.0",
+      "mirror": "sg-evals/protobuf-go--v1.32.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orch-004"
+      ]
+    },
+    {
+      "upstream": "github.com/qutebrowser/qutebrowser",
+      "commit": "v3.0.0",
+      "mirror": "sg-evals/qutebrowser--v3.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-map-qutebrowser-cache-008"
+      ]
+    },
+    {
+      "upstream": "github.com/facebook/react",
+      "commit": "56408a5b12fa4099e9dbbeca7f6bc59e1307e507",
+      "mirror": "sg-evals/react--56408a5b",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-002"
+      ]
+    },
+    {
+      "upstream": "github.com/facebook/react",
+      "commit": "9fba65efa50fe5f38e5664729d4aa6f85cf7be92",
+      "mirror": "sg-evals/react--9fba65ef",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-001"
+      ]
+    },
+    {
+      "upstream": "github.com/facebook/react",
+      "commit": "ab18f33d46171ed1963ae1ac955c5110bb1eb199",
+      "mirror": "sg-evals/react--ab18f33d",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-003"
+      ]
+    },
+    {
+      "upstream": "github.com/unknown/repo",
+      "commit": "HEAD",
+      "mirror": "sg-evals/repo--HEAD",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "bustub-hyperloglog-impl-001"
+      ]
+    },
+    {
+      "upstream": "github.com/psf/requests",
+      "commit": "v2.28.0",
+      "mirror": "sg-evals/requests--v2.28.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-008",
+        "dep-traversal-009"
+      ]
+    },
+    {
+      "upstream": "github.com/psf/requests",
+      "commit": "v2.28.2",
+      "mirror": "sg-evals/requests--v2.28.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-mgmt-urllib3-requests-001"
+      ]
+    },
+    {
+      "upstream": "github.com/psf/requests",
+      "commit": "v2.32.3",
+      "mirror": "sg-evals/requests--v2.32.3",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "cal-err-requests-proxy-003",
+        "cal-sup-requests-cabundle-007"
+      ]
+    },
+    {
+      "upstream": "github.com/rust-lang/rust",
+      "commit": "1.76.0",
+      "mirror": "sg-evals/rust--1.76.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "monorepo-boundary-rustc-statics-010"
+      ]
+    },
+    {
+      "upstream": "github.com/rust-lang/rust",
+      "commit": "1.83.0",
+      "mirror": "sg-evals/rust--1.83.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "monorepo-boundary-rustc-attr-009"
+      ]
+    },
+    {
+      "upstream": "github.com/getsentry/sentry",
+      "commit": "fad1fc61366a8162823603a9e86eafd96faa9c00",
+      "mirror": "sg-evals/sentry--fad1fc61",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-009"
+      ]
+    },
+    {
+      "upstream": "github.com/spring-projects/spring-boot",
+      "commit": "v2.6.1",
+      "mirror": "sg-evals/spring-boot--v2.6.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-011"
+      ]
+    },
+    {
+      "upstream": "github.com/spring-projects/spring-boot",
+      "commit": "v2.7.0",
+      "mirror": "sg-evals/spring-boot--v2.7.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-010"
+      ]
+    },
+    {
+      "upstream": "github.com/stripe/stripe-go",
+      "commit": "v76.0.0",
+      "mirror": "sg-evals/stripe-go--v76.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "ir-deploy-error-spike-001"
+      ]
+    },
+    {
+      "upstream": "github.com/hashicorp/terraform",
+      "commit": "v1.10.0",
+      "mirror": "sg-evals/terraform--v1.10.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "error-trace-tf-backend-nilptr-001",
+        "error-trace-tf-backend-copypaste-001"
+      ]
+    },
+    {
+      "upstream": "github.com/hashicorp/terraform",
+      "commit": "v1.6.0",
+      "mirror": "sg-evals/terraform--v1.6.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "error-trace-tf-builtin-schema-001"
+      ]
+    },
+    {
+      "upstream": "github.com/typescript-eslint/typescript-eslint",
+      "commit": "v8.20.0",
+      "mirror": "sg-evals/typescript-eslint--v8.20.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-mgmt-eslint-scope-001"
+      ]
+    },
+    {
+      "upstream": "github.com/urllib3/urllib3",
+      "commit": "1.26.16",
+      "mirror": "sg-evals/urllib3--1.26.16",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-009"
+      ]
+    },
+    {
+      "upstream": "github.com/urllib3/urllib3",
+      "commit": "2.0.0",
+      "mirror": "sg-evals/urllib3--2.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-mgmt-urllib3-requests-001"
+      ]
+    },
+    {
+      "upstream": "github.com/hashicorp/vault",
+      "commit": "v1.14.0",
+      "mirror": "sg-evals/vault--v1.14.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-005"
+      ]
+    },
+    {
+      "upstream": "github.com/webpack/webpack",
+      "commit": "v5.64.0",
+      "mirror": "sg-evals/webpack--v5.64.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-001"
+      ]
+    },
+    {
+      "upstream": "github.com/zulip/zulip",
+      "commit": "38053e9c7cc59b5e3f7c26af49fc1bb57acf0b86",
+      "mirror": "sg-evals/zulip--38053e9c",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-001"
+      ]
+    },
+    {
+      "upstream": "github.com/zulip/zulip",
+      "commit": "912c1b598458f89afa6814b3a19b95d4648e2371",
+      "mirror": "sg-evals/zulip--912c1b59",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-002"
+      ]
+    },
+    {
+      "upstream": "github.com/zulip/zulip",
+      "commit": "f2a5dc949a7c0ec776b3729b2c92703292404127",
+      "mirror": "sg-evals/zulip--f2a5dc94",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-004"
+      ]
+    },
+    {
+      "upstream": "github.com/zulip/zulip",
+      "commit": "faa06497ed09f65dc0c7ba510dc56ebd41fbe037",
+      "mirror": "sg-evals/zulip--faa06497",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-003"
       ]
     }
   ]

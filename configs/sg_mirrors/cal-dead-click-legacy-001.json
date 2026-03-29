@@ -1,0 +1,10 @@
+{
+  "task_id": "cal-dead-click-legacy-001",
+  "mirrors": [
+    {
+      "repo": "github.com/pallets/click",
+      "rev": "8.2.1",
+      "mirror_id": "pallets/click--8.2.1"
+    }
+  ]
+}

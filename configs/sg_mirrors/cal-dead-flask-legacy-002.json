@@ -1,0 +1,10 @@
+{
+  "task_id": "cal-dead-flask-legacy-002",
+  "mirrors": [
+    {
+      "repo": "github.com/pallets/flask",
+      "rev": "3.1.0",
+      "mirror_id": "pallets/flask--3.1.0"
+    }
+  ]
+}

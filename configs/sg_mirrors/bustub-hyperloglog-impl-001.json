@@ -1,0 +1,10 @@
+{
+  "task_id": "bustub-hyperloglog-impl-001",
+  "mirrors": [
+    {
+      "repo": "github.com/unknown/repo",
+      "rev": "HEAD",
+      "mirror_id": "unknown/repo--HEAD"
+    }
+  ]
+}

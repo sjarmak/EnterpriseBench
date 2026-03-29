@@ -1,0 +1,10 @@
+{
+  "task_id": "cal-sup-click-clirunner-008",
+  "mirrors": [
+    {
+      "repo": "github.com/pallets/click",
+      "rev": "8.2.1",
+      "mirror_id": "pallets/click--8.2.1"
+    }
+  ]
+}

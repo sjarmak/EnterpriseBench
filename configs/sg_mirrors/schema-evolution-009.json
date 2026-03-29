@@ -1,0 +1,10 @@
+{
+  "task_id": "schema-evolution-009",
+  "mirrors": [
+    {
+      "repo": "github.com/getsentry/sentry",
+      "rev": "fad1fc61366a8162823603a9e86eafd96faa9c00",
+      "mirror_id": "getsentry/sentry--fad1fc61"
+    }
+  ]
+}

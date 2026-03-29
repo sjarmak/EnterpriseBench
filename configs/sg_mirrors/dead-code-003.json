@@ -1,0 +1,10 @@
+{
+  "task_id": "dead-code-003",
+  "mirrors": [
+    {
+      "repo": "github.com/facebook/react",
+      "rev": "ab18f33d46171ed1963ae1ac955c5110bb1eb199",
+      "mirror_id": "facebook/react--ab18f33d"
+    }
+  ]
+}

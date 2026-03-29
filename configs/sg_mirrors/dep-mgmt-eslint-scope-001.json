@@ -1,0 +1,15 @@
+{
+  "task_id": "dep-mgmt-eslint-scope-001",
+  "mirrors": [
+    {
+      "repo": "github.com/eslint/eslint",
+      "rev": "v10.0.0",
+      "mirror_id": "eslint/eslint--v10.0.0"
+    },
+    {
+      "repo": "github.com/typescript-eslint/typescript-eslint",
+      "rev": "v8.20.0",
+      "mirror_id": "typescript-eslint/typescript-eslint--v8.20.0"
+    }
+  ]
+}
