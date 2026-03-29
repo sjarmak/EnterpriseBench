@@ -17,7 +17,7 @@ fi
 
 # Extract ordered repo list from agent's plan (numbered list items)
 PROPOSED_FILE=$(mktemp)
-grep -oE '^\s*[0-9]+\.\s+\S+' "$ANSWER" | sed 's/^[[:space:]]*[0-9]*\.\s*//' | head -20 > "$PROPOSED_FILE"
+grep -oE '^\s*[0-9]+\.\s+\S+' "$ANSWER" | sed 's/^[[:space:]]*[0-9]*\.\s*//' | head -20 > "$PROPOSED_FILE" || true
 
 if [[ ! -s "$PROPOSED_FILE" ]]; then
   rm -f "$PROPOSED_FILE"

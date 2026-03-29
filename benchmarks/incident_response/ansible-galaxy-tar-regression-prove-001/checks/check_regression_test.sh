@@ -13,7 +13,7 @@ fi
 # Check it has test functions
 TEST_COUNT=$(grep -c "def test_" "$TEST_FILE" 2>/dev/null || echo 0)
 if [ "$TEST_COUNT" -ge 1 ]; then
-    SCORE=$(python3 -c "print(round(min(1.0, $TEST_COUNT / 2), 2))")
+    SCORE=$(awk "BEGIN {s=$TEST_COUNT/2; if(s>1)s=1; printf \"%.2f\", s}")
     printf '{"score": %s, "passed": true, "detail": "regression_test.py has %d test functions"}\n' "$SCORE" "$TEST_COUNT"
 else
     printf '{"score": 0.2, "passed": false, "detail": "regression_test.py exists but has no test_ functions"}\n'

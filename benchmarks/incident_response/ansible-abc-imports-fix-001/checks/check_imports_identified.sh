@@ -19,6 +19,6 @@ if grep -rq "_collections_compat" "$WORKSPACE/agent_output/" 2>/dev/null; then
     FOUND=$((FOUND + 1))
 fi
 
-SCORE=$(python3 -c "print(round($FOUND / max($TOTAL, 1), 2))")
+SCORE=$(awk "BEGIN {t=($TOTAL>1?$TOTAL:1); printf \"%.2f\", $FOUND/t}")
 PASSED=$([ "$FOUND" -ge 1 ] && echo true || echo false)
 printf '{"score": %s, "passed": %s, "detail": "Identified %d/%d import sources"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"

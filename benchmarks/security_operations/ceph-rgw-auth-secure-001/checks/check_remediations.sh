@@ -16,6 +16,6 @@ TOTAL=2
 grep -qiE "remediat|recommend|mitigat|fix|patch|harden" "$REPORT" && FOUND=$((FOUND + 1))
 grep -qiE "risk.*assessment\|summary\|overall\|conclusion" "$REPORT" && FOUND=$((FOUND + 1))
 
-SCORE=$(python3 -c "print(round($FOUND / $TOTAL, 2))")
+SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
 PASSED=$([ "$FOUND" -ge 1 ] && echo true || echo false)
 printf '{"score": %s, "passed": %s, "detail": "Remediation quality: %d/%d criteria"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"

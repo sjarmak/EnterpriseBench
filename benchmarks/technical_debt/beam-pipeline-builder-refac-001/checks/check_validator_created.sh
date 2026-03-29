@@ -17,6 +17,6 @@ grep -q "class.*Builder" "$TARGET" 2>/dev/null && FOUND=$((FOUND + 1))
 grep -q "validateRequired" "$TARGET" 2>/dev/null && FOUND=$((FOUND + 1))
 grep -q "validate\b" "$TARGET" 2>/dev/null && FOUND=$((FOUND + 1))
 
-SCORE=$(python3 -c "print(round($FOUND / $TOTAL, 2))")
+SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
 PASSED=$([ "$FOUND" -ge 2 ] && echo true || echo false)
 printf '{"score": %s, "passed": %s, "detail": "Found %d/%d required elements in validator"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"

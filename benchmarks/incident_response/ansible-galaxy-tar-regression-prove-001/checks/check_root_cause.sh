@@ -26,6 +26,6 @@ if echo "$ALL_TEXT" | grep -qi "collection.*init\|galaxy.*collection\|tarfile"; 
     FOUND=$((FOUND + 1))
 fi
 
-SCORE=$(python3 -c "print(round($FOUND / max($TOTAL, 1), 2))")
+SCORE=$(awk "BEGIN {t=($TOTAL>1?$TOTAL:1); printf \"%.2f\", $FOUND/t}")
 PASSED=$([ "$FOUND" -ge 1 ] && echo true || echo false)
 printf '{"score": %s, "passed": %s, "detail": "Found %d/%d root cause indicators"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"

@@ -19,6 +19,6 @@ echo "$TEXT" | grep -q "pattern\|design pattern\|eip\|enterprise integration" &&
 LEN=$(echo "$TEXT" | wc -c)
 [ "$LEN" -ge 500 ] && FOUND=$((FOUND + 1))
 
-SCORE=$(python3 -c "print(round($FOUND / $TOTAL, 2))")
+SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
 PASSED=$([ "$FOUND" -ge 2 ] && echo true || echo false)
 printf '{"score": %s, "passed": %s, "detail": "Architecture analysis quality: %d/%d criteria met"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"

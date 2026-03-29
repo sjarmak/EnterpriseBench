@@ -19,6 +19,6 @@ echo "$TEXT" | grep -q "routedefinition\|route.*definition" && FOUND=$((FOUND + 
 echo "$TEXT" | grep -q "pipeline" && FOUND=$((FOUND + 1))
 echo "$TEXT" | grep -q "channel" && FOUND=$((FOUND + 1))
 
-SCORE=$(python3 -c "print(round($FOUND / $TOTAL, 2))")
+SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
 PASSED=$([ "$FOUND" -ge 2 ] && echo true || echo false)
 printf '{"score": %s, "passed": %s, "detail": "Found %d/%d reification chain concepts"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"

@@ -48,6 +48,7 @@ timeout_seconds = 120
 
 [artifacts]
 required = ["code_patch"]
+optional = ["answer"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
