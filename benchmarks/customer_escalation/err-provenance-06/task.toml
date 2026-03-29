@@ -1,0 +1,71 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "error-trace-k8s-utf8-envvar-001"
+suite = "customer_escalation"
+difficulty = "hard"
+estimated_duration_minutes = 45
+session_type = "single"
+task_type = "error_provenance"
+description = "Trace invalid UTF-8 gRPC error from env var expansion byte truncation"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.33.0-alpha.1"
+path = "kubernetes"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+frameworks = ["kubernetes", "grpc"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.40
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the exact source file and function that generates the error"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the error propagation chain from source to user-visible output"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.30
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies the conditions that trigger this error"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "User-visible error (gRPC invalid UTF-8) is completely different from root cause (byte truncation in expansion); MCP needed to trace across kubelet -> CRI -> gRPC layers"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "third_party/forked/golang/expansion/expand.go"
+repo = "kubernetes"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "third_party/forked/golang/expansion/expand_test.go"
+repo = "kubernetes"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pkg/kubelet/container/helpers.go"
+repo = "kubernetes"
+confidence = 0.55

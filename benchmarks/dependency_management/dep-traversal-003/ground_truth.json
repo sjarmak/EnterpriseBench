@@ -1,0 +1,39 @@
+{
+  "candidate_id": 3,
+  "cve": "CVE-2022-32149",
+  "ghsa": "GHSA-69ch-w2m2-3vjp",
+  "package": "golang.org/x/text",
+  "ecosystem": "go",
+  "description": "golang.org/x/text Accept-Language parsing DoS affects Go HTTP middleware stacks",
+  "dependency_chain": [
+    {
+      "from": "golang.org/x/text",
+      "to": "go-chi/chi",
+      "relationship": "go module dependency",
+      "manifest": "go.mod",
+      "affected_versions": "< 0.3.8"
+    },
+    {
+      "from": "golang.org/x/text",
+      "to": "gohugoio/hugo",
+      "relationship": "go module dependency",
+      "manifest": "go.mod",
+      "affected_versions": "< 0.3.8"
+    }
+  ],
+  "direct_dependents": ["go-chi/chi", "gorilla/mux", "gohugoio/hugo"],
+  "transitive_paths": [
+    ["golang.org/x/text", "go-chi/chi", "chi-based-apps"],
+    ["golang.org/x/text", "gohugoio/hugo"]
+  ],
+  "fix_reference": "go.dev/cl/442235",
+  "affected_version_range": "< 0.3.8",
+  "fixed_version": "0.3.8",
+  "verification": {
+    "method": "go_advisory_db",
+    "advisory_id": "GO-2022-1059",
+    "verified": true
+  },
+  "difficulty": "medium",
+  "confidence": 0.92
+}

@@ -1,0 +1,99 @@
+# Monorepo Boundary: Babel TSPropertySignature.initializer removal
+
+difficulty_stratum = "monorepo_cross_package"
+
+[task]
+id = "monorepo-boundary-babel-ts-init-001"
+suite = "feature_delivery"
+task_type = "monorepo_boundary"
+difficulty = "medium"
+estimated_duration_minutes = 20
+session_type = "single"
+description = "Trace impact of removing TSPropertySignature.initializer from @babel/types across babel monorepo"
+prompt = """
+The `@babel/types` package has had the `initializer` field removed from the
+`TSPropertySignature` AST node type definition. This change was made in
+`packages/babel-types/src/definitions/typescript.ts`.
+
+Your task:
+1. Identify all sibling packages in the babel monorepo that consume the
+   `TSPropertySignature` type and are affected by this removal.
+2. For each affected package, classify the impact as none/patch/minor/major.
+3. Identify specific boundary violations — places where code or type
+   definitions reference the removed `initializer` field.
+
+Write your analysis to /workspace/babel/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/babel/babel"
+rev = "v7.23.5"
+path = "babel"
+role = "primary"
+
+[metadata]
+languages = ["typescript", "javascript"]
+total_loc = 450_000
+dependency_depth = 1
+frameworks = ["babel"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_affected_packages"
+weight = 0.25
+verifier = "checks/check_affected_packages.sh"
+description = "Agent identifies all affected sibling packages (@babel/parser, @babel/generator)"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "classify_change_impact"
+weight = 0.45
+verifier = "checks/check_impact_classification.sh"
+description = "Agent correctly classifies impact per package as patch (bug fix, no API change)"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_boundary_violations"
+weight = 0.30
+verifier = "checks/check_boundary_violations.sh"
+description = "Agent identifies specific files/lines referencing TSPropertySignature.initializer"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-package type reference tracing through barrel re-exports and generated type files benefits from semantic code navigation"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "packages/babel-types/src/definitions/typescript.ts"
+repo = "babel"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/babel-parser/src/types.d.ts"
+repo = "babel"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/babel-generator/src/generators/typescript.ts"
+repo = "babel"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "packages/babel-types/src/ast-types/generated/index.ts"
+repo = "babel"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "packages/babel-types/src/builders/generated/index.ts"
+repo = "babel"
+confidence = 0.80

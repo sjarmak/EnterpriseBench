@@ -1,0 +1,43 @@
+{
+  "task_id": "support-map-envoy-connpool-001",
+  "task_dir": "support-mapping-001",
+  "mode": "mcp",
+  "checkpoints": [
+    {
+      "name": "code_paths",
+      "weight": 0.60,
+      "score": 1.0,
+      "passed": true,
+      "detail": "Found 4/4 required, 3/3 sufficient files"
+    },
+    {
+      "name": "ownership",
+      "weight": 0.15,
+      "score": 1.0,
+      "passed": true,
+      "detail": "Matched 4/5 ownership keywords"
+    },
+    {
+      "name": "severity",
+      "weight": 0.15,
+      "score": 1.0,
+      "passed": true,
+      "detail": "Expected: high, Agent: high (score=1.0)"
+    },
+    {
+      "name": "related_issues",
+      "weight": 0.10,
+      "score": 1.0,
+      "passed": true,
+      "detail": "Matched 2/2 related references"
+    }
+  ],
+  "total_score": 1.00,
+  "tool_usage": {
+    "sourcegraph_searches": 11,
+    "symbol_navigations": 18,
+    "file_reads": 34,
+    "total_tokens": 16800
+  },
+  "infrastructure_errors": []
+}

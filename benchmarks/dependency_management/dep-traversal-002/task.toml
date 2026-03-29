@@ -1,0 +1,117 @@
+# Dependency Graph Traversal: axios ReDoS blast radius
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "dep-traversal-002"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "medium"
+estimated_duration_minutes = 25
+session_type = "single"
+description = "Trace blast radius of CVE-2021-3749 (axios ReDoS) through frontend plugin ecosystems"
+prompt = """
+CVE-2021-3749 has been reported in the `axios` npm package — a Regular Expression
+Denial of Service (ReDoS) vulnerability. Versions prior to 0.21.2 are affected.
+
+Your task:
+1. Identify the CVE and confirm the affected package and version range.
+2. Find all direct dependents of axios in the workspace repos.
+3. Trace transitive dependency paths through plugin SDKs and frontend modules.
+4. For each affected consumer, determine whether their pinned axios version falls
+   within the vulnerable range.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/axios/axios"
+rev = "v0.21.1"
+path = "axios"
+role = "primary"
+
+[[repos]]
+url = "github.com/grafana/grafana"
+rev = "v9.5.0"
+path = "grafana"
+role = "consumer"
+
+[[repos]]
+url = "github.com/apache/druid"
+rev = "druid-26.0.0"
+path = "druid"
+role = "consumer"
+
+[metadata]
+languages = ["javascript", "typescript"]
+total_loc = 850000
+dependency_depth = 2
+frameworks = ["grafana", "react"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent correctly identifies CVE-2021-3749 and axios < 0.21.2"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds direct dependents of axios in workspace repos"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces transitive paths through plugin SDK and web-console"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent classifies consumers as affected or not by version range"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo npm dependency resolution through lock files and nested package.json files benefits from Sourcegraph dependency indexing"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "package.json"
+repo = "axios"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "package.json"
+repo = "grafana"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "web-console/package.json"
+repo = "druid"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "yarn.lock"
+repo = "grafana"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "web-console/package-lock.json"
+repo = "druid"
+confidence = 0.80

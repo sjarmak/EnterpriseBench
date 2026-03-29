@@ -1,0 +1,73 @@
+{
+  "candidate_id": "SE-5",
+  "repo": "discourse/discourse",
+  "pr_refs": ["#31901"],
+  "base_rev": "e7c3abb94b1db0ff811f991b873dcca9d589cd3a",
+  "description": "Add automatic boolean to ReviewableClaimedTopic — impacts 3 models, 2 controllers, 3 serializers, guardian, frontend, 6 spec files",
+  "schema_change": {
+    "type": "add_column",
+    "table": "ReviewableClaimedTopic",
+    "column": "automatic",
+    "column_type": "boolean",
+    "migration": "db/migrate/20250319024514_add_automatic_to_reviewable_claimed_topic.rb"
+  },
+  "required_files": [
+    "app/models/reviewable_claimed_topic.rb",
+    "app/models/reviewable.rb",
+    "app/controllers/reviewables_controller.rb",
+    "app/controllers/reviewable_claimed_topics_controller.rb",
+    "app/serializers/reviewable_serializer.rb"
+  ],
+  "sufficient_files": [
+    "db/migrate/20250319024514_add_automatic_to_reviewable_claimed_topic.rb",
+    "app/models/reviewable_flagged_post.rb",
+    "app/serializers/reviewable_claimed_topic_serializer.rb",
+    "app/serializers/reviewable_topic_serializer.rb",
+    "lib/guardian/user_guardian.rb",
+    "app/assets/javascripts/discourse/app/components/reviewable-item.hbs",
+    "app/assets/javascripts/discourse/app/components/reviewable-item.js",
+    "app/assets/javascripts/discourse/app/routes/review-index.js",
+    "app/assets/javascripts/admin/addon/components/modal/penalize-user.js",
+    "app/assets/javascripts/admin/addon/services/admin-tools.js",
+    "config/locales/client.en.yml",
+    "spec/models/reviewable_claimed_topic_spec.rb",
+    "spec/models/reviewable_spec.rb",
+    "spec/requests/reviewable_claimed_topics_controller_spec.rb",
+    "spec/requests/reviewables_controller_spec.rb",
+    "spec/serializers/reviewable_claimed_topic_serializer_spec.rb",
+    "spec/lib/guardian/user_guardian_spec.rb"
+  ],
+  "pr_files": [
+    "app/assets/javascripts/admin/addon/components/modal/penalize-user.js",
+    "app/assets/javascripts/admin/addon/services/admin-tools.js",
+    "app/assets/javascripts/discourse/app/components/reviewable-item.hbs",
+    "app/assets/javascripts/discourse/app/components/reviewable-item.js",
+    "app/assets/javascripts/discourse/app/routes/review-index.js",
+    "app/assets/javascripts/discourse/app/services/store.js",
+    "app/assets/javascripts/discourse/tests/unit/routes/review-index-test.js",
+    "app/controllers/reviewable_claimed_topics_controller.rb",
+    "app/controllers/reviewables_controller.rb",
+    "app/models/reviewable.rb",
+    "app/models/reviewable_claimed_topic.rb",
+    "app/models/reviewable_flagged_post.rb",
+    "app/serializers/reviewable_claimed_topic_serializer.rb",
+    "app/serializers/reviewable_serializer.rb",
+    "app/serializers/reviewable_topic_serializer.rb",
+    "config/locales/client.en.yml",
+    "db/migrate/20250319024514_add_automatic_to_reviewable_claimed_topic.rb",
+    "lib/guardian/user_guardian.rb",
+    "spec/lib/guardian/user_guardian_spec.rb",
+    "spec/models/reviewable_claimed_topic_spec.rb",
+    "spec/models/reviewable_spec.rb",
+    "spec/requests/reviewable_claimed_topics_controller_spec.rb",
+    "spec/requests/reviewables_controller_spec.rb",
+    "spec/serializers/reviewable_claimed_topic_serializer_spec.rb"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 24,
+    "verified": true
+  },
+  "difficulty": "expert",
+  "confidence": 0.97
+}

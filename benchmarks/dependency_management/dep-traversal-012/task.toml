@@ -1,0 +1,125 @@
+# Dependency Graph Traversal: OpenSSL BN_mod_sqrt infinite loop — cross-ecosystem
+
+difficulty_stratum = "multi_repo"
+
+[task]
+id = "dep-traversal-012"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "expert"
+estimated_duration_minutes = 60
+session_type = "single"
+description = "Trace CVE-2022-0778 (OpenSSL infinite loop) across C, Go, Python, and Node.js ecosystems"
+prompt = """
+CVE-2022-0778 affects OpenSSL — an infinite loop in the BN_mod_sqrt() function
+triggered by crafted certificates. Three version branches affected:
+1.0.2 through 1.0.2zc, 1.1.1 through 1.1.1m, 3.0.0 through 3.0.1.
+
+This is a system-level library that affects every language ecosystem differently.
+Your task:
+1. Identify the CVE and all three affected OpenSSL version branches.
+2. Trace the blast radius across ecosystems:
+   - C: curl links against OpenSSL -> git uses curl for HTTP transport
+   - Go: kubernetes uses crypto/tls which may use CGO+OpenSSL or pure Go
+   - Python: the ssl module links against system OpenSSL -> pip -> requests
+3. For each ecosystem, determine whether the dependency is:
+   - Dynamically linked (affected by system OpenSSL version)
+   - Statically linked (bundles specific OpenSSL version)
+   - Pure implementation (not affected — e.g., Go's pure-Go crypto)
+4. Assess which workspace repos are actually vulnerable based on their linking
+   strategy.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/curl/curl"
+rev = "curl-7_82_0"
+path = "curl"
+role = "consumer"
+
+[[repos]]
+url = "github.com/git/git"
+rev = "v2.35.0"
+path = "git"
+role = "consumer"
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.24.0"
+path = "kubernetes"
+role = "consumer"
+
+[metadata]
+languages = ["c", "go", "python", "javascript"]
+total_loc = 4500000
+dependency_depth = 4
+frameworks = ["openssl", "curl", "kubernetes"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent identifies CVE-2022-0778 and all three OpenSSL version branches"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent maps OpenSSL consumers across multiple ecosystems"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces cross-ecosystem dependency paths and linking strategies"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent distinguishes dynamic/static/pure linking to assess actual exposure"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Cross-ecosystem system library tracing partially benefits from Sourcegraph, but linking strategy analysis requires build system understanding"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "configure.ac"
+repo = "curl"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "Makefile"
+repo = "git"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "kubernetes"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "CMakeLists.txt"
+repo = "curl"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "hack/lib/golang.sh"
+repo = "kubernetes"
+confidence = 0.75

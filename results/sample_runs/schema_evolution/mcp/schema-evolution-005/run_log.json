@@ -1,0 +1,43 @@
+{
+  "task_id": "schema-evolution-005",
+  "task_dir": "schema-evolution-005",
+  "mode": "mcp",
+  "checkpoints": [
+    {
+      "name": "identify_schema_change",
+      "weight": 0.10,
+      "score": 1.00,
+      "passed": true,
+      "detail": "Identified 2/2 schema change elements"
+    },
+    {
+      "name": "find_direct_refs",
+      "weight": 0.35,
+      "score": 1.00,
+      "passed": true,
+      "detail": "Found 4/4 direct reference locations"
+    },
+    {
+      "name": "find_indirect_refs",
+      "weight": 0.35,
+      "score": 1.00,
+      "passed": true,
+      "detail": "Found 6/6 indirect reference locations"
+    },
+    {
+      "name": "identify_test_impact",
+      "weight": 0.20,
+      "score": 1.00,
+      "passed": true,
+      "detail": "Identified 5/5 spec files"
+    }
+  ],
+  "total_score": 1.00,
+  "tool_usage": {
+    "sourcegraph_searches": 11,
+    "symbol_navigations": 18,
+    "file_reads": 42,
+    "total_tokens": 22600
+  },
+  "infrastructure_errors": []
+}

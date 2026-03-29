@@ -1,0 +1,40 @@
+{
+  "candidate_id": 6,
+  "cve": "CVE-2024-24786",
+  "ghsa": "GHSA-8r3f-844c-mc37",
+  "package": "google.golang.org/protobuf",
+  "ecosystem": "go",
+  "description": "Protobuf JSON unmarshal infinite loop affects grpc-go, istio, and envoy go-control-plane",
+  "dependency_chain": [
+    {
+      "from": "google.golang.org/protobuf",
+      "to": "grpc/grpc-go",
+      "relationship": "go module dependency (protobuf marshaling)",
+      "manifest": "go.mod",
+      "affected_versions": "< 1.33.0"
+    },
+    {
+      "from": "grpc/grpc-go",
+      "to": "istio/istio",
+      "relationship": "go module dependency (gRPC transport)",
+      "manifest": "go.mod",
+      "affected_versions": "all using protobuf < 1.33.0"
+    }
+  ],
+  "direct_dependents": ["grpc-go", "istio", "go-control-plane"],
+  "transitive_paths": [
+    ["google.golang.org/protobuf", "grpc-go", "istio"],
+    ["google.golang.org/protobuf", "go-control-plane", "istio"],
+    ["google.golang.org/protobuf", "grpc-go"]
+  ],
+  "fix_reference": "go.dev/cl/569356",
+  "affected_version_range": "< 1.33.0",
+  "fixed_version": "1.33.0",
+  "verification": {
+    "method": "go_advisory_db",
+    "advisory_id": "GO-2024-2611",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.94
+}

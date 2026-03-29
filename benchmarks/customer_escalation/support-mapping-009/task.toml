@@ -1,0 +1,95 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-element-threads-009"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 30
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map Element Web white screen crash when opening threads panel to null safety issue in RoomHeaderButtons"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/element-hq/element-web"
+rev = "8ebdcab7d92f90422776c4390363338dcfd98ba5"
+path = "element-web"
+role = "primary"
+
+[metadata]
+languages = ["typescript"]
+frameworks = ["react", "matrix"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies RoomHeaderButtons and ThreadPanel components as crash location"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the room header and right panel components as responsible"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity for UI crash affecting thread access"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related null safety or notification state issues"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Medium TypeScript codebase; component hierarchy is discoverable but MCP helps trace thread notification state flow"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/components/views/rooms/RoomHeader/RoomHeaderButtons.tsx"
+repo = "element-web"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/components/views/right_panel/ThreadPanel.tsx"
+repo = "element-web"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/components/views/rooms/RoomHeader/RoomHeader.tsx"
+repo = "element-web"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "src/components/structures/RoomView.tsx"
+repo = "element-web"
+confidence = 0.65
+
+[[ground_truth.sufficient_files]]
+path = "src/components/views/context_menus/RoomNotificationContextMenu.tsx"
+repo = "element-web"
+confidence = 0.55
+
+[csb_lineage]
+parent_csb_id = "element-web-roomheaderbuttons-can-crash-fix-001"
+origin_suite = "csb_sdlc_fix"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

@@ -1,0 +1,57 @@
+{
+  "candidate_id": "SE-4",
+  "repo": "zulip/zulip",
+  "pr_refs": ["#38020"],
+  "base_rev": "f2a5dc949a7c0ec776b3729b2c92703292404127",
+  "description": "Move default_avatar_source from UserProfile to Realm — impacts avatar logic, 3 importers, frontend, tests",
+  "schema_change": {
+    "type": "move_field",
+    "from_table": "UserProfile",
+    "to_table": "Realm",
+    "column": "default_avatar_source",
+    "migration": "zerver/migrations/0776_realm_default_avatar_source.py"
+  },
+  "required_files": [
+    "zerver/models/realms.py",
+    "zerver/models/users.py",
+    "zerver/lib/avatar.py"
+  ],
+  "sufficient_files": [
+    "zerver/migrations/0776_realm_default_avatar_source.py",
+    "zerver/openapi/python_examples.py",
+    "web/templates/settings/organization_settings_admin.hbs",
+    "zerver/tests/test_events.py",
+    "zerver/tests/test_upload.py",
+    "zerver/tests/test_upload_s3.py",
+    "zerver/tests/test_mattermost_importer.py",
+    "zerver/tests/test_rocketchat_importer.py",
+    "zerver/tests/test_slack_importer.py"
+  ],
+  "pr_files": [
+    "package.json",
+    "patches/jdenticon.patch",
+    "pnpm-lock.yaml",
+    "version.py",
+    "web/templates/settings/organization_settings_admin.hbs",
+    "zerver/lib/avatar.py",
+    "zerver/migrations/0001_squashed_0569.py",
+    "zerver/migrations/0031_remove_system_avatar_source.py",
+    "zerver/migrations/0776_realm_default_avatar_source.py",
+    "zerver/models/realms.py",
+    "zerver/models/users.py",
+    "zerver/openapi/python_examples.py",
+    "zerver/tests/test_events.py",
+    "zerver/tests/test_mattermost_importer.py",
+    "zerver/tests/test_rocketchat_importer.py",
+    "zerver/tests/test_slack_importer.py",
+    "zerver/tests/test_upload.py",
+    "zerver/tests/test_upload_s3.py"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 18,
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.96
+}

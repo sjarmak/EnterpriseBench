@@ -1,0 +1,121 @@
+# API Contract Boundary: gRPC-Go metadata context separation
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "api-contract-grpc-metadata-001"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "medium"
+estimated_duration_minutes = 25
+session_type = "single"
+description = "Trace impact of gRPC-Go metadata context separation on etcd consumers"
+prompt = """
+The gRPC-Go team has merged a change that separates incoming and outgoing
+metadata in the context (PR #1157). Previously, `metadata.FromContext` and
+`metadata.NewContext` handled both directions. Now, separate functions exist:
+`metadata.FromIncomingContext`, `metadata.FromOutgoingContext`, and
+`metadata.NewOutgoingContext`.
+
+Your task:
+1. Identify the breaking API changes in `grpc-go/metadata/metadata.go`.
+2. Find all files in the `etcd` codebase that use the old metadata APIs
+   (`metadata.FromContext`, `metadata.NewContext`) and will break.
+3. For each affected file, classify the breakage type: compile error,
+   runtime behavior change, or deprecation warning.
+4. Identify any files that forward metadata between incoming and outgoing
+   contexts (interceptors, proxies) — these are the most critical.
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.4.0"
+path = "grpc-go"
+role = "primary"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.3.0"
+path = "etcd"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 350_000
+dependency_depth = 2
+frameworks = ["grpc"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_breaking_api"
+weight = 0.15
+verifier = "checks/check_source_identification.sh"
+description = "Agent identifies the breaking change in metadata/metadata.go"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_consumers"
+weight = 0.35
+verifier = "checks/check_direct_consumers.sh"
+description = "Agent finds all etcd files using old metadata APIs"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_impact"
+weight = 0.30
+verifier = "checks/check_transitive_impact.sh"
+description = "Agent identifies metadata forwarding in interceptors and proxies"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "classify_breakage"
+weight = 0.20
+verifier = "checks/check_classification.sh"
+description = "Agent correctly classifies breakage types per file"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo symbol search for metadata.FromContext usage across grpc-go and etcd requires semantic navigation through Go imports"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "metadata/metadata.go"
+repo = "grpc-go"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "auth/store.go"
+repo = "etcd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "etcdserver/api/v3rpc/interceptor.go"
+repo = "etcd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "transport/handler_server.go"
+repo = "grpc-go"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "clientv3/auth.go"
+repo = "etcd"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "Documentation/grpc-metadata.md"
+repo = "grpc-go"
+confidence = 0.70

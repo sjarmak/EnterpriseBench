@@ -1,0 +1,83 @@
+{
+  "task_id": "support-map-element-unread-010",
+  "candidate_ref": "CSB-A10",
+  "description": "Chat App Shows Unread When Everything Is Read \u2014 Element shows rooms as unread; thread receipts diverge from room timeline",
+  "repo": "element-hq/element-web",
+  "repo_rev": null,
+  "pre_fix_rev": "526645c79160ab1ad4b4c3845de27d51263a405e",
+  "csb_lineage": {
+    "parent_csb_id": "element-web-unread-indicators-diverge-fix-001",
+    "origin_suite": "csb_sdlc_fix",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "src/utils/notifications.ts",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Notification utilities \u2014 unread detection logic for room timeline and threads"
+      },
+      {
+        "path": "src/stores/notifications/RoomNotificationState.ts",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Room notification state \u2014 manages per-room unread counts including thread-scoped state"
+      },
+      {
+        "path": "src/stores/notifications/ThreadNotificationState.ts",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Thread notification state \u2014 thread-specific unread tracking and receipt processing"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "src/stores/notifications/NotificationState.ts",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.75,
+        "rationale": "Base notification state \u2014 shared notification state interface"
+      },
+      {
+        "path": "src/components/views/rooms/NotificationBadge.tsx",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.65,
+        "rationale": "Notification badge UI \u2014 renders unread indicator, consumes notification state"
+      },
+      {
+        "path": "src/models/Room.ts",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.55,
+        "rationale": "Room model \u2014 may contain read receipt and event filtering logic"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "notification-state",
+    "unread-tracking",
+    "thread-receipts",
+    "read-receipts",
+    "divergence"
+  ],
+  "expected_severity": "medium",
+  "related_references": [
+    "src/stores/notifications/NotificationState.ts",
+    "src/components/views/rooms/NotificationBadge.tsx"
+  ]
+}

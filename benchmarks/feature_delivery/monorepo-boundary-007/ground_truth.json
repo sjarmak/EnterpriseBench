@@ -1,0 +1,76 @@
+{
+  "candidate_id": 9,
+  "repo": "pnpm/pnpm",
+  "pr_refs": ["#8530", "#8557"],
+  "release": "v10.0.0",
+  "description": "SHA256 migration for pnpmfile checksum + escape # in dir names cascades through crypto, dependency-path, and core packages",
+  "changed_package": {
+    "name": "@pnpm/crypto.hash",
+    "path": "crypto/hash",
+    "change_summary": "Hash algorithm migration and pnpmfile checksum support",
+    "changed_files": [
+      "crypto/hash/src/index.ts"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "@pnpm/pnpmfile",
+      "path": "hooks/pnpmfile",
+      "semver_bump": "major",
+      "impact": "Pnpmfile hooks updated for checksum verification with new hash algorithm",
+      "affected_files": [
+        "hooks/pnpmfile/package.json",
+        "hooks/pnpmfile/src/requireHooks.ts",
+        "hooks/pnpmfile/tsconfig.json"
+      ],
+      "confidence": 0.94
+    },
+    {
+      "name": "@pnpm/dependency-path",
+      "path": "packages/dependency-path",
+      "semver_bump": "major",
+      "impact": "Escape # character in directory names for dependency paths (PR #8557)",
+      "affected_files": [
+        "packages/dependency-path/src/index.ts",
+        "packages/dependency-path/test/index.ts"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "name": "pnpm (CLI)",
+      "path": "pnpm",
+      "semver_bump": "major",
+      "impact": "CLI hooks test updated for new checksum behavior",
+      "affected_files": [
+        "pnpm/test/hooks.ts",
+        "pnpm/package.json",
+        "pnpm/tsconfig.json"
+      ],
+      "confidence": 0.92
+    },
+    {
+      "name": "@pnpm/core",
+      "path": "pkg-manager/core",
+      "semver_bump": "major",
+      "impact": "Core install test updated for repo-based installs with new path format",
+      "affected_files": [
+        "pkg-manager/core/test/install/fromRepo.ts"
+      ],
+      "confidence": 0.88
+    }
+  ],
+  "overall_semver": "major",
+  "changelog_entries": [
+    "@pnpm/crypto.hash: Support pnpmfile checksum verification (v10.0.0)",
+    "@pnpm/dependency-path: Escape # in directory names (v10.0.0)"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count_8530": 9,
+    "pr_file_count_8557": 4,
+    "packages_touched": ["crypto/hash", "hooks/pnpmfile", "dependency-path", "pnpm", "pkg-manager/core"],
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.91
+}

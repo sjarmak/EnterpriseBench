@@ -1,0 +1,141 @@
+# DB Schema Evolution: Flatten View Model (Mattermost)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-010"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace impact of dropping icon column and removing nested subviews from Mattermost's Go view model"
+prompt = """
+We're flattening the View model in Mattermost by dropping the `icon` column from the
+views table and removing nested `subviews` and `typed_board_props` from the Go model
+struct. The SQL migration is:
+- `server/channels/db/migrations/postgres/000167_views_drop_icon.up.sql`
+
+Your task:
+1. Identify the SQL migration files (up and down) and the migrations list.
+2. Find the Go model struct definition and the SQL store implementation that
+   need updating for the removed fields.
+3. Find the OpenAPI specification files that define the View schema for the API.
+4. Identify all test files — model tests, store tests, API tests, and app tests.
+
+Write your analysis to /workspace/mattermost/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/mattermost/mattermost"
+rev = "1349899f42212aab066a8d1a6caed08b7d3d2b53"
+path = "mattermost"
+role = "primary"
+
+[metadata]
+languages = ["go", "sql"]
+total_loc = 800_000
+dependency_depth = 1
+frameworks = ["mattermost"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the SQL migration files and migrations list"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds Go model struct and SQL store implementation"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds OpenAPI definition files and i18n strings"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies all test files for view model"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Go monorepo with SQL migrations, Go structs, and OpenAPI spec requires tracing across server/public/model, server/channels/store, and api/v4 directories"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "server/public/model/view.go"
+repo = "mattermost"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "server/channels/store/sqlstore/view_store.go"
+repo = "mattermost"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "api/v4/source/definitions.yaml"
+repo = "mattermost"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "server/channels/db/migrations/postgres/000167_views_drop_icon.up.sql"
+repo = "mattermost"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "server/channels/db/migrations/postgres/000167_views_drop_icon.down.sql"
+repo = "mattermost"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "server/channels/db/migrations/migrations.list"
+repo = "mattermost"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "api/v4/source/views.yaml"
+repo = "mattermost"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "server/channels/store/storetest/view_store.go"
+repo = "mattermost"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "server/channels/api4/view_test.go"
+repo = "mattermost"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "server/channels/app/view_test.go"
+repo = "mattermost"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "server/public/model/view_test.go"
+repo = "mattermost"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "server/i18n/en.json"
+repo = "mattermost"
+confidence = 0.75

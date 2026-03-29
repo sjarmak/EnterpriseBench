@@ -1,0 +1,106 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-libreoffice-formula-007"
+suite = "customer_escalation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map customer-reported incorrect SUM results and stale cell values to LibreOffice Calc formula engine"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/LibreOffice/core"
+rev = ""
+path = "core"
+role = "primary"
+
+[metadata]
+languages = ["cpp"]
+frameworks = ["libreoffice"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies the formula compiler, interpreter, and formula cell recalculation code"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the sc (Calc) formula engine subsystem as responsible"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity for incorrect calculation results in spreadsheets"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related recalculation or dirty flag issues"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Enormous C++ monorepo; formula engine spans compiler, interpreter (split across many files), and cell dependency tracking"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "sc/source/core/tool/compiler.cxx"
+repo = "core"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "sc/source/core/tool/interpr4.cxx"
+repo = "core"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "sc/inc/formulacell.hxx"
+repo = "core"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "sc/source/core/data/formulacell.cxx"
+repo = "core"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "sc/source/core/tool/interpr7.cxx"
+repo = "core"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "sc/inc/address.hxx"
+repo = "core"
+confidence = 0.60
+
+[[ground_truth.sufficient_files]]
+path = "include/formula/tokenarray.hxx"
+repo = "core"
+confidence = 0.55
+
+[csb_lineage]
+parent_csb_id = "ccx-incident-139"
+origin_suite = "csb_org_incident"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

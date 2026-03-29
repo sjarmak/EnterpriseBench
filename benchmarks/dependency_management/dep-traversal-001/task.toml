@@ -1,0 +1,123 @@
+# Dependency Graph Traversal: lodash command injection blast radius
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "dep-traversal-001"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "medium"
+estimated_duration_minutes = 25
+session_type = "single"
+description = "Trace blast radius of CVE-2021-23337 (lodash command injection) through JS build toolchain"
+prompt = """
+CVE-2021-23337 has been reported affecting the `lodash` npm package — a command
+injection vulnerability in `lodash.template`. All versions prior to 4.17.21 are
+affected.
+
+Your task:
+1. Identify the CVE and confirm the affected package and version range.
+2. Find all direct dependents of lodash in the workspace repos (webpack, jest).
+3. Trace transitive dependency paths — which downstream packages pull in a
+   vulnerable lodash version through these intermediaries?
+4. For each affected consumer, determine whether their pinned/resolved lodash
+   version falls within the vulnerable range.
+
+Write your analysis to /workspace/BLAST_RADIUS.md with:
+- CVE ID and affected package
+- List of direct dependents with manifest file locations
+- Transitive dependency paths (package A → B → C)
+- Per-consumer version analysis (affected / not affected)
+"""
+
+[[repos]]
+url = "github.com/lodash/lodash"
+rev = "4.17.20"
+path = "lodash"
+role = "primary"
+
+[[repos]]
+url = "github.com/webpack/webpack"
+rev = "v5.64.0"
+path = "webpack"
+role = "consumer"
+
+[[repos]]
+url = "github.com/jestjs/jest"
+rev = "v29.0.0"
+path = "jest"
+role = "consumer"
+
+[metadata]
+languages = ["javascript"]
+total_loc = 320000
+dependency_depth = 3
+frameworks = ["webpack", "jest"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent correctly identifies CVE-2021-23337 and lodash < 4.17.21"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds all direct dependents of lodash in workspace repos"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces transitive dependency paths through intermediaries"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent correctly classifies affected vs unaffected consumers by version"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo dependency graph traversal through npm package manifests and lock files benefits from Sourcegraph's dependency indexing"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "package.json"
+repo = "lodash"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "package.json"
+repo = "webpack"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/jest-haste-map/package.json"
+repo = "jest"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "package-lock.json"
+repo = "webpack"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "yarn.lock"
+repo = "jest"
+confidence = 0.80

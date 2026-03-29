@@ -1,0 +1,37 @@
+{
+  "candidate_id": "AC-5",
+  "producer_repo": "protocolbuffers/protobuf (google.golang.org/protobuf)",
+  "consumer_repos": ["grpc/grpc-go"],
+  "breaking_change_pr": "grpc/grpc-go#6919",
+  "consumer_fix_prs": ["grpc/grpc-go#7724"],
+  "api_contract_type": "go_types",
+  "breakage_type": "runtime_behavior",
+  "description": "Protobuf v2 migration in grpc-go caused status.Details() to return MessageV2 types instead of MessageV1, breaking type assertions in consumers",
+  "producer_changed_files": [
+    "encoding/proto/proto.go",
+    "internal/status/status.go",
+    "internal/binarylog/method_logger.go",
+    "internal/binarylog/sink.go",
+    "internal/pretty/pretty.go",
+    "balancer/grpclb/grpclb.go",
+    "balancer/grpclb/grpclb_remote_balancer.go",
+    "internal/transport/handler_server.go",
+    "internal/transport/http2_server.go",
+    "interop/test_utils.go"
+  ],
+  "consumer_affected_files": {
+    "grpc-go": [
+      "internal/status/status.go",
+      "status/status_ext_test.go",
+      "internal/testutils/status_equal.go"
+    ]
+  },
+  "breaking_symbols": [
+    "status.Details()",
+    "ptypes.UnmarshalAny",
+    "proto.MessageV1",
+    "proto.MessageV2"
+  ],
+  "difficulty": "expert",
+  "confidence": 0.90
+}

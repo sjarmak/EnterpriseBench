@@ -1,0 +1,82 @@
+{
+  "task_id": "support-map-llvm-assertion-002",
+  "candidate_ref": "CSB-A2",
+  "description": "LLVM Assertion Failure \u2014 'Cannot expand this type; LLVM lacks the right hooks' during CI build",
+  "repo": "llvm/llvm-project",
+  "repo_rev": null,
+  "csb_lineage": {
+    "parent_csb_id": "ccx-incident-108",
+    "origin_suite": "csb_org_incident",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "llvm/lib/CodeGen/SelectionDAG/LegalizeDAG.cpp",
+        "repo": "llvm-project",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "LegalizeDAG orchestrates type legalization \u2014 contains 'Cannot expand' assertion paths"
+      },
+      {
+        "path": "llvm/lib/CodeGen/SelectionDAG/LegalizeTypes.cpp",
+        "repo": "llvm-project",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Type legalization expansion logic \u2014 handles type promotion/expansion cases"
+      },
+      {
+        "path": "llvm/include/llvm/CodeGen/ValueTypes.h",
+        "repo": "llvm-project",
+        "line_range": null,
+        "confidence": 0.85,
+        "source": "deterministic",
+        "rationale": "EVT class definition \u2014 extended value type used in type legalization decisions"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "llvm/lib/CodeGen/SelectionDAG/LegalizeIntegerTypes.cpp",
+        "repo": "llvm-project",
+        "line_range": null,
+        "confidence": 0.75,
+        "rationale": "Integer type legalization \u2014 may contain specific expansion paths that fail"
+      },
+      {
+        "path": "llvm/lib/CodeGen/SelectionDAG/LegalizeFloatTypes.cpp",
+        "repo": "llvm-project",
+        "line_range": null,
+        "confidence": 0.65,
+        "rationale": "Float type legalization \u2014 parallel expansion logic"
+      },
+      {
+        "path": "llvm/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp",
+        "repo": "llvm-project",
+        "line_range": null,
+        "confidence": 0.6,
+        "rationale": "Instruction selection entry point that triggers legalization phase"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "type-legalization",
+    "code-generation",
+    "SelectionDAG",
+    "value-types",
+    "expansion"
+  ],
+  "expected_severity": "critical",
+  "related_references": [
+    "llvm/lib/CodeGen/SelectionDAG/LegalizeIntegerTypes.cpp",
+    "llvm/lib/CodeGen/SelectionDAG/LegalizeFloatTypes.cpp"
+  ]
+}

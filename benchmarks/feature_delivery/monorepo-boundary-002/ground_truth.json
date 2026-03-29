@@ -1,0 +1,56 @@
+{
+  "candidate_id": 2,
+  "repo": "babel/babel",
+  "pr_refs": ["#16242"],
+  "release": "v7.24.0",
+  "description": "Decorator 2023-11 normative updates in helper-create-class-features-plugin cascade through helpers, plugin-decorators, and test fixtures",
+  "changed_package": {
+    "name": "@babel/helper-create-class-features-plugin",
+    "path": "packages/babel-helper-create-class-features-plugin",
+    "change_summary": "Updated decorator semantics to match 2023-11 normative spec changes",
+    "changed_files": [
+      "packages/babel-helper-create-class-features-plugin/src/decorators.ts",
+      "packages/babel-helper-create-class-features-plugin/src/index.ts"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "@babel/helpers",
+      "path": "packages/babel-helpers",
+      "semver_bump": "minor",
+      "impact": "Generated helper `applyDecs2311` added replacing `applyDecs2305`",
+      "affected_files": [
+        "packages/babel-helpers/src/helpers-generated.ts",
+        "packages/babel-helpers/src/helpers/applyDecs2311.ts"
+      ],
+      "confidence": 0.97
+    },
+    {
+      "name": "@babel/plugin-proposal-decorators",
+      "path": "packages/babel-plugin-proposal-decorators",
+      "semver_bump": "minor",
+      "impact": "Decorator transform updated for 2023-11 semantics, test fixtures updated with new options",
+      "affected_files": [
+        "packages/babel-plugin-proposal-decorators/src/index.ts",
+        "packages/babel-plugin-proposal-decorators/test/fixtures/2023-05-accessors--to-es2015/options.json",
+        "packages/babel-plugin-proposal-decorators/test/fixtures/2023-05-accessors/options.json",
+        "packages/babel-plugin-proposal-decorators/test/fixtures/2023-05-classes--to-es2015/options.json",
+        "packages/babel-plugin-proposal-decorators/test/fixtures/2023-05-classes/options.json"
+      ],
+      "confidence": 0.96
+    }
+  ],
+  "overall_semver": "minor",
+  "changelog_entries": [
+    "@babel/helper-create-class-features-plugin: Update decorator semantics to 2023-11 normative changes (v7.24.0)",
+    "@babel/helpers: Add applyDecs2311 helper (v7.24.0)"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 31,
+    "packages_touched": ["babel-helper-create-class-features-plugin", "babel-helpers", "babel-plugin-proposal-decorators"],
+    "verified": true
+  },
+  "difficulty": "expert",
+  "confidence": 0.94
+}

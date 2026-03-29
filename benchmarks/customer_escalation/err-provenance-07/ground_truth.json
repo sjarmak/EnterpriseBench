@@ -1,0 +1,45 @@
+{
+  "candidate_id": 7,
+  "candidate_ref": "hashicorp/terraform#34207",
+  "error_string": "[ERROR] AttachSchemaTransformer: No provider config schema available for provider[\"terraform.io/builtin/terraform\"]",
+  "fix_pr": "https://github.com/hashicorp/terraform/pull/38183",
+  "repo": "hashicorp/terraform",
+  "repo_rev": "v1.6.0",
+  "difficulty": "medium",
+  "required_files": [
+    {
+      "path": "internal/builtin/providers/terraform/provider.go",
+      "repo": "terraform",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "The builtin terraform provider implementation. Fix either returns an empty config schema or changes the log level. The error is triggered because this provider returns no config schema."
+    },
+    {
+      "path": "internal/builtin/providers/terraform/provider_test.go",
+      "repo": "terraform",
+      "confidence": 0.80,
+      "source": "deterministic",
+      "rationale": "Test file updated in fix PR."
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "internal/terraform/transform_attach_schema.go",
+      "repo": "terraform",
+      "confidence": 0.65,
+      "rationale": "Contains the AttachSchemaTransformer that logs the ERROR. Understanding the caller helps trace the error origin."
+    }
+  ],
+  "error_chain": [
+    "Terraform plan/apply runs the graph transform pipeline",
+    "AttachSchemaTransformer iterates over providers to attach config schemas",
+    "Builtin 'terraform.io/builtin/terraform' provider returns no config schema",
+    "AttachSchemaTransformer logs ERROR level message about missing schema",
+    "User sees [ERROR] in terraform output even though it's expected behavior"
+  ],
+  "trigger_conditions": [
+    "Any terraform plan/apply that uses terraform_data or terraform_remote_state resources",
+    "The builtin provider is always loaded but has no config schema",
+    "TF_LOG=ERROR or higher shows the message"
+  ]
+}

@@ -1,0 +1,126 @@
+# Dependency Graph Traversal: golang.org/x/net HTTP/2 Rapid Reset across CNCF
+
+difficulty_stratum = "multi_repo"
+
+[task]
+id = "dep-traversal-004"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace CVE-2023-39325 (HTTP/2 Rapid Reset) blast radius through kubernetes, etcd, and grpc-go"
+prompt = """
+CVE-2023-39325 affects `golang.org/x/net` versions prior to 0.17.0 — an HTTP/2
+Rapid Reset attack that allows denial of service. This is related to the
+industry-wide CVE-2023-44487.
+
+Your task:
+1. Identify the CVE and confirm the affected module and version range.
+2. Find all direct dependents of golang.org/x/net in the workspace repos
+   (kubernetes, etcd, grpc-go). Check go.mod files.
+3. Trace transitive dependency paths. grpc-go depends on x/net for its HTTP/2
+   transport layer. etcd depends on grpc-go. kubernetes depends on both x/net
+   directly and grpc-go transitively. Map the full graph.
+4. For each repo, determine the resolved x/net version from go.sum and classify
+   as affected or patched.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.28.0"
+path = "kubernetes"
+role = "consumer"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.5.9"
+path = "etcd"
+role = "consumer"
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.58.0"
+path = "grpc-go"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 3500000
+dependency_depth = 3
+frameworks = ["kubernetes", "grpc", "etcd"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent correctly identifies CVE-2023-39325 and x/net < 0.17.0"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds all three repos depend on x/net"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces x/net -> grpc-go -> etcd and x/net -> kubernetes paths"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent determines resolved x/net versions per repo from go.sum"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Go module graph traversal across CNCF repos requires cross-repo dependency resolution that Sourcegraph indexes natively"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "kubernetes"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "etcd"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "grpc-go"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "go.sum"
+repo = "kubernetes"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "go.sum"
+repo = "etcd"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "go.sum"
+repo = "grpc-go"
+confidence = 0.85

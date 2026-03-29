@@ -1,0 +1,95 @@
+# Monorepo Boundary: Babel retainLines + for-of iterableIsArray Fixes
+
+difficulty_stratum = "monorepo_cross_package"
+
+[task]
+id = "monorepo-boundary-babel-forof-004"
+suite = "feature_delivery"
+task_type = "monorepo_boundary"
+difficulty = "medium"
+estimated_duration_minutes = 20
+session_type = "single"
+description = "Trace impact of generator retainLines fix and for-of iterableIsArray fix across babel packages"
+prompt = """
+Two bug fixes are shipping in babel v7.23.6:
+
+1. `@babel/generator` — fixed indentation when `retainLines` is enabled
+   (in `src/printer.ts`)
+2. `@babel/plugin-transform-for-of` — fixed `iterableIsArray` assumption
+   when loop variable is shadowed (in `src/index.ts`)
+
+Your task:
+1. Identify all sibling packages affected by these fixes.
+2. Classify the impact per package as none/patch/minor/major.
+3. Identify specific boundary violations — test fixtures or integration
+   points that reference these behaviors.
+
+Write your analysis to /workspace/babel/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/babel/babel"
+rev = "v7.23.5"
+path = "babel"
+role = "primary"
+
+[metadata]
+languages = ["typescript", "javascript"]
+total_loc = 450_000
+dependency_depth = 1
+frameworks = ["babel"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_affected_packages"
+weight = 0.25
+verifier = "checks/check_affected_packages.sh"
+description = "Agent identifies @babel/plugin-transform-for-of and @babel/preset-env as affected"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "classify_change_impact"
+weight = 0.45
+verifier = "checks/check_impact_classification.sh"
+description = "Agent classifies affected packages as patch"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_boundary_violations"
+weight = 0.30
+verifier = "checks/check_boundary_violations.sh"
+description = "Agent identifies printer.ts, plugin-transform-for-of/src/index.ts, and preset-env integration test fixtures"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Bug fixes are localized but the for-of fix affects preset-env integration tests, requiring cross-package test fixture tracing"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "packages/babel-generator/src/printer.ts"
+repo = "babel"
+confidence = 0.97
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/babel-plugin-transform-for-of/src/index.ts"
+repo = "babel"
+confidence = 0.97
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/babel-preset-env/test/fixtures/plugins-integration/for-of-array-block-scoping/output.js"
+repo = "babel"
+confidence = 0.94
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "packages/babel-preset-env/test/fixtures/plugins-integration/for-of-array-block-scoping-2/output.js"
+repo = "babel"
+confidence = 0.88

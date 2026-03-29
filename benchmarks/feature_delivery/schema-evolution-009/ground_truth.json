@@ -1,0 +1,42 @@
+{
+  "candidate_id": "SE-9",
+  "repo": "getsentry/sentry",
+  "pr_refs": ["#95361", "#95788"],
+  "base_rev": "fad1fc61366a8162823603a9e86eafd96faa9c00",
+  "description": "Create DashboardLastVisited model — impacts backup system, React table component, TypeScript types",
+  "schema_change": {
+    "type": "create_table",
+    "table": "DashboardLastVisited",
+    "migration": "src/sentry/migrations/0947_add_dashboard_last_visited_model.py"
+  },
+  "required_files": [
+    "src/sentry/models/dashboard.py",
+    "src/sentry/backup/comparators.py",
+    "static/app/views/dashboards/manage/tableView/table.tsx"
+  ],
+  "sufficient_files": [
+    "src/sentry/migrations/0947_add_dashboard_last_visited_model.py",
+    "src/sentry/testutils/helpers/backups.py",
+    "static/app/views/dashboards/types.tsx",
+    "static/app/views/dashboards/manage/tableView/table.spec.tsx"
+  ],
+  "pr_files_backend": [
+    "migrations_lockfile.txt",
+    "src/sentry/backup/comparators.py",
+    "src/sentry/migrations/0947_add_dashboard_last_visited_model.py",
+    "src/sentry/models/dashboard.py",
+    "src/sentry/testutils/helpers/backups.py"
+  ],
+  "pr_files_frontend": [
+    "static/app/views/dashboards/manage/tableView/table.spec.tsx",
+    "static/app/views/dashboards/manage/tableView/table.tsx",
+    "static/app/views/dashboards/types.tsx"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count_combined": 8,
+    "verified": true
+  },
+  "difficulty": "medium",
+  "confidence": 0.92
+}

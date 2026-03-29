@@ -1,0 +1,101 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-kafka-bufpool-012"
+suite = "customer_escalation"
+difficulty = "expert"
+estimated_duration_minutes = 60
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map messages appearing on wrong Kafka topic during broker restarts to buffer pool reuse race in producer internals"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/apache/kafka"
+rev = ""
+path = "kafka"
+role = "primary"
+
+[metadata]
+languages = ["java"]
+frameworks = ["kafka"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies Sender, BufferPool, and RecordAccumulator as the affected code paths"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the producer internals subsystem as responsible"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity for data integrity issue (messages on wrong topic)"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related buffer reuse, batch failure, or retry issues"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Large Java codebase; race condition spans Sender, BufferPool, and RecordAccumulator with subtle concurrency semantics requiring deep code search"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "clients/src/main/java/org/apache/kafka/clients/producer/internals/Sender.java"
+repo = "kafka"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "clients/src/main/java/org/apache/kafka/clients/producer/internals/BufferPool.java"
+repo = "kafka"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "clients/src/main/java/org/apache/kafka/clients/producer/internals/RecordAccumulator.java"
+repo = "kafka"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "clients/src/main/java/org/apache/kafka/clients/producer/internals/ProducerBatch.java"
+repo = "kafka"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "clients/src/main/java/org/apache/kafka/clients/producer/KafkaProducer.java"
+repo = "kafka"
+confidence = 0.65
+
+[[ground_truth.sufficient_files]]
+path = "clients/src/test/java/org/apache/kafka/clients/producer/internals/SenderTest.java"
+repo = "kafka"
+confidence = 0.60
+
+[csb_lineage]
+parent_csb_id = "kafka-producer-bufpool-fix-001"
+origin_suite = "csb_sdlc_fix"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

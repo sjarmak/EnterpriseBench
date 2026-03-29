@@ -1,0 +1,38 @@
+{
+  "candidate_id": 5,
+  "candidate_ref": "kubernetes/kubernetes#134040",
+  "error_string": "Warning: spec.SessionAffinity is ignored for headless services",
+  "fix_pr": "https://github.com/kubernetes/kubernetes/pull/134054",
+  "repo": "kubernetes/kubernetes",
+  "repo_rev": "v1.32.0",
+  "difficulty": "medium",
+  "required_files": [
+    {
+      "path": "pkg/api/service/warnings.go",
+      "repo": "kubernetes",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains the warning generation function that produces 'spec.SessionAffinity is ignored for headless services'. The format string is directly in this file."
+    },
+    {
+      "path": "pkg/api/service/warnings_test.go",
+      "repo": "kubernetes",
+      "confidence": 0.85,
+      "source": "deterministic",
+      "rationale": "Test file for warnings, updated in fix PR to test the SessionAffinity condition."
+    }
+  ],
+  "sufficient_files": [],
+  "error_chain": [
+    "User creates or updates a headless Service",
+    "API server validation runs warnings check",
+    "pkg/api/service/warnings.go checks SessionAffinity value",
+    "Bug: defaults SessionAffinity to 'None' which is indistinguishable from user-set",
+    "Warning fires even when user didn't explicitly set SessionAffinity"
+  ],
+  "trigger_conditions": [
+    "Service is headless (ClusterIP: None)",
+    "SessionAffinity field is defaulted to 'None' (not explicitly set by user)",
+    "Warning incorrectly fires because it can't distinguish default from explicit"
+  ]
+}

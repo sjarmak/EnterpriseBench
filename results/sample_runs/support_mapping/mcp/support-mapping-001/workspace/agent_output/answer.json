@@ -1,0 +1,60 @@
+{
+  "code_paths": [
+    {
+      "path": "source/common/http/conn_pool_base.cc",
+      "repo": "envoy"
+    },
+    {
+      "path": "source/common/http/conn_pool_base.h",
+      "repo": "envoy"
+    },
+    {
+      "path": "source/common/conn_pool/conn_pool_base.cc",
+      "repo": "envoy"
+    },
+    {
+      "path": "source/common/upstream/conn_pool_map_impl.h",
+      "repo": "envoy"
+    },
+    {
+      "path": "envoy/http/conn_pool.h",
+      "repo": "envoy"
+    },
+    {
+      "path": "docs/root/intro/arch_overview/upstream/circuit_breaking.rst",
+      "repo": "envoy"
+    },
+    {
+      "path": "envoy/router/router.h",
+      "repo": "envoy"
+    }
+  ],
+  "ownership": {
+    "subsystem": "connection pool and circuit breaking",
+    "description": "The upstream connection-pool layer with circuit-breaking and max-connections overflow management"
+  },
+  "severity": {
+    "level": "high",
+    "rationale": "Production traffic affected during peak hours due to connection pool overflow — upstream requests dropped"
+  },
+  "related_issues": [
+    {
+      "reference": "docs/root/intro/arch_overview/upstream/circuit_breaking.rst",
+      "type": "doc"
+    },
+    {
+      "reference": "envoy/http/conn_pool.h",
+      "type": "code"
+    },
+    {
+      "reference": "envoy/router/router.h",
+      "type": "code"
+    }
+  ],
+  "tool_usage": {
+    "sourcegraph_searches": 11,
+    "symbol_navigations": 18,
+    "file_reads": 34,
+    "total_tokens": 16800
+  }
+}

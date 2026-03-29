@@ -1,0 +1,101 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-firefox-css-crash-006"
+suite = "customer_escalation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map Firefox crash on pages with complex CSS calc() expressions to Servo style engine code"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/mozilla/gecko-dev"
+rev = ""
+path = "gecko-dev"
+role = "primary"
+
+[metadata]
+languages = ["cpp", "rust"]
+frameworks = ["gecko", "servo"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies the Servo calc() parsing and computed length value files"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the Servo style engine as responsible subsystem"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity for browser crash on user-facing web pages"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related calc() overflow or animation interpolation issues"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Enormous mixed C++/Rust codebase; CSS processing spans Gecko layout and Servo style engine with complex FFI boundary"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "layout/style/ServoCSSPropList.mako.py"
+repo = "gecko-dev"
+confidence = 0.80
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "servo/components/style/values/specified/calc.rs"
+repo = "gecko-dev"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "servo/components/style/values/computed/length.rs"
+repo = "gecko-dev"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "servo/components/style/values/specified/length.rs"
+repo = "gecko-dev"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "servo/components/style/values/animated/mod.rs"
+repo = "gecko-dev"
+confidence = 0.65
+
+[[ground_truth.sufficient_files]]
+path = "layout/style/ServoBindings.toml"
+repo = "gecko-dev"
+confidence = 0.50
+
+[csb_lineage]
+parent_csb_id = "ccx-incident-149"
+origin_suite = "csb_org_incident"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

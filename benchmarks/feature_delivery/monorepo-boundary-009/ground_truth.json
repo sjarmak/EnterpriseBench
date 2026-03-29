@@ -1,0 +1,94 @@
+{
+  "candidate_id": 13,
+  "repo": "rust-lang/rust",
+  "pr_refs": ["#134381"],
+  "release": "nightly-2024-12-18",
+  "description": "Split rustc_attr into rustc_attr_parsing + rustc_attr_data_structures cascades through compiler crates",
+  "changed_package": {
+    "name": "rustc_attr",
+    "path": "compiler/rustc_attr",
+    "change_summary": "Renamed to rustc_attr_parsing, data types extracted to new crate rustc_attr_data_structures",
+    "changed_files": [
+      "compiler/rustc_attr/src/builtin.rs",
+      "compiler/rustc_attr_parsing/Cargo.toml",
+      "compiler/rustc_attr_parsing/messages.ftl",
+      "compiler/rustc_attr_parsing/src/lib.rs",
+      "compiler/rustc_attr_parsing/src/attributes/mod.rs",
+      "compiler/rustc_attr_parsing/src/attributes/allow_unstable.rs",
+      "compiler/rustc_attr_parsing/src/attributes/cfg.rs",
+      "compiler/rustc_attr_parsing/src/attributes/confusables.rs",
+      "compiler/rustc_attr_parsing/src/attributes/deprecation.rs",
+      "compiler/rustc_attr_parsing/src/attributes/repr.rs",
+      "compiler/rustc_attr_parsing/src/attributes/stability.rs",
+      "compiler/rustc_attr_parsing/src/attributes/transparency.rs",
+      "compiler/rustc_attr_parsing/src/attributes/util.rs",
+      "compiler/rustc_attr_parsing/src/session_diagnostics.rs",
+      "compiler/rustc_attr_data_structures/Cargo.toml",
+      "compiler/rustc_attr_data_structures/src/lib.rs",
+      "compiler/rustc_attr_data_structures/src/attributes.rs",
+      "compiler/rustc_attr_data_structures/src/stability.rs",
+      "compiler/rustc_attr_data_structures/src/version.rs"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "rustc_ast_passes",
+      "path": "compiler/rustc_ast_passes",
+      "semver_bump": "major",
+      "impact": "Cargo.toml dependency updated from rustc_attr to rustc_attr_parsing/rustc_attr_data_structures",
+      "affected_files": [
+        "compiler/rustc_ast_passes/Cargo.toml",
+        "compiler/rustc_ast_passes/src/ast_validation.rs"
+      ],
+      "confidence": 0.97
+    },
+    {
+      "name": "rustc_builtin_macros",
+      "path": "compiler/rustc_builtin_macros",
+      "semver_bump": "major",
+      "impact": "Cargo.toml and import paths updated for split crates",
+      "affected_files": [
+        "compiler/rustc_builtin_macros/Cargo.toml",
+        "compiler/rustc_builtin_macros/src/cfg.rs",
+        "compiler/rustc_builtin_macros/src/deriving/coerce_pointee.rs",
+        "compiler/rustc_builtin_macros/src/deriving/generic/mod.rs"
+      ],
+      "confidence": 0.97
+    },
+    {
+      "name": "rustc_codegen_llvm",
+      "path": "compiler/rustc_codegen_llvm",
+      "semver_bump": "major",
+      "impact": "Cargo.toml dependency and attribute imports updated",
+      "affected_files": [
+        "compiler/rustc_codegen_llvm/Cargo.toml",
+        "compiler/rustc_codegen_llvm/src/attributes.rs"
+      ],
+      "confidence": 0.96
+    },
+    {
+      "name": "rustc_codegen_gcc",
+      "path": "compiler/rustc_codegen_gcc",
+      "semver_bump": "major",
+      "impact": "Import paths updated for attribute data structures",
+      "affected_files": [
+        "compiler/rustc_codegen_gcc/src/attributes.rs",
+        "compiler/rustc_codegen_gcc/src/lib.rs"
+      ],
+      "confidence": 0.96
+    }
+  ],
+  "overall_semver": "major",
+  "changelog_entries": [
+    "rustc_attr: Split into rustc_attr_parsing + rustc_attr_data_structures (preparation for rustc_attr_validation)"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 31,
+    "packages_touched": ["rustc_attr", "rustc_attr_parsing", "rustc_attr_data_structures", "rustc_ast_passes", "rustc_builtin_macros", "rustc_codegen_llvm", "rustc_codegen_gcc"],
+    "cargo_workspace": true,
+    "verified": true
+  },
+  "difficulty": "expert",
+  "confidence": 0.95
+}

@@ -1,0 +1,101 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-element-unread-010"
+suite = "customer_escalation"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map persistent false unread indicators in Element Web to thread vs room notification state divergence"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/element-hq/element-web"
+rev = "526645c79160ab1ad4b4c3845de27d51263a405e"
+path = "element-web"
+role = "primary"
+
+[metadata]
+languages = ["typescript"]
+frameworks = ["react", "matrix"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies notification utilities and thread/room notification state files"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the notifications store subsystem as responsible"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity for persistent false unread indicators"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related thread receipt or read state issues"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Notification state spans multiple stores and utilities; MCP helps trace thread receipt processing vs room timeline state"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/utils/notifications.ts"
+repo = "element-web"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/stores/notifications/RoomNotificationState.ts"
+repo = "element-web"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/stores/notifications/ThreadNotificationState.ts"
+repo = "element-web"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/stores/notifications/NotificationState.ts"
+repo = "element-web"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "src/components/views/rooms/NotificationBadge.tsx"
+repo = "element-web"
+confidence = 0.65
+
+[[ground_truth.sufficient_files]]
+path = "src/models/Room.ts"
+repo = "element-web"
+confidence = 0.55
+
+[csb_lineage]
+parent_csb_id = "element-web-unread-indicators-diverge-fix-001"
+origin_suite = "csb_sdlc_fix"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

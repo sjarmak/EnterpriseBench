@@ -1,0 +1,180 @@
+# DB Schema Evolution: Deactivate User Groups (Zulip)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-001"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "hard"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Trace impact of adding a deactivated boolean column to NamedUserGroup across the Zulip Django codebase"
+prompt = """
+We're adding a `deactivated` boolean field to the `NamedUserGroup` model so that
+groups can be soft-deleted instead of permanently removed. The migration is in
+`zerver/migrations/0578_namedusergroup_deactivated.py`.
+
+Your task:
+1. Identify the schema change and the migration file.
+2. Find all code that directly references the NamedUserGroup model and would need
+   updating to account for the new `deactivated` field (actions, views, queries).
+3. Find indirect references — event system, API schema, import/export, audit logging,
+   markdown rendering, URL routing — that need to be aware of deactivated groups.
+4. Identify all test files that exercise user group functionality and would need
+   new test cases for deactivation behavior.
+
+Write your analysis to /workspace/zulip/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/zulip/zulip"
+rev = "38053e9c7cc59b5e3f7c26af49fc1bb57acf0b86"
+path = "zulip"
+role = "primary"
+
+[metadata]
+languages = ["python", "javascript"]
+total_loc = 500_000
+dependency_depth = 1
+frameworks = ["django"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the migration file and the model field addition"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds direct model references: actions, views, user_groups utility, groups model"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds indirect references: events, event_schema, import_realm, markdown, API schema, audit log, URLs"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies test files needing updates for deactivation behavior"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing a new boolean field through Django model → actions → views → event system → API schema requires cross-file symbol resolution"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "zerver/models/groups.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/actions/user_groups.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/views/user_groups.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/lib/events.py"
+repo = "zulip"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/lib/event_schema.py"
+repo = "zulip"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/lib/user_groups.py"
+repo = "zulip"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "zerver/migrations/0578_namedusergroup_deactivated.py"
+repo = "zulip"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "zerver/views/streams.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zerver/lib/import_realm.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/lib/markdown/__init__.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zerver/openapi/zulip.yaml"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/openapi/curl_param_value_generators.py"
+repo = "zulip"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "zerver/models/realm_audit_logs.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zproject/urls.py"
+repo = "zulip"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_user_groups.py"
+repo = "zulip"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_events.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_audit_log.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_markdown.py"
+repo = "zulip"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "api_docs/changelog.md"
+repo = "zulip"
+confidence = 0.75

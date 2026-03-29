@@ -1,0 +1,75 @@
+{
+  "task_id": "support-map-element-threads-009",
+  "candidate_ref": "CSB-A9",
+  "description": "Chat App Threads Panel Crashes \u2014 Element Web shows white screen when clicking threads button in some rooms",
+  "repo": "element-hq/element-web",
+  "repo_rev": null,
+  "pre_fix_rev": "8ebdcab7d92f90422776c4390363338dcfd98ba5",
+  "csb_lineage": {
+    "parent_csb_id": "element-web-roomheaderbuttons-can-crash-fix-001",
+    "origin_suite": "csb_sdlc_fix",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "src/components/views/rooms/RoomHeader/RoomHeaderButtons.tsx",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "RoomHeaderButtons component \u2014 thread panel toggle logic, null safety for thread notification state"
+      },
+      {
+        "path": "src/components/views/right_panel/ThreadPanel.tsx",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.85,
+        "source": "deterministic",
+        "rationale": "Thread panel component \u2014 renders threads, may crash accessing undefined thread state"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "src/components/views/rooms/RoomHeader/RoomHeader.tsx",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.75,
+        "rationale": "Room header component \u2014 parent of RoomHeaderButtons, passes room props"
+      },
+      {
+        "path": "src/components/structures/RoomView.tsx",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.65,
+        "rationale": "Room view \u2014 orchestrates header, timeline, and right panel components"
+      },
+      {
+        "path": "src/components/views/context_menus/RoomNotificationContextMenu.tsx",
+        "repo": "element-web",
+        "line_range": null,
+        "confidence": 0.55,
+        "rationale": "Room notification context menu \u2014 related notification state handling (file from pre-fix commit)"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "thread-panel",
+    "null-safety",
+    "component-crash",
+    "room-header",
+    "state-handling"
+  ],
+  "expected_severity": "high",
+  "related_references": [
+    "src/components/views/rooms/RoomHeader/RoomHeader.tsx",
+    "src/components/structures/RoomView.tsx"
+  ]
+}

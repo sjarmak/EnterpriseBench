@@ -1,0 +1,117 @@
+# API Contract Boundary: gRPC-Go balancer.ClientConn embedding requirement
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "api-contract-grpc-clientconn-004"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace impact of gRPC-Go balancer.ClientConn embedding requirement on etcd"
+prompt = """
+The gRPC-Go v1.71.0 release added an internal method to the
+`balancer.ClientConn` interface (PR #8026), requiring all implementors
+to embed a delegate implementation. This ensures gRPC-Go can add new
+methods without breaking builds. However, any consumer that directly
+implements `balancer.ClientConn` without embedding will fail to compile.
+
+Your task:
+1. Identify the exact change in `grpc-go/balancer/balancer.go` that
+   enforces embedding.
+2. Find all types in etcd that implement `balancer.ClientConn` and would
+   break.
+3. Check if etcd has any test mocks or fakes of `balancer.ClientConn`
+   that would also need updating.
+4. Assess whether etcd can simply add embedding or needs to restructure
+   its balancer integration.
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.71.0"
+path = "grpc-go"
+role = "primary"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.5.17"
+path = "etcd"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 500_000
+dependency_depth = 2
+frameworks = ["grpc"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_breaking_api"
+weight = 0.15
+verifier = "checks/check_source_identification.sh"
+description = "Agent identifies the embedding enforcement in balancer.ClientConn"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_consumers"
+weight = 0.35
+verifier = "checks/check_direct_consumers.sh"
+description = "Agent finds all etcd types implementing balancer.ClientConn"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_impact"
+weight = 0.30
+verifier = "checks/check_transitive_impact.sh"
+description = "Agent finds test mocks and fakes also affected"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "classify_breakage"
+weight = 0.20
+verifier = "checks/check_classification.sh"
+description = "Agent assesses embedding vs restructure fix"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Interface implementation search across repos requires semantic understanding of Go interface satisfaction rules"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "balancer/balancer.go"
+repo = "grpc-go"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "balancer/subconn.go"
+repo = "grpc-go"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "balancer_wrapper.go"
+repo = "grpc-go"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "internal/internal.go"
+repo = "grpc-go"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "internal/testutils/balancer.go"
+repo = "grpc-go"
+confidence = 0.80

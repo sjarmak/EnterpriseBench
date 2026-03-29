@@ -1,0 +1,44 @@
+{
+  "candidate_id": 1,
+  "candidate_ref": "kubernetes/kubernetes#136527",
+  "error_string": "Job.batch \"job-c4nbt\" is invalid: status.startTime: Required value: startTime cannot be removed for unsuspended job",
+  "fix_pr": "https://github.com/kubernetes/kubernetes/pull/136585",
+  "repo": "kubernetes/kubernetes",
+  "repo_rev": "v1.33.0-alpha.1",
+  "difficulty": "medium",
+  "required_files": [
+    {
+      "path": "pkg/apis/batch/validation/validation.go",
+      "repo": "kubernetes",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains the validation logic that generates the misleading 'startTime cannot be removed' error message. The format string is directly in this file."
+    },
+    {
+      "path": "pkg/apis/batch/validation/validation_test.go",
+      "repo": "kubernetes",
+      "confidence": 0.85,
+      "source": "deterministic",
+      "rationale": "Test file modified in the fix PR. Contains test cases that exercise the validation error path."
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pkg/registry/batch/job/strategy_test.go",
+      "repo": "kubernetes",
+      "confidence": 0.60,
+      "rationale": "Registry strategy test also updated in fix — validates end-to-end Job update behavior."
+    }
+  ],
+  "error_chain": [
+    "User submits Job status update via kubectl/API",
+    "pkg/registry/batch/job/strategy.go validates the update",
+    "pkg/apis/batch/validation/validation.go checks startTime field",
+    "Validation returns field.Required error with misleading message"
+  ],
+  "trigger_conditions": [
+    "Job has session_type=single and is not suspended",
+    "User or controller modifies status.startTime (not just removes it)",
+    "The validation incorrectly treats any change as removal"
+  ]
+}

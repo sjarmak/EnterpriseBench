@@ -1,0 +1,49 @@
+{
+  "candidate_id": "SE-2",
+  "repo": "zulip/zulip",
+  "pr_refs": ["#31760"],
+  "base_rev": "912c1b598458f89afa6814b3a19b95d4648e2371",
+  "description": "Create RealmExport model replacing JSON file-based export tracking — impacts actions, views, worker, management commands, tests",
+  "schema_change": {
+    "type": "create_table",
+    "table": "RealmExport",
+    "migration": "zerver/migrations/0595_add_realmexport_table_and_backfill.py"
+  },
+  "required_files": [
+    "zerver/models/realms.py",
+    "zerver/actions/realm_export.py",
+    "zerver/views/realm_export.py",
+    "zerver/worker/deferred_work.py"
+  ],
+  "sufficient_files": [
+    "zerver/migrations/0595_add_realmexport_table_and_backfill.py",
+    "zerver/models/__init__.py",
+    "zerver/lib/export.py",
+    "zerver/management/commands/export.py",
+    "zerver/tests/test_realm_export.py",
+    "zerver/tests/test_import_export.py",
+    "zerver/tests/test_events.py",
+    "zerver/tests/test_management_commands.py"
+  ],
+  "pr_files": [
+    "zerver/actions/realm_export.py",
+    "zerver/lib/export.py",
+    "zerver/management/commands/export.py",
+    "zerver/migrations/0595_add_realmexport_table_and_backfill.py",
+    "zerver/models/__init__.py",
+    "zerver/models/realms.py",
+    "zerver/tests/test_events.py",
+    "zerver/tests/test_import_export.py",
+    "zerver/tests/test_management_commands.py",
+    "zerver/tests/test_realm_export.py",
+    "zerver/views/realm_export.py",
+    "zerver/worker/deferred_work.py"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 12,
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.96
+}

@@ -1,0 +1,50 @@
+{
+  "candidate_id": 3,
+  "candidate_ref": "kubernetes/kubernetes#136288",
+  "error_string": "PostStartHook \"start-service-ip-repair-controllers\" failed: unable to perform initial IP and Port allocation check",
+  "secondary_errors": [
+    "ipaddresses.networking.k8s.io is forbidden: not yet ready to handle request",
+    "informer-sync,poststarthook/start-service-ip-repair-controllers check failed: readyz"
+  ],
+  "fix_pr": "https://github.com/kubernetes/kubernetes/pull/137147",
+  "repo": "kubernetes/kubernetes",
+  "repo_rev": "v1.32.0",
+  "difficulty": "expert",
+  "required_files": [
+    {
+      "path": "pkg/registry/core/service/ipallocator/controller/repairip.go",
+      "repo": "kubernetes",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains the RepairIPAddress controller that fails during startup. The 'unable to perform initial IP and Port allocation check' error originates here."
+    },
+    {
+      "path": "pkg/registry/core/service/ipallocator/controller/repairip_test.go",
+      "repo": "kubernetes",
+      "confidence": 0.80,
+      "source": "deterministic",
+      "rationale": "Test for the repair controller, updated in fix PR."
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "test/integration/servicecidr/startup_race_test.go",
+      "repo": "kubernetes",
+      "confidence": 0.70,
+      "rationale": "Integration test added to reproduce the race condition during upgrade."
+    }
+  ],
+  "error_chain": [
+    "kube-apiserver starts during v1.32->v1.33 upgrade",
+    "PostStartHook 'start-service-ip-repair-controllers' registered",
+    "RepairIPAddress controller tries to create IPAddress objects",
+    "API server rejects with 'not yet ready to handle request' (admission not ready)",
+    "PostStartHook fails, readyz check fails",
+    "kube-apiserver reports unhealthy"
+  ],
+  "trigger_conditions": [
+    "Kubernetes cluster upgrade from v1.32 to v1.33",
+    "MultiCIDRServiceAllocator enabled by default in v1.33",
+    "Race between PostStartHook and API readiness during startup"
+  ]
+}

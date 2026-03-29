@@ -52,6 +52,22 @@
         "prompt": {
           "type": "string",
           "description": "The instruction given to the agent"
+        },
+        "task_type": {
+          "type": "string",
+          "enum": [
+            "api_contract",
+            "refactor_orchestration",
+            "dependency_graph",
+            "monorepo_boundary",
+            "db_schema_evolution",
+            "error_provenance",
+            "support_code_mapping",
+            "dead_code_necropsy",
+            "incident_investigation",
+            "config_drift"
+          ],
+          "description": "Task type classification from the 10 EnterpriseBench task types"
         }
       }
     },

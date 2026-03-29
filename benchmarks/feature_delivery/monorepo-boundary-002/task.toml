@@ -1,0 +1,95 @@
+# Monorepo Boundary: Babel Decorator 2023-11 Normative Updates
+
+difficulty_stratum = "monorepo_cross_package"
+
+[task]
+id = "monorepo-boundary-babel-decorators-002"
+suite = "feature_delivery"
+task_type = "monorepo_boundary"
+difficulty = "expert"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Trace impact of TC39 decorator 2023-11 normative spec changes through babel helper/plugin chain"
+prompt = """
+The `@babel/helper-create-class-features-plugin` package has been updated with
+decorator semantics changes matching the TC39 2023-11 normative updates. The
+changes are in `packages/babel-helper-create-class-features-plugin/src/decorators.ts`
+and `src/index.ts`.
+
+Your task:
+1. Identify all sibling packages in the babel monorepo that depend on the
+   decorator helper and are affected by this semantics change.
+2. For each affected package, classify the impact as none/patch/minor/major.
+3. Identify specific boundary violations — files where decorator helper APIs
+   are consumed or where generated helpers need updating.
+
+Write your analysis to /workspace/babel/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/babel/babel"
+rev = "v7.23.9"
+path = "babel"
+role = "primary"
+
+[metadata]
+languages = ["typescript", "javascript"]
+total_loc = 450_000
+dependency_depth = 1
+frameworks = ["babel"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_affected_packages"
+weight = 0.25
+verifier = "checks/check_affected_packages.sh"
+description = "Agent identifies @babel/helpers and @babel/plugin-proposal-decorators as affected"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "classify_change_impact"
+weight = 0.45
+verifier = "checks/check_impact_classification.sh"
+description = "Agent correctly classifies both affected packages as minor (new helper version, updated transform)"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_boundary_violations"
+weight = 0.30
+verifier = "checks/check_boundary_violations.sh"
+description = "Agent identifies helpers-generated.ts and plugin-proposal-decorators/src/index.ts as boundary points"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing decorator helper consumption through re-exports and plugin chains requires semantic cross-package navigation"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "packages/babel-helper-create-class-features-plugin/src/decorators.ts"
+repo = "babel"
+confidence = 0.97
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/babel-helpers/src/helpers-generated.ts"
+repo = "babel"
+confidence = 0.97
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/babel-plugin-proposal-decorators/src/index.ts"
+repo = "babel"
+confidence = 0.96
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "packages/babel-helpers/src/helpers/applyDecs2311.ts"
+repo = "babel"
+confidence = 0.90

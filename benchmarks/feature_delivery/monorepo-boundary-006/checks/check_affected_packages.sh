@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Checkpoint 1: Verify agent identified affected packages
+set -euo pipefail
+
+REPORT="${WORKSPACE:-/workspace}/pnpm/IMPACT_REPORT.md"
+if [[ ! -f "$REPORT" ]]; then
+  printf '{"score": 0.0, "passed": false, "reason": "IMPACT_REPORT.md not found"}\n'
+  exit 0
+fi
+
+FOUND=0
+TOTAL=2
+if grep -qiE 'plugin.commands.install|plugin-commands-installation|plugin-commands-rebuild' "$REPORT"; then FOUND=$((FOUND + 1)); fi
+if grep -qiE 'pnpm.*(cli|CLI)|pnpm/test' "$REPORT"; then FOUND=$((FOUND + 1)); fi
+
+# Compute score as proper decimal
+if [ "$TOTAL" -gt 0 ]; then
+  SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
+else
+  SCORE="0.00"
+fi
+if [ "$FOUND" -ge 2 ]; then PASSED=true; else PASSED=false; fi
+
+printf '{"score": %s, "passed": %s, "reason": "Found %d/%d affected packages"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"

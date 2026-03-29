@@ -1,0 +1,154 @@
+# DB Schema Evolution: Auto-Bump Cooldown Days (Discourse)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-008"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "medium"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace impact of adding auto_bump_cooldown_days to CategorySetting with backfill migration in Discourse"
+prompt = """
+We're adding an `auto_bump_cooldown_days` integer column to `CategorySetting` to
+control how frequently topics in a category can be automatically bumped. This is a
+two-step migration:
+1. `20230301071240_add_auto_bump_cooldown_days_to_category_settings.rb` — adds the column
+2. `20230308042434_backfill_auto_bump_cooldown_days_category_setting.rb` — backfills defaults
+
+Your task:
+1. Identify both migration files and the model changes.
+2. Find direct references — CategorySetting model, Category model, the
+   categories controller, and the category serializer.
+3. Find indirect references — frontend components (edit-category-settings template,
+   category model JS, new-category route), locale strings, and API response JSON schemas.
+4. Identify spec and API schema fixture files that need updating.
+
+Write your analysis to /workspace/discourse/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/discourse/discourse"
+rev = "168de52538632ae18b95c0757ab2ae5e21ff240c"
+path = "discourse"
+role = "primary"
+
+[metadata]
+languages = ["ruby", "javascript"]
+total_loc = 600_000
+dependency_depth = 1
+frameworks = ["rails"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies both migration files"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds model, controller, and serializer references"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds frontend components, locales, and API JSON schema fixtures"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies spec files and API schema fixtures"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Two-step migration with API response schema fixtures is a common pattern; MCP helps find the JSON fixture files in spec/"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "app/models/category_setting.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/models/category.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/controllers/categories_controller.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/serializers/category_serializer.rb"
+repo = "discourse"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "db/migrate/20230301071240_add_auto_bump_cooldown_days_to_category_settings.rb"
+repo = "discourse"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "db/migrate/20230308042434_backfill_auto_bump_cooldown_days_category_setting.rb"
+repo = "discourse"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/discourse/app/components/edit-category-settings.hbs"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/discourse/app/models/category.js"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/discourse/app/routes/new-category.js"
+repo = "discourse"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "config/locales/client.en.yml"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "spec/models/category_setting_spec.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "spec/models/category_spec.rb"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "spec/requests/api/schemas/json/category_create_response.json"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "spec/requests/api/schemas/json/category_update_response.json"
+repo = "discourse"
+confidence = 0.90

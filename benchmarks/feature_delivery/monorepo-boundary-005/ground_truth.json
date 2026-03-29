@@ -1,0 +1,132 @@
+{
+  "candidate_id": 6,
+  "repo": "pnpm/pnpm",
+  "pr_refs": ["#7470", "#7476"],
+  "release": "v9.0.0",
+  "description": "Lockfile v6 format change in @pnpm/constants and @pnpm/dependency-path cascades through lockfile and resolution packages",
+  "changed_package": {
+    "name": "@pnpm/constants",
+    "path": "packages/constants",
+    "change_summary": "New lockfile version constant for v6 format; @pnpm/dependency-path updated for new path format",
+    "changed_files": [
+      "packages/constants/src/index.ts",
+      "packages/dependency-path/src/index.ts",
+      "packages/dependency-path/test/index.ts"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "@pnpm/lockfile-file",
+      "path": "lockfile/lockfile-file",
+      "semver_bump": "major",
+      "impact": "Lockfile reading/writing updated for v6 format, inline specifiers conversion",
+      "affected_files": [
+        "lockfile/lockfile-file/src/experiments/inlineSpecifiersLockfileConverters.ts",
+        "lockfile/lockfile-file/src/write.ts",
+        "lockfile/lockfile-file/test/__snapshots__/write.test.ts.snap",
+        "lockfile/lockfile-file/test/lockfileV6Converters.test.ts",
+        "lockfile/lockfile-file/test/normalizeLockfile.test.ts",
+        "lockfile/lockfile-file/test/write.test.ts"
+      ],
+      "confidence": 0.96
+    },
+    {
+      "name": "@pnpm/lockfile-utils",
+      "path": "lockfile/lockfile-utils",
+      "semver_bump": "major",
+      "impact": "Package snapshot utilities updated for new lockfile format",
+      "affected_files": [
+        "lockfile/lockfile-utils/test/nameVerFromPkgSnapshot.ts",
+        "lockfile/lockfile-utils/test/pkgSnapshotToResolution.ts"
+      ],
+      "confidence": 0.93
+    },
+    {
+      "name": "@pnpm/lockfile-to-pnp",
+      "path": "lockfile/lockfile-to-pnp",
+      "semver_bump": "major",
+      "impact": "PnP lockfile conversion updated",
+      "affected_files": [
+        "lockfile/lockfile-to-pnp/src/index.ts",
+        "lockfile/lockfile-to-pnp/test/index.ts"
+      ],
+      "confidence": 0.92
+    },
+    {
+      "name": "@pnpm/merge-lockfile-changes",
+      "path": "lockfile/merge-lockfile-changes",
+      "semver_bump": "major",
+      "impact": "Lockfile merge logic updated for v6 format",
+      "affected_files": [
+        "lockfile/merge-lockfile-changes/src/index.ts",
+        "lockfile/merge-lockfile-changes/test/index.ts"
+      ],
+      "confidence": 0.92
+    },
+    {
+      "name": "@pnpm/prune-lockfile",
+      "path": "lockfile/prune-lockfile",
+      "semver_bump": "major",
+      "impact": "Lockfile pruning updated",
+      "affected_files": [
+        "lockfile/prune-lockfile/test/index.ts"
+      ],
+      "confidence": 0.90
+    },
+    {
+      "name": "@pnpm/filter-lockfile",
+      "path": "lockfile/filter-lockfile",
+      "semver_bump": "major",
+      "impact": "Lockfile filtering updated for new format",
+      "affected_files": [
+        "lockfile/filter-lockfile/test/filterByImporters.ts",
+        "lockfile/filter-lockfile/test/filterByImportersAndEngine.ts"
+      ],
+      "confidence": 0.91
+    },
+    {
+      "name": "@pnpm/calc-dep-state",
+      "path": "packages/calc-dep-state",
+      "semver_bump": "major",
+      "impact": "Dependency state calculation updated for new path format",
+      "affected_files": [
+        "packages/calc-dep-state/test/index.ts",
+        "packages/calc-dep-state/test/lockfileToDepGraph.test.ts"
+      ],
+      "confidence": 0.91
+    },
+    {
+      "name": "@pnpm/plugin-commands-rebuild",
+      "path": "exec/plugin-commands-rebuild",
+      "semver_bump": "major",
+      "impact": "Rebuild commands updated for new lockfile format",
+      "affected_files": [
+        "exec/plugin-commands-rebuild/test/index.ts"
+      ],
+      "confidence": 0.88
+    },
+    {
+      "name": "@pnpm/audit",
+      "path": "lockfile/audit",
+      "semver_bump": "major",
+      "impact": "Audit lockfile reading updated",
+      "affected_files": [
+        "lockfile/audit/test/index.ts"
+      ],
+      "confidence": 0.88
+    }
+  ],
+  "overall_semver": "major",
+  "changelog_entries": [
+    "@pnpm/constants: Bump lockfile version to v6 (v9.0.0)",
+    "@pnpm/dependency-path: Remove registry URL from package ID (v9.0.0)"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 30,
+    "packages_touched": ["constants", "dependency-path", "lockfile-file", "lockfile-utils", "lockfile-to-pnp", "merge-lockfile-changes", "prune-lockfile", "filter-lockfile", "calc-dep-state", "plugin-commands-rebuild", "audit"],
+    "verified": true
+  },
+  "difficulty": "expert",
+  "confidence": 0.92
+}

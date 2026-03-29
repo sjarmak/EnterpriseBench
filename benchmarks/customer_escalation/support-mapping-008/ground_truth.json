@@ -1,0 +1,74 @@
+{
+  "task_id": "support-map-qutebrowser-cache-008",
+  "candidate_ref": "CSB-A8",
+  "description": "Browser App Crashes on Startup After Update \u2014 qutebrowser crashes immediately, corrupted ad-blocker cache after power outage",
+  "repo": "qutebrowser/qutebrowser",
+  "repo_rev": null,
+  "csb_lineage": {
+    "parent_csb_id": "qutebrowser-adblock-cache-regression-prove-001",
+    "origin_suite": "csb_sdlc_debug",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "qutebrowser/components/braveadblock.py",
+        "repo": "qutebrowser",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "Brave ad-blocker component \u2014 cache serialization/deserialization, startup loading path"
+      },
+      {
+        "path": "qutebrowser/browser/webengine/interceptor.py",
+        "repo": "qutebrowser",
+        "line_range": null,
+        "confidence": 0.85,
+        "source": "deterministic",
+        "rationale": "WebEngine request interceptor \u2014 invokes ad-blocker filter checks, calls into braveadblock"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "qutebrowser/config/configdata.yml",
+        "repo": "qutebrowser",
+        "line_range": null,
+        "confidence": 0.7,
+        "rationale": "Configuration data \u2014 defines ad-blocker settings including cache-related options"
+      },
+      {
+        "path": "tests/unit/components/test_braveadblock.py",
+        "repo": "qutebrowser",
+        "line_range": null,
+        "confidence": 0.65,
+        "rationale": "Ad-blocker tests \u2014 documents expected cache behavior and deserialization handling"
+      },
+      {
+        "path": "qutebrowser/utils/version.py",
+        "repo": "qutebrowser",
+        "line_range": null,
+        "confidence": 0.5,
+        "rationale": "Version utilities \u2014 may report ad-blocker cache state for debugging"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "ad-blocker",
+    "cache-serialization",
+    "startup-crash",
+    "data-persistence",
+    "WebEngine"
+  ],
+  "expected_severity": "critical",
+  "related_references": [
+    "tests/unit/components/test_braveadblock.py",
+    "qutebrowser/config/configdata.yml"
+  ]
+}

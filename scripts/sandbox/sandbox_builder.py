@@ -133,60 +133,67 @@ def generate_dockerfile(task: dict, task_dir: str) -> str:
     else:
         base_image = 'ubuntu:22.04'
 
-    clone_steps = []
+    lines = [
+        f"# Auto-generated Dockerfile for EnterpriseBench task: {task_id}",
+        f"# Repos: {', '.join(r['path'] for r in repos)}",
+        f"FROM {base_image}",
+        "",
+        f'LABEL eb.task.id="{task_id}"',
+        f'LABEL eb.repo.count="{len(repos)}"',
+        "",
+        "# Install essentials",
+        "RUN apt-get update && apt-get install -y --no-install-recommends \\",
+        "    git curl ca-certificates jq && \\",
+        "    rm -rf /var/lib/apt/lists/*",
+        "",
+        "# Create workspace and marker directory",
+        "RUN mkdir -p /workspace/.markers",
+        "",
+    ]
+
     health_markers = []
     for repo in repos:
         url = repo['url']
-        # Ensure full https URL
-        if not url.startswith('http'):
-            url = f'https://{url}'
+        # Ensure .git suffix for clone
+        clone_url = url if url.endswith('.git') else f"{url}.git"
         rev = repo['rev']
         path = repo['path']
 
-        clone_steps.append(textwrap.dedent(f"""\
-            # Clone {path} at {rev}
-            RUN git clone --depth 1 --branch {rev} {url}.git /workspace/{path} && \\
-                cd /workspace/{path} && \\
-                git log --oneline -1 > /workspace/.markers/{path}.rev && \\
-                echo "OK" > /workspace/.markers/{path}.status
-        """))
+        lines.append(f"# Clone {path} at {rev}")
+        lines.append(
+            f"RUN git clone --depth 1 --branch {rev} {clone_url} /workspace/{path} && \\"
+        )
+        lines.append(
+            f"    cd /workspace/{path} && \\"
+        )
+        lines.append(
+            f"    git log --oneline -1 > /workspace/.markers/{path}.rev && \\"
+        )
+        lines.append(
+            f'    echo "OK" > /workspace/.markers/{path}.status'
+        )
+        lines.append("")
         health_markers.append(path)
 
-    clone_block = '\n'.join(clone_steps)
     marker_list = ' '.join(health_markers)
 
-    dockerfile = textwrap.dedent(f"""\
-        # Auto-generated Dockerfile for EnterpriseBench task: {task_id}
-        # Repos: {', '.join(r['path'] for r in repos)}
-        FROM {base_image}
+    lines.extend([
+        "# Health-check: verify all repos cloned",
+        "COPY health_check.sh /workspace/health_check.sh",
+        "RUN chmod +x /workspace/health_check.sh",
+        "",
+        "# Cross-repo test runner",
+        "COPY test_runner.sh /workspace/test.sh",
+        "RUN chmod +x /workspace/test.sh",
+        "",
+        "WORKDIR /workspace",
+        "",
+        f"# Final health check during build — fail the build if any repo missing",
+        f"RUN /workspace/health_check.sh {marker_list}",
+        "",
+    ])
 
-        LABEL eb.task.id="{task_id}"
-        LABEL eb.repo.count="{len(repos)}"
-
-        # Install essentials
-        RUN apt-get update && apt-get install -y --no-install-recommends \\
-            git curl ca-certificates jq && \\
-            rm -rf /var/lib/apt/lists/*
-
-        # Create workspace and marker directory
-        RUN mkdir -p /workspace/.markers
-
-        {clone_block}
-        # Health-check: verify all repos cloned
-        COPY health_check.sh /workspace/health_check.sh
-        RUN chmod +x /workspace/health_check.sh
-
-        # Cross-repo test runner
-        COPY test_runner.sh /workspace/test.sh
-        RUN chmod +x /workspace/test.sh
-
-        WORKDIR /workspace
-
-        # Final health check during build — fail the build if any repo missing
-        RUN /workspace/health_check.sh {marker_list}
-    """)
-
-    return dockerfile
+    return "\n".join(lines)
 
 
 def generate_health_check() -> str:
@@ -253,63 +260,10 @@ def generate_health_check() -> str:
 
 
 def generate_test_runner() -> str:
-    """Generate test_runner.sh skeleton."""
-    return textwrap.dedent("""\
-        #!/usr/bin/env bash
-        # test_runner.sh — Cross-repo test runner for EnterpriseBench tasks.
-        # This is a skeleton. Each task may override or extend with task-specific logic.
-        #
-        # Usage: /workspace/test.sh [checkpoint_name]
-        set -euo pipefail
-
-        WORKSPACE="/workspace"
-
-        echo "=== EnterpriseBench Cross-Repo Test Runner ==="
-        echo "Workspace: $WORKSPACE"
-        echo "Repos:"
-        for dir in "$WORKSPACE"/*/; do
-            [ -d "$dir/.git" ] && echo "  - $(basename "$dir")"
-        done
-        echo ""
-
-        # If a checkpoint name is given, run only that checkpoint's verifier
-        if [ -n "${1:-}" ]; then
-            CHECKPOINT="$1"
-            VERIFIER="$WORKSPACE/.verifiers/${CHECKPOINT}.sh"
-            if [ -f "$VERIFIER" ]; then
-                echo "Running checkpoint: $CHECKPOINT"
-                bash "$VERIFIER"
-                exit $?
-            else
-                echo "ERROR: No verifier found for checkpoint '$CHECKPOINT'"
-                echo "Looked at: $VERIFIER"
-                exit 1
-            fi
-        fi
-
-        # Default: run all verifiers in order
-        if [ -d "$WORKSPACE/.verifiers" ]; then
-            TOTAL=0
-            PASSED=0
-            for verifier in "$WORKSPACE"/.verifiers/*.sh; do
-                [ -f "$verifier" ] || continue
-                name=$(basename "$verifier" .sh)
-                TOTAL=$((TOTAL + 1))
-                echo "--- Checkpoint: $name ---"
-                if bash "$verifier"; then
-                    echo "  PASS"
-                    PASSED=$((PASSED + 1))
-                else
-                    echo "  FAIL"
-                fi
-                echo ""
-            done
-            echo "Results: $PASSED/$TOTAL checkpoints passed"
-        else
-            echo "No .verifiers/ directory found. Nothing to run."
-            echo "This runner expects checkpoint verifiers in /workspace/.verifiers/"
-        fi
-    """)
+    """Read test_runner.sh from the canonical source file."""
+    runner_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_runner.sh')
+    with open(runner_path) as f:
+        return f.read()
 
 
 def build_image(dockerfile_content: str, context_dir: str, tag: str) -> tuple[bool, float]:
@@ -396,7 +350,10 @@ def main():
     task_id = task_meta.get('id', 'unknown')
     repos = task.get('repos', [])
 
+    # Normalize URLs before validation (TOML may omit https:// prefix)
     for r in repos:
+        if not r.get('url', '').startswith('http'):
+            r['url'] = f"https://{r['url']}"
         validate_repo_entry(r)
 
     print(f"Task: {task_id}")

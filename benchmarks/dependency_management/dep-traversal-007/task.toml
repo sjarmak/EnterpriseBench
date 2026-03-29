@@ -1,0 +1,106 @@
+# Dependency Graph Traversal: protobufjs prototype pollution through gRPC-JS
+
+difficulty_stratum = "multi_repo"
+
+[task]
+id = "dep-traversal-007"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace CVE-2022-25878 (protobufjs prototype pollution) through @grpc/grpc-js to k8s client and Google Cloud"
+prompt = """
+CVE-2022-25878 affects `protobufjs` (npm) — a prototype pollution vulnerability.
+Versions 6.10.0-6.10.2 and 6.11.0-6.11.2 are affected (fixed in 6.10.3/6.11.3).
+
+Your task:
+1. Identify the CVE and confirm the affected package and version ranges.
+2. Find all direct dependents of protobufjs in the workspace repos.
+3. Trace transitive dependency paths. @grpc/grpc-js depends on protobufjs for
+   message serialization. The Kubernetes JavaScript client and Google Cloud
+   libraries depend on @grpc/grpc-js. Map the full chain.
+4. For each consumer, check the resolved protobufjs version in lock files.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-node"
+rev = "v1.8.0"
+path = "grpc-node"
+role = "consumer"
+
+[[repos]]
+url = "github.com/kubernetes-client/javascript"
+rev = "0.18.0"
+path = "kubernetes-client-js"
+role = "consumer"
+
+[metadata]
+languages = ["javascript", "typescript"]
+total_loc = 180000
+dependency_depth = 3
+frameworks = ["grpc", "kubernetes-client"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent correctly identifies CVE-2022-25878 and protobufjs affected versions"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds repos depending on protobufjs"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces protobufjs -> grpc-js -> k8s client chain"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent checks resolved protobufjs versions in lock files"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo npm dependency chain traversal through nested packages benefits from Sourcegraph dependency graph indexing"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "packages/grpc-js/package.json"
+repo = "grpc-node"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "package.json"
+repo = "kubernetes-client-js"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "packages/grpc-js/package-lock.json"
+repo = "grpc-node"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "package-lock.json"
+repo = "kubernetes-client-js"
+confidence = 0.80

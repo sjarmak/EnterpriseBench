@@ -1,0 +1,95 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-qutebrowser-cache-008"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 30
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map qutebrowser startup crash after power outage to corrupted ad-blocker cache deserialization"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/qutebrowser/qutebrowser"
+rev = ""
+path = "qutebrowser"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["qt", "qtwebengine"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies the braveadblock component and WebEngine interceptor code"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the braveadblock component as responsible"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity for startup crash preventing browser use"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related cache corruption or serialization issues"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Medium-sized Python codebase; ad-blocker cache path is somewhat discoverable but MCP speeds tracing startup initialization chain"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "qutebrowser/components/braveadblock.py"
+repo = "qutebrowser"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "qutebrowser/browser/webengine/interceptor.py"
+repo = "qutebrowser"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "qutebrowser/config/configdata.yml"
+repo = "qutebrowser"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "tests/unit/components/test_braveadblock.py"
+repo = "qutebrowser"
+confidence = 0.65
+
+[[ground_truth.sufficient_files]]
+path = "qutebrowser/utils/version.py"
+repo = "qutebrowser"
+confidence = 0.50
+
+[csb_lineage]
+parent_csb_id = "qutebrowser-adblock-cache-regression-prove-001"
+origin_suite = "csb_sdlc_debug"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

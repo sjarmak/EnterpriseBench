@@ -1,0 +1,101 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-nodebb-notif-011"
+suite = "customer_escalation"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map empty notification dropdown and misplaced category selector to NodeBB client-side module bugs"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/NodeBB/NodeBB"
+rev = "8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7"
+path = "NodeBB"
+role = "primary"
+
+[metadata]
+languages = ["javascript"]
+frameworks = ["nodebb", "express"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies the notifications module, categorySelector, and topic move client code"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the client-side modules as responsible"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity for broken notifications and UI positioning"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related dropdown or async loading issues"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Medium JavaScript codebase; two separate bugs (notifications + category selector) require understanding both client and server notification flow"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "public/src/modules/notifications.js"
+repo = "NodeBB"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "public/src/modules/categorySelector.js"
+repo = "NodeBB"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "public/src/client/topic/move.js"
+repo = "NodeBB"
+confidence = 0.80
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "public/src/client/topic/fork.js"
+repo = "NodeBB"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "src/notifications.js"
+repo = "NodeBB"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "public/src/modules/helpers.js"
+repo = "NodeBB"
+confidence = 0.55
+
+[csb_lineage]
+parent_csb_id = "nodebb-notif-dropdown-fix-001"
+origin_suite = "csb_sdlc_fix"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

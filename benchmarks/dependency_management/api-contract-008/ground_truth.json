@@ -1,0 +1,22 @@
+{
+  "candidate_id": "AC-11",
+  "producer_repo": "google/cel-go",
+  "consumer_repos": ["grpc/grpc-go"],
+  "breaking_change": "cel-go v0.10.1 added a new method to cel.Program interface",
+  "consumer_fix_prs": ["grpc/grpc-go#5243"],
+  "api_contract_type": "go_interface",
+  "breakage_type": "compile_error",
+  "description": "cel-go added a method to cel.Program interface, breaking grpc-go authorization module mocks",
+  "consumer_affected_files": {
+    "grpc-go": [
+      "security/authorization/engine/engine_test.go",
+      "security/authorization/go.mod",
+      "security/authorization/go.sum"
+    ]
+  },
+  "breaking_symbols": [
+    "cel.Program"
+  ],
+  "difficulty": "medium",
+  "confidence": 0.95
+}

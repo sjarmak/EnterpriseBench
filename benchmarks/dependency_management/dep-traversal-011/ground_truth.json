@@ -1,0 +1,46 @@
+{
+  "candidate_id": 11,
+  "cve": "CVE-2021-44228",
+  "ghsa": "GHSA-jfh8-c2jp-5v3q",
+  "package": "org.apache.logging.log4j:log4j-core",
+  "ecosystem": "maven",
+  "description": "Log4Shell RCE affects Spring Boot, Kafka, Elasticsearch via shaded/relocated JARs and OSGi bundles",
+  "dependency_chain": [
+    {
+      "from": "log4j-core",
+      "to": "spring-boot",
+      "relationship": "optional dependency (via spring-boot-starter-log4j2)",
+      "manifest": "pom.xml / build.gradle",
+      "affected_versions": "2.0-beta9 - 2.14.1"
+    },
+    {
+      "from": "log4j-core",
+      "to": "apache/kafka",
+      "relationship": "dependency (logging framework)",
+      "manifest": "build.gradle",
+      "affected_versions": "2.0-beta9 - 2.14.1"
+    },
+    {
+      "from": "log4j-core",
+      "to": "apache/kafka",
+      "relationship": "also: pax-logging-log4j2 (OSGi)",
+      "manifest": "pom.xml",
+      "affected_versions": "shaded copy"
+    }
+  ],
+  "direct_dependents": ["spring-boot-starter-log4j2", "kafka", "elasticsearch"],
+  "transitive_paths": [
+    ["log4j-core", "spring-boot-starter-log4j2", "spring-boot-apps"],
+    ["log4j-core", "kafka-clients", "kafka-streams", "kafka-apps"],
+    ["pax-logging-log4j2", "OSGi-applications"]
+  ],
+  "fix_reference": "apache/logging-log4j2#608",
+  "affected_version_range": "2.0-beta9 - 2.14.1",
+  "fixed_version": "2.15.0 (partial), 2.16.0 (full), backports: 2.3.1, 2.12.2",
+  "verification": {
+    "method": "gh_advisory_api",
+    "verified": true
+  },
+  "difficulty": "expert",
+  "confidence": 0.98
+}

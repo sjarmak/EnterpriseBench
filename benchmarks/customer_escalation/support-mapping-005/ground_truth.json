@@ -1,0 +1,82 @@
+{
+  "task_id": "support-map-k8s-eviction-005",
+  "candidate_ref": "CSB-A5",
+  "description": "Kubernetes Pods Randomly Evicted \u2014 pods evicted with 'memory pressure' despite apparently sufficient RAM",
+  "repo": "kubernetes/kubernetes",
+  "repo_rev": null,
+  "csb_lineage": {
+    "parent_csb_id": "ccx-incident-144",
+    "origin_suite": "csb_org_incident",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "pkg/kubelet/eviction/eviction_manager.go",
+        "repo": "kubernetes",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "Eviction manager \u2014 core decision logic for memory-pressure-based pod eviction, threshold evaluation"
+      },
+      {
+        "path": "pkg/kubelet/eviction/helpers.go",
+        "repo": "kubernetes",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Eviction helper functions \u2014 threshold parsing, resource comparison, eviction signal computation"
+      },
+      {
+        "path": "pkg/kubelet/eviction/types.go",
+        "repo": "kubernetes",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Eviction type definitions \u2014 Signal, Threshold, and eviction configuration types"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "pkg/kubelet/nodestatus/setters.go",
+        "repo": "kubernetes",
+        "line_range": null,
+        "confidence": 0.75,
+        "rationale": "Node status setters \u2014 reports memory pressure condition to the API server"
+      },
+      {
+        "path": "pkg/kubelet/eviction/eviction_manager_test.go",
+        "repo": "kubernetes",
+        "line_range": null,
+        "confidence": 0.65,
+        "rationale": "Eviction manager tests \u2014 documents expected behavior and threshold scenarios"
+      },
+      {
+        "path": "staging/src/k8s.io/kubelet/config/v1beta1/types.go",
+        "repo": "kubernetes",
+        "line_range": null,
+        "confidence": 0.6,
+        "rationale": "Kubelet config types \u2014 defines eviction threshold configuration fields"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "eviction-manager",
+    "memory-pressure",
+    "threshold",
+    "pod-lifecycle",
+    "resource-management"
+  ],
+  "expected_severity": "critical",
+  "related_references": [
+    "pkg/kubelet/nodestatus/setters.go",
+    "pkg/kubelet/eviction/eviction_manager_test.go"
+  ]
+}

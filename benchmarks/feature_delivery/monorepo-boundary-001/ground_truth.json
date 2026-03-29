@@ -1,0 +1,53 @@
+{
+  "candidate_id": 1,
+  "repo": "babel/babel",
+  "pr_refs": ["#16154"],
+  "release": "v7.23.6",
+  "description": "Remove TSPropertySignature.initializer from @babel/types cascades to parser and generator",
+  "changed_package": {
+    "name": "@babel/types",
+    "path": "packages/babel-types",
+    "change_summary": "Removed `initializer` field from `TSPropertySignature` AST node definition",
+    "changed_files": [
+      "packages/babel-types/src/definitions/typescript.ts",
+      "packages/babel-types/src/ast-types/generated/index.ts",
+      "packages/babel-types/src/builders/generated/index.ts"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "@babel/parser",
+      "path": "packages/babel-parser",
+      "semver_bump": "patch",
+      "impact": "Type definitions updated to remove initializer from TSPropertySignature",
+      "affected_files": [
+        "packages/babel-parser/src/types.d.ts",
+        "packages/babel-parser/test/fixtures/typescript/interface/property-initializer/input.ts",
+        "packages/babel-parser/test/fixtures/typescript/interface/property-initializer/options.json"
+      ],
+      "confidence": 0.98
+    },
+    {
+      "name": "@babel/generator",
+      "path": "packages/babel-generator",
+      "semver_bump": "patch",
+      "impact": "TypeScript generation code updated to no longer emit initializer for TSPropertySignature",
+      "affected_files": [
+        "packages/babel-generator/src/generators/typescript.ts"
+      ],
+      "confidence": 0.98
+    }
+  ],
+  "overall_semver": "patch",
+  "changelog_entries": [
+    "@babel/types: Remove `initializer` from `TSPropertySignature` (v7.23.6)"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 7,
+    "packages_touched": ["babel-types", "babel-parser", "babel-generator"],
+    "verified": true
+  },
+  "difficulty": "medium",
+  "confidence": 0.97
+}

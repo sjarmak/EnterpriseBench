@@ -1,0 +1,218 @@
+# DB Schema Evolution: Group-Based Channel Creation Setting (Zulip)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-003"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "expert"
+estimated_duration_minutes = 60
+session_type = "single"
+description = "Trace impact of replacing a boolean policy with a FK to NamedUserGroup across Zulip's full stack (Python + JS + API)"
+prompt = """
+We're replacing the integer `create_public_stream_policy` field on the Realm model
+with a foreign key `can_create_public_channel_group` pointing to `NamedUserGroup`.
+This is a 4-migration sequence:
+- 0532: Add the new FK column
+- 0533: Backfill from old policy values
+- 0534: Alter column constraints
+- 0535: Remove old `create_public_stream_policy` column
+
+Your task:
+1. Identify all 4 migration files and the model change in `zerver/models/realms.py`.
+2. Find all backend code that directly references either the old policy field or the
+   new group-based field — actions, views, events.
+3. Find all frontend code (JavaScript/TypeScript) that references channel creation
+   settings — settings UI, state management, dispatch handlers.
+4. Identify test files across both backend and frontend that need updating.
+
+Write your analysis to /workspace/zulip/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/zulip/zulip"
+rev = "faa06497ed09f65dc0c7ba510dc56ebd41fbe037"
+path = "zulip"
+role = "primary"
+
+[metadata]
+languages = ["python", "javascript", "typescript"]
+total_loc = 500_000
+dependency_depth = 1
+frameworks = ["django"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies all 4 migration files and the model FK change"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds backend references: actions, views, events, event_schema"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds frontend references: settings UI, state data, dispatch, templates"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies test files across backend and frontend"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-stack tracing from Django model through Python events to JavaScript settings UI requires understanding both backend and frontend codepaths"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "zerver/models/realms.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/actions/realm_settings.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/lib/events.py"
+repo = "zulip"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/lib/event_schema.py"
+repo = "zulip"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "web/src/settings_org.js"
+repo = "zulip"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "web/src/settings_data.ts"
+repo = "zulip"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "zerver/migrations/0532_realm_can_create_public_channel_group.py"
+repo = "zulip"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "zerver/migrations/0533_set_can_create_public_channel_group.py"
+repo = "zulip"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "zerver/migrations/0534_alter_realm_can_create_public_channel_group.py"
+repo = "zulip"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "zerver/migrations/0535_remove_realm_create_public_stream_policy.py"
+repo = "zulip"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "zerver/actions/create_realm.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/views/realm.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/src/settings_components.ts"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/src/stream_settings_ui.js"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/src/state_data.ts"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/src/ui_init.js"
+repo = "zulip"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "web/src/server_events_dispatch.js"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/templates/settings/organization_permissions_admin.hbs"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zerver/openapi/zulip.yaml"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_events.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_realm.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_subs.py"
+repo = "zulip"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "web/tests/dispatch.test.js"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/tests/settings_data.test.js"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/tests/settings_org.test.js"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/e2e-tests/admin.test.ts"
+repo = "zulip"
+confidence = 0.80

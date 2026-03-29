@@ -1,0 +1,82 @@
+{
+  "task_id": "support-map-kafka-bufpool-012",
+  "candidate_ref": "CSB-A12",
+  "description": "Kafka Messages Appearing on Wrong Topic \u2014 messages published to topic A appear on topic B during broker restarts",
+  "repo": "apache/kafka",
+  "repo_rev": null,
+  "csb_lineage": {
+    "parent_csb_id": "kafka-producer-bufpool-fix-001",
+    "origin_suite": "csb_sdlc_fix",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "clients/src/main/java/org/apache/kafka/clients/producer/internals/Sender.java",
+        "repo": "kafka",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "Sender \u2014 sendProducerData() and failBatch() methods; batch dispatch and failure handling where buffer reuse race occurs"
+      },
+      {
+        "path": "clients/src/main/java/org/apache/kafka/clients/producer/internals/BufferPool.java",
+        "repo": "kafka",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "BufferPool \u2014 memory management and buffer reuse logic; race condition in buffer recycling during broker restart"
+      },
+      {
+        "path": "clients/src/main/java/org/apache/kafka/clients/producer/internals/RecordAccumulator.java",
+        "repo": "kafka",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "RecordAccumulator \u2014 batch accumulation per topic-partition, allocates/returns buffers from BufferPool"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "clients/src/main/java/org/apache/kafka/clients/producer/internals/ProducerBatch.java",
+        "repo": "kafka",
+        "line_range": null,
+        "confidence": 0.8,
+        "rationale": "ProducerBatch \u2014 individual batch lifecycle, buffer ownership during send/retry"
+      },
+      {
+        "path": "clients/src/main/java/org/apache/kafka/clients/producer/KafkaProducer.java",
+        "repo": "kafka",
+        "line_range": null,
+        "confidence": 0.65,
+        "rationale": "KafkaProducer \u2014 public API entry point, creates Sender and RecordAccumulator"
+      },
+      {
+        "path": "clients/src/test/java/org/apache/kafka/clients/producer/internals/SenderTest.java",
+        "repo": "kafka",
+        "line_range": null,
+        "confidence": 0.6,
+        "rationale": "Sender tests \u2014 documents batch failure and retry scenarios"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "buffer-pool",
+    "race-condition",
+    "batch-dispatch",
+    "buffer-reuse",
+    "producer-internals"
+  ],
+  "expected_severity": "critical",
+  "related_references": [
+    "clients/src/main/java/org/apache/kafka/clients/producer/internals/ProducerBatch.java",
+    "clients/src/test/java/org/apache/kafka/clients/producer/internals/SenderTest.java"
+  ]
+}

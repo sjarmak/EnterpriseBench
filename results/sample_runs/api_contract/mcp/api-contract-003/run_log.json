@@ -1,0 +1,43 @@
+{
+  "task_id": "api-contract-grpc-transport-003",
+  "task_dir": "api-contract-003",
+  "mode": "mcp",
+  "checkpoints": [
+    {
+      "name": "identify_breaking_api",
+      "weight": 0.15,
+      "score": 1.00,
+      "passed": true,
+      "detail": "Identified 3/3 source elements"
+    },
+    {
+      "name": "find_direct_consumers",
+      "weight": 0.35,
+      "score": 1.00,
+      "passed": true,
+      "detail": "Found 4/4 consumer areas"
+    },
+    {
+      "name": "trace_transitive_impact",
+      "weight": 0.30,
+      "score": 1.00,
+      "passed": true,
+      "detail": "Traced 3/3 chain elements"
+    },
+    {
+      "name": "classify_breakage",
+      "weight": 0.20,
+      "score": 1.00,
+      "passed": true,
+      "detail": "Classified 2/2 impact aspects"
+    }
+  ],
+  "total_score": 1.00,
+  "tool_usage": {
+    "sourcegraph_searches": 14,
+    "symbol_navigations": 22,
+    "file_reads": 54,
+    "total_tokens": 28500
+  },
+  "infrastructure_errors": []
+}

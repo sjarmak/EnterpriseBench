@@ -1,0 +1,46 @@
+{
+  "candidate_id": 4,
+  "candidate_ref": "kubernetes/kubernetes#136910",
+  "error_string": "State: Terminated, Reason: Error, Exit Code: 2",
+  "fix_pr": "https://github.com/kubernetes/kubernetes/pull/137146",
+  "repo": "kubernetes/kubernetes",
+  "repo_rev": "v1.33.0-alpha.2",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "pkg/kubelet/prober/worker.go",
+      "repo": "kubernetes",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains the prober worker logic that fails to restart containers when sidecar is still running. The bug is in the restart decision logic."
+    },
+    {
+      "path": "pkg/kubelet/prober/worker_test.go",
+      "repo": "kubernetes",
+      "confidence": 0.80,
+      "source": "deterministic",
+      "rationale": "Test file updated in fix PR to cover the sidecar restart scenario."
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "test/e2e_node/container_lifecycle_test.go",
+      "repo": "kubernetes",
+      "confidence": 0.65,
+      "rationale": "E2E test added for the container lifecycle with sidecar scenario."
+    }
+  ],
+  "error_chain": [
+    "Container exits with non-zero code (Reason: Error)",
+    "Kubelet prober worker evaluates restart policy",
+    "Prober worker checks if sidecar container is running",
+    "Bug: worker skips restart when sidecar is still alive",
+    "Container stays in Terminated state indefinitely"
+  ],
+  "trigger_conditions": [
+    "Pod has both regular containers and sidecar containers (native sidecars)",
+    "Regular container crashes (exits non-zero)",
+    "Sidecar container is still running",
+    "RestartPolicy allows restart but prober doesn't trigger it"
+  ]
+}

@@ -1,0 +1,122 @@
+# Dependency Graph Traversal: urllib3 Cookie header leak — 3-hop transitive chain
+
+difficulty_stratum = "multi_repo"
+
+[task]
+id = "dep-traversal-009"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace CVE-2023-43804 (urllib3 cookie leak) through 3-hop chain: urllib3 -> requests -> boto3"
+prompt = """
+CVE-2023-43804 affects `urllib3` (PyPI) — a Cookie header leak on cross-origin
+redirects. Two version ranges affected: < 1.26.17 (1.x branch) and 2.0.0-2.0.5
+(2.x branch).
+
+Your task:
+1. Identify the CVE and confirm the package and both affected version ranges.
+2. Find direct dependents of urllib3. The key one is `requests`, which uses urllib3
+   as its HTTP transport layer.
+3. Trace the full 3-hop transitive chain: urllib3 -> requests -> botocore -> boto3.
+   Note that requests may vendor or pin urllib3 — investigate how the dependency
+   is managed.
+4. Determine the resolved urllib3 version in each consumer's dependency tree.
+   Note the 1.x vs 2.x branch split — requests 2.28.x uses urllib3 1.x, while
+   newer requests uses urllib3 2.x.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/urllib3/urllib3"
+rev = "1.26.16"
+path = "urllib3"
+role = "primary"
+
+[[repos]]
+url = "github.com/psf/requests"
+rev = "v2.28.0"
+path = "requests"
+role = "consumer"
+
+[[repos]]
+url = "github.com/boto/boto3"
+rev = "1.26.0"
+path = "boto3"
+role = "consumer"
+
+[metadata]
+languages = ["python"]
+total_loc = 180000
+dependency_depth = 3
+frameworks = ["requests", "boto3"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent identifies CVE-2023-43804 and both affected version ranges"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds requests as primary dependent of urllib3"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces 3-hop chain: urllib3 -> requests -> botocore -> boto3"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent handles 1.x/2.x branch split and vendoring complexity"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "3-hop Python dependency chain with vendoring complexity benefits from cross-repo dependency resolution"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "setup.cfg"
+repo = "urllib3"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "setup.cfg"
+repo = "requests"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "setup.py"
+repo = "boto3"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/urllib3/_version.py"
+repo = "urllib3"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "requirements.txt"
+repo = "boto3"
+confidence = 0.75

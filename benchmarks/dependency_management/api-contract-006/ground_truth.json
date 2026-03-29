@@ -1,0 +1,40 @@
+{
+  "candidate_id": "AC-8",
+  "producer_repo": "envoyproxy/envoy",
+  "consumer_repos": ["envoyproxy/go-control-plane", "istio/istio"],
+  "breaking_change_prs": ["envoyproxy/envoy#14223", "envoyproxy/envoy#15481"],
+  "consumer_fix_prs": [
+    "envoyproxy/go-control-plane#415",
+    "istio/istio#22919",
+    "istio/istio#23962",
+    "istio/istio#24588"
+  ],
+  "api_contract_type": "protobuf",
+  "breakage_type": "runtime_fatal",
+  "description": "Envoy xDS v2 API deprecation and removal caused go-control-plane v2 removal and istio migration to xDS v3",
+  "producer_changed_files_envoy": [
+    "source/common/config/api_version_impl.cc",
+    "test/integration/ads_integration_test.cc",
+    "test/config_test/config_test.cc"
+  ],
+  "consumer_affected_files": {
+    "go-control-plane": [
+      "pkg/cache/v2/cache.go",
+      "pkg/cache/v2/resource.go",
+      "pkg/cache/v2/simple_test.go",
+      "pkg/server/v2/server.go"
+    ],
+    "istio": [
+      "pilot/pkg/networking/core/v1alpha3/cluster.go",
+      "pilot/pkg/networking/core/v1alpha3/cluster_builder.go",
+      "pilot/pkg/networking/core/v1alpha3/listener.go",
+      "pilot/pkg/networking/core/v1alpha3/route/route.go",
+      "pilot/pkg/proxy/envoy/v2/ads.go",
+      "pilot/pkg/proxy/envoy/v2/cds.go",
+      "pilot/pkg/proxy/envoy/v2/eds.go",
+      "pilot/pkg/networking/util/util.go"
+    ]
+  },
+  "difficulty": "expert",
+  "confidence": 0.95
+}

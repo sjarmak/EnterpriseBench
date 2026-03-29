@@ -1,0 +1,68 @@
+{
+  "candidate_id": "SE-1",
+  "repo": "zulip/zulip",
+  "pr_refs": ["#30504"],
+  "base_rev": "38053e9c7cc59b5e3f7c26af49fc1bb57acf0b86",
+  "description": "Add deactivated boolean to NamedUserGroup model — impacts actions, views, events, API schema, import/export, audit log, markdown, tests",
+  "schema_change": {
+    "type": "add_column",
+    "table": "NamedUserGroup",
+    "column": "deactivated",
+    "column_type": "BooleanField",
+    "migration": "zerver/migrations/0578_namedusergroup_deactivated.py"
+  },
+  "required_files": [
+    "zerver/models/groups.py",
+    "zerver/actions/user_groups.py",
+    "zerver/views/user_groups.py",
+    "zerver/lib/events.py",
+    "zerver/lib/event_schema.py",
+    "zerver/lib/user_groups.py"
+  ],
+  "sufficient_files": [
+    "zerver/migrations/0578_namedusergroup_deactivated.py",
+    "zerver/views/streams.py",
+    "zerver/lib/import_realm.py",
+    "zerver/lib/markdown/__init__.py",
+    "zerver/openapi/zulip.yaml",
+    "zerver/openapi/curl_param_value_generators.py",
+    "zerver/models/realm_audit_logs.py",
+    "zproject/urls.py",
+    "zerver/tests/test_user_groups.py",
+    "zerver/tests/test_events.py",
+    "zerver/tests/test_audit_log.py",
+    "zerver/tests/test_markdown.py",
+    "api_docs/changelog.md"
+  ],
+  "pr_files": [
+    "api_docs/changelog.md",
+    "api_docs/include/rest-endpoints.md",
+    "version.py",
+    "web/tests/lib/events.js",
+    "zerver/actions/user_groups.py",
+    "zerver/lib/event_schema.py",
+    "zerver/lib/events.py",
+    "zerver/lib/import_realm.py",
+    "zerver/lib/markdown/__init__.py",
+    "zerver/lib/user_groups.py",
+    "zerver/migrations/0578_namedusergroup_deactivated.py",
+    "zerver/models/groups.py",
+    "zerver/models/realm_audit_logs.py",
+    "zerver/openapi/curl_param_value_generators.py",
+    "zerver/openapi/zulip.yaml",
+    "zerver/tests/test_audit_log.py",
+    "zerver/tests/test_events.py",
+    "zerver/tests/test_markdown.py",
+    "zerver/tests/test_user_groups.py",
+    "zerver/views/streams.py",
+    "zerver/views/user_groups.py",
+    "zproject/urls.py"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 22,
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.97
+}

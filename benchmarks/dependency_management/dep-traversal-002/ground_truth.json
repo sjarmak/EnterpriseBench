@@ -1,0 +1,38 @@
+{
+  "candidate_id": 2,
+  "cve": "CVE-2021-3749",
+  "ghsa": "GHSA-cph5-m8f7-6c5x",
+  "package": "axios",
+  "ecosystem": "npm",
+  "description": "axios ReDoS vulnerability via trim function affects Grafana frontend plugins and Apache Druid",
+  "dependency_chain": [
+    {
+      "from": "axios",
+      "to": "grafana",
+      "relationship": "dependency (frontend plugins)",
+      "manifest": "package.json",
+      "affected_versions": "< 0.21.2"
+    },
+    {
+      "from": "axios",
+      "to": "apache/druid",
+      "relationship": "dependency (web-console)",
+      "manifest": "web-console/package.json",
+      "affected_versions": "< 0.21.2"
+    }
+  ],
+  "direct_dependents": ["grafana", "druid-web-console"],
+  "transitive_paths": [
+    ["axios", "grafana-plugin-sdk", "grafana-plugins"],
+    ["axios", "druid-web-console", "druid"]
+  ],
+  "fix_reference": "axios/axios@5b457116e31db0e88fede6c428e969e87f290929",
+  "affected_version_range": "< 0.21.2",
+  "fixed_version": "0.21.2",
+  "verification": {
+    "method": "gh_advisory_api",
+    "verified": true
+  },
+  "difficulty": "medium",
+  "confidence": 0.93
+}

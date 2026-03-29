@@ -1,0 +1,107 @@
+# Dependency Graph Traversal: golang.org/x/text Accept-Language DoS
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "dep-traversal-003"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "medium"
+estimated_duration_minutes = 25
+session_type = "single"
+description = "Trace blast radius of CVE-2022-32149 (x/text DoS) — requires function-level analysis beyond manifest scanning"
+prompt = """
+CVE-2022-32149 affects `golang.org/x/text` versions prior to 0.3.8 — a denial of
+service in the `ParseAcceptLanguage` function in the `language` package.
+
+Your task:
+1. Identify the CVE and confirm the affected package and version range.
+2. Find all workspace repos that depend on golang.org/x/text (check go.mod files).
+3. Critically: not all importers are affected. Only code that calls
+   `language.ParseAcceptLanguage` is vulnerable. Trace which repos actually USE
+   the vulnerable function vs just importing the module.
+4. Classify each consumer as affected or unaffected based on both version and
+   actual usage of the vulnerable code path.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/go-chi/chi"
+rev = "v5.0.8"
+path = "chi"
+role = "consumer"
+
+[[repos]]
+url = "github.com/gohugoio/hugo"
+rev = "v0.111.0"
+path = "hugo"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 280000
+dependency_depth = 2
+frameworks = ["chi", "hugo"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent correctly identifies CVE-2022-32149 and x/text < 0.3.8"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds repos depending on golang.org/x/text via go.mod"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent identifies which repos call ParseAcceptLanguage (function-level)"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent classifies consumers by version and actual code path usage"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Go module graph is parseable from go.mod, but function-level usage analysis (ParseAcceptLanguage callers) benefits from Sourcegraph symbol search"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "chi"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "hugo"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "go.sum"
+repo = "chi"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "go.sum"
+repo = "hugo"
+confidence = 0.80

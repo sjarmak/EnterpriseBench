@@ -1,0 +1,51 @@
+{
+  "candidate_id": "SE-7",
+  "repo": "discourse/discourse",
+  "pr_refs": ["#38523"],
+  "base_rev": "5d603ece49a296da47197bc91ea8e1d178d5772c",
+  "description": "Two-phase migration normalizing category approval booleans into join table — 3 models, import script, 5 spec files",
+  "schema_change": {
+    "type": "normalize_to_join_table",
+    "old_columns": ["require_topic_approval", "require_reply_approval"],
+    "new_table": "CategoryApprovalGroup",
+    "migrations": [
+      "db/migrate/20260310072550_mark_category_approval_booleans_readonly.rb",
+      "db/migrate/20260310072759_create_category_approval_groups.rb"
+    ]
+  },
+  "required_files": [
+    "app/models/category.rb",
+    "app/models/category_posting_review_group.rb",
+    "app/models/category_setting.rb"
+  ],
+  "sufficient_files": [
+    "db/migrate/20260310072550_mark_category_approval_booleans_readonly.rb",
+    "db/migrate/20260310072759_create_category_approval_groups.rb",
+    "script/bulk_import/discourse_merger.rb",
+    "spec/db/migrate/20260310072759_create_category_approval_groups_spec.rb",
+    "spec/models/category_posting_review_group_spec.rb",
+    "spec/models/category_setting_spec.rb",
+    "spec/models/category_spec.rb",
+    "spec/serializers/category_serializer_spec.rb"
+  ],
+  "pr_files": [
+    "app/models/category.rb",
+    "app/models/category_posting_review_group.rb",
+    "app/models/category_setting.rb",
+    "db/migrate/20260310072550_mark_category_approval_booleans_readonly.rb",
+    "db/migrate/20260310072759_create_category_approval_groups.rb",
+    "script/bulk_import/discourse_merger.rb",
+    "spec/db/migrate/20260310072759_create_category_approval_groups_spec.rb",
+    "spec/models/category_posting_review_group_spec.rb",
+    "spec/models/category_setting_spec.rb",
+    "spec/models/category_spec.rb",
+    "spec/serializers/category_serializer_spec.rb"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 11,
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.95
+}

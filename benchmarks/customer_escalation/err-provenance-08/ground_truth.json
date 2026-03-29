@@ -1,0 +1,46 @@
+{
+  "candidate_id": 8,
+  "candidate_ref": "hashicorp/terraform#38027",
+  "error_string": "panic: runtime error: invalid memory address or nil pointer dereference",
+  "fix_pr": "https://github.com/hashicorp/terraform/pull/38028",
+  "repo": "hashicorp/terraform",
+  "repo_rev": "v1.10.0",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "internal/command/meta_backend_migrate.go",
+      "repo": "terraform",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains the backend migration code that dereferences nil state. Fix adds nil check before accessing state returned by GCS backend."
+    },
+    {
+      "path": "internal/command/meta_backend.go",
+      "repo": "terraform",
+      "confidence": 0.80,
+      "source": "deterministic",
+      "rationale": "Parent backend initialization code that calls into migration. Contains the state retrieval flow where nil is returned without error."
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "internal/backend/remote-state/gcs/backend_state.go",
+      "repo": "terraform",
+      "confidence": 0.55,
+      "rationale": "GCS backend state implementation that returns nil state on permission error without surfacing the error."
+    }
+  ],
+  "error_chain": [
+    "User runs 'terraform init -migrate-state' with GCS backend",
+    "GCS backend returns nil state due to storage.objects.get permission error",
+    "Permission error is swallowed — nil state returned without error",
+    "meta_backend_migrate.go dereferences the nil state pointer",
+    "Go runtime panics with nil pointer dereference",
+    "Original permission error is invisible to the user"
+  ],
+  "trigger_conditions": [
+    "terraform init -migrate-state with GCS backend",
+    "User's service account lacks storage.objects.get permission",
+    "Backend migration attempts to read existing state but gets nil"
+  ]
+}

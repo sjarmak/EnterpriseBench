@@ -1,0 +1,90 @@
+{
+  "task_id": "support-map-envoy-connpool-001",
+  "candidate_ref": "CSB-A1",
+  "description": "Envoy Connection Pool Exhaustion \u2014 'upstream connect error or disconnect/reset before headers. reset reason: overflow'",
+  "repo": "envoyproxy/envoy",
+  "repo_rev": "v1.31.2",
+  "csb_lineage": {
+    "parent_csb_id": "ccx-incident-032",
+    "origin_suite": "csb_org_incident",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "source/common/http/conn_pool_base.cc",
+        "repo": "envoy",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "HTTP connection pool base implementation \u2014 defines overflow behavior when max connections exceeded"
+      },
+      {
+        "path": "source/common/http/conn_pool_base.h",
+        "repo": "envoy",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "Header declaring connection pool overflow logic and max_connections threshold"
+      },
+      {
+        "path": "source/common/conn_pool/conn_pool_base.cc",
+        "repo": "envoy",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Generic connection pool base \u2014 pending request overflow and circuit breaking integration"
+      },
+      {
+        "path": "source/common/upstream/conn_pool_map_impl.h",
+        "repo": "envoy",
+        "line_range": null,
+        "confidence": 0.85,
+        "source": "deterministic",
+        "rationale": "Connection pool map managing per-host pools \u2014 routes requests to specific pools"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "envoy/http/conn_pool.h",
+        "repo": "envoy",
+        "line_range": null,
+        "confidence": 0.8,
+        "rationale": "Public API header for HTTP connection pool interface"
+      },
+      {
+        "path": "docs/root/intro/arch_overview/upstream/circuit_breaking.rst",
+        "repo": "envoy",
+        "line_range": null,
+        "confidence": 0.7,
+        "rationale": "Documentation explaining circuit breaking config (max_connections, max_pending_requests)"
+      },
+      {
+        "path": "envoy/router/router.h",
+        "repo": "envoy",
+        "line_range": null,
+        "confidence": 0.6,
+        "rationale": "Router interface referencing reset reasons including overflow"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "connection-pool",
+    "overflow",
+    "circuit-breaking",
+    "upstream",
+    "max-connections"
+  ],
+  "expected_severity": "high",
+  "related_references": [
+    "docs/root/intro/arch_overview/upstream/circuit_breaking.rst",
+    "envoy/http/conn_pool.h"
+  ]
+}

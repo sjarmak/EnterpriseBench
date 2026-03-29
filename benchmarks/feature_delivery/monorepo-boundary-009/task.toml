@@ -1,0 +1,111 @@
+# Monorepo Boundary: Rust Compiler rustc_attr Crate Split
+
+difficulty_stratum = "monorepo_cross_package"
+
+[task]
+id = "monorepo-boundary-rustc-attr-009"
+suite = "feature_delivery"
+task_type = "monorepo_boundary"
+difficulty = "expert"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Trace impact of splitting rustc_attr into parsing and data_structures crates across Rust compiler workspace"
+prompt = """
+The `rustc_attr` crate in the Rust compiler workspace is being split into two:
+- `rustc_attr_parsing` — the parsing/validation logic
+- `rustc_attr_data_structures` — shared data type definitions
+
+This is preparation for a future third crate `rustc_attr_validation`.
+
+The original crate is at `compiler/rustc_attr/`. All downstream compiler
+crates that depend on `rustc_attr` will need their `Cargo.toml` dependencies
+and `use` import paths updated.
+
+Your task:
+1. Identify all compiler crates that depend on `rustc_attr` and would need
+   updating for the split.
+2. Classify the impact per crate — which need only Cargo.toml changes vs
+   which also need source code `use` path updates.
+3. Identify specific boundary violations — Cargo.toml dependency declarations
+   and source files with `use rustc_attr::` imports.
+
+Write your analysis to /workspace/rust/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/rust-lang/rust"
+rev = "1.83.0"
+path = "rust"
+role = "primary"
+
+[metadata]
+languages = ["rust"]
+total_loc = 3_500_000
+dependency_depth = 1
+frameworks = ["rustc"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_affected_packages"
+weight = 0.25
+verifier = "checks/check_affected_packages.sh"
+description = "Agent identifies at least 3 of 4 affected crates (rustc_ast_passes, rustc_builtin_macros, rustc_codegen_llvm, rustc_codegen_gcc)"
+timeout_seconds = 90
+
+[[checkpoints]]
+name = "classify_change_impact"
+weight = 0.45
+verifier = "checks/check_impact_classification.sh"
+description = "Agent classifies all affected crates as major (crate rename requires Cargo.toml + import changes)"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_boundary_violations"
+weight = 0.30
+verifier = "checks/check_boundary_violations.sh"
+description = "Agent identifies Cargo.toml files and source files with rustc_attr imports"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cargo workspace dependency graph + use path tracing across 500+ compiler crates benefits enormously from semantic navigation"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "compiler/rustc_ast_passes/Cargo.toml"
+repo = "rust"
+confidence = 0.97
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "compiler/rustc_builtin_macros/Cargo.toml"
+repo = "rust"
+confidence = 0.97
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "compiler/rustc_codegen_llvm/Cargo.toml"
+repo = "rust"
+confidence = 0.96
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "compiler/rustc_codegen_llvm/src/attributes.rs"
+repo = "rust"
+confidence = 0.96
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "compiler/rustc_codegen_gcc/src/lib.rs"
+repo = "rust"
+confidence = 0.88
+
+[[ground_truth.sufficient_files]]
+path = "compiler/rustc_builtin_macros/src/deriving/generic/mod.rs"
+repo = "rust"
+confidence = 0.85

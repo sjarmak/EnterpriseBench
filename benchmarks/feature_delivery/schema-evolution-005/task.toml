@@ -1,0 +1,193 @@
+# DB Schema Evolution: Sync Reviewable Claimed Status (Discourse)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-005"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "expert"
+estimated_duration_minutes = 60
+session_type = "single"
+description = "Trace impact of adding automatic boolean to ReviewableClaimedTopic across Discourse's Rails MVC stack"
+prompt = """
+We're adding an `automatic` boolean column to the `ReviewableClaimedTopic` model to
+distinguish between manually claimed and automatically claimed review topics. The
+migration is `db/migrate/20250319024514_add_automatic_to_reviewable_claimed_topic.rb`.
+
+Your task:
+1. Identify the schema change and migration.
+2. Find all direct model and controller references — the Reviewable model hierarchy,
+   controllers for reviewables and claimed topics.
+3. Find indirect references — serializers (3 of them), guardian authorization,
+   frontend JavaScript components and routes, locale strings.
+4. Identify all spec files that need updating.
+
+Write your analysis to /workspace/discourse/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/discourse/discourse"
+rev = "e7c3abb94b1db0ff811f991b873dcca9d589cd3a"
+path = "discourse"
+role = "primary"
+
+[metadata]
+languages = ["ruby", "javascript"]
+total_loc = 600_000
+dependency_depth = 1
+frameworks = ["rails"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the migration and model change"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds models and controllers referencing reviewable claim logic"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds serializers, guardian, frontend components, locales"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies spec files for models, controllers, serializers, guardian"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Rails MVC tracing through model hierarchy, 3 serializers, guardian auth layer, and Ember.js frontend requires cross-layer symbol resolution"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "app/models/reviewable_claimed_topic.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/models/reviewable.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/controllers/reviewables_controller.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/controllers/reviewable_claimed_topics_controller.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/serializers/reviewable_serializer.rb"
+repo = "discourse"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "db/migrate/20250319024514_add_automatic_to_reviewable_claimed_topic.rb"
+repo = "discourse"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "app/models/reviewable_flagged_post.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "app/serializers/reviewable_claimed_topic_serializer.rb"
+repo = "discourse"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "app/serializers/reviewable_topic_serializer.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "lib/guardian/user_guardian.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/discourse/app/components/reviewable-item.hbs"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/discourse/app/components/reviewable-item.js"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/discourse/app/routes/review-index.js"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/admin/addon/components/modal/penalize-user.js"
+repo = "discourse"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/admin/addon/services/admin-tools.js"
+repo = "discourse"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "config/locales/client.en.yml"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "spec/models/reviewable_claimed_topic_spec.rb"
+repo = "discourse"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "spec/models/reviewable_spec.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "spec/requests/reviewable_claimed_topics_controller_spec.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "spec/requests/reviewables_controller_spec.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "spec/serializers/reviewable_claimed_topic_serializer_spec.rb"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "spec/lib/guardian/user_guardian_spec.rb"
+repo = "discourse"
+confidence = 0.85

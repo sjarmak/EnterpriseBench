@@ -1,0 +1,47 @@
+{
+  "candidate_id": 5,
+  "cve": "CVE-2022-41723",
+  "ghsa": "GHSA-vvpx-j8f3-3w6h",
+  "package": "golang.org/x/net",
+  "ecosystem": "go",
+  "description": "HPACK DoS in golang.org/x/net affects prometheus, consul, and vault via HTTP/2 server handling",
+  "dependency_chain": [
+    {
+      "from": "golang.org/x/net",
+      "to": "prometheus/prometheus",
+      "relationship": "go module dependency",
+      "manifest": "go.mod",
+      "affected_versions": "< 0.7.0"
+    },
+    {
+      "from": "golang.org/x/net",
+      "to": "hashicorp/consul",
+      "relationship": "go module dependency",
+      "manifest": "go.mod",
+      "affected_versions": "< 0.7.0"
+    },
+    {
+      "from": "golang.org/x/net",
+      "to": "hashicorp/vault",
+      "relationship": "go module dependency",
+      "manifest": "go.mod",
+      "affected_versions": "< 0.7.0"
+    }
+  ],
+  "direct_dependents": ["prometheus", "consul", "vault"],
+  "transitive_paths": [
+    ["golang.org/x/net", "prometheus"],
+    ["golang.org/x/net", "consul"],
+    ["golang.org/x/net", "vault"]
+  ],
+  "fix_reference": "go.dev/cl/468135",
+  "affected_version_range": "< 0.7.0",
+  "fixed_version": "0.7.0",
+  "verification": {
+    "method": "go_advisory_db",
+    "advisory_id": "GO-2023-1571",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.95
+}

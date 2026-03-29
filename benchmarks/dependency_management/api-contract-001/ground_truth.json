@@ -1,0 +1,38 @@
+{
+  "candidate_id": "AC-1",
+  "producer_repo": "grpc/grpc-go",
+  "consumer_repos": ["etcd-io/etcd"],
+  "breaking_change_pr": "grpc/grpc-go#1157",
+  "consumer_fix_prs": ["etcd-io/etcd#8160"],
+  "api_contract_type": "go_api",
+  "breakage_type": "compile_and_runtime",
+  "description": "gRPC-Go separated incoming/outgoing metadata in context, breaking etcd auth and interceptor code",
+  "producer_changed_files": [
+    "metadata/metadata.go",
+    "transport/handler_server.go",
+    "transport/http2_client.go",
+    "transport/http2_server.go",
+    "grpclb/grpclb_test.go",
+    "interop/test_utils.go",
+    "Documentation/grpc-metadata.md"
+  ],
+  "consumer_affected_files": {
+    "etcd": [
+      "auth/store.go",
+      "etcdserver/api/v3rpc/interceptor.go",
+      "etcdserver/api/v3rpc/grpc.go",
+      "clientv3/auth.go"
+    ]
+  },
+  "breaking_symbols": [
+    "metadata.FromContext",
+    "metadata.NewContext"
+  ],
+  "replacement_symbols": [
+    "metadata.FromIncomingContext",
+    "metadata.FromOutgoingContext",
+    "metadata.NewOutgoingContext"
+  ],
+  "difficulty": "medium",
+  "confidence": 0.95
+}

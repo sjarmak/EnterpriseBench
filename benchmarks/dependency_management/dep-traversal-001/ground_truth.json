@@ -1,0 +1,39 @@
+{
+  "candidate_id": 1,
+  "cve": "CVE-2021-23337",
+  "ghsa": "GHSA-35jh-r3h4-6jhm",
+  "package": "lodash",
+  "ecosystem": "npm",
+  "description": "lodash command injection via template function affects webpack, babel, and jest build toolchains",
+  "dependency_chain": [
+    {
+      "from": "lodash",
+      "to": "webpack",
+      "relationship": "devDependency",
+      "manifest": "package.json",
+      "affected_versions": "< 4.17.21"
+    },
+    {
+      "from": "lodash",
+      "to": "jest",
+      "relationship": "dependency (via jest-haste-map)",
+      "manifest": "packages/jest-haste-map/package.json",
+      "affected_versions": "< 4.17.21"
+    }
+  ],
+  "direct_dependents": ["webpack", "jest", "@babel/traverse"],
+  "transitive_paths": [
+    ["lodash", "webpack", "create-react-app"],
+    ["lodash", "jest", "create-react-app"],
+    ["lodash", "@babel/traverse", "babel-loader", "webpack"]
+  ],
+  "fix_reference": "lodash/lodash@3469357cff396a26c363f8c1b5a91dde28ba4b1c",
+  "affected_version_range": "< 4.17.21",
+  "fixed_version": "4.17.21",
+  "verification": {
+    "method": "gh_advisory_api",
+    "verified": true
+  },
+  "difficulty": "medium",
+  "confidence": 0.95
+}

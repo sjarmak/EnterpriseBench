@@ -1,0 +1,120 @@
+# Dependency Graph Traversal: requests Proxy-Authorization header leak through AWS toolchain
+
+difficulty_stratum = "multi_repo"
+
+[task]
+id = "dep-traversal-008"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace CVE-2023-32681 (requests proxy header leak) through boto3/botocore to awscli"
+prompt = """
+CVE-2023-32681 affects the Python `requests` library versions >= 2.3.0 and < 2.31.0.
+When making requests through a proxy, the Proxy-Authorization header is leaked to
+the destination server on HTTP redirects.
+
+Your task:
+1. Identify the CVE and confirm the affected package and version range.
+2. Find all direct dependents of requests in the workspace repos.
+3. Trace the transitive dependency chain. botocore depends on requests for HTTP.
+   boto3 depends on botocore. awscli depends on both boto3 and botocore. Map
+   the full 3-hop chain: requests -> botocore -> boto3 -> awscli.
+4. For each consumer, check the pinned requests version in requirements files or
+   setup.cfg to determine if they are affected.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/psf/requests"
+rev = "v2.28.0"
+path = "requests"
+role = "primary"
+
+[[repos]]
+url = "github.com/boto/boto3"
+rev = "1.26.0"
+path = "boto3"
+role = "consumer"
+
+[[repos]]
+url = "github.com/aws/aws-cli"
+rev = "2.11.0"
+path = "awscli"
+role = "consumer"
+
+[metadata]
+languages = ["python"]
+total_loc = 450000
+dependency_depth = 3
+frameworks = ["boto3", "awscli"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent correctly identifies CVE-2023-32681 and requests < 2.31.0"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds botocore, boto3, and awscli depend on requests"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces requests -> botocore -> boto3 -> awscli chain"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent checks pinned requests versions in requirements/setup files"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Python dependency chain through setup.py/setup.cfg/requirements.txt across 3 repos benefits from cross-repo import and dependency resolution"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "setup.cfg"
+repo = "requests"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "setup.py"
+repo = "boto3"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "setup.py"
+repo = "awscli"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "requirements.txt"
+repo = "awscli"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "setup.cfg"
+repo = "boto3"
+confidence = 0.80

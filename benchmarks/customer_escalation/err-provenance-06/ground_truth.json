@@ -1,0 +1,46 @@
+{
+  "candidate_id": 6,
+  "candidate_ref": "kubernetes/kubernetes#136323",
+  "error_string": "grpc: error while marshaling: string field contains invalid UTF-8",
+  "fix_pr": "https://github.com/kubernetes/kubernetes/pull/136325",
+  "repo": "kubernetes/kubernetes",
+  "repo_rev": "v1.33.0-alpha.1",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "third_party/forked/golang/expansion/expand.go",
+      "repo": "kubernetes",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains the env var expansion logic that truncates multi-byte UTF-8 characters when processing $-prefixed variable names. Root cause of the invalid UTF-8."
+    },
+    {
+      "path": "third_party/forked/golang/expansion/expand_test.go",
+      "repo": "kubernetes",
+      "confidence": 0.85,
+      "source": "deterministic",
+      "rationale": "Test file updated in fix PR to cover the multi-byte UTF-8 edge case."
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pkg/kubelet/container/helpers.go",
+      "repo": "kubernetes",
+      "confidence": 0.55,
+      "rationale": "Kubelet env var expansion caller — helps understand how expand.go is invoked during container creation."
+    }
+  ],
+  "error_chain": [
+    "Container spec has env var with value containing $ followed by non-ASCII character",
+    "Kubelet processes container env vars via expansion/expand.go",
+    "expand.go treats $ as variable reference, truncates multi-byte UTF-8 char to get variable name",
+    "Truncated bytes produce invalid UTF-8 in the expanded string",
+    "CRI/gRPC marshaling rejects the invalid UTF-8 string",
+    "Container creation fails with 'string field contains invalid UTF-8'"
+  ],
+  "trigger_conditions": [
+    "Container env var value contains $ followed by a multi-byte UTF-8 character",
+    "Example: VALUE=$\\xc3\\xa9 (e-acute) — $ causes expansion to treat \\xc3 as var name start",
+    "The variable name extraction truncates the multi-byte character"
+  ]
+}

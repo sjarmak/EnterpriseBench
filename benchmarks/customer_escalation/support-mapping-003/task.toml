@@ -1,0 +1,101 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-grafana-import-003"
+suite = "customer_escalation"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map customer-reported dashboard formatting loss after import to Grafana import and schema migration code"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/grafana/grafana"
+rev = ""
+path = "grafana"
+role = "primary"
+
+[metadata]
+languages = ["go", "typescript"]
+frameworks = ["grafana"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies the dashboard import service and schema migration paths"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the dashboard import service and related frontend components as responsible"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity based on data loss during import"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related schema migration or fieldConfig issues"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Full-stack Go+TypeScript codebase; import flow spans backend service and frontend model — MCP helps trace across language boundary"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pkg/services/dashboardimport/service/service.go"
+repo = "grafana"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/services/dashboards/database/database.go"
+repo = "grafana"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/components/simplejson/simplejson.go"
+repo = "grafana"
+confidence = 0.80
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pkg/services/dashboards/service/dashboard_service.go"
+repo = "grafana"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "public/app/features/dashboard/state/DashboardModel.ts"
+repo = "grafana"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "public/app/features/manage-dashboards/DashboardImportPage.tsx"
+repo = "grafana"
+confidence = 0.60
+
+[csb_lineage]
+parent_csb_id = "ccx-incident-113"
+origin_suite = "csb_org_incident"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

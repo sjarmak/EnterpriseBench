@@ -1,0 +1,38 @@
+{
+  "candidate_id": 9,
+  "cve": "CVE-2023-43804",
+  "ghsa": "GHSA-v845-jxx5-vc9f",
+  "package": "urllib3",
+  "ecosystem": "pypi",
+  "description": "urllib3 Cookie header leak on redirect propagates through requests to boto3 via 3-hop chain",
+  "dependency_chain": [
+    {
+      "from": "urllib3",
+      "to": "requests",
+      "relationship": "dependency (HTTP transport layer)",
+      "manifest": "setup.cfg",
+      "affected_versions": "< 1.26.17 (1.x), 2.0.0-2.0.5 (2.x)"
+    },
+    {
+      "from": "requests",
+      "to": "boto3",
+      "relationship": "transitive via botocore",
+      "manifest": "setup.py",
+      "affected_versions": "transitive"
+    }
+  ],
+  "direct_dependents": ["requests"],
+  "transitive_paths": [
+    ["urllib3", "requests", "botocore", "boto3"],
+    ["urllib3", "requests", "docker-py"]
+  ],
+  "fix_reference": "urllib3/urllib3@644124ecd0b6e417c527191f866daa05a5a2056d",
+  "affected_version_range": "< 1.26.17 (1.x), 2.0.0-2.0.5 (2.x)",
+  "fixed_version": "1.26.17 / 2.0.6",
+  "verification": {
+    "method": "gh_advisory_api",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.95
+}

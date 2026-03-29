@@ -1,0 +1,138 @@
+# DB Schema Evolution: Category Approval Groups (Discourse)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-007"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace impact of normalizing category approval booleans into a CategoryApprovalGroup join table in Discourse"
+prompt = """
+We're normalizing the category approval system. Instead of boolean columns on
+CategorySetting, we're creating a `CategoryApprovalGroup` join table. This is a
+two-phase migration:
+1. `20260310072550_mark_category_approval_booleans_readonly.rb` — marks old booleans readonly
+2. `20260310072759_create_category_approval_groups.rb` — creates the new join table
+
+Your task:
+1. Identify both migration files and understand the two-phase approach.
+2. Find all model files that reference category approval logic — Category,
+   CategoryPostingReviewGroup, CategorySetting.
+3. Find indirect references — the bulk import merger script that handles
+   category data during imports.
+4. Identify all spec files, including migration-specific specs.
+
+Write your analysis to /workspace/discourse/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/discourse/discourse"
+rev = "5d603ece49a296da47197bc91ea8e1d178d5772c"
+path = "discourse"
+role = "primary"
+
+[metadata]
+languages = ["ruby"]
+total_loc = 600_000
+dependency_depth = 1
+frameworks = ["rails"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies both migrations and the two-phase approach"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds all 3 model files referencing category approval"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds the bulk import script and serializer specs"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies spec files including migration-specific spec"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Two-phase migration pattern with boolean-to-join-table normalization requires understanding migration ordering and model relationships"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "app/models/category.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/models/category_posting_review_group.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/models/category_setting.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "db/migrate/20260310072550_mark_category_approval_booleans_readonly.rb"
+repo = "discourse"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "db/migrate/20260310072759_create_category_approval_groups.rb"
+repo = "discourse"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "script/bulk_import/discourse_merger.rb"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "spec/db/migrate/20260310072759_create_category_approval_groups_spec.rb"
+repo = "discourse"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "spec/models/category_posting_review_group_spec.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "spec/models/category_setting_spec.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "spec/models/category_spec.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "spec/serializers/category_serializer_spec.rb"
+repo = "discourse"
+confidence = 0.85

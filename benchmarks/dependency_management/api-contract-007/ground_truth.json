@@ -1,0 +1,35 @@
+{
+  "candidate_id": "AC-9",
+  "producer_repo": "envoyproxy/go-control-plane",
+  "consumer_repos": ["istio/istio", "grpc/grpc-go"],
+  "breaking_change_pr": "envoyproxy/go-control-plane#714",
+  "consumer_fix_prs": [
+    "envoyproxy/go-control-plane#1075",
+    "grpc/grpc-go#8067"
+  ],
+  "api_contract_type": "go_module",
+  "breakage_type": "dependency_resolution",
+  "description": "go-control-plane module split broke dependency upgrades for istio, grpc-go, and google-cloud-go",
+  "producer_changed_files": [
+    "go.mod",
+    "go.sum",
+    "envoy/go.mod",
+    "envoy/go.sum",
+    "contrib/go.mod",
+    "contrib/go.sum",
+    "Makefile"
+  ],
+  "fix_files": [
+    "envoy/empty.go",
+    "envoy/go.mod",
+    "envoy/go.sum",
+    "ci/sync_envoy.sh"
+  ],
+  "consumer_affected_repos": [
+    "istio/istio",
+    "grpc/grpc-go",
+    "googleapis/google-cloud-go"
+  ],
+  "difficulty": "hard",
+  "confidence": 0.93
+}

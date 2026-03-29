@@ -1,0 +1,82 @@
+{
+  "task_id": "support-map-grafana-import-003",
+  "candidate_ref": "CSB-A3",
+  "description": "Grafana Dashboard Import Loses Settings \u2014 table panel column widths and text alignment lost after import",
+  "repo": "grafana/grafana",
+  "repo_rev": null,
+  "csb_lineage": {
+    "parent_csb_id": "ccx-incident-113",
+    "origin_suite": "csb_org_incident",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "pkg/services/dashboardimport/service/service.go",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Dashboard import service \u2014 processes incoming dashboards and triggers schema migrations"
+      },
+      {
+        "path": "pkg/services/dashboards/database/database.go",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.85,
+        "source": "deterministic",
+        "rationale": "Dashboard database layer \u2014 stores dashboards after import, may apply schema version"
+      },
+      {
+        "path": "pkg/components/simplejson/simplejson.go",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.8,
+        "source": "deterministic",
+        "rationale": "JSON handling for dashboard models \u2014 fieldConfig merging during schema migration"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "pkg/services/dashboards/service/dashboard_service.go",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.75,
+        "rationale": "Dashboard service orchestrating save/import operations"
+      },
+      {
+        "path": "public/app/features/dashboard/state/DashboardModel.ts",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.7,
+        "rationale": "Frontend dashboard model \u2014 schema version handling and panel config"
+      },
+      {
+        "path": "public/app/features/manage-dashboards/DashboardImportPage.tsx",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.6,
+        "rationale": "Frontend import page \u2014 UI entry point for dashboard import flow"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "dashboard-import",
+    "schema-migration",
+    "fieldConfig",
+    "panel-config",
+    "serialization"
+  ],
+  "expected_severity": "medium",
+  "related_references": [
+    "public/app/features/dashboard/state/DashboardModel.ts",
+    "public/app/features/manage-dashboards/DashboardImportPage.tsx"
+  ]
+}

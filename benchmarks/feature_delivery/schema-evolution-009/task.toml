@@ -1,0 +1,115 @@
+# DB Schema Evolution: Dashboard Last Visited Tracking (Sentry)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-009"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "medium"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace impact of creating DashboardLastVisited model across Sentry's Django backend and React frontend"
+prompt = """
+We're adding per-user dashboard visit tracking by creating a `DashboardLastVisited`
+model. The migration is `src/sentry/migrations/0947_add_dashboard_last_visited_model.py`.
+
+Your task:
+1. Identify the schema change — new model creation and migration.
+2. Find all backend references — the dashboard model file, backup comparators,
+   and test utilities for backups.
+3. Find frontend references — the React table component that displays dashboards
+   with "last visited" sorting, and the TypeScript types file.
+4. Identify test files, especially frontend component specs.
+
+Write your analysis to /workspace/sentry/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/getsentry/sentry"
+rev = "fad1fc61366a8162823603a9e86eafd96faa9c00"
+path = "sentry"
+role = "primary"
+
+[metadata]
+languages = ["python", "typescript"]
+total_loc = 1_500_000
+dependency_depth = 1
+frameworks = ["django", "react"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the migration and new model"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds backend model, backup comparators, backup test utilities"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds React table component and TypeScript types"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies frontend test spec file"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-layer tracing from Django model through backup system to React TypeScript frontend in a very large codebase benefits from semantic search"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/sentry/models/dashboard.py"
+repo = "sentry"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/sentry/backup/comparators.py"
+repo = "sentry"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "static/app/views/dashboards/manage/tableView/table.tsx"
+repo = "sentry"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/sentry/migrations/0947_add_dashboard_last_visited_model.py"
+repo = "sentry"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "src/sentry/testutils/helpers/backups.py"
+repo = "sentry"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "static/app/views/dashboards/types.tsx"
+repo = "sentry"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "static/app/views/dashboards/manage/tableView/table.spec.tsx"
+repo = "sentry"
+confidence = 0.90

@@ -1,0 +1,29 @@
+{
+  "source_files": [
+    {
+      "path": "pkg/apis/batch/validation/validation.go",
+      "repo": "kubernetes"
+    },
+    {
+      "path": "pkg/apis/batch/validation/validation_test.go",
+      "repo": "kubernetes"
+    }
+  ],
+  "error_chain": [
+    "User submits Job status update via kubectl/API",
+    "pkg/registry/batch/job/strategy.go validates the update",
+    "pkg/apis/batch/validation/validation.go checks startTime field",
+    "Validation returns field.Required error with misleading message"
+  ],
+  "trigger_conditions": [
+    "Job has session_type=single and is not suspended",
+    "User or controller modifies status.startTime (not just removes it)",
+    "The validation incorrectly treats any change as removal"
+  ],
+  "tool_usage": {
+    "sourcegraph_searches": 8,
+    "symbol_navigations": 12,
+    "file_reads": 28,
+    "total_tokens": 14200
+  }
+}

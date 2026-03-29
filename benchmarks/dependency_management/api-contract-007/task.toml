@@ -1,0 +1,121 @@
+# API Contract Boundary: go-control-plane module split breakage
+
+difficulty_stratum = "multi_repo"
+
+[task]
+id = "api-contract-gocp-module-007"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace impact of go-control-plane module split on istio, grpc-go, and google-cloud-go"
+prompt = """
+The go-control-plane project restructured into multi-module layout
+(PR #714, 32 files), splitting generated Envoy proto Go bindings into
+submodules (`envoy/` and `contrib/`). This broke `go get -u` for
+multiple high-profile consumers due to Go module proxy resolution issues.
+
+Your task:
+1. Identify the module restructure in go-control-plane: what modules
+   were created and how do they relate to the root module.
+2. Find which consumers were affected: istio, grpc-go, google-cloud-go.
+   What error did they see when upgrading?
+3. Analyze the fix (PR #1075): what backward-compatible imports were
+   added and why did they solve the problem?
+4. Check if grpc-go needed a separate fix (PR #8067) and what it changed.
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/envoyproxy/go-control-plane"
+rev = "v0.13.2"
+path = "go-control-plane"
+role = "primary"
+
+[[repos]]
+url = "github.com/istio/istio"
+rev = "1.24.0"
+path = "istio"
+role = "consumer"
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.68.0"
+path = "grpc-go"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 1_500_000
+dependency_depth = 2
+frameworks = ["envoy", "grpc", "istio"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_breaking_api"
+weight = 0.15
+verifier = "checks/check_source_identification.sh"
+description = "Agent identifies the module split structure"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_consumers"
+weight = 0.35
+verifier = "checks/check_direct_consumers.sh"
+description = "Agent finds all affected consumers"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_impact"
+weight = 0.30
+verifier = "checks/check_transitive_impact.sh"
+description = "Agent traces module resolution failure mechanism"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "classify_breakage"
+weight = 0.20
+verifier = "checks/check_classification.sh"
+description = "Agent explains the fix approach"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Module-level analysis requires understanding Go module resolution rather than code-level symbol tracing"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "go-control-plane"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "envoy/go.mod"
+repo = "go-control-plane"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "envoy/empty.go"
+repo = "go-control-plane"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "contrib/go.mod"
+repo = "go-control-plane"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "Makefile"
+repo = "go-control-plane"
+confidence = 0.70

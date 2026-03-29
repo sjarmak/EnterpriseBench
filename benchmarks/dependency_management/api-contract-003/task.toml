@@ -1,0 +1,134 @@
+# API Contract Boundary: gRPC-Go transport package internalization
+
+difficulty_stratum = "multi_repo"
+
+[task]
+id = "api-contract-grpc-transport-003"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "expert"
+estimated_duration_minutes = 60
+session_type = "single"
+description = "Trace impact of gRPC-Go transport package internalization across etcd and kubernetes"
+prompt = """
+The gRPC-Go team moved the entire `google.golang.org/grpc/transport` package
+to `google.golang.org/grpc/internal/transport` (PR #2212, 27 files changed).
+The transport package was never intended for external use, but some consumers
+imported it directly.
+
+Your task:
+1. Identify the key types and functions that moved from `transport/` to
+   `internal/transport/` in grpc-go.
+2. Find all files in etcd that import `google.golang.org/grpc/transport`
+   directly.
+3. Find all files in kubernetes that transitively depend on the transport
+   package through etcd or direct gRPC usage.
+4. Map the three-repo dependency chain: grpc-go → etcd → kubernetes.
+   Which kubernetes components are affected?
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.14.0"
+path = "grpc-go"
+role = "primary"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.3.10"
+path = "etcd"
+role = "consumer"
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.13.0"
+path = "kubernetes"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 2_500_000
+dependency_depth = 3
+frameworks = ["grpc", "kubernetes"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_breaking_api"
+weight = 0.15
+verifier = "checks/check_source_identification.sh"
+description = "Agent identifies the transport package move to internal"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_consumers"
+weight = 0.35
+verifier = "checks/check_direct_consumers.sh"
+description = "Agent finds etcd and k8s files importing transport package"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trace_transitive_impact"
+weight = 0.30
+verifier = "checks/check_transitive_impact.sh"
+description = "Agent maps the grpc-go → etcd → kubernetes chain"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "classify_breakage"
+weight = 0.20
+verifier = "checks/check_classification.sh"
+description = "Agent identifies affected k8s components"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Three-repo dependency chain requires cross-repo import graph traversal. Transport types are re-exported and wrapped, making grep insufficient."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "internal/transport/transport.go"
+repo = "grpc-go"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "internal/transport/http2_client.go"
+repo = "grpc-go"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "internal/transport/http2_server.go"
+repo = "grpc-go"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "clientconn.go"
+repo = "grpc-go"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "server.go"
+repo = "grpc-go"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "stream.go"
+repo = "grpc-go"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "rpc_util.go"
+repo = "grpc-go"
+confidence = 0.80

@@ -1,0 +1,101 @@
+# Monorepo Boundary: pnpm SHA256 Hash Migration
+
+difficulty_stratum = "monorepo_cross_package"
+
+[task]
+id = "monorepo-boundary-pnpm-sha256-007"
+suite = "feature_delivery"
+task_type = "monorepo_boundary"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace impact of SHA256 hash migration and # escaping through pnpm crypto and path packages"
+prompt = """
+Two related changes for pnpm v10.0.0:
+
+1. `@pnpm/crypto.hash` — pnpmfile checksum verification added using SHA256
+   (in `crypto/hash/src/index.ts`)
+2. `@pnpm/dependency-path` — escape `#` character in directory names
+   (in `packages/dependency-path/src/index.ts`)
+
+Your task:
+1. Identify all workspace packages affected by the hash algorithm change
+   and the path escaping change.
+2. Classify the impact per package as none/patch/minor/major.
+3. Identify specific boundary violations — files where hash format or path
+   encoding assumptions are made.
+
+Write your analysis to /workspace/pnpm/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/pnpm/pnpm"
+rev = "v9.15.0"
+path = "pnpm"
+role = "primary"
+
+[metadata]
+languages = ["typescript"]
+total_loc = 350_000
+dependency_depth = 1
+frameworks = ["pnpm"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_affected_packages"
+weight = 0.25
+verifier = "checks/check_affected_packages.sh"
+description = "Agent identifies at least 3 of 4 affected packages (pnpmfile, dependency-path, pnpm CLI, core)"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "classify_change_impact"
+weight = 0.45
+verifier = "checks/check_impact_classification.sh"
+description = "Agent classifies affected packages as major (hash format is a breaking change)"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_boundary_violations"
+weight = 0.30
+verifier = "checks/check_boundary_violations.sh"
+description = "Agent identifies crypto/hash/src/index.ts and hooks/pnpmfile/src/requireHooks.ts"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Hash function consumers are spread across content-addressable store, hooks, and path packages — semantic search reveals actual call sites"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "crypto/hash/src/index.ts"
+repo = "pnpm"
+confidence = 0.94
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "hooks/pnpmfile/src/requireHooks.ts"
+repo = "pnpm"
+confidence = 0.94
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/dependency-path/src/index.ts"
+repo = "pnpm"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pnpm/test/hooks.ts"
+repo = "pnpm"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "pkg-manager/core/test/install/fromRepo.ts"
+repo = "pnpm"
+confidence = 0.82

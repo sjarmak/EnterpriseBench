@@ -1,0 +1,95 @@
+{
+  "candidate_id": 15,
+  "repo": "rust-lang/rust",
+  "pr_refs": ["#116564"],
+  "release": "nightly-2024-02-15",
+  "description": "Store static initializers in metadata instead of MIR cascades through const_eval, codegen, metadata, and mir_build crates",
+  "changed_package": {
+    "name": "rustc_middle",
+    "path": "compiler/rustc_middle",
+    "change_summary": "Changed MIR representation for static initializers — store in metadata directly instead of as MIR bodies",
+    "changed_files": [
+      "compiler/rustc_middle/src/mir/interpret/error.rs",
+      "compiler/rustc_middle/src/mir/interpret/mod.rs",
+      "compiler/rustc_middle/src/mir/interpret/queries.rs",
+      "compiler/rustc_middle/src/mir/mod.rs",
+      "compiler/rustc_middle/src/mir/pretty.rs",
+      "compiler/rustc_middle/src/query/erase.rs",
+      "compiler/rustc_middle/src/query/mod.rs",
+      "compiler/rustc_middle/src/ty/parameterized.rs"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "rustc_const_eval",
+      "path": "compiler/rustc_const_eval",
+      "semver_bump": "minor",
+      "impact": "Static initializer evaluation changed — new error types, machine updates, interpreter changes for metadata-based statics",
+      "affected_files": [
+        "compiler/rustc_const_eval/messages.ftl",
+        "compiler/rustc_const_eval/src/const_eval/error.rs",
+        "compiler/rustc_const_eval/src/const_eval/eval_queries.rs",
+        "compiler/rustc_const_eval/src/const_eval/machine.rs",
+        "compiler/rustc_const_eval/src/interpret/cast.rs",
+        "compiler/rustc_const_eval/src/interpret/eval_context.rs",
+        "compiler/rustc_const_eval/src/interpret/intern.rs",
+        "compiler/rustc_const_eval/src/interpret/intrinsics.rs",
+        "compiler/rustc_const_eval/src/interpret/machine.rs",
+        "compiler/rustc_const_eval/src/interpret/memory.rs",
+        "compiler/rustc_const_eval/src/interpret/mod.rs",
+        "compiler/rustc_const_eval/src/interpret/place.rs",
+        "compiler/rustc_const_eval/src/interpret/step.rs",
+        "compiler/rustc_const_eval/src/interpret/terminator.rs",
+        "compiler/rustc_const_eval/src/interpret/util.rs",
+        "compiler/rustc_const_eval/src/interpret/validity.rs",
+        "compiler/rustc_const_eval/src/lib.rs"
+      ],
+      "confidence": 0.97
+    },
+    {
+      "name": "rustc_metadata",
+      "path": "compiler/rustc_metadata",
+      "semver_bump": "minor",
+      "impact": "Metadata encoding/decoding updated to store static initializers directly",
+      "affected_files": [
+        "compiler/rustc_metadata/src/rmeta/decoder/cstore_impl.rs",
+        "compiler/rustc_metadata/src/rmeta/encoder.rs",
+        "compiler/rustc_metadata/src/rmeta/mod.rs"
+      ],
+      "confidence": 0.96
+    },
+    {
+      "name": "rustc_mir_transform",
+      "path": "compiler/rustc_mir_transform",
+      "semver_bump": "minor",
+      "impact": "GVN transform updated for new static initializer representation",
+      "affected_files": [
+        "compiler/rustc_mir_transform/src/gvn.rs"
+      ],
+      "confidence": 0.90
+    },
+    {
+      "name": "miri",
+      "path": "src/tools/miri",
+      "semver_bump": "minor",
+      "impact": "Miri interpreter shims updated for new intrinsic behavior",
+      "affected_files": [
+        "src/tools/miri/src/shims/intrinsics/mod.rs"
+      ],
+      "confidence": 0.88
+    }
+  ],
+  "overall_semver": "minor",
+  "changelog_entries": [
+    "rustc_middle: Store static initializers in metadata instead of MIR bodies"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 30,
+    "packages_touched": ["rustc_middle", "rustc_const_eval", "rustc_metadata", "rustc_mir_transform", "miri"],
+    "cargo_workspace": true,
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.93
+}

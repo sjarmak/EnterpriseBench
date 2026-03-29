@@ -1,0 +1,145 @@
+# DB Schema Evolution: Add Description to Invites (Discourse)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-006"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "medium"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace impact of adding a description column to the Invite model across Discourse's Rails stack"
+prompt = """
+We're adding a `description` text column to the `Invite` model so admins can
+annotate invites with notes about who they're for. The migration is
+`db/migrate/20250614020437_add_description_to_invites.rb`.
+
+Your task:
+1. Identify the schema change and migration.
+2. Find all direct references — the Invite model, controller, and serializer.
+3. Find indirect references — frontend components (the create-invite modal,
+   the invited-show template), locale strings, CSS, and the constants file.
+4. Identify all spec files that need updating, including system tests.
+
+Write your analysis to /workspace/discourse/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/discourse/discourse"
+rev = "290b435a727ed1d95aef554d60d8572eba7e818a"
+path = "discourse"
+role = "primary"
+
+[metadata]
+languages = ["ruby", "javascript"]
+total_loc = 600_000
+dependency_depth = 1
+frameworks = ["rails"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the migration and model change"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds model, controller, and serializer"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds frontend components, locales, CSS"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies spec files including system tests"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Standard Rails MVC tracing with frontend component references — MCP helps but the pattern is straightforward"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "app/models/invite.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/controllers/invites_controller.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "app/serializers/invite_serializer.rb"
+repo = "discourse"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "db/migrate/20250614020437_add_description_to_invites.rb"
+repo = "discourse"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/discourse/app/components/modal/create-invite.gjs"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/discourse/app/templates/user-invited-show.gjs"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/javascripts/discourse/app/lib/constants.js"
+repo = "discourse"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "app/assets/stylesheets/common/base/user.scss"
+repo = "discourse"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "config/locales/client.en.yml"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "spec/models/invite_spec.rb"
+repo = "discourse"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "spec/requests/invites_controller_spec.rb"
+repo = "discourse"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "spec/system/create_invite_spec.rb"
+repo = "discourse"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "spec/system/page_objects/pages/user_invited_pending.rb"
+repo = "discourse"
+confidence = 0.80

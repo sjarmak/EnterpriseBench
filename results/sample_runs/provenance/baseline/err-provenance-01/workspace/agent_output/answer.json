@@ -1,0 +1,20 @@
+{
+  "source_files": [
+    {
+      "path": "pkg/apis/batch/validation/validation.go",
+      "repo": "kubernetes"
+    }
+  ],
+  "error_chain": [
+    "User submits Job status update via kubectl/API",
+    "pkg/registry/batch/job/strategy.go validates the update"
+  ],
+  "trigger_conditions": [
+    "Job has session_type=single and is not suspended"
+  ],
+  "tool_usage": {
+    "grep_calls": 15,
+    "file_reads": 42,
+    "total_tokens": 18500
+  }
+}

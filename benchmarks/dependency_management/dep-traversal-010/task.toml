@@ -1,0 +1,122 @@
+# Dependency Graph Traversal: jackson-databind deep nesting DoS through Spring Boot BOM
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "dep-traversal-010"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace CVE-2020-36518 (jackson-databind DoS) through Maven BOM inheritance in Spring Boot and Dropwizard"
+prompt = """
+CVE-2020-36518 affects `com.fasterxml.jackson.core:jackson-databind` — a denial
+of service via deeply nested JSON objects that cause stack overflow. Two version
+ranges: <= 2.12.6.0 (fixed in 2.12.6.1) and 2.13.0-2.13.2 (fixed in 2.13.2.1).
+
+Your task:
+1. Identify the CVE and confirm the affected package and version ranges.
+2. Find how jackson-databind is consumed by workspace repos. Spring Boot manages
+   jackson via its BOM (Bill of Materials) — trace through the BOM dependency
+   management chain.
+3. Trace the full dependency path: jackson-databind -> jackson-bom ->
+   spring-boot-dependencies -> spring-boot-starter-web -> applications.
+4. Determine the jackson-databind version resolved by each consumer. Maven BOM
+   inheritance means the version may not be declared directly in the consumer's
+   pom.xml — it's inherited from the parent/BOM.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/FasterXML/jackson-databind"
+rev = "jackson-databind-2.13.2"
+path = "jackson-databind"
+role = "primary"
+
+[[repos]]
+url = "github.com/spring-projects/spring-boot"
+rev = "v2.7.0"
+path = "spring-boot"
+role = "consumer"
+
+[[repos]]
+url = "github.com/dropwizard/dropwizard"
+rev = "v2.1.0"
+path = "dropwizard"
+role = "consumer"
+
+[metadata]
+languages = ["java"]
+total_loc = 1800000
+dependency_depth = 3
+frameworks = ["spring-boot", "dropwizard", "maven"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent identifies CVE-2020-36518 and jackson-databind version ranges"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds Spring Boot and Dropwizard depend on jackson-databind"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces BOM inheritance chain in Maven"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent resolves jackson version through BOM inheritance"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Maven BOM inheritance chain traversal requires understanding pom.xml parent/dependency management sections across repos — benefits from Sourcegraph structural search"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pom.xml"
+repo = "jackson-databind"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "spring-boot-project/spring-boot-dependencies/build.gradle"
+repo = "spring-boot"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "dropwizard-jackson/pom.xml"
+repo = "dropwizard"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "spring-boot-project/spring-boot-starters/spring-boot-starter-web/build.gradle"
+repo = "spring-boot"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "dropwizard-bom/pom.xml"
+repo = "dropwizard"
+confidence = 0.80

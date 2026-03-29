@@ -1,0 +1,36 @@
+{
+  "task_id": "monorepo-boundary-babel-metadata-003",
+  "task_dir": "monorepo-boundary-003",
+  "mode": "mcp",
+  "checkpoints": [
+    {
+      "name": "identify_affected_packages",
+      "weight": 0.25,
+      "score": 1.0,
+      "passed": true,
+      "detail": "Found 3/3 affected packages"
+    },
+    {
+      "name": "classify_change_impact",
+      "weight": 0.45,
+      "score": 1.0,
+      "passed": true,
+      "detail": "Correct classification found"
+    },
+    {
+      "name": "identify_boundary_violations",
+      "weight": 0.30,
+      "score": 1.0,
+      "passed": true,
+      "detail": "Identified 3/3 boundary violation locations"
+    }
+  ],
+  "total_score": 1.00,
+  "tool_usage": {
+    "sourcegraph_searches": 9,
+    "symbol_navigations": 14,
+    "file_reads": 41,
+    "total_tokens": 19500
+  },
+  "infrastructure_errors": []
+}

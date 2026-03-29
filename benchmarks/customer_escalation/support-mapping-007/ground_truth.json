@@ -1,0 +1,89 @@
+{
+  "task_id": "support-map-libreoffice-formula-007",
+  "candidate_ref": "CSB-A7",
+  "description": "LibreOffice Spreadsheet Gives Wrong Results \u2014 SUM formulas show incorrect results, cells don't recalculate",
+  "repo": "LibreOffice/core",
+  "repo_rev": null,
+  "csb_lineage": {
+    "parent_csb_id": "ccx-incident-139",
+    "origin_suite": "csb_org_incident",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "sc/source/core/tool/compiler.cxx",
+        "repo": "core",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "Formula tokenizer/compiler \u2014 parses formula text into bytecode for execution"
+      },
+      {
+        "path": "sc/source/core/tool/interpr4.cxx",
+        "repo": "core",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "ScInterpreter bytecode interpreter (part 4) \u2014 executes compiled formula bytecode including SUM"
+      },
+      {
+        "path": "sc/inc/formulacell.hxx",
+        "repo": "core",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "ScFormulaCell class declaration \u2014 manages formula state, dirty flags, and recalculation triggers"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "sc/source/core/data/formulacell.cxx",
+        "repo": "core",
+        "line_range": null,
+        "confidence": 0.85,
+        "rationale": "ScFormulaCell implementation \u2014 recalc scheduling, dirty flag management, dependency tracking"
+      },
+      {
+        "path": "sc/source/core/tool/interpr7.cxx",
+        "repo": "core",
+        "line_range": null,
+        "confidence": 0.7,
+        "rationale": "ScInterpreter part 7 \u2014 additional formula function implementations"
+      },
+      {
+        "path": "sc/inc/address.hxx",
+        "repo": "core",
+        "line_range": null,
+        "confidence": 0.6,
+        "rationale": "ScAddress definitions \u2014 cell addressing used in formula dependency graph"
+      },
+      {
+        "path": "include/formula/tokenarray.hxx",
+        "repo": "core",
+        "line_range": null,
+        "confidence": 0.55,
+        "rationale": "Token array definitions \u2014 compiled formula representation passed to interpreter"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "formula-compilation",
+    "bytecode-interpreter",
+    "recalculation",
+    "dirty-flags",
+    "dependency-tracking"
+  ],
+  "expected_severity": "critical",
+  "related_references": [
+    "sc/source/core/data/formulacell.cxx",
+    "sc/source/core/tool/interpr7.cxx"
+  ]
+}

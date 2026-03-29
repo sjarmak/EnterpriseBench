@@ -1,0 +1,74 @@
+{
+  "task_id": "support-map-grafana-alerts-004",
+  "candidate_ref": "CSB-A4",
+  "description": "Grafana Alerts Running Slow \u2014 'alert evaluation took longer than expected' warnings, alerts firing late",
+  "repo": "grafana/grafana",
+  "repo_rev": null,
+  "csb_lineage": {
+    "parent_csb_id": "ccx-incident-145",
+    "origin_suite": "csb_org_incident",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "pkg/services/ngalert/schedule/schedule.go",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.95,
+        "source": "deterministic",
+        "rationale": "Alert evaluation scheduler \u2014 contains tick loop, overrun detection, and 'took longer than expected' logging"
+      },
+      {
+        "path": "pkg/services/ngalert/schedule/compat.go",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.85,
+        "source": "deterministic",
+        "rationale": "Scheduler compatibility layer \u2014 evaluation cycle timing and rule group scheduling"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "pkg/services/ngalert/eval/eval.go",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.8,
+        "rationale": "Alert evaluation engine \u2014 executes individual alert rule queries"
+      },
+      {
+        "path": "pkg/services/ngalert/schedule/registry.go",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.7,
+        "rationale": "Rule registry tracking active alert rules and their evaluation intervals"
+      },
+      {
+        "path": "pkg/services/ngalert/models/alert_rule.go",
+        "repo": "grafana",
+        "line_range": null,
+        "confidence": 0.6,
+        "rationale": "Alert rule model defining evaluation intervals and conditions"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "alert-scheduling",
+    "evaluation-loop",
+    "tick-loop",
+    "performance",
+    "rule-group"
+  ],
+  "expected_severity": "high",
+  "related_references": [
+    "pkg/services/ngalert/eval/eval.go",
+    "pkg/services/ngalert/schedule/registry.go"
+  ]
+}

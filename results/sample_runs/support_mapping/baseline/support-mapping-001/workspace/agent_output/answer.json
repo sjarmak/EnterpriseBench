@@ -1,0 +1,31 @@
+{
+  "code_paths": [
+    {
+      "path": "source/common/http/conn_pool_base.cc",
+      "repo": "envoy"
+    },
+    {
+      "path": "source/common/http/conn_pool_base.h",
+      "repo": "envoy"
+    }
+  ],
+  "ownership": {
+    "subsystem": "HTTP connection handling",
+    "description": "The upstream connection pool layer in Envoy manages HTTP connections"
+  },
+  "severity": {
+    "level": "medium",
+    "rationale": "Intermittent failures during peak traffic affecting some requests"
+  },
+  "related_issues": [
+    {
+      "reference": "envoy/http/conn_pool.h",
+      "type": "code"
+    }
+  ],
+  "tool_usage": {
+    "grep_calls": 23,
+    "file_reads": 56,
+    "total_tokens": 22400
+  }
+}

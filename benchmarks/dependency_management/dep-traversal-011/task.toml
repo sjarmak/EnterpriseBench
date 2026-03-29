@@ -1,0 +1,125 @@
+# Dependency Graph Traversal: Log4Shell blast radius through Java ecosystem
+
+difficulty_stratum = "multi_repo"
+
+[task]
+id = "dep-traversal-011"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "expert"
+estimated_duration_minutes = 60
+session_type = "single"
+description = "Trace CVE-2021-44228 (Log4Shell) through Spring Boot starters, Kafka, and shaded/relocated JARs"
+prompt = """
+CVE-2021-44228 (Log4Shell) affects `org.apache.logging.log4j:log4j-core` versions
+2.0-beta9 through 2.14.1. This is a critical remote code execution vulnerability
+via JNDI lookup injection in log messages.
+
+Your task:
+1. Identify the CVE and all affected artifacts. Note: log4j-core is the primary
+   artifact, but there are also shaded copies (pax-logging-log4j2) and the
+   related log4j-api artifact.
+2. Find all direct dependents in workspace repos. Spring Boot offers log4j2 as
+   an optional logging framework via spring-boot-starter-log4j2. Kafka uses
+   log4j directly.
+3. Trace transitive paths including:
+   - spring-boot-starter-log4j2 -> application dependencies
+   - kafka-clients -> kafka-streams -> downstream consumers
+   - Shaded/relocated JARs that bundle log4j classes under different package names
+4. Version analysis: Note multiple fix versions (2.15.0 partial fix, 2.16.0 full
+   fix, backports to 2.3.1 and 2.12.2). Classify each consumer.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/spring-projects/spring-boot"
+rev = "v2.6.1"
+path = "spring-boot"
+role = "consumer"
+
+[[repos]]
+url = "github.com/apache/kafka"
+rev = "3.1.0"
+path = "kafka"
+role = "consumer"
+
+[[repos]]
+url = "github.com/apache/logging-log4j2"
+rev = "rel/2.14.1"
+path = "log4j2"
+role = "primary"
+
+[metadata]
+languages = ["java"]
+total_loc = 2500000
+dependency_depth = 3
+frameworks = ["spring-boot", "kafka", "log4j2"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent identifies CVE-2021-44228, log4j-core, and shaded copies"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds Spring Boot and Kafka depend on log4j-core"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces through starters, shaded JARs, and Kafka modules"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent handles multiple fix versions and backports"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Shaded/relocated JAR detection and Maven BOM traversal through Spring Boot starters requires structural understanding of build systems"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "log4j-core/pom.xml"
+repo = "log4j2"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "spring-boot-project/spring-boot-starters/spring-boot-starter-log4j2/build.gradle"
+repo = "spring-boot"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "build.gradle"
+repo = "kafka"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "spring-boot-project/spring-boot-dependencies/build.gradle"
+repo = "spring-boot"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "gradle/dependencies.gradle"
+repo = "kafka"
+confidence = 0.80

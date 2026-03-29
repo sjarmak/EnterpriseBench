@@ -1,0 +1,38 @@
+{
+  "candidate_id": 10,
+  "cve": "CVE-2020-36518",
+  "ghsa": "GHSA-57j2-w4cx-62h2",
+  "package": "com.fasterxml.jackson.core:jackson-databind",
+  "ecosystem": "maven",
+  "description": "jackson-databind deep nesting DoS affects Spring Boot and Dropwizard via BOM inheritance",
+  "dependency_chain": [
+    {
+      "from": "jackson-databind",
+      "to": "spring-boot",
+      "relationship": "managed dependency (via spring-boot-starter-web BOM)",
+      "manifest": "pom.xml / build.gradle",
+      "affected_versions": "<= 2.12.6.0, 2.13.0-2.13.2"
+    },
+    {
+      "from": "spring-boot",
+      "to": "enterprise-apps",
+      "relationship": "parent/starter dependency",
+      "manifest": "pom.xml",
+      "affected_versions": "transitive"
+    }
+  ],
+  "direct_dependents": ["spring-boot", "dropwizard"],
+  "transitive_paths": [
+    ["jackson-databind", "spring-boot-starter-web", "spring-boot-apps"],
+    ["jackson-databind", "dropwizard-jackson", "dropwizard-apps"]
+  ],
+  "fix_reference": "FasterXML/jackson-databind@3cc52f8",
+  "affected_version_range": "<= 2.12.6.0 (fix 2.12.6.1), 2.13.0-2.13.2 (fix 2.13.2.1)",
+  "fixed_version": "2.12.6.1 / 2.13.2.1",
+  "verification": {
+    "method": "gh_advisory_api",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.95
+}

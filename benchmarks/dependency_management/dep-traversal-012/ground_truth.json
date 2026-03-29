@@ -1,0 +1,47 @@
+{
+  "candidate_id": 12,
+  "cve": "CVE-2022-0778",
+  "ghsa": "GHSA-x3mh-jvjw-3xwx",
+  "package": "openssl",
+  "ecosystem": "system",
+  "description": "OpenSSL BN_mod_sqrt infinite loop affects curl, git, Python ssl, Node.js crypto — cross-ecosystem blast radius",
+  "dependency_chain": [
+    {
+      "from": "openssl",
+      "to": "curl",
+      "relationship": "system library (dynamic linking)",
+      "manifest": "configure / CMakeLists.txt",
+      "affected_versions": "1.0.2-1.0.2zc, 1.1.1-1.1.1m, 3.0.0-3.0.1"
+    },
+    {
+      "from": "curl",
+      "to": "git",
+      "relationship": "dependency (HTTP transport)",
+      "manifest": "Makefile / configure",
+      "affected_versions": "transitive"
+    },
+    {
+      "from": "openssl",
+      "to": "kubernetes",
+      "relationship": "system library (via Go crypto/tls when CGO_ENABLED=1)",
+      "manifest": "go.mod (indirect)",
+      "affected_versions": "conditional on CGO"
+    }
+  ],
+  "direct_dependents": ["curl", "python-ssl", "node-crypto", "nginx"],
+  "transitive_paths": [
+    ["openssl", "curl", "git", "CI/CD pipelines"],
+    ["openssl", "python ssl", "pip", "requests", "boto3"],
+    ["openssl", "nodejs crypto", "npm", "JS ecosystem"],
+    ["openssl", "kubernetes (CGO)"]
+  ],
+  "fix_reference": "OpenSSL 1.0.2zd, 1.1.1n, 3.0.2",
+  "affected_version_range": "1.0.2-1.0.2zc, 1.1.1-1.1.1m, 3.0.0-3.0.1",
+  "fixed_version": "1.0.2zd / 1.1.1n / 3.0.2",
+  "verification": {
+    "method": "gh_advisory_api",
+    "verified": true
+  },
+  "difficulty": "expert",
+  "confidence": 0.92
+}

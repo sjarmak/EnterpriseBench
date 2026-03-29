@@ -1,0 +1,141 @@
+# DB Schema Evolution: Move Default Avatar Source from User to Realm (Zulip)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-004"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace impact of moving default_avatar_source from UserProfile to Realm model in Zulip"
+prompt = """
+We're moving the `default_avatar_source` field from the `UserProfile` model to the
+`Realm` model. This makes avatar source configuration a realm-level setting rather
+than per-user. The migration is `zerver/migrations/0776_realm_default_avatar_source.py`.
+
+Your task:
+1. Identify the schema change — field removal from UserProfile, addition to Realm.
+2. Find all code that directly references avatar source logic — the avatar library,
+   model definitions, API examples.
+3. Find indirect references — all importers (Slack, Mattermost, Rocket.Chat) that
+   set avatar source during import, frontend templates, and dependency changes.
+4. Identify test files that cover avatar and importer functionality.
+
+Write your analysis to /workspace/zulip/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/zulip/zulip"
+rev = "f2a5dc949a7c0ec776b3729b2c92703292404127"
+path = "zulip"
+role = "primary"
+
+[metadata]
+languages = ["python", "javascript"]
+total_loc = 500_000
+dependency_depth = 1
+frameworks = ["django"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the migration and field movement between models"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds direct references: avatar lib, both model files, API examples"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds importer files and frontend templates that reference avatar source"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies test files for avatar and importer functionality"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing a field that moves between models requires finding all references in both models plus all importers that set avatar source"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "zerver/models/realms.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/models/users.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/lib/avatar.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "zerver/migrations/0776_realm_default_avatar_source.py"
+repo = "zulip"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "zerver/openapi/python_examples.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/templates/settings/organization_settings_admin.hbs"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_events.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_upload.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_upload_s3.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_mattermost_importer.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_rocketchat_importer.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_slack_importer.py"
+repo = "zulip"
+confidence = 0.90

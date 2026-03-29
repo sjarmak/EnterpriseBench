@@ -1,0 +1,59 @@
+{
+  "candidate_id": 10,
+  "repo": "vercel/next.js",
+  "pr_refs": ["#56662"],
+  "release": "v14.0.0",
+  "description": "Move ImageResponse from next/server to next/og crosses JS/Rust boundary via next-swc import map",
+  "changed_package": {
+    "name": "next",
+    "path": "packages/next",
+    "change_summary": "Moved ImageResponse export from next/server to next/og, added new og.js and og.d.ts entry points",
+    "changed_files": [
+      "packages/next/og.d.ts",
+      "packages/next/og.js",
+      "packages/next/package.json",
+      "packages/next/src/server/og/image-response.ts",
+      "packages/next/src/server/web/spec-extension/image-response.ts",
+      "packages/next/src/build/webpack-config.ts",
+      "packages/next/src/build/webpack/plugins/middleware-plugin.ts",
+      "packages/next/taskfile.js"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "@next/swc (next-core crate)",
+      "path": "packages/next-swc/crates/next-core",
+      "semver_bump": "major",
+      "impact": "Rust SWC import map updated to resolve next/og instead of next/server for ImageResponse",
+      "affected_files": [
+        "packages/next-swc/crates/next-core/src/next_import_map.rs"
+      ],
+      "confidence": 0.97
+    },
+    {
+      "name": "@vercel/og (compiled)",
+      "path": "packages/next/src/compiled/@vercel/og",
+      "semver_bump": "major",
+      "impact": "Compiled OG package.json updated for new export path",
+      "affected_files": [
+        "packages/next/src/compiled/@vercel/og/package.json"
+      ],
+      "confidence": 0.93
+    }
+  ],
+  "overall_semver": "major",
+  "changelog_entries": [
+    "next: Move ImageResponse from next/server to next/og (v14.0.0)",
+    "@next/swc: Update import map for next/og (v14.0.0)"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 29,
+    "packages_touched": ["next", "next-swc"],
+    "cross_language_boundary": true,
+    "languages": ["typescript", "rust"],
+    "verified": true
+  },
+  "difficulty": "medium",
+  "confidence": 0.95
+}

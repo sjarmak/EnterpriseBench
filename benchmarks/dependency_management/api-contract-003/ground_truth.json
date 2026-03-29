@@ -1,0 +1,39 @@
+{
+  "candidate_id": "AC-3",
+  "producer_repo": "grpc/grpc-go",
+  "consumer_repos": ["etcd-io/etcd", "kubernetes/kubernetes"],
+  "breaking_change_pr": "grpc/grpc-go#2212",
+  "consumer_fix_prs": ["kubernetes/kubernetes#57160"],
+  "api_contract_type": "go_package",
+  "breakage_type": "compile_error",
+  "description": "gRPC-Go moved transport package to internal, breaking all direct importers across etcd and kubernetes",
+  "producer_changed_files": [
+    "internal/transport/transport.go",
+    "internal/transport/http2_client.go",
+    "internal/transport/http2_server.go",
+    "internal/transport/handler_server.go",
+    "internal/transport/controlbuf.go",
+    "internal/transport/flowcontrol.go",
+    "internal/transport/http_util.go",
+    "clientconn.go",
+    "server.go",
+    "stream.go",
+    "rpc_util.go"
+  ],
+  "consumer_affected_files": {
+    "kubernetes": [
+      "vendor/google.golang.org/grpc/transport/",
+      "staging/src/k8s.io/apiserver/",
+      "pkg/kubelet/",
+      "vendor/go.etcd.io/etcd/"
+    ]
+  },
+  "breaking_symbols": [
+    "transport.ClientTransport",
+    "transport.ServerTransport",
+    "transport.Stream",
+    "transport.NewClientTransport"
+  ],
+  "difficulty": "expert",
+  "confidence": 0.93
+}

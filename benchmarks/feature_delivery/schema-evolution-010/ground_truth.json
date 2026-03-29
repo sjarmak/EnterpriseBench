@@ -1,0 +1,51 @@
+{
+  "candidate_id": "SE-11",
+  "repo": "mattermost/mattermost",
+  "pr_refs": ["#35726"],
+  "base_rev": "1349899f42212aab066a8d1a6caed08b7d3d2b53",
+  "description": "Drop icon column and remove nested subviews from Go View model — SQL migration, Go struct, OpenAPI spec, 4 test files",
+  "schema_change": {
+    "type": "drop_column_and_flatten",
+    "table": "views",
+    "dropped_column": "icon",
+    "removed_fields": ["subviews", "typed_board_props"],
+    "migration": "server/channels/db/migrations/postgres/000167_views_drop_icon.up.sql"
+  },
+  "required_files": [
+    "server/public/model/view.go",
+    "server/channels/store/sqlstore/view_store.go",
+    "api/v4/source/definitions.yaml"
+  ],
+  "sufficient_files": [
+    "server/channels/db/migrations/postgres/000167_views_drop_icon.up.sql",
+    "server/channels/db/migrations/postgres/000167_views_drop_icon.down.sql",
+    "server/channels/db/migrations/migrations.list",
+    "api/v4/source/views.yaml",
+    "server/channels/store/storetest/view_store.go",
+    "server/channels/api4/view_test.go",
+    "server/channels/app/view_test.go",
+    "server/public/model/view_test.go",
+    "server/i18n/en.json"
+  ],
+  "pr_files": [
+    "api/v4/source/definitions.yaml",
+    "api/v4/source/views.yaml",
+    "server/channels/api4/view_test.go",
+    "server/channels/app/view_test.go",
+    "server/channels/db/migrations/migrations.list",
+    "server/channels/db/migrations/postgres/000167_views_drop_icon.down.sql",
+    "server/channels/db/migrations/postgres/000167_views_drop_icon.up.sql",
+    "server/channels/store/sqlstore/view_store.go",
+    "server/channels/store/storetest/view_store.go",
+    "server/i18n/en.json",
+    "server/public/model/view.go",
+    "server/public/model/view_test.go"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 12,
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.96
+}

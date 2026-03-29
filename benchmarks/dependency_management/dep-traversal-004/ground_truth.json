@@ -1,0 +1,47 @@
+{
+  "candidate_id": 4,
+  "cve": "CVE-2023-39325",
+  "ghsa": "GHSA-4374-p667-p6c8",
+  "package": "golang.org/x/net",
+  "ecosystem": "go",
+  "description": "HTTP/2 Rapid Reset DoS in golang.org/x/net affects kubernetes, etcd, and grpc-go",
+  "dependency_chain": [
+    {
+      "from": "golang.org/x/net",
+      "to": "grpc/grpc-go",
+      "relationship": "go module dependency (http2 transport)",
+      "manifest": "go.mod",
+      "affected_versions": "< 0.17.0"
+    },
+    {
+      "from": "grpc/grpc-go",
+      "to": "etcd-io/etcd",
+      "relationship": "go module dependency (gRPC client/server)",
+      "manifest": "go.mod",
+      "affected_versions": "< 1.58.3"
+    },
+    {
+      "from": "golang.org/x/net",
+      "to": "kubernetes/kubernetes",
+      "relationship": "go module dependency (API server)",
+      "manifest": "go.mod",
+      "affected_versions": "< 0.17.0"
+    }
+  ],
+  "direct_dependents": ["grpc-go", "kubernetes", "etcd"],
+  "transitive_paths": [
+    ["golang.org/x/net", "grpc-go", "etcd"],
+    ["golang.org/x/net", "kubernetes"],
+    ["golang.org/x/net", "grpc-go", "kubernetes"]
+  ],
+  "fix_reference": "go.dev/cl/514907",
+  "affected_version_range": "< 0.17.0",
+  "fixed_version": "0.17.0",
+  "verification": {
+    "method": "go_advisory_db",
+    "advisory_id": "GO-2023-2102",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.97
+}

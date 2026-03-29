@@ -1,0 +1,83 @@
+{
+  "task_id": "support-map-nodebb-notif-011",
+  "candidate_ref": "CSB-A11",
+  "description": "Forum Notifications Don't Show Up \u2014 NodeBB notification bell empty; category dropdown misplaced in fork/move modals",
+  "repo": "NodeBB/NodeBB",
+  "repo_rev": null,
+  "pre_fix_rev": "8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7",
+  "csb_lineage": {
+    "parent_csb_id": "nodebb-notif-dropdown-fix-001",
+    "origin_suite": "csb_sdlc_fix",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "public/src/modules/notifications.js",
+        "repo": "NodeBB",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Notifications module \u2014 dropdown async loading/toggle logic, handles notification bell state"
+      },
+      {
+        "path": "public/src/modules/categorySelector.js",
+        "repo": "NodeBB",
+        "line_range": null,
+        "confidence": 0.85,
+        "source": "deterministic",
+        "rationale": "Category selector \u2014 dropdown positioning logic for fork/move topic modals"
+      },
+      {
+        "path": "public/src/client/topic/move.js",
+        "repo": "NodeBB",
+        "line_range": null,
+        "confidence": 0.8,
+        "source": "deterministic",
+        "rationale": "Topic move client code \u2014 invokes category selector dropdown in move modal"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "public/src/client/topic/fork.js",
+        "repo": "NodeBB",
+        "line_range": null,
+        "confidence": 0.75,
+        "rationale": "Topic fork client code \u2014 also uses category selector in fork modal"
+      },
+      {
+        "path": "src/notifications.js",
+        "repo": "NodeBB",
+        "line_range": null,
+        "confidence": 0.7,
+        "rationale": "Server-side notifications \u2014 API endpoint serving notification data to the dropdown"
+      },
+      {
+        "path": "public/src/modules/helpers.js",
+        "repo": "NodeBB",
+        "line_range": null,
+        "confidence": 0.55,
+        "rationale": "UI helpers \u2014 may contain dropup class management logic"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "notification-dropdown",
+    "category-selector",
+    "dropdown-positioning",
+    "async-loading",
+    "modal"
+  ],
+  "expected_severity": "medium",
+  "related_references": [
+    "public/src/client/topic/fork.js",
+    "src/notifications.js"
+  ]
+}

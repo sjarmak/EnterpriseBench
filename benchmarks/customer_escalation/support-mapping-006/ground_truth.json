@@ -1,0 +1,82 @@
+{
+  "task_id": "support-map-firefox-css-crash-006",
+  "candidate_ref": "CSB-A6",
+  "description": "Firefox Crashes on CSS Pages \u2014 crash on pages with complex CSS animations using calc() values",
+  "repo": "mozilla/gecko-dev",
+  "repo_rev": null,
+  "csb_lineage": {
+    "parent_csb_id": "ccx-incident-149",
+    "origin_suite": "csb_org_incident",
+    "migration_status": "schema_mapped",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ground_truth": {
+    "tiers": [
+      "deterministic"
+    ],
+    "required_files": [
+      {
+        "path": "layout/style/ServoCSSPropList.mako.py",
+        "repo": "gecko-dev",
+        "line_range": null,
+        "confidence": 0.8,
+        "source": "deterministic",
+        "rationale": "CSS property list generation \u2014 defines calc-enabled properties and value types"
+      },
+      {
+        "path": "servo/components/style/values/specified/calc.rs",
+        "repo": "gecko-dev",
+        "line_range": null,
+        "confidence": 0.9,
+        "source": "deterministic",
+        "rationale": "Servo calc() expression parsing and evaluation \u2014 where numeric overflow would originate"
+      },
+      {
+        "path": "servo/components/style/values/computed/length.rs",
+        "repo": "gecko-dev",
+        "line_range": null,
+        "confidence": 0.85,
+        "source": "deterministic",
+        "rationale": "Computed length values \u2014 calc() resolution for lengths, may contain overflow guards"
+      }
+    ],
+    "sufficient_files": [
+      {
+        "path": "servo/components/style/values/specified/length.rs",
+        "repo": "gecko-dev",
+        "line_range": null,
+        "confidence": 0.75,
+        "rationale": "Specified length values \u2014 input parsing for calc() expressions in CSS"
+      },
+      {
+        "path": "servo/components/style/values/animated/mod.rs",
+        "repo": "gecko-dev",
+        "line_range": null,
+        "confidence": 0.65,
+        "rationale": "Animated values \u2014 animation interpolation may trigger calc() overflow during transitions"
+      },
+      {
+        "path": "layout/style/ServoBindings.toml",
+        "repo": "gecko-dev",
+        "line_range": null,
+        "confidence": 0.5,
+        "rationale": "Servo-Gecko bindings config \u2014 maps Servo types to Gecko layout engine"
+      }
+    ]
+  },
+  "ownership_keywords": [
+    "CSS-calc",
+    "numeric-overflow",
+    "CSS-parsing",
+    "computed-values",
+    "Servo"
+  ],
+  "expected_severity": "high",
+  "related_references": [
+    "servo/components/style/values/specified/length.rs",
+    "servo/components/style/values/animated/mod.rs"
+  ]
+}

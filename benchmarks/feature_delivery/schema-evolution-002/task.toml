@@ -1,0 +1,142 @@
+# DB Schema Evolution: RealmExport Model (Zulip)
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "schema-evolution-002"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace impact of creating a new RealmExport table to replace JSON file-based export tracking in Zulip"
+prompt = """
+We're replacing the JSON file-based export tracking system with a proper
+`RealmExport` database model. The migration is in
+`zerver/migrations/0595_add_realmexport_table_and_backfill.py`.
+
+Your task:
+1. Identify the schema change — new model creation and backfill migration.
+2. Find all code that directly references realm export functionality — the model
+   registration, actions, views that serve export data.
+3. Find indirect references — background workers, management commands, export
+   logic, and the import/export pipeline.
+4. Identify all test files that cover export functionality and need updating.
+
+Write your analysis to /workspace/zulip/SCHEMA_IMPACT.md.
+"""
+
+[[repos]]
+url = "github.com/zulip/zulip"
+rev = "912c1b598458f89afa6814b3a19b95d4648e2371"
+path = "zulip"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+total_loc = 500_000
+dependency_depth = 1
+frameworks = ["django"]
+
+[[checkpoints]]
+name = "identify_schema_change"
+weight = 0.10
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the new RealmExport model and backfill migration"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_refs"
+weight = 0.35
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds direct references: model registration, actions, views"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_indirect_refs"
+weight = 0.35
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent finds indirect references: worker, management commands, export logic"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "identify_test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies test files covering export functionality"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "New model creation requires tracing all existing export references from JSON-based tracking to understand migration scope"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "zerver/models/realms.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/actions/realm_export.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/views/realm_export.py"
+repo = "zulip"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "zerver/worker/deferred_work.py"
+repo = "zulip"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "zerver/migrations/0595_add_realmexport_table_and_backfill.py"
+repo = "zulip"
+confidence = 0.98
+
+[[ground_truth.sufficient_files]]
+path = "zerver/models/__init__.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/lib/export.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/management/commands/export.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_realm_export.py"
+repo = "zulip"
+confidence = 0.95
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_import_export.py"
+repo = "zulip"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_events.py"
+repo = "zulip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "zerver/tests/test_management_commands.py"
+repo = "zulip"
+confidence = 0.80

@@ -1,0 +1,35 @@
+{
+  "task_id": "error-trace-k8s-job-starttime-001",
+  "task_dir": "err-provenance-01",
+  "mode": "baseline",
+  "checkpoints": [
+    {
+      "name": "error_source",
+      "weight": 0.4,
+      "score": 0.5,
+      "passed": true,
+      "detail": "Found 1/2 required source files"
+    },
+    {
+      "name": "error_chain",
+      "weight": 0.3,
+      "score": 0.67,
+      "passed": true,
+      "detail": "Matched 4/12 key concepts in error chain"
+    },
+    {
+      "name": "trigger_conditions",
+      "weight": 0.3,
+      "score": 0.33,
+      "passed": true,
+      "detail": "Matched 1/3 trigger conditions"
+    }
+  ],
+  "total_score": 0.5,
+  "tool_usage": {
+    "grep_calls": 15,
+    "file_reads": 42,
+    "total_tokens": 18500
+  },
+  "infrastructure_errors": []
+}

@@ -1,0 +1,67 @@
+{
+  "candidate_id": 4,
+  "repo": "babel/babel",
+  "pr_refs": ["#15895", "#15896"],
+  "release": "v7.23.0",
+  "description": "Decorator metadata support + TS tuple label changes cascade across parser, generator, helpers, and plugin-decorators",
+  "changed_package": {
+    "name": "@babel/helper-create-class-features-plugin",
+    "path": "packages/babel-helper-create-class-features-plugin",
+    "change_summary": "Decorator metadata support added; also @babel/types updated for mixed labeled/unlabeled TS tuple elements",
+    "changed_files": [
+      "packages/babel-helpers/src/helpers/applyDecs2305.js",
+      "packages/babel-plugin-proposal-decorators/src/transformer-2023-05.ts"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "@babel/helpers",
+      "path": "packages/babel-helpers",
+      "semver_bump": "minor",
+      "impact": "New applyDecs2305 helper for decorator metadata",
+      "affected_files": [
+        "packages/babel-helpers/src/helpers-generated.ts",
+        "packages/babel-helpers/src/helpers/applyDecs2305.js"
+      ],
+      "confidence": 0.96
+    },
+    {
+      "name": "@babel/plugin-proposal-decorators",
+      "path": "packages/babel-plugin-proposal-decorators",
+      "semver_bump": "minor",
+      "impact": "Decorator transformer updated for metadata, new test fixtures added",
+      "affected_files": [
+        "packages/babel-plugin-proposal-decorators/src/transformer-2023-05.ts",
+        "packages/babel-plugin-proposal-decorators/test/fixtures/metadata/class/exec.js",
+        "packages/babel-plugin-proposal-decorators/test/fixtures/metadata/element/exec.js",
+        "packages/babel-plugin-proposal-decorators/test/fixtures/metadata/options.json"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "name": "@babel/parser",
+      "path": "packages/babel-parser",
+      "semver_bump": "minor",
+      "impact": "Parser updated to allow mixed labeled/unlabeled TS tuple elements (PR #15896)",
+      "affected_files": [
+        "packages/babel-parser/src/plugins/typescript/index.ts",
+        "packages/babel-parser/test/fixtures/typescript/types/tuple-labeled-after-unlabeled/output.json"
+      ],
+      "confidence": 0.95
+    }
+  ],
+  "overall_semver": "minor",
+  "changelog_entries": [
+    "@babel/plugin-proposal-decorators: Support decorator metadata (v7.23.0)",
+    "@babel/parser: Allow TS tuples with both labeled and unlabeled elements (v7.23.0)"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count_15895": 26,
+    "pr_file_count_15896": 5,
+    "packages_touched": ["babel-helpers", "babel-plugin-proposal-decorators", "babel-parser"],
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.93
+}

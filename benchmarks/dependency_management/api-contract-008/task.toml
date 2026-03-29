@@ -1,0 +1,97 @@
+# API Contract Boundary: cel-go Program interface breaking change
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "api-contract-celgo-program-008"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "medium"
+estimated_duration_minutes = 20
+session_type = "single"
+description = "Trace impact of cel-go Program interface change on grpc-go authorization module"
+prompt = """
+The cel-go library (v0.10.1) added a new method to the `cel.Program`
+interface. This broke existing mock implementations in grpc-go's
+authorization module (security/authorization).
+
+Your task:
+1. Identify the new method added to `cel.Program` in cel-go v0.10.1.
+2. Find the mock/fake implementation in grpc-go's authorization engine
+   tests that broke.
+3. Check the fix PR (grpc-go #5243) — what exactly was changed in the
+   test file and dependency versions?
+4. Assess whether other grpc-go modules also implement `cel.Program`
+   and might be affected.
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.46.0"
+path = "grpc-go"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 180_000
+dependency_depth = 2
+frameworks = ["grpc", "cel"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_breaking_api"
+weight = 0.15
+verifier = "checks/check_source_identification.sh"
+description = "Agent identifies the cel.Program interface change"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_consumers"
+weight = 0.35
+verifier = "checks/check_direct_consumers.sh"
+description = "Agent finds the mock implementation in authorization engine tests"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_impact"
+weight = 0.30
+verifier = "checks/check_transitive_impact.sh"
+description = "Agent checks for other cel.Program implementations in grpc-go"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "classify_breakage"
+weight = 0.20
+verifier = "checks/check_classification.sh"
+description = "Agent identifies this as compile error in test code"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Cross-repo interface implementation search to find all cel.Program implementors in grpc-go"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "security/authorization/engine/engine_test.go"
+repo = "grpc-go"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "security/authorization/go.mod"
+repo = "grpc-go"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "security/authorization/go.sum"
+repo = "grpc-go"
+confidence = 0.70

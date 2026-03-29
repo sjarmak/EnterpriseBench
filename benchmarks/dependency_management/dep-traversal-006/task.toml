@@ -1,0 +1,121 @@
+# Dependency Graph Traversal: google.golang.org/protobuf JSON unmarshal infinite loop
+
+difficulty_stratum = "multi_repo"
+
+[task]
+id = "dep-traversal-006"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace CVE-2024-24786 (protobuf JSON unmarshal infinite loop) through grpc-go and Istio service mesh"
+prompt = """
+CVE-2024-24786 affects `google.golang.org/protobuf` versions prior to 1.33.0 —
+an infinite loop when unmarshaling certain JSON inputs containing `google.protobuf.Any`
+types.
+
+Your task:
+1. Identify the CVE and confirm the affected module and version range.
+2. Find all direct dependents of google.golang.org/protobuf in workspace repos.
+3. Trace transitive dependency paths. grpc-go depends on protobuf for message
+   marshaling. Istio depends on both grpc-go and go-control-plane, which both
+   use protobuf. Map the full graph.
+4. Critical: the vulnerability only affects code that unmarshals `Any` protobuf
+   types via JSON. Identify which repos actually use this code path vs just
+   importing the module.
+
+Write your analysis to /workspace/BLAST_RADIUS.md.
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.62.0"
+path = "grpc-go"
+role = "consumer"
+
+[[repos]]
+url = "github.com/istio/istio"
+rev = "1.20.0"
+path = "istio"
+role = "consumer"
+
+[[repos]]
+url = "github.com/envoyproxy/go-control-plane"
+rev = "v0.12.0"
+path = "go-control-plane"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 2200000
+dependency_depth = 3
+frameworks = ["grpc", "istio", "envoy"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_cve"
+weight = 0.10
+verifier = "checks/check_cve_id.sh"
+description = "Agent correctly identifies CVE-2024-24786 and protobuf < 1.33.0"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "find_direct_deps"
+weight = 0.30
+verifier = "checks/check_direct_deps.sh"
+description = "Agent finds all three repos depend on protobuf"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_paths"
+weight = 0.35
+verifier = "checks/check_transitive_paths.sh"
+description = "Agent traces protobuf -> grpc-go -> istio and control-plane paths"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "version_analysis"
+weight = 0.25
+verifier = "checks/check_version_analysis.sh"
+description = "Agent identifies Any type usage and version-based exposure"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Protobuf Any type usage requires cross-repo symbol search through generated code — Sourcegraph indexes protobuf-generated Go code"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "grpc-go"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "istio"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "go-control-plane"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "go.sum"
+repo = "istio"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "go.sum"
+repo = "grpc-go"
+confidence = 0.85

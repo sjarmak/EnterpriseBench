@@ -1,0 +1,101 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-llvm-assertion-002"
+suite = "customer_escalation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map CI build crash with 'Cannot expand this type' to LLVM type legalization code paths"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/llvm/llvm-project"
+rev = ""
+path = "llvm-project"
+role = "primary"
+
+[metadata]
+languages = ["cpp"]
+frameworks = ["llvm"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies the correct type legalization source files in SelectionDAG"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the CodeGen/SelectionDAG subsystem as responsible"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity as CI-blocking compiler crash"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related type legalization issues or target-specific hooks"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Massive monorepo; tracing assertion string through type legalization pipeline requires deep code search across SelectionDAG subsystem"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "llvm/lib/CodeGen/SelectionDAG/LegalizeDAG.cpp"
+repo = "llvm-project"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "llvm/lib/CodeGen/SelectionDAG/LegalizeTypes.cpp"
+repo = "llvm-project"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "llvm/include/llvm/CodeGen/ValueTypes.h"
+repo = "llvm-project"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "llvm/lib/CodeGen/SelectionDAG/LegalizeIntegerTypes.cpp"
+repo = "llvm-project"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "llvm/lib/CodeGen/SelectionDAG/LegalizeFloatTypes.cpp"
+repo = "llvm-project"
+confidence = 0.65
+
+[[ground_truth.sufficient_files]]
+path = "llvm/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp"
+repo = "llvm-project"
+confidence = 0.60
+
+[csb_lineage]
+parent_csb_id = "ccx-incident-108"
+origin_suite = "csb_org_incident"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

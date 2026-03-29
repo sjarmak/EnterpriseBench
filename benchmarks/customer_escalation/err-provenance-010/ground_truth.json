@@ -1,0 +1,45 @@
+{
+  "candidate_id": 10,
+  "candidate_ref": "grafana/grafana#119439",
+  "error_string": "runtime error: index out of range [0] with length 0",
+  "fix_pr": "https://github.com/grafana/grafana/pull/120266",
+  "repo": "grafana/grafana",
+  "repo_rev": "v10.2.0",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "pkg/tsdb/jaeger/client.go",
+      "repo": "grafana",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains the Jaeger datasource client that accesses first element of trace response slice without checking for empty response. Line ~248."
+    },
+    {
+      "path": "pkg/tsdb/jaeger/client_test.go",
+      "repo": "grafana",
+      "confidence": 0.85,
+      "source": "deterministic",
+      "rationale": "Test file updated in fix PR to cover the empty trace response case."
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pkg/tsdb/jaeger/trace.go",
+      "repo": "grafana",
+      "confidence": 0.55,
+      "rationale": "Related trace processing code that helps understand the response structure."
+    }
+  ],
+  "error_chain": [
+    "User queries Jaeger datasource for a trace ID",
+    "Jaeger API returns empty response (trace not found or expired)",
+    "client.go accesses response.Data[0] without length check",
+    "Go runtime panics with index out of range",
+    "Grafana returns 500 Internal Server Error to the frontend"
+  ],
+  "trigger_conditions": [
+    "Query Jaeger datasource with a trace ID that doesn't exist or has expired",
+    "Jaeger API returns an empty Data array in the response",
+    "Grafana Jaeger plugin processes the response without bounds check"
+  ]
+}

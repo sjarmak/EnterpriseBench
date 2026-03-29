@@ -1,0 +1,38 @@
+{
+  "candidate_id": 8,
+  "cve": "CVE-2023-32681",
+  "ghsa": "GHSA-j8r2-6x86-q33q",
+  "package": "requests",
+  "ecosystem": "pypi",
+  "description": "requests Proxy-Authorization header leak on redirect affects boto3 and awscli",
+  "dependency_chain": [
+    {
+      "from": "requests",
+      "to": "boto3",
+      "relationship": "dependency (via botocore)",
+      "manifest": "setup.py / setup.cfg",
+      "affected_versions": ">= 2.3.0, < 2.31.0"
+    },
+    {
+      "from": "boto3",
+      "to": "awscli",
+      "relationship": "dependency",
+      "manifest": "setup.py / setup.cfg",
+      "affected_versions": "transitive"
+    }
+  ],
+  "direct_dependents": ["botocore", "docker-py"],
+  "transitive_paths": [
+    ["requests", "botocore", "boto3", "awscli"],
+    ["requests", "docker-py", "docker-compose"]
+  ],
+  "fix_reference": "psf/requests@74ea7cf7a6a27a4eeb2ae24e162bcc942a6706d5",
+  "affected_version_range": ">= 2.3.0, < 2.31.0",
+  "fixed_version": "2.31.0",
+  "verification": {
+    "method": "gh_advisory_api",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.96
+}

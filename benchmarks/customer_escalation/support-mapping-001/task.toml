@@ -1,0 +1,107 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "support-map-envoy-connpool-001"
+suite = "customer_escalation"
+difficulty = "hard"
+estimated_duration_minutes = 45
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map customer-reported 'upstream connect error, reset reason: overflow' to Envoy connection pool implementation"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/envoyproxy/envoy"
+rev = "v1.31.2"
+path = "envoy"
+role = "primary"
+
+[metadata]
+languages = ["cpp"]
+frameworks = ["envoy"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies the correct connection pool source files responsible for overflow behavior"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the responsible code owners or subsystem for connection pool management"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.15
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity based on production impact of connection pool exhaustion"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "related_issues"
+weight = 0.10
+verifier = "checks/check_related_issues.sh"
+description = "Agent identifies related issues, PRs, or circuit breaker configuration docs"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article", "reproduction_script"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Large C++ codebase with deep call chains; MCP search accelerates tracing from error string to connection pool internals and circuit breaker config"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "source/common/http/conn_pool_base.cc"
+repo = "envoy"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "source/common/http/conn_pool_base.h"
+repo = "envoy"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "source/common/conn_pool/conn_pool_base.cc"
+repo = "envoy"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "source/common/upstream/conn_pool_map_impl.h"
+repo = "envoy"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "envoy/http/conn_pool.h"
+repo = "envoy"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "docs/root/intro/arch_overview/upstream/circuit_breaking.rst"
+repo = "envoy"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "envoy/router/router.h"
+repo = "envoy"
+confidence = 0.60
+
+[csb_lineage]
+parent_csb_id = "ccx-incident-032"
+origin_suite = "csb_org_incident"
+migration_status = "schema_mapped"
+bugs_fixed = []
+metadata_sources = ["task.toml"]

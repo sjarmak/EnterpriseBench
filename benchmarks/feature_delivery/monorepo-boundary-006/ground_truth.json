@@ -1,0 +1,51 @@
+{
+  "candidate_id": 8,
+  "repo": "pnpm/pnpm",
+  "pr_refs": ["#8897"],
+  "release": "v10.0.0",
+  "description": "Lifecycle scripts allow-list by default in @pnpm/config cascades to installation, core, build-modules, and headless packages",
+  "changed_package": {
+    "name": "@pnpm/config",
+    "path": "config/config",
+    "change_summary": "Changed lifecycle script execution policy to require explicit allow-list by default (security hardening)",
+    "changed_files": [
+      "config/config/src/getOptionsFromRootManifest.ts"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "@pnpm/plugin-commands-installation",
+      "path": "exec/plugin-commands-rebuild",
+      "semver_bump": "major",
+      "impact": "Installation command enforcement updated for allow-list policy",
+      "affected_files": [
+        "exec/plugin-commands-rebuild/test/index.ts"
+      ],
+      "confidence": 0.90
+    },
+    {
+      "name": "pnpm (CLI)",
+      "path": "pnpm",
+      "semver_bump": "major",
+      "impact": "CLI test updates for lifecycle script allow-list behavior",
+      "affected_files": [
+        "pnpm/test/install/global.ts",
+        "pnpm/test/install/lifecycleScripts.ts",
+        "pnpm/test/monorepo/index.ts"
+      ],
+      "confidence": 0.95
+    }
+  ],
+  "overall_semver": "major",
+  "changelog_entries": [
+    "@pnpm/config: Lifecycle scripts require explicit allow-list by default (v10.0.0)"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count": 6,
+    "packages_touched": ["config", "plugin-commands-rebuild", "pnpm"],
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.91
+}

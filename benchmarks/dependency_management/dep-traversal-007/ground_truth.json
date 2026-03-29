@@ -1,0 +1,38 @@
+{
+  "candidate_id": 7,
+  "cve": "CVE-2022-25878",
+  "ghsa": "GHSA-g954-5hwp-pp24",
+  "package": "protobufjs",
+  "ecosystem": "npm",
+  "description": "protobufjs prototype pollution affects @grpc/grpc-js and Google Cloud libraries",
+  "dependency_chain": [
+    {
+      "from": "protobufjs",
+      "to": "@grpc/grpc-js",
+      "relationship": "dependency (protobuf serialization)",
+      "manifest": "package.json",
+      "affected_versions": "6.10.0-6.10.2, 6.11.0-6.11.2"
+    },
+    {
+      "from": "@grpc/grpc-js",
+      "to": "kubernetes-client/javascript",
+      "relationship": "dependency (gRPC transport for k8s API)",
+      "manifest": "package.json",
+      "affected_versions": "transitive"
+    }
+  ],
+  "direct_dependents": ["@grpc/grpc-js", "@google-cloud/pubsub"],
+  "transitive_paths": [
+    ["protobufjs", "@grpc/grpc-js", "kubernetes-client-node"],
+    ["protobufjs", "@grpc/grpc-js", "@google-cloud/pubsub"]
+  ],
+  "fix_reference": "protobufjs/protobuf.js#1731",
+  "affected_version_range": "6.10.0-6.10.2, 6.11.0-6.11.2",
+  "fixed_version": "6.10.3 / 6.11.3",
+  "verification": {
+    "method": "gh_advisory_api",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.93
+}

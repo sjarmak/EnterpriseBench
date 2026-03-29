@@ -1,0 +1,20 @@
+{
+  "source_files": [
+    {
+      "path": "third_party/forked/golang/expansion/expand.go",
+      "repo": "kubernetes"
+    }
+  ],
+  "error_chain": [
+    "Container spec has env var with value containing $ followed by non-ASCII character",
+    "Kubelet processes container env vars via expansion/expand.go"
+  ],
+  "trigger_conditions": [
+    "Container env var value contains $ followed by a multi-byte UTF-8 character"
+  ],
+  "tool_usage": {
+    "grep_calls": 15,
+    "file_reads": 42,
+    "total_tokens": 18500
+  }
+}

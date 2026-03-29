@@ -1,0 +1,36 @@
+{
+  "candidate_id": 9,
+  "candidate_ref": "hashicorp/terraform PR#38116",
+  "error_string": "Copy-paste error in backend migration error message",
+  "fix_pr": "https://github.com/hashicorp/terraform/pull/38116",
+  "repo": "hashicorp/terraform",
+  "repo_rev": "v1.10.0",
+  "difficulty": "medium",
+  "required_files": [
+    {
+      "path": "internal/command/meta_backend_errors.go",
+      "repo": "terraform",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains the error message templates for backend migration. Fix corrects a copy-paste error where one migration scenario displayed the wrong message."
+    },
+    {
+      "path": "internal/command/meta_backend_migrate.go",
+      "repo": "terraform",
+      "confidence": 0.80,
+      "source": "deterministic",
+      "rationale": "Caller that references the error constants from meta_backend_errors.go. Agent must trace from error display back to this file to understand which constant is used."
+    }
+  ],
+  "sufficient_files": [],
+  "error_chain": [
+    "User runs backend migration (terraform init with backend change)",
+    "Migration code in meta_backend_migrate.go selects error message template",
+    "Wrong error constant is referenced due to copy-paste",
+    "User sees error message that doesn't match their situation"
+  ],
+  "trigger_conditions": [
+    "Specific backend migration scenario triggers the wrong error template",
+    "Error message content doesn't match the actual migration operation"
+  ]
+}

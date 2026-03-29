@@ -1,0 +1,66 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "error-trace-tf-backend-copypaste-001"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 20
+session_type = "single"
+task_type = "error_provenance"
+description = "Trace copy-paste error in backend migration error message"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/hashicorp/terraform"
+rev = "v1.10.0"
+path = "terraform"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+frameworks = ["terraform"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.40
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the exact source file and function that generates the error"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the error propagation chain from source to user-visible output"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.30
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies the conditions that trigger this error"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Direct string match in error constants file; minimal MCP benefit for this simple provenance trace"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "internal/command/meta_backend_errors.go"
+repo = "terraform"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "internal/command/meta_backend_migrate.go"
+repo = "terraform"
+confidence = 0.8
+source = "deterministic"

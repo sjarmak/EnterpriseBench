@@ -1,0 +1,59 @@
+{
+  "candidate_id": 5,
+  "repo": "babel/babel",
+  "pr_refs": ["#16166", "#16011"],
+  "release": "v7.23.6",
+  "description": "retainLines indentation fix in generator + for-of iterableIsArray fix cascade to preset-env and plugin-transform-for-of",
+  "changed_package": {
+    "name": "@babel/generator",
+    "path": "packages/babel-generator",
+    "change_summary": "Fixed indentation when retainLines is enabled; also @babel/plugin-transform-for-of fixed iterableIsArray with shadowing variable",
+    "changed_files": [
+      "packages/babel-generator/src/printer.ts",
+      "packages/babel-generator/test/index.js",
+      "packages/babel-plugin-transform-for-of/src/index.ts",
+      "packages/babel-plugin-transform-for-of/package.json"
+    ]
+  },
+  "affected_dependents": [
+    {
+      "name": "@babel/plugin-transform-for-of",
+      "path": "packages/babel-plugin-transform-for-of",
+      "semver_bump": "patch",
+      "impact": "Bug fix for iterableIsArray assumption with variable shadowing",
+      "affected_files": [
+        "packages/babel-plugin-transform-for-of/src/index.ts",
+        "packages/babel-plugin-transform-for-of/test/fixtures/assumption-iterableIsArray/for-of-modify-iterable/input.js",
+        "packages/babel-plugin-transform-for-of/test/fixtures/assumption-iterableIsArray/for-of-modify-iterable/output.js"
+      ],
+      "confidence": 0.97
+    },
+    {
+      "name": "@babel/preset-env",
+      "path": "packages/babel-preset-env",
+      "semver_bump": "patch",
+      "impact": "Integration test fixtures updated for for-of array block scoping fix",
+      "affected_files": [
+        "packages/babel-preset-env/test/fixtures/plugins-integration/for-of-array-block-scoping-2/exec.js",
+        "packages/babel-preset-env/test/fixtures/plugins-integration/for-of-array-block-scoping-2/output.js",
+        "packages/babel-preset-env/test/fixtures/plugins-integration/for-of-array-block-scoping/exec.js",
+        "packages/babel-preset-env/test/fixtures/plugins-integration/for-of-array-block-scoping/output.js"
+      ],
+      "confidence": 0.94
+    }
+  ],
+  "overall_semver": "patch",
+  "changelog_entries": [
+    "@babel/generator: Fix indentation when retainLines is enabled (v7.23.6)",
+    "@babel/plugin-transform-for-of: Fix iterableIsArray with variable shadowing (v7.23.6)"
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_file_count_16166": 2,
+    "pr_file_count_16011": 13,
+    "packages_touched": ["babel-generator", "babel-plugin-transform-for-of", "babel-preset-env"],
+    "verified": true
+  },
+  "difficulty": "medium",
+  "confidence": 0.95
+}

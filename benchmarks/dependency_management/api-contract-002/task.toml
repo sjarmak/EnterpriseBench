@@ -1,0 +1,127 @@
+# API Contract Boundary: gRPC-Go balancer/resolver alias removal
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "api-contract-grpc-balancer-002"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace impact of gRPC-Go balancer/resolver type alias removal on etcd clientv3"
+prompt = """
+The gRPC-Go team removed backward-compatibility type aliases from the
+balancer and resolver packages (PR #3309). These aliases were temporary
+bridges from the old package paths to new ones. With their removal,
+any consumer directly referencing the old type paths gets compile failures.
+
+Your task:
+1. Identify the exact type aliases removed from `balancer/balancer.go`
+   and `resolver/resolver.go` in grpc-go.
+2. Find all files in etcd that implement or reference these interfaces
+   (custom balancers, pickers, resolvers).
+3. Map each affected etcd file to the specific removed type it depends on.
+4. Assess whether the fix is a simple import path change or requires
+   deeper architectural changes (hint: etcd has a custom balancer).
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.27.0"
+path = "grpc-go"
+role = "primary"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.4.3"
+path = "etcd"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 400_000
+dependency_depth = 2
+frameworks = ["grpc"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_breaking_api"
+weight = 0.15
+verifier = "checks/check_source_identification.sh"
+description = "Agent identifies the removed type aliases in balancer.go and resolver.go"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "find_direct_consumers"
+weight = 0.35
+verifier = "checks/check_direct_consumers.sh"
+description = "Agent finds all etcd files referencing removed types"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transitive_impact"
+weight = 0.30
+verifier = "checks/check_transitive_impact.sh"
+description = "Agent traces the custom balancer dependency chain in etcd"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "classify_breakage"
+weight = 0.20
+verifier = "checks/check_classification.sh"
+description = "Agent assesses simple fix vs architectural change needed"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo interface implementation search needed to find all etcd types implementing grpc-go balancer/resolver interfaces"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "balancer/balancer.go"
+repo = "grpc-go"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "resolver/resolver.go"
+repo = "grpc-go"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "clientv3/balancer/picker/err.go"
+repo = "etcd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "clientv3/balancer/picker/roundrobin_balanced.go"
+repo = "etcd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "clientv3/balancer/resolver/endpoint/endpoint.go"
+repo = "etcd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "clientv3/balancer/balancer.go"
+repo = "etcd"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "clientv3/balancer/connectivity.go"
+repo = "etcd"
+confidence = 0.80
