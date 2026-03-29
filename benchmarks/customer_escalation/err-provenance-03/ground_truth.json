@@ -21,19 +21,12 @@
     {
       "path": "pkg/registry/core/service/ipallocator/controller/repairip_test.go",
       "repo": "kubernetes",
-      "confidence": 0.80,
+      "confidence": 0.8,
       "source": "deterministic",
       "rationale": "Test for the repair controller, updated in fix PR."
     }
   ],
-  "sufficient_files": [
-    {
-      "path": "test/integration/servicecidr/startup_race_test.go",
-      "repo": "kubernetes",
-      "confidence": 0.70,
-      "rationale": "Integration test added to reproduce the race condition during upgrade."
-    }
-  ],
+  "sufficient_files": [],
   "error_chain": [
     "kube-apiserver starts during v1.32->v1.33 upgrade",
     "PostStartHook 'start-service-ip-repair-controllers' registered",

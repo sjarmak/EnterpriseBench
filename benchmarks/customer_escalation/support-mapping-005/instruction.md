@@ -4,6 +4,8 @@
 **Submitted by:** Application Team Lead
 **Product:** Kubernetes cluster (self-managed)
 
+**Codebase:** Available at `/workspace/kubernetes/`
+
 ---
 
 Hello,

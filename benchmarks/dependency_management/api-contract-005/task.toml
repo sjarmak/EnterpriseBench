@@ -1,6 +1,6 @@
 # API Contract Boundary: Protobuf v2 migration runtime behavior change
 
-difficulty_stratum = "dual_repo"
+difficulty_stratum = "large_single"
 
 [task]
 id = "api-contract-protobuf-v2-005"
@@ -21,7 +21,7 @@ types (via `anypb.Any.UnmarshalNew()`). Type assertions against
 MessageV1 concrete types silently fail.
 
 Your task:
-1. Trace the change in `internal/status/status.go` — what function call
+1. Trace the change in the internal status implementation — what function call
    changed and how it affects the return type.
 2. Identify all files in grpc-go that call `Status.Details()` or
    `Status.WithDetails()` and may be affected.
@@ -78,6 +78,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/api-contract-protobuf-v2-005.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Single-repo analysis but requires understanding protobuf type system evolution and generated code patterns"
 

@@ -4,6 +4,8 @@
 **Submitted by:** QA Tester
 **Product:** Firefox (internal deployment)
 
+**Codebase:** Available at `/workspace/gecko-dev/`
+
 ---
 
 Hi,

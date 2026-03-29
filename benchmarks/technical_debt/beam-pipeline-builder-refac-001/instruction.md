@@ -1,5 +1,11 @@
 # Task: Refactor PipelineOptions Validation in Apache Beam
 
+## Context
+
+As part of the Q2 tech debt reduction initiative, the data platform team has identified PipelineOptions validation as a high-priority cleanup target. Validation logic is scattered across the codebase, making it difficult to add new pipeline configuration rules consistently.
+
+The codebase is available at `/workspace/beam/`.
+
 ## Background
 
 The PipelineOptions validation in Apache Beam is scattered across multiple locations. This task consolidates validation into a dedicated validator class using the Builder pattern.

@@ -1,6 +1,6 @@
 # Incident Investigation: Docker Daemon Spurious Restart Warnings on Shutdown
 
-difficulty_stratum = "dual_repo"
+difficulty_stratum = "large_single"
 
 [task]
 id = "incident-inv-docker-shutdown-004"
@@ -87,6 +87,7 @@ required = ["incident_report"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/incident-inv-docker-shutdown-004.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Tracing spurious restart warnings requires following the shutdown signal through the daemon, restart manager, and containerd event handling; MCP helps navigate these cross-component interactions"
 

@@ -1,9 +1,13 @@
 {
   "candidate_id": "AC-4",
   "producer_repo": "grpc/grpc-go",
-  "consumer_repos": ["etcd-io/etcd"],
+  "consumer_repos": [
+    "etcd-io/etcd"
+  ],
   "breaking_change_pr": "grpc/grpc-go#8026",
-  "consumer_fix_prs": ["etcd-io/etcd#19780"],
+  "consumer_fix_prs": [
+    "etcd-io/etcd#19780"
+  ],
   "api_contract_type": "go_interface",
   "breakage_type": "compile_error",
   "description": "gRPC-Go enforced embedding requirement on balancer.ClientConn interface, breaking etcd's custom implementations",
@@ -17,9 +21,13 @@
     "xds/internal/balancer/outlierdetection/balancer.go"
   ],
   "consumer_affected_files": {
-    "etcd": ["server/etcdserver/api/rafthttp/"]
+    "etcd": [
+      "server/etcdserver/api/rafthttp/http.go"
+    ]
   },
-  "breaking_symbols": ["balancer.ClientConn"],
+  "breaking_symbols": [
+    "balancer.ClientConn"
+  ],
   "difficulty": "hard",
   "confidence": 0.92
 }

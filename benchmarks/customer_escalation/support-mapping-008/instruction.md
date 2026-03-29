@@ -4,6 +4,8 @@
 **Submitted by:** End User
 **Product:** qutebrowser
 
+**Codebase:** Available at `/workspace/qutebrowser/`
+
 ---
 
 Hi,

@@ -1,0 +1,10 @@
+{
+  "task_id": "api-contract-protobuf-v2-005",
+  "mirrors": [
+    {
+      "repo": "github.com/grpc/grpc-go",
+      "rev": "v1.70.0",
+      "mirror_id": "grpc/grpc-go--v1.70.0"
+    }
+  ]
+}

@@ -68,6 +68,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/monorepo-boundary-pnpm-lockfile-005.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "workspace:* protocol dependencies create a complex internal dependency graph — semantic navigation traces actual package consumption paths that text search misses"
 

@@ -1,0 +1,10 @@
+{
+  "task_id": "api-contract-celgo-program-008",
+  "mirrors": [
+    {
+      "repo": "github.com/grpc/grpc-go",
+      "rev": "v1.46.0",
+      "mirror_id": "grpc/grpc-go--v1.46.0"
+    }
+  ]
+}

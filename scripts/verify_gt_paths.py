@@ -209,8 +209,8 @@ def check_path_exists(owner_repo: str, rev: str, path: str) -> tuple[bool, str]:
 
     try:
         result = subprocess.run(
-            ["gh", "api", f"repos/{owner_repo}/contents/{path}",
-             "-q", ".name", "--header", f"ref: {rev}",
+            ["gh", "api", f"repos/{owner_repo}/contents/{path}?ref={rev}",
+             "-q", ".name",
              "-H", "Accept: application/vnd.github.v3+json"],
             capture_output=True, text=True, timeout=30,
             env={**os.environ, "GH_NO_UPDATE_NOTIFIER": "1"}

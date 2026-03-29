@@ -1,0 +1,10 @@
+{
+  "task_id": "config-drift-consul-serf-port-001",
+  "mirrors": [
+    {
+      "repo": "github.com/bitnami/charts",
+      "rev": "33114~1",
+      "mirror_id": "bitnami/charts--33114~1"
+    }
+  ]
+}

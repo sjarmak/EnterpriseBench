@@ -43,6 +43,7 @@ timeout_seconds = 120
 required = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/ccx-compliance-053.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Audit logging spans Scala core and Java clients packages; MCP helps trace authorization event production across language boundaries, though the single-repo layout keeps search manageable"
 

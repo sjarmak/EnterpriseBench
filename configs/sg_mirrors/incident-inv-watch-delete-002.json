@@ -1,0 +1,10 @@
+{
+  "task_id": "incident-inv-watch-delete-002",
+  "mirrors": [
+    {
+      "repo": "github.com/kubernetes/kubernetes",
+      "rev": "v1.9.1",
+      "mirror_id": "kubernetes/kubernetes--v1.9.1"
+    }
+  ]
+}

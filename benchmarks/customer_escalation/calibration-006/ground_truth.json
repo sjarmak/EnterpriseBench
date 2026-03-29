@@ -1,0 +1,40 @@
+{
+  "task_id": "cal-sup-flask-errhandler-006",
+  "candidate_ref": "pallets/flask#4297",
+  "description": "Blueprint.errorhandler has overly restrictive type annotation",
+  "repo": "pallets/flask",
+  "repo_rev": "3.1.0",
+  "required_files": [
+    {
+      "path": "src/flask/sansio/scaffold.py",
+      "repo": "flask",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Scaffold class defines errorhandler decorator with type annotations"
+    },
+    {
+      "path": "src/flask/blueprints.py",
+      "repo": "flask",
+      "confidence": 0.85,
+      "source": "deterministic",
+      "rationale": "Blueprint class inherits from Scaffold and may override error handler behavior"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/flask/app.py",
+      "repo": "flask",
+      "confidence": 0.65,
+      "rationale": "Flask app error handler implementation for comparison"
+    }
+  ],
+  "ownership_keywords": [
+    "scaffold",
+    "errorhandler",
+    "blueprint",
+    "type-annotation",
+    "error-handling"
+  ],
+  "expected_severity": "low",
+  "related_references": []
+}

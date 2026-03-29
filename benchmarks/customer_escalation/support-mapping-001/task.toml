@@ -54,6 +54,7 @@ required = ["answer"]
 optional = ["kb_article", "reproduction_script"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/support-map-envoy-connpool-001.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Large C++ codebase with deep call chains; MCP search accelerates tracing from error string to connection pool internals and circuit breaker config"
 

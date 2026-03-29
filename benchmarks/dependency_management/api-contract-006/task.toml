@@ -86,6 +86,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/api-contract-envoy-xds-v2-006.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Three-repo proto definition chain requires tracing xDS type references from Envoy proto files through Go bindings into istio pilot implementation"
 

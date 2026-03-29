@@ -3,7 +3,7 @@ difficulty_stratum = "large_single"
 [task]
 id = "support-map-grafana-alerts-004"
 suite = "customer_escalation"
-difficulty = "medium"
+difficulty = "hard"
 estimated_duration_minutes = 35
 session_type = "single"
 task_type = "support_code_mapping"
@@ -54,6 +54,7 @@ required = ["answer"]
 optional = ["kb_article", "reproduction_script"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/support-map-grafana-alerts-004.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Alert scheduler is well-contained in ngalert package; MCP helps discover scheduler tick loop and evaluation overrun detection"
 

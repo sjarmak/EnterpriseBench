@@ -4,6 +4,8 @@
 **Submitted by:** Data Platform Engineer
 **Product:** Apache Kafka (self-managed cluster)
 
+**Codebase:** Available at `/workspace/kafka/`
+
 ---
 
 Hi,

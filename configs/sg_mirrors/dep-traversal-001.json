@@ -1,0 +1,20 @@
+{
+  "task_id": "dep-traversal-001",
+  "mirrors": [
+    {
+      "repo": "github.com/lodash/lodash",
+      "rev": "4.17.20",
+      "mirror_id": "lodash/lodash--4.17.20"
+    },
+    {
+      "repo": "github.com/webpack/webpack",
+      "rev": "v5.64.0",
+      "mirror_id": "webpack/webpack--v5.64.0"
+    },
+    {
+      "repo": "github.com/jestjs/jest",
+      "rev": "v29.0.0",
+      "mirror_id": "jestjs/jest--v29.0.0"
+    }
+  ]
+}

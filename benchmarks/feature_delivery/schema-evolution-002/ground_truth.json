@@ -1,9 +1,11 @@
 {
   "candidate_id": "SE-2",
   "repo": "zulip/zulip",
-  "pr_refs": ["#31760"],
+  "pr_refs": [
+    "#31760"
+  ],
   "base_rev": "912c1b598458f89afa6814b3a19b95d4648e2371",
-  "description": "Create RealmExport model replacing JSON file-based export tracking — impacts actions, views, worker, management commands, tests",
+  "description": "Create RealmExport model replacing JSON file-based export tracking \u2014 impacts actions, views, worker, management commands, tests",
   "schema_change": {
     "type": "create_table",
     "table": "RealmExport",
@@ -16,7 +18,6 @@
     "zerver/worker/deferred_work.py"
   ],
   "sufficient_files": [
-    "zerver/migrations/0595_add_realmexport_table_and_backfill.py",
     "zerver/models/__init__.py",
     "zerver/lib/export.py",
     "zerver/management/commands/export.py",
@@ -29,7 +30,6 @@
     "zerver/actions/realm_export.py",
     "zerver/lib/export.py",
     "zerver/management/commands/export.py",
-    "zerver/migrations/0595_add_realmexport_table_and_backfill.py",
     "zerver/models/__init__.py",
     "zerver/models/realms.py",
     "zerver/tests/test_events.py",

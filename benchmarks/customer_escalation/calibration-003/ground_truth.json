@@ -1,0 +1,48 @@
+{
+  "task_id": "cal-err-requests-proxy-003",
+  "candidate_ref": "psf/requests#5888",
+  "error_string": "Proxy-Authorization header is stripped from requests",
+  "repo": "psf/requests",
+  "repo_rev": "v2.32.3",
+  "required_files": [
+    {
+      "path": "src/requests/utils.py",
+      "repo": "requests",
+      "confidence": 0.9,
+      "source": "deterministic",
+      "rationale": "Contains rewind_body and header-stripping logic for proxy connections"
+    },
+    {
+      "path": "src/requests/models.py",
+      "repo": "requests",
+      "confidence": 0.9,
+      "source": "deterministic",
+      "rationale": "PreparedRequest.prepare method and header handling during request preparation"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/requests/adapters.py",
+      "repo": "requests",
+      "confidence": 0.7,
+      "rationale": "HTTPAdapter.send() where proxy connection is established"
+    },
+    {
+      "path": "src/requests/sessions.py",
+      "repo": "requests",
+      "confidence": 0.65,
+      "rationale": "Session.request() flow that passes headers through preparation"
+    }
+  ],
+  "error_chain": [
+    "User sets Proxy-Authorization in headers dict",
+    "Session.request() creates PreparedRequest",
+    "During redirect or proxy negotiation, headers are rebuilt",
+    "Proxy-Authorization is stripped from non-proxy destinations in utils.py"
+  ],
+  "trigger_conditions": [
+    "Proxy-Authorization header is manually set",
+    "Request goes through HTTPS proxy (CONNECT tunnel)",
+    "Header stripping logic in utils treats it as sensitive header to remove on redirect"
+  ]
+}

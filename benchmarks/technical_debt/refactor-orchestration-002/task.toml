@@ -75,6 +75,7 @@ required = ["answer", "topological_order"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/refactor-orch-002.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Dependency graph traversal through go.mod to find all cobra consumers in k8s staging repos"
 

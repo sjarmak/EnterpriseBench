@@ -1,0 +1,20 @@
+{
+  "task_id": "dep-traversal-011",
+  "mirrors": [
+    {
+      "repo": "github.com/spring-projects/spring-boot",
+      "rev": "v2.6.1",
+      "mirror_id": "spring-projects/spring-boot--v2.6.1"
+    },
+    {
+      "repo": "github.com/apache/kafka",
+      "rev": "3.1.0",
+      "mirror_id": "apache/kafka--3.1.0"
+    },
+    {
+      "repo": "github.com/apache/logging-log4j2",
+      "rev": "rel/2.14.1",
+      "mirror_id": "apache/logging-log4j2--rel/2.14.1"
+    }
+  ]
+}

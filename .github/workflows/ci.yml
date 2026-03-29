@@ -1,0 +1,30 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install pytest jsonschema tomli
+          pip install -e lib/
+      - name: Run tests
+        run: python3 -m pytest tests/ -v --tb=short -m "not network and not docker"
+      - name: Audit task consistency
+        run: python3 scripts/audit_consistency.py
+      - name: Validate shell scripts
+        run: |
+          find benchmarks -name "*.sh" -not -path "*/_archived/*" | while read f; do
+            bash -n "$f" || exit 1
+          done

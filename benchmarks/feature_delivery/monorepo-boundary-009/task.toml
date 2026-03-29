@@ -70,6 +70,7 @@ timeout_seconds = 60
 required = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/monorepo-boundary-rustc-attr-009.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Cargo workspace dependency graph + use path tracing across 500+ compiler crates benefits enormously from semantic navigation"
 

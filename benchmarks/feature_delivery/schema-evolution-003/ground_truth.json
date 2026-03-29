@@ -1,9 +1,11 @@
 {
   "candidate_id": "SE-3",
   "repo": "zulip/zulip",
-  "pr_refs": ["#30301"],
+  "pr_refs": [
+    "#30301"
+  ],
   "base_rev": "faa06497ed09f65dc0c7ba510dc56ebd41fbe037",
-  "description": "4-migration sequence replacing integer policy with group FK — cross-stack impact across Python backend and JavaScript frontend",
+  "description": "4-migration sequence replacing integer policy with group FK \u2014 cross-stack impact across Python backend and JavaScript frontend",
   "schema_change": {
     "type": "replace_column",
     "table": "Realm",
@@ -26,10 +28,6 @@
     "web/src/settings_data.ts"
   ],
   "sufficient_files": [
-    "zerver/migrations/0532_realm_can_create_public_channel_group.py",
-    "zerver/migrations/0533_set_can_create_public_channel_group.py",
-    "zerver/migrations/0534_alter_realm_can_create_public_channel_group.py",
-    "zerver/migrations/0535_remove_realm_create_public_stream_policy.py",
     "zerver/actions/create_realm.py",
     "zerver/views/realm.py",
     "web/src/settings_components.ts",
@@ -68,10 +66,6 @@
     "zerver/actions/realm_settings.py",
     "zerver/lib/event_schema.py",
     "zerver/lib/events.py",
-    "zerver/migrations/0532_realm_can_create_public_channel_group.py",
-    "zerver/migrations/0533_set_can_create_public_channel_group.py",
-    "zerver/migrations/0534_alter_realm_can_create_public_channel_group.py",
-    "zerver/migrations/0535_remove_realm_create_public_stream_policy.py",
     "zerver/models/realms.py",
     "zerver/models/users.py",
     "zerver/openapi/zulip.yaml",

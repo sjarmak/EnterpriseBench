@@ -3,7 +3,7 @@ difficulty_stratum = "large_single"
 [task]
 id = "error-trace-tf-builtin-schema-001"
 suite = "customer_escalation"
-difficulty = "medium"
+difficulty = "hard"
 estimated_duration_minutes = 25
 session_type = "single"
 task_type = "error_provenance"
@@ -47,6 +47,7 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/error-trace-tf-builtin-schema-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "The error string is easy to locate, but tracing it to the builtin Terraform provider requires understanding the schema transform pipeline and how providers are registered"
 

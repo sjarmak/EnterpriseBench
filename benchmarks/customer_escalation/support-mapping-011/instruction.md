@@ -4,6 +4,8 @@
 **Submitted by:** Community Moderator
 **Product:** NodeBB Forum (self-hosted)
 
+**Codebase:** Available at `/workspace/NodeBB/`
+
 ---
 
 Hi support,

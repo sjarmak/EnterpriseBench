@@ -1,0 +1,43 @@
+{
+  "task_id": "cal-err-click-flagval-002",
+  "candidate_ref": "pallets/click#3071",
+  "error_string": "flag_value with default=True is order-sensitive",
+  "repo": "pallets/click",
+  "repo_rev": "8.2.1",
+  "required_files": [
+    {
+      "path": "src/click/core.py",
+      "repo": "click",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains Option class where flag_value parameter is processed and default is resolved"
+    },
+    {
+      "path": "src/click/decorators.py",
+      "repo": "click",
+      "confidence": 0.85,
+      "source": "deterministic",
+      "rationale": "The option() decorator that passes flag_value and default to Option.__init__"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/click/types.py",
+      "repo": "click",
+      "confidence": 0.6,
+      "rationale": "Type conversion logic that may interact with flag_value handling"
+    }
+  ],
+  "error_chain": [
+    "User defines option with flag_value=True and default=True",
+    "click.option decorator in decorators.py passes params to Option.__init__",
+    "Option.__init__ in core.py processes flag_value and default",
+    "The flag_value assignment overwrites or conflicts with default depending on order"
+  ],
+  "trigger_conditions": [
+    "Option uses flag_value=True parameter",
+    "Option also specifies default=True",
+    "The flag_value processing in Option.__init__ has order-dependent behavior",
+    "Using --no-verbose does not override when flag_value is processed after default"
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "task_id": "cal-dead-flask-legacy-002",
+  "repo": "pallets/flask",
+  "repo_rev": "3.1.0",
+  "dead_code": [
+    {
+      "file": "src/flask/helpers.py",
+      "symbol": "get_root_path",
+      "kind": "function"
+    },
+    {
+      "file": "src/flask/helpers.py",
+      "symbol": "locked_cached_property",
+      "kind": "class"
+    },
+    {
+      "file": "src/flask/json/__init__.py",
+      "symbol": "htmlsafe_dumps",
+      "kind": "function"
+    },
+    {
+      "file": "src/flask/json/__init__.py",
+      "symbol": "htmlsafe_dump",
+      "kind": "function"
+    }
+  ],
+  "live_code": [
+    {
+      "file": "src/flask/app.py",
+      "symbol": "Flask",
+      "kind": "class"
+    },
+    {
+      "file": "src/flask/blueprints.py",
+      "symbol": "Blueprint",
+      "kind": "class"
+    },
+    {
+      "file": "src/flask/helpers.py",
+      "symbol": "url_for",
+      "kind": "function"
+    },
+    {
+      "file": "src/flask/helpers.py",
+      "symbol": "flash",
+      "kind": "function"
+    },
+    {
+      "file": "src/flask/helpers.py",
+      "symbol": "send_file",
+      "kind": "function"
+    },
+    {
+      "file": "src/flask/sessions.py",
+      "symbol": "SecureCookieSessionInterface",
+      "kind": "class"
+    },
+    {
+      "file": "src/flask/templating.py",
+      "symbol": "render_template",
+      "kind": "function"
+    },
+    {
+      "file": "src/flask/globals.py",
+      "symbol": "request",
+      "kind": "export"
+    }
+  ]
+}

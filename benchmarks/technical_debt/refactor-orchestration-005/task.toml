@@ -11,6 +11,9 @@ estimated_duration_minutes = 35
 session_type = "single"
 description = "Plan the ordering for Babel 8 breaking plugin removal across monorepo packages"
 prompt = """
+As the build infrastructure engineer, you need to plan the safe removal of
+deprecated Babel plugins before the Babel 8 major release.
+
 Babel 8 is removing several deprecated plugin-transform packages from the
 monorepo. The removal cascade involves internal package dependencies:
 
@@ -75,6 +78,7 @@ required = ["answer", "topological_order"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/refactor-orch-005.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Monorepo internal dependency graph requires resolving package.json cross-references across 200+ packages"
 

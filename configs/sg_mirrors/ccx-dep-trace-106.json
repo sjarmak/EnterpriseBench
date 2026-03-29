@@ -1,0 +1,10 @@
+{
+  "task_id": "ccx-dep-trace-106",
+  "mirrors": [
+    {
+      "repo": "github.com/gcc-mirror/gcc",
+      "rev": "a8f3c97d",
+      "mirror_id": "gcc-mirror/gcc--a8f3c97d"
+    }
+  ]
+}

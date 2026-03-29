@@ -4,6 +4,8 @@
 **Submitted by:** Finance Department
 **Product:** LibreOffice Calc
 
+**Codebase:** Available at `/workspace/core/`
+
 ---
 
 Hi,

@@ -12,8 +12,7 @@ session_type = "single"
 description = "Trace impact of adding a deactivated boolean column to NamedUserGroup across the Zulip Django codebase"
 prompt = """
 We're adding a `deactivated` boolean field to the `NamedUserGroup` model so that
-groups can be soft-deleted instead of permanently removed. The migration is in
-`zerver/migrations/0578_namedusergroup_deactivated.py`.
+groups can be soft-deleted instead of permanently removed. A Django migration has been created for this change.
 
 Your task:
 1. Identify the schema change and the migration file.

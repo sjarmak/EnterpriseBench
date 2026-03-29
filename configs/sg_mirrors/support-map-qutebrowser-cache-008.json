@@ -1,0 +1,10 @@
+{
+  "task_id": "support-map-qutebrowser-cache-008",
+  "mirrors": [
+    {
+      "repo": "github.com/qutebrowser/qutebrowser",
+      "rev": "v3.0.0",
+      "mirror_id": "qutebrowser/qutebrowser--v3.0.0"
+    }
+  ]
+}

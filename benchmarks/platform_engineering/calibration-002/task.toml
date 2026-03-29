@@ -1,0 +1,71 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-drift-click-envvar-002"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "medium"
+estimated_duration_minutes = 10
+session_type = "single"
+description = "Identify parameter source drift between Click env var, default, and prompt layers"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/pallets/click"
+rev = "8.2.1"
+path = "click"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["click"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_drift_points"
+weight = 0.40
+verifier = "checks/check_drift_points.sh"
+description = "Agent identifies parameter resolution drift points"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "determine_expected_values"
+weight = 0.35
+verifier = "checks/check_expected_values.sh"
+description = "Agent correctly determines parameter source precedence"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "validate_corrected_config"
+weight = 0.25
+verifier = "checks/check_config_valid.sh"
+description = "Agent explains the resolution chain correctly"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Click parameter resolution is in core.py; the precedence logic is in a single method"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/click/core.py"
+repo = "click"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/click/types.py"
+repo = "click"
+confidence = 0.80
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/click/decorators.py"
+repo = "click"
+confidence = 0.60

@@ -1,0 +1,44 @@
+{
+  "task_id": "cal-err-flask-endpoint-004",
+  "candidate_ref": "pallets/flask#3776",
+  "error_string": "request.endpoint is None in SessionInterface.open_session",
+  "repo": "pallets/flask",
+  "repo_rev": "3.1.0",
+  "required_files": [
+    {
+      "path": "src/flask/app.py",
+      "repo": "flask",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains wsgi_app/full_dispatch_request where open_session is called before URL matching sets endpoint"
+    },
+    {
+      "path": "src/flask/sessions.py",
+      "repo": "flask",
+      "confidence": 0.9,
+      "source": "deterministic",
+      "rationale": "SessionInterface.open_session definition and SecureCookieSessionInterface implementation"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/flask/wrappers.py",
+      "repo": "flask",
+      "confidence": 0.65,
+      "rationale": "Request wrapper where endpoint attribute is defined"
+    }
+  ],
+  "error_chain": [
+    "WSGI request arrives at Flask.wsgi_app()",
+    "Flask creates request context and pushes it",
+    "open_session() is called during request context push",
+    "URL matching (which sets request.endpoint) happens AFTER session is opened",
+    "Therefore request.endpoint is None inside open_session"
+  ],
+  "trigger_conditions": [
+    "Custom SessionInterface.open_session accesses request.endpoint",
+    "open_session is called during request context push in app.py",
+    "URL rule matching happens later in full_dispatch_request",
+    "Endpoint is not available until after URL dispatch"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "task_id": "config-drift-argocd-redis-ha-004",
+  "mirrors": [
+    {
+      "repo": "github.com/argoproj/argo-cd",
+      "rev": "v2.14.0-rc3",
+      "mirror_id": "argoproj/argo-cd--v2.14.0-rc3"
+    }
+  ]
+}

@@ -6,7 +6,7 @@ difficulty_stratum = "large_single"
 [task]
 id = "beam-pipeline-builder-refac-001"
 suite = "technical_debt"
-difficulty = "hard"
+difficulty = "medium"
 estimated_duration_minutes = 20
 session_type = "single"
 task_type = "refactor_orchestration"
@@ -50,6 +50,7 @@ timeout_seconds = 120
 required = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/beam-pipeline-builder-refac-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Single-repo Java refactoring; MCP helps navigate the PipelineOptions interface hierarchy in the Beam SDK"
 

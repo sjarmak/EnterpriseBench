@@ -1,0 +1,20 @@
+{
+  "task_id": "dep-traversal-005",
+  "mirrors": [
+    {
+      "repo": "github.com/prometheus/prometheus",
+      "rev": "v2.45.0",
+      "mirror_id": "prometheus/prometheus--v2.45.0"
+    },
+    {
+      "repo": "github.com/hashicorp/consul",
+      "rev": "v1.16.0",
+      "mirror_id": "hashicorp/consul--v1.16.0"
+    },
+    {
+      "repo": "github.com/hashicorp/vault",
+      "rev": "v1.14.0",
+      "mirror_id": "hashicorp/vault--v1.14.0"
+    }
+  ]
+}

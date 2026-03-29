@@ -1,0 +1,71 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-sup-flask-errhandler-006"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 10
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map customer report of Blueprint.errorhandler restricting handler return type"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/pallets/flask"
+rev = "3.1.0"
+path = "flask"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["flask"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies source files for blueprint error handler registration and type checking"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.20
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the responsible code area"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.20
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Flask is small; errorhandler is easily found by grep in scaffold.py or blueprints.py"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/flask/scaffold.py"
+repo = "flask"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/flask/blueprints.py"
+repo = "flask"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/flask/app.py"
+repo = "flask"
+confidence = 0.65

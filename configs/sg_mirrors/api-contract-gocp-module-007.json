@@ -1,0 +1,20 @@
+{
+  "task_id": "api-contract-gocp-module-007",
+  "mirrors": [
+    {
+      "repo": "github.com/envoyproxy/go-control-plane",
+      "rev": "v0.13.2",
+      "mirror_id": "envoyproxy/go-control-plane--v0.13.2"
+    },
+    {
+      "repo": "github.com/istio/istio",
+      "rev": "1.24.0",
+      "mirror_id": "istio/istio--1.24.0"
+    },
+    {
+      "repo": "github.com/grpc/grpc-go",
+      "rev": "v1.68.0",
+      "mirror_id": "grpc/grpc-go--v1.68.0"
+    }
+  ]
+}

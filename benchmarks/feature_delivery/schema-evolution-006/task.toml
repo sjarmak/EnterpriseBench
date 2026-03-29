@@ -6,14 +6,13 @@ difficulty_stratum = "large_single"
 id = "schema-evolution-006"
 suite = "feature_delivery"
 task_type = "db_schema_evolution"
-difficulty = "medium"
+difficulty = "hard"
 estimated_duration_minutes = 30
 session_type = "single"
 description = "Trace impact of adding a description column to the Invite model across Discourse's Rails stack"
 prompt = """
 We're adding a `description` text column to the `Invite` model so admins can
-annotate invites with notes about who they're for. The migration is
-`db/migrate/20250614020437_add_description_to_invites.rb`.
+annotate invites with notes about who they're for. A Rails migration has been created for this change.
 
 Your task:
 1. Identify the schema change and migration.

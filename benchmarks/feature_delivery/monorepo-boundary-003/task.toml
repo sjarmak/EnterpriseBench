@@ -65,6 +65,7 @@ timeout_seconds = 60
 required = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/monorepo-boundary-babel-metadata-003.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Two independent changes converging requires tracing decorator helper chains and TypeScript parser plugin boundaries; text search handles most of the discovery in this well-structured monorepo"
 

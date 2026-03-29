@@ -1,6 +1,6 @@
 # API Contract Boundary: cel-go Program interface breaking change
 
-difficulty_stratum = "dual_repo"
+difficulty_stratum = "large_single"
 
 [task]
 id = "api-contract-celgo-program-008"
@@ -73,6 +73,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/api-contract-celgo-program-008.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Cross-repo interface implementation search to find all cel.Program implementors in grpc-go"
 

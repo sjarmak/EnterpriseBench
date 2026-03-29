@@ -1,0 +1,15 @@
+{
+  "task_id": "dep-traversal-007",
+  "mirrors": [
+    {
+      "repo": "github.com/grpc/grpc-node",
+      "rev": "v1.8.0",
+      "mirror_id": "grpc/grpc-node--v1.8.0"
+    },
+    {
+      "repo": "github.com/kubernetes-client/javascript",
+      "rev": "0.18.0",
+      "mirror_id": "kubernetes-client/javascript--0.18.0"
+    }
+  ]
+}

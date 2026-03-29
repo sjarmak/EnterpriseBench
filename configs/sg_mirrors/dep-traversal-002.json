@@ -1,0 +1,20 @@
+{
+  "task_id": "dep-traversal-002",
+  "mirrors": [
+    {
+      "repo": "github.com/axios/axios",
+      "rev": "v0.21.1",
+      "mirror_id": "axios/axios--v0.21.1"
+    },
+    {
+      "repo": "github.com/grafana/grafana",
+      "rev": "v9.5.0",
+      "mirror_id": "grafana/grafana--v9.5.0"
+    },
+    {
+      "repo": "github.com/apache/druid",
+      "rev": "druid-26.0.0",
+      "mirror_id": "apache/druid--druid-26.0.0"
+    }
+  ]
+}

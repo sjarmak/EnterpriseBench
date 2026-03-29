@@ -22,8 +22,8 @@ validation.
 
 Your task:
 1. Examine the ArgoCD HA manifest configuration hierarchy:
-   - manifests/ha/base/redis-ha/chart/Chart.yaml (subchart definition)
-   - manifests/ha/base/redis-ha/chart/values.yaml (ArgoCD's overrides)
+   - The redis-ha subchart definition and Chart.yaml
+   - ArgoCD's value overrides for the redis-ha subchart
    - The upstream redis-ha chart's own default values
 2. Identify all configuration drift points where ArgoCD's value overrides
    conflict with or incorrectly override the upstream defaults.
@@ -86,6 +86,7 @@ required = ["answer"]
 optional = ["config"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/config-drift-argocd-redis-ha-004.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Cross-file search helps trace value override chain from ArgoCD's values.yaml through the subchart dependency, but the drift is contained in a known file"
 

@@ -1,0 +1,10 @@
+{
+  "task_id": "rbac-audit-001",
+  "mirrors": [
+    {
+      "repo": "github.com/projectcalico/calico",
+      "rev": "1ea2a4ea3e0407c97d387cc8dbe5f80db7e2e430~1",
+      "mirror_id": "projectcalico/calico--1ea2a4ea3e0407c97d387cc8dbe5f80db7e2e430~1"
+    }
+  ]
+}

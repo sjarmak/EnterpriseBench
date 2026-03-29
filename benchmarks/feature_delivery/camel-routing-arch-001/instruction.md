@@ -7,6 +7,7 @@ Trace how Apache Camel routes a message from endpoint reception through the EIP 
 ## Context
 
 - **Repository**: apache/camel (Java, ~2.8M LOC)
+- **Codebase**: Available at `/workspace/camel/`
 - **Category**: Architectural Understanding
 - **Difficulty**: hard
 - **Subsystem Focus**: core/ — the Camel core routing engine (camel-api, camel-support, camel-core-processor, camel-base-engine, camel-core-reifier)

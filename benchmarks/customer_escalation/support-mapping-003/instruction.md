@@ -4,6 +4,8 @@
 **Submitted by:** Platform Analytics Team
 **Product:** Grafana (self-hosted)
 
+**Codebase:** Available at `/workspace/grafana/`
+
 ---
 
 Hi there,

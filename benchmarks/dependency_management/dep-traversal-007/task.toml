@@ -77,6 +77,7 @@ required = ["answer", "security_assessment"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/dep-traversal-007.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Cross-repo npm dependency chain traversal through nested packages benefits from Sourcegraph dependency graph indexing"
 

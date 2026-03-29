@@ -1,6 +1,6 @@
 # Dependency Graph Traversal: jackson-databind deep nesting DoS through Spring Boot BOM
 
-difficulty_stratum = "dual_repo"
+difficulty_stratum = "tri_repo"
 
 [task]
 id = "dep-traversal-010"
@@ -87,6 +87,7 @@ required = ["answer", "security_assessment"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/dep-traversal-010.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Maven BOM inheritance chain traversal requires understanding pom.xml parent/dependency management sections across repos — benefits from Sourcegraph structural search"
 

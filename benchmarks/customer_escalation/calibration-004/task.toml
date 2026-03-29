@@ -1,0 +1,71 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-err-flask-endpoint-004"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 10
+session_type = "single"
+task_type = "error_provenance"
+description = "Trace why request.endpoint is always None in SessionInterface.open_session in Flask"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/pallets/flask"
+rev = "3.1.0"
+path = "flask"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["flask"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.50
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies where request.endpoint is set relative to session opening"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the request lifecycle showing session opens before URL matching"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.20
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies the ordering issue between session opening and URL dispatch"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Flask is a small codebase; the request lifecycle is linear and in a single module"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/flask/app.py"
+repo = "flask"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/flask/sessions.py"
+repo = "flask"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/flask/wrappers.py"
+repo = "flask"
+confidence = 0.65

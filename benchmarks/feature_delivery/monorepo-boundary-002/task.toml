@@ -65,6 +65,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/monorepo-boundary-babel-decorators-002.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Tracing decorator helper consumption through re-exports and plugin chains requires semantic cross-package navigation"
 

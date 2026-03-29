@@ -47,6 +47,7 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/error-trace-tf-backend-copypaste-001.json"
 expected_mcp_benefit = "low"
 mcp_benefit_rationale = "Direct string match in error constants file; minimal MCP benefit for this simple provenance trace"
 

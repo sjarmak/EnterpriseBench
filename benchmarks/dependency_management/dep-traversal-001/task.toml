@@ -1,6 +1,6 @@
 # Dependency Graph Traversal: lodash command injection blast radius
 
-difficulty_stratum = "dual_repo"
+difficulty_stratum = "multi_repo"
 
 [task]
 id = "dep-traversal-001"
@@ -88,6 +88,7 @@ required = ["answer", "security_assessment"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/dep-traversal-001.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Cross-repo dependency graph traversal through npm package manifests and lock files benefits from Sourcegraph's dependency indexing"
 

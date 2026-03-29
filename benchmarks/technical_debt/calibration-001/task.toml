@@ -1,0 +1,47 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-dead-click-legacy-001"
+suite = "technical_debt"
+task_type = "dead_code_necropsy"
+difficulty = "medium"
+estimated_duration_minutes = 15
+session_type = "single"
+description = "Identify unused exports and dead helper functions in Click's core module"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/pallets/click"
+rev = "8.2.1"
+path = "click"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["click"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "check_dead_code"
+weight = 0.60
+verifier = "checks/check_dead_code.sh"
+description = "Verify dead code identification with precision >= 0.8"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "check_evidence"
+weight = 0.40
+verifier = "checks/check_evidence.sh"
+description = "Validate reasoning and evidence quality for each dead code claim"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Click is small enough that grep -r can exhaustively check all imports and references within seconds"
+
+[ground_truth]
+tiers = ["deterministic"]

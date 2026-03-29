@@ -1,9 +1,11 @@
 {
   "candidate_id": "SE-4",
   "repo": "zulip/zulip",
-  "pr_refs": ["#38020"],
+  "pr_refs": [
+    "#38020"
+  ],
   "base_rev": "f2a5dc949a7c0ec776b3729b2c92703292404127",
-  "description": "Move default_avatar_source from UserProfile to Realm — impacts avatar logic, 3 importers, frontend, tests",
+  "description": "Move default_avatar_source from UserProfile to Realm \u2014 impacts avatar logic, 3 importers, frontend, tests",
   "schema_change": {
     "type": "move_field",
     "from_table": "UserProfile",
@@ -29,7 +31,6 @@
   ],
   "pr_files": [
     "package.json",
-    "patches/jdenticon.patch",
     "pnpm-lock.yaml",
     "version.py",
     "web/templates/settings/organization_settings_admin.hbs",

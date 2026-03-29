@@ -1,0 +1,20 @@
+{
+  "task_id": "dep-traversal-006",
+  "mirrors": [
+    {
+      "repo": "github.com/grpc/grpc-go",
+      "rev": "v1.62.0",
+      "mirror_id": "grpc/grpc-go--v1.62.0"
+    },
+    {
+      "repo": "github.com/istio/istio",
+      "rev": "1.20.0",
+      "mirror_id": "istio/istio--1.20.0"
+    },
+    {
+      "repo": "github.com/envoyproxy/go-control-plane",
+      "rev": "v0.12.0",
+      "mirror_id": "envoyproxy/go-control-plane--v0.12.0"
+    }
+  ]
+}

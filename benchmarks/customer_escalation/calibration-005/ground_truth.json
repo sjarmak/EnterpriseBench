@@ -1,0 +1,40 @@
+{
+  "task_id": "cal-sup-click-sentinel-005",
+  "candidate_ref": "pallets/click#3069",
+  "description": "Click Sentinel object leaks into type_cast_value and callbacks",
+  "repo": "pallets/click",
+  "repo_rev": "8.2.1",
+  "required_files": [
+    {
+      "path": "src/click/core.py",
+      "repo": "click",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Option.type_cast_value and resolve_ctx where Sentinel is checked/passed"
+    },
+    {
+      "path": "src/click/types.py",
+      "repo": "click",
+      "confidence": 0.85,
+      "source": "deterministic",
+      "rationale": "ParamType.convert which receives the Sentinel value"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/click/decorators.py",
+      "repo": "click",
+      "confidence": 0.6,
+      "rationale": "option() decorator that wires up callback chain"
+    }
+  ],
+  "ownership_keywords": [
+    "core",
+    "option",
+    "type-cast",
+    "sentinel",
+    "callback"
+  ],
+  "expected_severity": "medium",
+  "related_references": []
+}

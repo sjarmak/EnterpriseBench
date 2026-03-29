@@ -1,0 +1,10 @@
+{
+  "task_id": "ccx-incident-032",
+  "mirrors": [
+    {
+      "repo": "github.com/envoyproxy/envoy",
+      "rev": "v1.31.2",
+      "mirror_id": "envoyproxy/envoy--v1.31.2"
+    }
+  ]
+}

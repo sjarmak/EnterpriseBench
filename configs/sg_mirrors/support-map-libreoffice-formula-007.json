@@ -1,0 +1,10 @@
+{
+  "task_id": "support-map-libreoffice-formula-007",
+  "mirrors": [
+    {
+      "repo": "github.com/LibreOffice/core",
+      "rev": "61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e",
+      "mirror_id": "LibreOffice/core--61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e"
+    }
+  ]
+}

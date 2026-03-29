@@ -13,7 +13,7 @@ description = "Trace impact of moving default_avatar_source from UserProfile to 
 prompt = """
 We're moving the `default_avatar_source` field from the `UserProfile` model to the
 `Realm` model. This makes avatar source configuration a realm-level setting rather
-than per-user. The migration is `zerver/migrations/0776_realm_default_avatar_source.py`.
+than per-user. A Django migration has been created for this change.
 
 Your task:
 1. Identify the schema change — field removal from UserProfile, addition to Realm.

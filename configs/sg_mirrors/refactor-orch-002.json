@@ -1,0 +1,15 @@
+{
+  "task_id": "refactor-orch-002",
+  "mirrors": [
+    {
+      "repo": "github.com/spf13/cobra",
+      "rev": "v1.10.2",
+      "mirror_id": "spf13/cobra--v1.10.2"
+    },
+    {
+      "repo": "github.com/kubernetes/kubernetes",
+      "rev": "v1.33.0",
+      "mirror_id": "kubernetes/kubernetes--v1.33.0"
+    }
+  ]
+}

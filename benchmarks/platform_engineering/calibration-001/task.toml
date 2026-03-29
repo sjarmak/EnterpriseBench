@@ -1,0 +1,71 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-drift-flask-config-001"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "medium"
+estimated_duration_minutes = 10
+session_type = "single"
+description = "Identify config value drift between Flask default_config, from_object, and from_envvar layers"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/pallets/flask"
+rev = "3.1.0"
+path = "flask"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["flask"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_drift_points"
+weight = 0.40
+verifier = "checks/check_drift_points.sh"
+description = "Agent identifies config layering drift points"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "determine_expected_values"
+weight = 0.35
+verifier = "checks/check_expected_values.sh"
+description = "Agent correctly determines expected config resolution behavior"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "validate_corrected_config"
+weight = 0.25
+verifier = "checks/check_config_valid.sh"
+description = "Agent explains the override chain correctly"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Flask config system is in a single file; simple grep finds all config methods"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/flask/config.py"
+repo = "flask"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/flask/app.py"
+repo = "flask"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/flask/scaffold.py"
+repo = "flask"
+confidence = 0.60

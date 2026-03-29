@@ -87,6 +87,7 @@ required = ["incident_report"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/incident-inv-watch-delete-002.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Tracing resourceVersion propagation across the watch cache and etcd3 watcher layers; MCP helps compare how each layer transforms event metadata, though the field name is easy to search"
 

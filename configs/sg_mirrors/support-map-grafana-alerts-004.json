@@ -1,0 +1,10 @@
+{
+  "task_id": "support-map-grafana-alerts-004",
+  "mirrors": [
+    {
+      "repo": "github.com/grafana/grafana",
+      "rev": "v10.2.0",
+      "mirror_id": "grafana/grafana--v10.2.0"
+    }
+  ]
+}

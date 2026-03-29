@@ -1,0 +1,41 @@
+{
+  "task_id": "cal-sup-requests-cabundle-007",
+  "candidate_ref": "psf/requests#5921",
+  "description": "REQUESTS_CA_BUNDLE env var overrides session.verify=False",
+  "repo": "psf/requests",
+  "repo_rev": "v2.32.3",
+  "required_files": [
+    {
+      "path": "src/requests/utils.py",
+      "repo": "requests",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains DEFAULT_CA_BUNDLE_PATH and environment variable reading logic"
+    },
+    {
+      "path": "src/requests/sessions.py",
+      "repo": "requests",
+      "confidence": 0.9,
+      "source": "deterministic",
+      "rationale": "Session.request and merge_environment_settings where verify is resolved"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/requests/adapters.py",
+      "repo": "requests",
+      "confidence": 0.65,
+      "rationale": "HTTPAdapter.send where final TLS verify setting is applied"
+    }
+  ],
+  "ownership_keywords": [
+    "session",
+    "verify",
+    "ca-bundle",
+    "environment",
+    "tls",
+    "ssl"
+  ],
+  "expected_severity": "medium",
+  "related_references": []
+}

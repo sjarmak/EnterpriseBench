@@ -188,6 +188,7 @@ class TestDockerfileTemplates:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 class TestPinnedTagsExist:
     """Verify that git tags referenced in Dockerfiles exist on GitHub."""
 
@@ -256,6 +257,7 @@ class TestBuildAllScript:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.docker
 class TestDockerBuild:
     """Optionally run a quick Docker build if the daemon is available."""
 

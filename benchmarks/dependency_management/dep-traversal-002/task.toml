@@ -1,6 +1,6 @@
 # Dependency Graph Traversal: axios ReDoS blast radius
 
-difficulty_stratum = "dual_repo"
+difficulty_stratum = "multi_repo"
 
 [task]
 id = "dep-traversal-002"
@@ -82,6 +82,7 @@ required = ["answer", "security_assessment"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/dep-traversal-002.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Cross-repo npm dependency resolution through lock files and nested package.json files benefits from Sourcegraph dependency indexing"
 

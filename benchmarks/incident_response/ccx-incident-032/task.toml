@@ -51,6 +51,7 @@ required = ["answer"]
 optional = ["incident_report"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/ccx-incident-032.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Tracing connection pool overflow requires following reset reason propagation across the connection pool, router, and HTTP filter layers; MCP helps navigate Envoy's layered module structure"
 

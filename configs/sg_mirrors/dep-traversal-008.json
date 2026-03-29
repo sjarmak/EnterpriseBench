@@ -1,0 +1,20 @@
+{
+  "task_id": "dep-traversal-008",
+  "mirrors": [
+    {
+      "repo": "github.com/psf/requests",
+      "rev": "v2.28.0",
+      "mirror_id": "psf/requests--v2.28.0"
+    },
+    {
+      "repo": "github.com/boto/boto3",
+      "rev": "1.26.0",
+      "mirror_id": "boto/boto3--1.26.0"
+    },
+    {
+      "repo": "github.com/aws/aws-cli",
+      "rev": "2.11.0",
+      "mirror_id": "aws/aws-cli--2.11.0"
+    }
+  ]
+}

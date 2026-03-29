@@ -78,6 +78,7 @@ required = ["answer", "security_assessment"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/dep-traversal-003.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Go module graph is parseable from go.mod, but function-level usage analysis (ParseAcceptLanguage callers) benefits from Sourcegraph symbol search"
 

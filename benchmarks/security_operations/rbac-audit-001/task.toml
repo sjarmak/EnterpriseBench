@@ -32,9 +32,8 @@ updating a network policy's tier assignment.
    StagedNetworkPolicy.
 2. In each storage type's `Update()` method, determine which tier is checked
    for authorization — the old tier, the new tier, or both.
-3. Locate the webhook RBAC authorization in `webhooks/pkg/rbac/rbac.go`. In
-   the `authorize()` function, determine which tier is checked on UPDATE
-   operations — old, new, or both.
+3. Locate the webhook RBAC authorization logic. In the `authorize()` function,
+   determine which tier is checked on UPDATE operations — old, new, or both.
 4. Identify the authorization gap: if the apiserver only checks one tier and
    the webhook only checks the other, a user can exploit either path.
 5. Write `/workspace/security_audit.md` documenting:
@@ -97,6 +96,7 @@ required = ["security_assessment"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/rbac-audit-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Single large repo but requires cross-component analysis between apiserver and webhook packages"
 

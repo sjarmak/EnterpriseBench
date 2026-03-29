@@ -43,6 +43,7 @@ timeout_seconds = 120
 required = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/ccx-compliance-052.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Access logger implementations are spread across the extensions/access_loggers/ directory; MCP helps classify structured vs unstructured logging support per implementation"
 

@@ -1,0 +1,10 @@
+{
+  "task_id": "refactor-orch-005",
+  "mirrors": [
+    {
+      "repo": "github.com/babel/babel",
+      "rev": "v7.25.0",
+      "mirror_id": "babel/babel--v7.25.0"
+    }
+  ]
+}

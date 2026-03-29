@@ -11,6 +11,9 @@ estimated_duration_minutes = 35
 session_type = "single"
 description = "Plan the ordering for grpc-go v1.72 bump cascade through etcd into Kubernetes"
 prompt = """
+As the tech lead responsible for our Go microservices platform, you need to plan
+the rollout of a critical dependency update across our stack.
+
 The grpc-go project has released v1.72.1 with breaking API changes that require
 consumer updates. The dependency chain is:
 
@@ -86,6 +89,7 @@ required = ["answer", "topological_order"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/refactor-orch-003.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "3-repo dependency chain requires cross-repo go.mod analysis and interface compatibility checking"
 

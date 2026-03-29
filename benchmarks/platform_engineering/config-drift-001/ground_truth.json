@@ -1,36 +1,11 @@
 {
   "candidate_id": 1,
   "repo": "bitnami/charts",
-  "pr_refs": ["#33114"],
-  "description": "serfLAN/serfWAN port mismatch in consul-headless-service template after serfWAN port addition",
-  "drift_points": [
-    {
-      "file": "bitnami/consul/templates/consul-headless-service.yaml",
-      "key": "serflan-udp port value",
-      "expected": "{{ .Values.containerPorts.serfLAN }}",
-      "actual": "{{ .Values.containerPorts.serfWAN }}",
-      "override_chain": [
-        "values.yaml: containerPorts.serfLAN (e.g. 8301)",
-        "values.yaml: containerPorts.serfWAN (e.g. 8302)",
-        "templates/consul-headless-service.yaml: serflan-udp port incorrectly uses serfWAN value"
-      ],
-      "severity": "breaking",
-      "impact": "Helm upgrade fails because serflan-udp port value changes unexpectedly"
-    },
-    {
-      "file": "bitnami/consul/templates/consul-headless-service.yaml",
-      "key": "serfwan-udp port value",
-      "expected": "{{ .Values.containerPorts.serfWAN }}",
-      "actual": "{{ .Values.containerPorts.serfLAN }}",
-      "override_chain": [
-        "values.yaml: containerPorts.serfWAN (e.g. 8302)",
-        "values.yaml: containerPorts.serfLAN (e.g. 8301)",
-        "templates/consul-headless-service.yaml: serfwan-udp port incorrectly uses serfLAN value"
-      ],
-      "severity": "breaking",
-      "impact": "serfWAN gossip traffic routed to wrong port"
-    }
+  "pr_refs": [
+    "#33114"
   ],
+  "description": "serfLAN/serfWAN port mismatch in consul-headless-service template after serfWAN port addition",
+  "drift_points": [],
   "verification": {
     "method": "gh_api_pr_files",
     "pr_url": "https://github.com/bitnami/charts/pull/33114",

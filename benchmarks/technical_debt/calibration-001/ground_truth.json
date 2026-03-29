@@ -1,0 +1,69 @@
+{
+  "task_id": "cal-dead-click-legacy-001",
+  "repo": "pallets/click",
+  "repo_rev": "8.2.1",
+  "dead_code": [
+    {
+      "file": "src/click/_compat.py",
+      "symbol": "isidentifier",
+      "kind": "function"
+    },
+    {
+      "file": "src/click/_compat.py",
+      "symbol": "_default_text_stderr",
+      "kind": "function"
+    },
+    {
+      "file": "src/click/utils.py",
+      "symbol": "safecall",
+      "kind": "function"
+    },
+    {
+      "file": "src/click/utils.py",
+      "symbol": "make_str",
+      "kind": "function"
+    }
+  ],
+  "live_code": [
+    {
+      "file": "src/click/core.py",
+      "symbol": "Context",
+      "kind": "class"
+    },
+    {
+      "file": "src/click/core.py",
+      "symbol": "BaseCommand",
+      "kind": "class"
+    },
+    {
+      "file": "src/click/decorators.py",
+      "symbol": "command",
+      "kind": "function"
+    },
+    {
+      "file": "src/click/decorators.py",
+      "symbol": "option",
+      "kind": "function"
+    },
+    {
+      "file": "src/click/types.py",
+      "symbol": "STRING",
+      "kind": "export"
+    },
+    {
+      "file": "src/click/testing.py",
+      "symbol": "CliRunner",
+      "kind": "class"
+    },
+    {
+      "file": "src/click/utils.py",
+      "symbol": "echo",
+      "kind": "function"
+    },
+    {
+      "file": "src/click/utils.py",
+      "symbol": "get_text_stderr",
+      "kind": "function"
+    }
+  ]
+}

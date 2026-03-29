@@ -12,8 +12,7 @@ session_type = "single"
 description = "Trace impact of lifecycle script allow-list default change through pnpm config consumers"
 prompt = """
 For pnpm v10.0.0, a security hardening change is being made: lifecycle scripts
-now require an explicit allow-list by default. The change is in `@pnpm/config`
-at `config/config/src/getOptionsFromRootManifest.ts`.
+now require an explicit allow-list by default. The change is in the `@pnpm/config` package's root manifest options handling.
 
 This is a default value change in a config package — the code path exists but
 the behavior flip affects every package that reads this setting.
@@ -66,6 +65,7 @@ timeout_seconds = 60
 required = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/monorepo-boundary-pnpm-lifecycle-006.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Config value consumption is spread across packages via function calls, not just imports — semantic navigation traces actual usage"
 

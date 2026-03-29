@@ -1,9 +1,11 @@
 {
   "candidate_id": "SE-1",
   "repo": "zulip/zulip",
-  "pr_refs": ["#30504"],
+  "pr_refs": [
+    "#30504"
+  ],
   "base_rev": "38053e9c7cc59b5e3f7c26af49fc1bb57acf0b86",
-  "description": "Add deactivated boolean to NamedUserGroup model — impacts actions, views, events, API schema, import/export, audit log, markdown, tests",
+  "description": "Add deactivated boolean to NamedUserGroup model \u2014 impacts actions, views, events, API schema, import/export, audit log, markdown, tests",
   "schema_change": {
     "type": "add_column",
     "table": "NamedUserGroup",
@@ -20,7 +22,6 @@
     "zerver/lib/user_groups.py"
   ],
   "sufficient_files": [
-    "zerver/migrations/0578_namedusergroup_deactivated.py",
     "zerver/views/streams.py",
     "zerver/lib/import_realm.py",
     "zerver/lib/markdown/__init__.py",
@@ -45,7 +46,6 @@
     "zerver/lib/import_realm.py",
     "zerver/lib/markdown/__init__.py",
     "zerver/lib/user_groups.py",
-    "zerver/migrations/0578_namedusergroup_deactivated.py",
     "zerver/models/groups.py",
     "zerver/models/realm_audit_logs.py",
     "zerver/openapi/curl_param_value_generators.py",

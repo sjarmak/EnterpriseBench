@@ -1,0 +1,10 @@
+{
+  "task_id": "ceph-rgw-auth-secure-001",
+  "mirrors": [
+    {
+      "repo": "github.com/ceph/ceph",
+      "rev": "v19.2.0",
+      "mirror_id": "ceph/ceph--v19.2.0"
+    }
+  ]
+}

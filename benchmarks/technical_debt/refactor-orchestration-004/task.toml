@@ -11,6 +11,9 @@ estimated_duration_minutes = 40
 session_type = "single"
 description = "Plan the ordering for golang/protobuf to google.golang.org/protobuf migration across grpc-go and etcd"
 prompt = """
+Your platform team needs to coordinate a protobuf import migration across
+your Go service dependencies before the next quarterly release freeze.
+
 The Go protobuf ecosystem migrated from the legacy github.com/golang/protobuf
 module to google.golang.org/protobuf. This is a major import path change
 affecting the entire Go gRPC ecosystem.
@@ -88,6 +91,7 @@ required = ["answer", "topological_order"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/refactor-orch-004.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Import path migration requires finding all protobuf imports across 3 repos and understanding which use the legacy vs new API"
 

@@ -1,0 +1,15 @@
+{
+  "task_id": "dep-traversal-003",
+  "mirrors": [
+    {
+      "repo": "github.com/go-chi/chi",
+      "rev": "v5.0.8",
+      "mirror_id": "go-chi/chi--v5.0.8"
+    },
+    {
+      "repo": "github.com/gohugoio/hugo",
+      "rev": "v0.111.0",
+      "mirror_id": "gohugoio/hugo--v0.111.0"
+    }
+  ]
+}

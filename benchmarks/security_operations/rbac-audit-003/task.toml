@@ -26,12 +26,12 @@ Audit the RBAC evaluation chain for robot accounts in Harbor to identify the
 permission gap between system-level and project-level robot authorization.
 
 ## Steps
-1. Locate the robot security context in `src/common/security/robot/context.go`.
+1. Locate the robot security context implementation.
    Understand how system robots build their RBAC evaluator chain.
 2. Compare how system robots vs project robots configure the RBAC evaluator.
    Look for `filterRobotPolicies` — is it applied consistently?
-3. Examine the robot handler in `src/server/v2.0/handler/robot.go`. Trace the
-   `CreateRobot()` flow and the `requireAccess()` permission check.
+3. Examine the robot API handler. Trace the `CreateRobot()` flow and the
+   `requireAccess()` permission check.
 4. Identify the gap: why does a system robot with `/project/*/robot` permission
    fail the RBAC check when creating a project-level robot?
 5. Write `/workspace/security_audit.md` documenting:
@@ -94,6 +94,7 @@ required = ["security_assessment"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/rbac-audit-003.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Single repo requiring cross-package analysis between security context, RBAC evaluator, and API handler"
 

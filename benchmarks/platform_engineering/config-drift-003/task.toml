@@ -81,6 +81,7 @@ required = ["answer"]
 optional = ["config"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/config-drift-redis-password-003.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Finding all call sites of the Redis password helper across templates to detect password generation drift; MCP helps identify re-evaluation points, though Helm include names are searchable in a single chart repo"
 

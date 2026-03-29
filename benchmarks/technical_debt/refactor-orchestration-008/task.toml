@@ -11,6 +11,10 @@ estimated_duration_minutes = 50
 session_type = "single"
 description = "Plan the ordering for go-grpc-middleware v1 removal cascade across etcd and Kubernetes"
 prompt = """
+Your SRE team has flagged an archived dependency in the service mesh stack.
+As the tech lead, you need to plan the migration away from the deprecated
+middleware library across all affected services.
+
 The grpc-ecosystem/go-grpc-middleware v1 library has been archived. Its
 functionality was partially absorbed into grpc-go core and partially into
 go-grpc-middleware v2 (incompatible API).
@@ -95,6 +99,7 @@ required = ["answer", "topological_order"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/refactor-orch-008.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Understanding which middleware features are used where across 3 repos requires cross-repo code search and import analysis"
 

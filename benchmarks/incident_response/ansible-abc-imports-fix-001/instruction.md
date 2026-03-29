@@ -1,8 +1,13 @@
 # Inconsistent Use and Dependencies on the Internal Shim for Importing Collection ABCs
 
 **Repository:** ansible/ansible
+**Codebase:** Available at `/workspace/ansible/`
 **Language:** Python
 **Difficulty:** hard
+
+## Context
+
+As part of the Python 3.12+ compatibility initiative, the automation platform team has prioritized removing internal compatibility shims that were created during the Python 2-to-3 transition. A senior engineer has identified the `_collections_compat` shim as a cleanup target.
 
 ## Problem
 
@@ -28,4 +33,3 @@ In various parts of the Ansible codebase (modules, `module_utils`, and controlle
 - All ABCs are imported from the supported canonical path consistently
 - Sanity checks are aligned with the updated import policy
 - All existing tests pass
-

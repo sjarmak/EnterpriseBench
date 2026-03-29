@@ -1,0 +1,10 @@
+{
+  "task_id": "refactor-orch-006",
+  "mirrors": [
+    {
+      "repo": "github.com/kubernetes/kubernetes",
+      "rev": "v1.34.0",
+      "mirror_id": "kubernetes/kubernetes--v1.34.0"
+    }
+  ]
+}

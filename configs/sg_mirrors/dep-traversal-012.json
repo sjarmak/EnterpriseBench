@@ -1,0 +1,20 @@
+{
+  "task_id": "dep-traversal-012",
+  "mirrors": [
+    {
+      "repo": "github.com/curl/curl",
+      "rev": "curl-7_82_0",
+      "mirror_id": "curl/curl--curl-7_82_0"
+    },
+    {
+      "repo": "github.com/git/git",
+      "rev": "v2.35.0",
+      "mirror_id": "git/git--v2.35.0"
+    },
+    {
+      "repo": "github.com/kubernetes/kubernetes",
+      "rev": "v1.24.0",
+      "mirror_id": "kubernetes/kubernetes--v1.24.0"
+    }
+  ]
+}

@@ -8,26 +8,34 @@
   "difficulty": "hard",
   "required_files": [
     {
-      "path": "pkg/tsdb/jaeger/client.go",
+      "path": "public/app/plugins/datasource/jaeger/datasource.ts",
       "repo": "grafana",
-      "confidence": 0.95,
-      "source": "deterministic",
-      "rationale": "Contains the Jaeger datasource client that accesses first element of trace response slice without checking for empty response. Line ~248."
+      "confidence": 0.9,
+      "source": "deterministic"
     },
     {
-      "path": "pkg/tsdb/jaeger/client_test.go",
+      "path": "public/app/plugins/datasource/jaeger/responseTransform.ts",
       "repo": "grafana",
       "confidence": 0.85,
-      "source": "deterministic",
-      "rationale": "Test file updated in fix PR to cover the empty trace response case."
+      "source": "deterministic"
+    },
+    {
+      "path": "public/app/plugins/datasource/jaeger/graphTransform.ts",
+      "repo": "grafana",
+      "confidence": 0.8,
+      "source": "deterministic"
     }
   ],
   "sufficient_files": [
     {
-      "path": "pkg/tsdb/jaeger/trace.go",
+      "path": "public/app/plugins/datasource/jaeger/types.ts",
       "repo": "grafana",
-      "confidence": 0.55,
-      "rationale": "Related trace processing code that helps understand the response structure."
+      "confidence": 0.6
+    },
+    {
+      "path": "public/app/plugins/datasource/jaeger/datasource.test.ts",
+      "repo": "grafana",
+      "confidence": 0.55
     }
   ],
   "error_chain": [

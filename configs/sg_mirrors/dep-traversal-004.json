@@ -1,0 +1,20 @@
+{
+  "task_id": "dep-traversal-004",
+  "mirrors": [
+    {
+      "repo": "github.com/kubernetes/kubernetes",
+      "rev": "v1.28.0",
+      "mirror_id": "kubernetes/kubernetes--v1.28.0"
+    },
+    {
+      "repo": "github.com/etcd-io/etcd",
+      "rev": "v3.5.9",
+      "mirror_id": "etcd-io/etcd--v3.5.9"
+    },
+    {
+      "repo": "github.com/grpc/grpc-go",
+      "rev": "v1.58.0",
+      "mirror_id": "grpc/grpc-go--v1.58.0"
+    }
+  ]
+}

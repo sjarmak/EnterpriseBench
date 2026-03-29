@@ -1,0 +1,71 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-sup-click-sentinel-005"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 10
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map customer report of Sentinel object leaking into Click callback to source code"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/pallets/click"
+rev = "8.2.1"
+path = "click"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["click"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies the correct source files for Sentinel and type casting"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.20
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies the responsible subsystem"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.20
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Click is small; grep for Sentinel immediately finds the relevant modules"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/click/core.py"
+repo = "click"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/click/types.py"
+repo = "click"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/click/decorators.py"
+repo = "click"
+confidence = 0.60

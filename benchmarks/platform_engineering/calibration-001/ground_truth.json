@@ -1,0 +1,49 @@
+{
+  "task_id": "cal-drift-flask-config-001",
+  "repo": "pallets/flask",
+  "repo_rev": "3.1.0",
+  "drift_points": [
+    {
+      "key": "SECRET_KEY",
+      "file": "src/flask/config.py",
+      "expected": "from_envvar overrides from_object",
+      "actual": "If from_envvar file does not set SECRET_KEY, from_object value persists",
+      "override_chain": [
+        "default_config -> from_object -> from_envvar -> direct"
+      ]
+    },
+    {
+      "key": "SESSION_COOKIE_SECURE",
+      "file": "src/flask/config.py",
+      "expected": "from_envvar overrides default",
+      "actual": "Boolean config in env file may be loaded as string, not overriding correctly",
+      "override_chain": [
+        "default_config -> from_object -> from_envvar"
+      ]
+    }
+  ],
+  "required_files": [
+    {
+      "path": "src/flask/config.py",
+      "repo": "flask",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Config class with from_object, from_envvar, from_pyfile methods"
+    },
+    {
+      "path": "src/flask/app.py",
+      "repo": "flask",
+      "confidence": 0.85,
+      "source": "deterministic",
+      "rationale": "Flask.__init__ where default config is set up"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/flask/sansio/scaffold.py",
+      "repo": "flask",
+      "confidence": 0.6,
+      "rationale": "Base class that may influence config initialization"
+    }
+  ]
+}

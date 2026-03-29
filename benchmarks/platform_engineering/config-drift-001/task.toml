@@ -79,6 +79,7 @@ required = ["answer"]
 optional = ["config"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/config-drift-consul-serf-port-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Cross-file search helps trace port value references from values.yaml through multiple templates, but the chart is contained in a single directory"
 

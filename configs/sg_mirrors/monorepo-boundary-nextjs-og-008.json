@@ -1,0 +1,10 @@
+{
+  "task_id": "monorepo-boundary-nextjs-og-008",
+  "mirrors": [
+    {
+      "repo": "github.com/vercel/next.js",
+      "rev": "v13.5.6",
+      "mirror_id": "vercel/next.js--v13.5.6"
+    }
+  ]
+}

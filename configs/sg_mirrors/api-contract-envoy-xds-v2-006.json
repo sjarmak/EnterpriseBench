@@ -1,0 +1,20 @@
+{
+  "task_id": "api-contract-envoy-xds-v2-006",
+  "mirrors": [
+    {
+      "repo": "github.com/envoyproxy/envoy",
+      "rev": "v1.18.0",
+      "mirror_id": "envoyproxy/envoy--v1.18.0"
+    },
+    {
+      "repo": "github.com/envoyproxy/go-control-plane",
+      "rev": "v0.9.8",
+      "mirror_id": "envoyproxy/go-control-plane--v0.9.8"
+    },
+    {
+      "repo": "github.com/istio/istio",
+      "rev": "1.6.0",
+      "mirror_id": "istio/istio--1.6.0"
+    }
+  ]
+}

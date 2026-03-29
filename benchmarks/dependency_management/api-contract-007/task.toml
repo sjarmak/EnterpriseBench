@@ -86,6 +86,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/api-contract-gocp-module-007.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Module-level analysis requires understanding Go module resolution rather than code-level symbol tracing"
 

@@ -45,6 +45,7 @@ timeout_seconds = 120
 required = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/ccx-dep-trace-106.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "GCC pass infrastructure uses macro-based registration in passes.def; MCP helps navigate from the pass manager to concrete implementations, though macro patterns can be found with text search"
 

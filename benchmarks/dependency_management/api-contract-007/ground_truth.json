@@ -1,7 +1,10 @@
 {
   "candidate_id": "AC-9",
   "producer_repo": "envoyproxy/go-control-plane",
-  "consumer_repos": ["istio/istio", "grpc/grpc-go"],
+  "consumer_repos": [
+    "istio/istio",
+    "grpc/grpc-go"
+  ],
   "breaking_change_pr": "envoyproxy/go-control-plane#714",
   "consumer_fix_prs": [
     "envoyproxy/go-control-plane#1075",
@@ -20,7 +23,6 @@
     "Makefile"
   ],
   "fix_files": [
-    "envoy/empty.go",
     "envoy/go.mod",
     "envoy/go.sum",
     "ci/sync_envoy.sh"

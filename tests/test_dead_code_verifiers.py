@@ -42,7 +42,7 @@ TASKS: list[DeadCodeTaskSpec] = [
     DeadCodeTaskSpec("002", "react", 15, 5, ["enableRenderableContext"]),
     DeadCodeTaskSpec("003", "react", 8, 3, ["retryCompileFunction", "enableFire", "inferEffectDependencies"]),
     DeadCodeTaskSpec("004", "TypeScript", 20, 7, []),
-    DeadCodeTaskSpec("005", "angular", 16, 6, []),
+    DeadCodeTaskSpec("005", "angular", 16, 4, []),
 ]
 
 

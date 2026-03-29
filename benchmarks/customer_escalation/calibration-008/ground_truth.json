@@ -1,0 +1,41 @@
+{
+  "task_id": "cal-sup-click-clirunner-008",
+  "candidate_ref": "pallets/click#3110",
+  "description": "CliRunner.invoke raises ValueError on closed file during stdin reading",
+  "repo": "pallets/click",
+  "repo_rev": "8.2.1",
+  "required_files": [
+    {
+      "path": "src/click/testing.py",
+      "repo": "click",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "CliRunner class and invoke() method that creates BytesIO for input stream"
+    },
+    {
+      "path": "src/click/utils.py",
+      "repo": "click",
+      "confidence": 0.8,
+      "source": "deterministic",
+      "rationale": "Utility functions for stream handling including _default_text_stdin"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/click/core.py",
+      "repo": "click",
+      "confidence": 0.55,
+      "rationale": "BaseCommand.main() which reads from stdin during invocation"
+    }
+  ],
+  "ownership_keywords": [
+    "testing",
+    "clirunner",
+    "invoke",
+    "stdin",
+    "stream",
+    "bytesio"
+  ],
+  "expected_severity": "medium",
+  "related_references": []
+}

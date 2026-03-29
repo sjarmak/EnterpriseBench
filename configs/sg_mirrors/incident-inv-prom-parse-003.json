@@ -1,0 +1,15 @@
+{
+  "task_id": "incident-inv-prom-parse-003",
+  "mirrors": [
+    {
+      "repo": "github.com/grafana/grafana",
+      "rev": "v10.1.0",
+      "mirror_id": "grafana/grafana--v10.1.0"
+    },
+    {
+      "repo": "github.com/prometheus/prometheus",
+      "rev": "v2.46.0",
+      "mirror_id": "prometheus/prometheus--v2.46.0"
+    }
+  ]
+}

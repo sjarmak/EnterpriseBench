@@ -1,0 +1,10 @@
+{
+  "task_id": "support-map-nodebb-notif-011",
+  "mirrors": [
+    {
+      "repo": "github.com/NodeBB/NodeBB",
+      "rev": "8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7",
+      "mirror_id": "NodeBB/NodeBB--8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7"
+    }
+  ]
+}

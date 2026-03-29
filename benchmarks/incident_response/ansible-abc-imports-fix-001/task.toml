@@ -6,7 +6,7 @@ difficulty_stratum = "large_single"
 [task]
 id = "ansible-abc-imports-fix-001"
 suite = "incident_response"
-difficulty = "hard"
+difficulty = "medium"
 estimated_duration_minutes = 15
 session_type = "single"
 task_type = "refactor_orchestration"
@@ -51,6 +51,7 @@ required = ["code_patch"]
 optional = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/ansible-abc-imports-fix-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Single-repo Python codebase; the import pattern is easy to find with text search, but understanding which imports are internal compatibility shims vs external requires navigating Ansible's module_utils structure"
 

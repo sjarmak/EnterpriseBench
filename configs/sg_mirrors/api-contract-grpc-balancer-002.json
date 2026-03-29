@@ -1,0 +1,15 @@
+{
+  "task_id": "api-contract-grpc-balancer-002",
+  "mirrors": [
+    {
+      "repo": "github.com/grpc/grpc-go",
+      "rev": "v1.27.0",
+      "mirror_id": "grpc/grpc-go--v1.27.0"
+    },
+    {
+      "repo": "github.com/etcd-io/etcd",
+      "rev": "v3.4.3",
+      "mirror_id": "etcd-io/etcd--v3.4.3"
+    }
+  ]
+}

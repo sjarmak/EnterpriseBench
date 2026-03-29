@@ -1,0 +1,10 @@
+{
+  "task_id": "rbac-audit-002",
+  "mirrors": [
+    {
+      "repo": "github.com/keycloak/keycloak",
+      "rev": "bfcb150e312362fa6fd9c6ac080bf58989949d93~1",
+      "mirror_id": "keycloak/keycloak--bfcb150e312362fa6fd9c6ac080bf58989949d93~1"
+    }
+  ]
+}

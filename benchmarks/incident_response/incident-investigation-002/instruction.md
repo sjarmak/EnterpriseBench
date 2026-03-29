@@ -22,7 +22,7 @@ SRE team has identified a subtle data consistency issue: Kubernetes informers oc
 
 ## Key Observation
 
-The etcd3 watcher (`staging/src/k8s.io/apiserver/pkg/storage/etcd3/watcher.go`) and the legacy etcd watcher (`staging/src/k8s.io/apiserver/pkg/storage/etcd/etcd_watcher.go`) both have logic to set the correct resourceVersion on delete events. The watch cache layer appears to be missing this logic.
+The etcd3 watcher and the legacy etcd watcher both have logic to set the correct resourceVersion on delete events. The watch cache layer appears to be missing this logic.
 
 ## Environment
 

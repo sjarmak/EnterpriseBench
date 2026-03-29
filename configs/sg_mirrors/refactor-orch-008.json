@@ -1,0 +1,20 @@
+{
+  "task_id": "refactor-orch-008",
+  "mirrors": [
+    {
+      "repo": "github.com/grpc-ecosystem/go-grpc-middleware",
+      "rev": "v1.4.0",
+      "mirror_id": "grpc-ecosystem/go-grpc-middleware--v1.4.0"
+    },
+    {
+      "repo": "github.com/etcd-io/etcd",
+      "rev": "v3.5.17",
+      "mirror_id": "etcd-io/etcd--v3.5.17"
+    },
+    {
+      "repo": "github.com/kubernetes/kubernetes",
+      "rev": "v1.33.0",
+      "mirror_id": "kubernetes/kubernetes--v1.33.0"
+    }
+  ]
+}

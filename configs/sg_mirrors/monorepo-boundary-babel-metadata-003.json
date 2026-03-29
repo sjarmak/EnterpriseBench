@@ -1,0 +1,10 @@
+{
+  "task_id": "monorepo-boundary-babel-metadata-003",
+  "mirrors": [
+    {
+      "repo": "github.com/babel/babel",
+      "rev": "v7.22.20",
+      "mirror_id": "babel/babel--v7.22.20"
+    }
+  ]
+}

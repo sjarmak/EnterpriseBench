@@ -54,6 +54,7 @@ required = ["answer"]
 optional = ["kb_article", "reproduction_script"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/support-map-element-unread-010.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Notification state spans multiple stores and utilities; MCP helps trace thread receipt processing vs room timeline state"
 

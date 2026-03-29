@@ -13,8 +13,7 @@ description = "Trace impact of dropping icon column and removing nested subviews
 prompt = """
 We're flattening the View model in Mattermost by dropping the `icon` column from the
 views table and removing nested `subviews` and `typed_board_props` from the Go model
-struct. The SQL migration is:
-- `server/channels/db/migrations/postgres/000167_views_drop_icon.up.sql`
+struct. A SQL migration has been created for this schema change.
 
 Your task:
 1. Identify the SQL migration files (up and down) and the migrations list.

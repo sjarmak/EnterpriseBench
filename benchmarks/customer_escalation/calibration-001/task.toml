@@ -1,0 +1,71 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-err-flask-blueprint-001"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 10
+session_type = "single"
+task_type = "error_provenance"
+description = "Trace Blueprint url_prefix ignored when nesting blueprints in Flask"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/pallets/flask"
+rev = "3.1.0"
+path = "flask"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["flask"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.50
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the source file and function where nested blueprint URL prefix is resolved"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces how blueprint registration propagates URL prefix"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.20
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies when nested blueprint url_prefix is ignored"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Flask is a small codebase; the Blueprint registration logic is in a single file easily found by grepping for 'url_prefix' or 'register_blueprint'"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/flask/blueprints.py"
+repo = "flask"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/flask/scaffold.py"
+repo = "flask"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/flask/app.py"
+repo = "flask"
+confidence = 0.70

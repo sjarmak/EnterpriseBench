@@ -12,8 +12,7 @@ session_type = "single"
 description = "Trace impact of removing TSPropertySignature.initializer from @babel/types across babel monorepo"
 prompt = """
 The `@babel/types` package has had the `initializer` field removed from the
-`TSPropertySignature` AST node type definition. This change was made in
-`packages/babel-types/src/definitions/typescript.ts`.
+`TSPropertySignature` AST node type definition. This change was made in the @babel/types TypeScript AST definitions.
 
 Your task:
 1. Identify all sibling packages in the babel monorepo that consume the
@@ -64,6 +63,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/monorepo-boundary-babel-ts-init-001.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Cross-package type reference tracing through barrel re-exports and generated type files benefits from semantic code navigation"
 

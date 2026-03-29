@@ -4,6 +4,8 @@
 **Submitted by:** Team Admin
 **Product:** Element Web (self-hosted)
 
+**Codebase:** Available at `/workspace/element-web/`
+
 ---
 
 Hello,

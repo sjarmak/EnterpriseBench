@@ -1,0 +1,10 @@
+{
+  "task_id": "beam-pipeline-builder-refac-001",
+  "mirrors": [
+    {
+      "repo": "github.com/apache/beam",
+      "rev": "v2.55.0",
+      "mirror_id": "apache/beam--v2.55.0"
+    }
+  ]
+}

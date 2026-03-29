@@ -6,7 +6,7 @@ difficulty_stratum = "monorepo_cross_package"
 id = "monorepo-boundary-nextjs-og-008"
 suite = "feature_delivery"
 task_type = "monorepo_boundary"
-difficulty = "medium"
+difficulty = "hard"
 estimated_duration_minutes = 25
 session_type = "single"
 description = "Trace impact of moving ImageResponse from next/server to next/og across JS and Rust SWC boundaries"
@@ -66,6 +66,7 @@ timeout_seconds = 60
 required = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/monorepo-boundary-nextjs-og-008.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Cross-language boundary (TypeScript → Rust) requires finding import map references in SWC crate that text search may miss due to different naming conventions"
 

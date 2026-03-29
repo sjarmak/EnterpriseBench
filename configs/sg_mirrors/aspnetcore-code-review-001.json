@@ -1,0 +1,10 @@
+{
+  "task_id": "aspnetcore-code-review-001",
+  "mirrors": [
+    {
+      "repo": "github.com/dotnet/aspnetcore",
+      "rev": "v9.0.0",
+      "mirror_id": "dotnet/aspnetcore--v9.0.0"
+    }
+  ]
+}

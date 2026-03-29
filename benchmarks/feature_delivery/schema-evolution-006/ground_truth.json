@@ -1,9 +1,11 @@
 {
   "candidate_id": "SE-6",
   "repo": "discourse/discourse",
-  "pr_refs": ["#33207"],
+  "pr_refs": [
+    "#33207"
+  ],
   "base_rev": "290b435a727ed1d95aef554d60d8572eba7e818a",
-  "description": "Add description text column to Invite model — full-stack impact: model, controller, serializer, frontend modal, system tests",
+  "description": "Add description text column to Invite model \u2014 full-stack impact: model, controller, serializer, frontend modal, system tests",
   "schema_change": {
     "type": "add_column",
     "table": "Invite",
@@ -17,7 +19,6 @@
     "app/serializers/invite_serializer.rb"
   ],
   "sufficient_files": [
-    "db/migrate/20250614020437_add_description_to_invites.rb",
     "app/assets/javascripts/discourse/app/components/modal/create-invite.gjs",
     "app/assets/javascripts/discourse/app/templates/user-invited-show.gjs",
     "app/assets/javascripts/discourse/app/lib/constants.js",
@@ -37,7 +38,6 @@
     "app/models/invite.rb",
     "app/serializers/invite_serializer.rb",
     "config/locales/client.en.yml",
-    "db/migrate/20250614020437_add_description_to_invites.rb",
     "lib/tasks/javascript.rake",
     "spec/models/invite_spec.rb",
     "spec/requests/invites_controller_spec.rb",

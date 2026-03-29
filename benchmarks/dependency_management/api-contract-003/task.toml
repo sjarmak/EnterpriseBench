@@ -87,6 +87,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/api-contract-grpc-transport-003.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Three-repo dependency chain (grpc-go → etcd → kubernetes) requires cross-repo import graph traversal. Transport types are re-exported and wrapped across package boundaries, so direct consumers are findable with text search but transitive impact through re-exports requires semantic navigation"
 

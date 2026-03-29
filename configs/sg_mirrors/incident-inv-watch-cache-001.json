@@ -1,0 +1,10 @@
+{
+  "task_id": "incident-inv-watch-cache-001",
+  "mirrors": [
+    {
+      "repo": "github.com/kubernetes/kubernetes",
+      "rev": "v1.7.3",
+      "mirror_id": "kubernetes/kubernetes--v1.7.3"
+    }
+  ]
+}

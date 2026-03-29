@@ -50,6 +50,7 @@ timeout_seconds = 60
 required = ["security_assessment"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/ceph-rgw-auth-secure-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Single-repo but large C++ codebase; MCP helps navigate the RGW auth subsystem and find S3 signature verification code paths"
 

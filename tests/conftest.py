@@ -8,6 +8,11 @@ from pathlib import Path
 import pytest
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "network: requires network access (git ls-remote)")
+    config.addinivalue_line("markers", "docker: requires Docker daemon")
+
+
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 REPO_ROOT = Path(__file__).parent.parent
 

@@ -8,7 +8,7 @@
   "difficulty": "medium",
   "required_files": [
     {
-      "path": "internal/command/meta_backend_errors.go",
+      "path": "internal/command/meta_backend.go",
       "repo": "terraform",
       "confidence": 0.95,
       "source": "deterministic",
@@ -17,7 +17,7 @@
     {
       "path": "internal/command/meta_backend_migrate.go",
       "repo": "terraform",
-      "confidence": 0.80,
+      "confidence": 0.8,
       "source": "deterministic",
       "rationale": "Caller that references the error constants from meta_backend_errors.go. Agent must trace from error display back to this file to understand which constant is used."
     }

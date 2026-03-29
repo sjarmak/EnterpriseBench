@@ -1,0 +1,10 @@
+{
+  "task_id": "support-map-llvm-assertion-002",
+  "mirrors": [
+    {
+      "repo": "github.com/llvm/llvm-project",
+      "rev": "llvmorg-18.1.0",
+      "mirror_id": "llvm/llvm-project--llvmorg-18.1.0"
+    }
+  ]
+}

@@ -6,7 +6,7 @@ difficulty_stratum = "dual_repo"
 id = "api-contract-grpc-metadata-001"
 suite = "dependency_management"
 task_type = "api_contract"
-difficulty = "medium"
+difficulty = "hard"
 estimated_duration_minutes = 25
 session_type = "single"
 description = "Trace impact of gRPC-Go metadata context separation on etcd consumers"
@@ -18,7 +18,7 @@ metadata in the context (PR #1157). Previously, `metadata.FromContext` and
 `metadata.NewOutgoingContext`.
 
 Your task:
-1. Identify the breaking API changes in `grpc-go/metadata/metadata.go`.
+1. Identify the breaking API changes in the grpc-go metadata package.
 2. Find all files in the `etcd` codebase that use the old metadata APIs
    (`metadata.FromContext`, `metadata.NewContext`) and will break.
 3. For each affected file, classify the breakage type: compile error,
@@ -81,6 +81,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/api-contract-grpc-metadata-001.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Cross-repo symbol search for metadata.FromContext usage across grpc-go and etcd requires semantic navigation through Go imports"
 

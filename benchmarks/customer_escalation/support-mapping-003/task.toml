@@ -54,6 +54,7 @@ required = ["answer"]
 optional = ["kb_article", "reproduction_script"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/support-map-grafana-import-003.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Full-stack Go+TypeScript codebase; import flow spans backend service and frontend model — MCP helps trace across language boundary"
 

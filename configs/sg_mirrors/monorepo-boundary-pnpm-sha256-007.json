@@ -1,0 +1,10 @@
+{
+  "task_id": "monorepo-boundary-pnpm-sha256-007",
+  "mirrors": [
+    {
+      "repo": "github.com/pnpm/pnpm",
+      "rev": "v9.15.0",
+      "mirror_id": "pnpm/pnpm--v9.15.0"
+    }
+  ]
+}

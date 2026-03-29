@@ -96,6 +96,7 @@ required = ["security_assessment"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/rbac-audit-002.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Large single repo requiring navigation of permission model across admin resource classes"
 

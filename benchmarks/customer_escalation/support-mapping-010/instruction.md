@@ -4,6 +4,8 @@
 **Submitted by:** Office Manager
 **Product:** Element Web (self-hosted)
 
+**Codebase:** Available at `/workspace/element-web/`
+
 ---
 
 Hi there,

@@ -13,10 +13,10 @@ Your task is to **find the defects and produce a structured review report with p
 
 ## Context
 
-The DisplayName feature spans two core C# source files:
+The DisplayName feature spans two core C# source files in the Blazor Forms area:
 
-1. **`src/Components/Web/src/Forms/DisplayName.cs`** — Component class: implements `IComponent`, accepts a `For` expression parameter, resolves the display name via `ExpressionMemberAccessor`, and renders it.
-2. **`src/Components/Web/src/Forms/ExpressionMemberAccessor.cs`** — Static helper: caches expression-to-member mappings and member-to-display-name mappings, supports hot reload cache clearing, resolves display names from `[Display]` and `[DisplayName]` attributes.
+1. **DisplayName component class** — implements `IComponent`, accepts a `For` expression parameter, resolves the display name via an expression member accessor, and renders it.
+2. **Expression member accessor helper** — static helper that caches expression-to-member mappings and member-to-display-name mappings, supports hot reload cache clearing, resolves display names from `[Display]` and `[DisplayName]` attributes.
 
 ## Task
 
@@ -49,6 +49,7 @@ Write a JSON file at `/workspace/review.json` containing an array of defect obje
 ```
 
 Each entry must include:
+
 - `file` — Relative path from repository root
 - `line` — Approximate line number where the defect occurs
 - `severity` — One of: `critical`, `high`, `medium`, `low`
@@ -58,6 +59,7 @@ Each entry must include:
 ## Evaluation
 
 Your review will be evaluated on:
+
 - **Detection accuracy** (50%): Precision and recall of reported defects
 - **Fix quality** (50%): Whether your proposed patches correctly resolve the defects
 

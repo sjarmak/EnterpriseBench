@@ -1,7 +1,12 @@
 {
   "candidate_id": "incident-inv-003",
-  "repos": ["grafana/grafana", "prometheus/prometheus"],
-  "issue_refs": ["grafana#73747"],
+  "repos": [
+    "grafana/grafana",
+    "prometheus/prometheus"
+  ],
+  "issue_refs": [
+    "grafana#73747"
+  ],
   "fix_pr": "grafana#73788",
   "fix_merged": "2023-08-28",
   "buggy_rev": "grafana v10.1.0",
@@ -37,9 +42,14 @@
   ],
   "remediation": "Check iter.Error after every jsoniter parsing operation in prom.go. When an error is detected (including truncation/EOF errors), return the error instead of partial data. Consider wrapping jsoniter Iterator methods to return errors directly (the PR introduces a jsonitere package for this purpose).",
   "fix_files": [
-    "pkg/util/converter/prom.go",
-    "pkg/util/converter/prom_test.go",
-    "pkg/util/converter/jsonitere/jsonitere.go"
+    {
+      "path": "pkg/util/converter/prom.go",
+      "repo": "grafana"
+    },
+    {
+      "path": "pkg/util/converter/prom_test.go",
+      "repo": "grafana"
+    }
   ],
   "difficulty": "hard",
   "confidence": 0.96

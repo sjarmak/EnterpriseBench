@@ -4,6 +4,8 @@
 **Submitted by:** Build Infrastructure Engineer
 **Product:** Internal CI/CD Pipeline (LLVM-based toolchain)
 
+**Codebase:** Available at `/workspace/llvm-project/`
+
 ---
 
 Hello,

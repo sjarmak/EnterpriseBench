@@ -2,42 +2,6 @@
   "repo": "gcc-mirror/gcc",
   "repo_rev": "a8f3c97d",
   "difficulty": "hard",
-  "required_files": [
-    {
-      "path": "gcc/passes.def",
-      "repo": "gcc",
-      "confidence": 0.8,
-      "source": "curator",
-      "rationale": "Master list of all optimization passes and their execution order"
-    },
-    {
-      "path": "gcc/passes.cc",
-      "repo": "gcc",
-      "confidence": 0.8,
-      "source": "curator",
-      "rationale": "Pass manager implementation orchestrating pass execution"
-    },
-    {
-      "path": "gcc/pass_manager.h",
-      "repo": "gcc",
-      "confidence": 0.8,
-      "source": "curator",
-      "rationale": "opt_pass base class and pass manager interface"
-    },
-    {
-      "path": "gcc/tree-ssa-dce.cc",
-      "repo": "gcc",
-      "confidence": 0.8,
-      "source": "curator",
-      "rationale": "Concrete GIMPLE dead code elimination pass implementation"
-    },
-    {
-      "path": "gcc/tree-pass.h",
-      "repo": "gcc",
-      "confidence": 0.8,
-      "source": "curator",
-      "rationale": "Tree-SSA pass header with pass registration macros"
-    }
-  ],
+  "required_files": [],
   "sufficient_files": []
 }

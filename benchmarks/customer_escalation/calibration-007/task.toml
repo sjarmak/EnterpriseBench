@@ -1,0 +1,71 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-sup-requests-cabundle-007"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 10
+session_type = "single"
+task_type = "support_code_mapping"
+description = "Map customer report of REQUESTS_CA_BUNDLE overriding session.verify=False"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/psf/requests"
+rev = "v2.32.3"
+path = "requests"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["requests"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies source files for CA bundle and verify handling"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "ownership"
+weight = 0.20
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies responsible code area"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.20
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Requests is small; REQUESTS_CA_BUNDLE handling is in utils.py or sessions.py, easily found with grep"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/requests/utils.py"
+repo = "requests"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/requests/sessions.py"
+repo = "requests"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/requests/adapters.py"
+repo = "requests"
+confidence = 0.65

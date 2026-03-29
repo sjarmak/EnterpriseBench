@@ -1,0 +1,10 @@
+{
+  "task_id": "incident-inv-docker-shutdown-004",
+  "mirrors": [
+    {
+      "repo": "github.com/moby/moby",
+      "rev": "v28.0.0",
+      "mirror_id": "moby/moby--v28.0.0"
+    }
+  ]
+}

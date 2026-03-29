@@ -25,14 +25,6 @@
         "confidence": 0.95,
         "source": "deterministic",
         "rationale": "Alert evaluation scheduler \u2014 contains tick loop, overrun detection, and 'took longer than expected' logging"
-      },
-      {
-        "path": "pkg/services/ngalert/schedule/compat.go",
-        "repo": "grafana",
-        "line_range": null,
-        "confidence": 0.85,
-        "source": "deterministic",
-        "rationale": "Scheduler compatibility layer \u2014 evaluation cycle timing and rule group scheduling"
       }
     ],
     "sufficient_files": [

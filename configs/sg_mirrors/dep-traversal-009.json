@@ -1,0 +1,20 @@
+{
+  "task_id": "dep-traversal-009",
+  "mirrors": [
+    {
+      "repo": "github.com/urllib3/urllib3",
+      "rev": "1.26.16",
+      "mirror_id": "urllib3/urllib3--1.26.16"
+    },
+    {
+      "repo": "github.com/psf/requests",
+      "rev": "v2.28.0",
+      "mirror_id": "psf/requests--v2.28.0"
+    },
+    {
+      "repo": "github.com/boto/boto3",
+      "rev": "1.26.0",
+      "mirror_id": "boto/boto3--1.26.0"
+    }
+  ]
+}

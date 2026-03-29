@@ -1,0 +1,10 @@
+{
+  "task_id": "rbac-audit-003",
+  "mirrors": [
+    {
+      "repo": "github.com/goharbor/harbor",
+      "rev": "v2.12.0",
+      "mirror_id": "goharbor/harbor--v2.12.0"
+    }
+  ]
+}

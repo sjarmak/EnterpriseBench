@@ -1,5 +1,11 @@
 # Task: Security Audit of Ceph RADOS Gateway S3 Authentication
 
+## Context
+
+Our security team is conducting a quarterly audit of storage infrastructure. As the security engineer assigned to the Ceph deployment, you need to review the S3 authentication implementation in the RADOS Gateway (RGW) before we expose our object storage endpoints to external partners.
+
+The codebase is available at `/workspace/ceph/`.
+
 ## Objective
 
 Perform a security audit of the S3 authentication implementation in Ceph's RADOS Gateway (RGW) and create a findings report with remediation recommendations.
@@ -22,6 +28,6 @@ Perform a security audit of the S3 authentication implementation in Ceph's RADOS
 ## Success Criteria
 
 - security_audit.md exists
-- Contains file paths from src/rgw/
+- Contains specific file paths and function references from the RGW source
 - Identifies at least 3 security findings
 - Includes remediation recommendations

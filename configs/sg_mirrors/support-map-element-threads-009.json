@@ -1,0 +1,10 @@
+{
+  "task_id": "support-map-element-threads-009",
+  "mirrors": [
+    {
+      "repo": "github.com/element-hq/element-web",
+      "rev": "8ebdcab7d92f90422776c4390363338dcfd98ba5",
+      "mirror_id": "element-hq/element-web--8ebdcab7d92f90422776c4390363338dcfd98ba5"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "task_id": "support-map-firefox-css-crash-006",
+  "mirrors": [
+    {
+      "repo": "github.com/mozilla/gecko-dev",
+      "rev": "1a843e2167f97a3789f9d8a7a9772586f0e1c16f",
+      "mirror_id": "mozilla/gecko-dev--1a843e2167f97a3789f9d8a7a9772586f0e1c16f"
+    }
+  ]
+}

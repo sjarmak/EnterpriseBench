@@ -1,0 +1,10 @@
+{
+  "task_id": "config-drift-scdf-rabbitmq-002",
+  "mirrors": [
+    {
+      "repo": "github.com/bitnami/charts",
+      "rev": "53aca51120f86086e6780dc0453b93fbf49766b4",
+      "mirror_id": "bitnami/charts--53aca51120f86086e6780dc0453b93fbf49766b4"
+    }
+  ]
+}

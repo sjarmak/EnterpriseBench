@@ -12,8 +12,7 @@ session_type = "single"
 description = "Trace impact of creating a new RealmExport table to replace JSON file-based export tracking in Zulip"
 prompt = """
 We're replacing the JSON file-based export tracking system with a proper
-`RealmExport` database model. The migration is in
-`zerver/migrations/0595_add_realmexport_table_and_backfill.py`.
+`RealmExport` database model. A Django migration with backfill has been created for this change.
 
 Your task:
 1. Identify the schema change — new model creation and backfill migration.

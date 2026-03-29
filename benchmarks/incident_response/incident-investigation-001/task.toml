@@ -84,6 +84,7 @@ required = ["incident_report"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/incident-inv-watch-cache-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Watch request flow crosses staging package boundaries from the watch cache layer to etcd3 storage; MCP helps trace the event handling chain, though the single-repo layout keeps text search effective"
 

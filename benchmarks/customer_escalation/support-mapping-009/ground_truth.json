@@ -10,40 +10,31 @@
     "origin_suite": "csb_sdlc_fix",
     "migration_status": "schema_mapped",
     "bugs_fixed": [],
-    "metadata_sources": [
-      "task.toml"
-    ]
+    "metadata_sources": ["task.toml"]
   },
   "ground_truth": {
-    "tiers": [
-      "deterministic"
-    ],
+    "tiers": ["deterministic"],
     "required_files": [
       {
-        "path": "src/components/views/rooms/RoomHeader/RoomHeaderButtons.tsx",
+        "path": "src/components/structures/ThreadPanel.tsx",
         "repo": "element-web",
-        "line_range": null,
-        "confidence": 0.95,
-        "source": "deterministic",
-        "rationale": "RoomHeaderButtons component \u2014 thread panel toggle logic, null safety for thread notification state"
+        "confidence": 0.9,
+        "rationale": "Thread panel component — crash originates here when threads button is clicked"
       },
       {
-        "path": "src/components/views/right_panel/ThreadPanel.tsx",
+        "path": "src/components/views/right_panel/RoomHeaderButtons.tsx",
         "repo": "element-web",
-        "line_range": null,
         "confidence": 0.85,
-        "source": "deterministic",
-        "rationale": "Thread panel component \u2014 renders threads, may crash accessing undefined thread state"
+        "rationale": "Room header buttons — triggers thread panel display"
+      },
+      {
+        "path": "src/components/views/rooms/RoomHeader.tsx",
+        "repo": "element-web",
+        "confidence": 0.8,
+        "rationale": "Room header component containing the threads button"
       }
     ],
     "sufficient_files": [
-      {
-        "path": "src/components/views/rooms/RoomHeader/RoomHeader.tsx",
-        "repo": "element-web",
-        "line_range": null,
-        "confidence": 0.75,
-        "rationale": "Room header component \u2014 parent of RoomHeaderButtons, passes room props"
-      },
       {
         "path": "src/components/structures/RoomView.tsx",
         "repo": "element-web",

@@ -1,0 +1,42 @@
+{
+  "task_id": "cal-err-flask-blueprint-001",
+  "candidate_ref": "pallets/flask#4037",
+  "error_string": "Nested Blueprint url_prefix is ignored during registration",
+  "repo": "pallets/flask",
+  "repo_rev": "3.1.0",
+  "required_files": [
+    {
+      "path": "src/flask/blueprints.py",
+      "repo": "flask",
+      "confidence": 0.95,
+      "source": "deterministic",
+      "rationale": "Contains Blueprint.register_blueprint and the register method that handles URL prefix merging for nested blueprints"
+    },
+    {
+      "path": "src/flask/sansio/scaffold.py",
+      "repo": "flask",
+      "confidence": 0.85,
+      "source": "deterministic",
+      "rationale": "Base class Scaffold defines the url_prefix property and _merge_blueprint_params helper"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/flask/app.py",
+      "repo": "flask",
+      "confidence": 0.7,
+      "rationale": "Flask app class that initiates the top-level blueprint registration"
+    }
+  ],
+  "error_chain": [
+    "User calls api_bp.register_blueprint(users_bp)",
+    "Blueprint.register() is called with the nested blueprint",
+    "URL prefix from nested blueprint is merged in blueprints.py",
+    "If url_prefix passed to register_blueprint is None, nested bp prefix may be dropped"
+  ],
+  "trigger_conditions": [
+    "Nested blueprint has url_prefix set at construction time",
+    "Parent blueprint calls register_blueprint without explicit url_prefix override",
+    "The prefix merging logic in register() does not correctly concatenate prefixes"
+  ]
+}

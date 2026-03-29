@@ -1,0 +1,10 @@
+{
+  "task_id": "camel-routing-arch-001",
+  "mirrors": [
+    {
+      "repo": "github.com/apache/camel",
+      "rev": "camel-4.4.0",
+      "mirror_id": "apache/camel--camel-4.4.0"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "task_id": "ansible-abc-imports-fix-001",
+  "mirrors": [
+    {
+      "repo": "github.com/ansible/ansible",
+      "rev": "v2.16.0",
+      "mirror_id": "ansible/ansible--v2.16.0"
+    }
+  ]
+}

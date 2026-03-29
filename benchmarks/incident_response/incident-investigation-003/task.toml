@@ -90,6 +90,7 @@ required = ["incident_report"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/incident-inv-prom-parse-003.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Cross-repo investigation: understanding how Prometheus API response format interacts with Grafana's response parsing requires navigating both codebases to understand the data flow"
 

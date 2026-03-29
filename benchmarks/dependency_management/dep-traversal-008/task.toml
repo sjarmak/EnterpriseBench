@@ -85,6 +85,7 @@ required = ["answer", "security_assessment"]
 optional = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/dep-traversal-008.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Python dependency chain through setup.py/setup.cfg/requirements.txt across 3 repos benefits from cross-repo import and dependency resolution"
 

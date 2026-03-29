@@ -58,13 +58,6 @@
         "line_range": null,
         "confidence": 0.65,
         "rationale": "Notification badge UI \u2014 renders unread indicator, consumes notification state"
-      },
-      {
-        "path": "src/models/Room.ts",
-        "repo": "element-web",
-        "line_range": null,
-        "confidence": 0.55,
-        "rationale": "Room model \u2014 may contain read receipt and event filtering logic"
       }
     ]
   },

@@ -1,0 +1,10 @@
+{
+  "task_id": "ccx-compliance-053",
+  "mirrors": [
+    {
+      "repo": "github.com/apache/kafka",
+      "rev": "0753c489",
+      "mirror_id": "apache/kafka--0753c489"
+    }
+  ]
+}

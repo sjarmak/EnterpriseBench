@@ -90,6 +90,7 @@ required = ["answer", "topological_order"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/refactor-orch-007.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Finding all grpc.Dial call sites across 3 repos and understanding wrapper layers requires cross-repo code search"
 

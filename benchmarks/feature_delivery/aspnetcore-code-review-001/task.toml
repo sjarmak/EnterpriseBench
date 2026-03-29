@@ -6,7 +6,7 @@ difficulty_stratum = "large_single"
 [task]
 id = "aspnetcore-code-review-001"
 suite = "feature_delivery"
-difficulty = "hard"
+difficulty = "medium"
 estimated_duration_minutes = 20
 session_type = "single"
 task_type = "error_provenance"
@@ -43,6 +43,7 @@ timeout_seconds = 120
 required = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/aspnetcore-code-review-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Single-repo code review; MCP helps navigate ASP.NET Core component conventions and IComponent interface contracts"
 

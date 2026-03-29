@@ -1,0 +1,10 @@
+{
+  "task_id": "error-trace-tf-builtin-schema-001",
+  "mirrors": [
+    {
+      "repo": "github.com/hashicorp/terraform",
+      "rev": "v1.6.0",
+      "mirror_id": "hashicorp/terraform--v1.6.0"
+    }
+  ]
+}

@@ -12,7 +12,7 @@ Our Node.js services use gRPC for inter-service communication, and the Kubernete
 
 2. **Direct Dependents**: Which workspace repos depend on protobufjs?
 
-3. **Transitive Paths**: Map the chain: protobufjs -> @grpc/grpc-js -> downstream consumers. The grpc-node repo is a monorepo — check `packages/grpc-js/package.json` specifically.
+3. **Transitive Paths**: Map the chain: protobufjs -> @grpc/grpc-js -> downstream consumers. The grpc-node repo is a monorepo — find the @grpc/grpc-js package manifest within it.
 
 4. **Version Analysis**: Check lock files for resolved protobufjs versions.
 

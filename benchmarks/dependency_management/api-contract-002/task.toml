@@ -17,8 +17,8 @@ bridges from the old package paths to new ones. With their removal,
 any consumer directly referencing the old type paths gets compile failures.
 
 Your task:
-1. Identify the exact type aliases removed from `balancer/balancer.go`
-   and `resolver/resolver.go` in grpc-go.
+1. Identify the exact type aliases removed from the balancer and resolver
+   packages in grpc-go.
 2. Find all files in etcd that implement or reference these interfaces
    (custom balancers, pickers, resolvers).
 3. Map each affected etcd file to the specific removed type it depends on.
@@ -80,6 +80,7 @@ required = ["answer"]
 optional = ["migration_guide"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/api-contract-grpc-balancer-002.json"
 expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Cross-repo interface implementation search needed to find all etcd types implementing grpc-go balancer/resolver interfaces"
 

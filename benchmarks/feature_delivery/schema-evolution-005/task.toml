@@ -13,7 +13,7 @@ description = "Trace impact of adding automatic boolean to ReviewableClaimedTopi
 prompt = """
 We're adding an `automatic` boolean column to the `ReviewableClaimedTopic` model to
 distinguish between manually claimed and automatically claimed review topics. The
-migration is `db/migrate/20250319024514_add_automatic_to_reviewable_claimed_topic.rb`.
+migration has been created in the Rails migrations directory.
 
 Your task:
 1. Identify the schema change and migration.

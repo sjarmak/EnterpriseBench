@@ -50,6 +50,7 @@ timeout_seconds = 120
 required = ["code_patch"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/ansible-galaxy-tar-regression-prove-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Single-repo; root cause is in Galaxy collection module — MCP helps navigate the ansible-galaxy installation code path"
 

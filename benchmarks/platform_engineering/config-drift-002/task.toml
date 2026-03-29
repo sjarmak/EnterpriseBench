@@ -83,6 +83,7 @@ required = ["answer"]
 optional = ["config"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/config-drift-scdf-rabbitmq-002.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Tracing external RabbitMQ config flow through a 4-layer Helm hierarchy (values.yaml → helpers → secrets → configmaps) benefits from MCP, though template variable names are searchable across chart files"
 

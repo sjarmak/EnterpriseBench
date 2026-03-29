@@ -50,6 +50,7 @@ timeout_seconds = 60
 required = ["answer"]
 
 [tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/camel-routing-arch-001.json"
 expected_mcp_benefit = "medium"
 mcp_benefit_rationale = "Single-repo but very large codebase (~2.8M LOC); MCP symbol search helps navigate the deep Component/Endpoint/Consumer hierarchy"
 

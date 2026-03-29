@@ -1,0 +1,10 @@
+{
+  "task_id": "support-map-kafka-bufpool-012",
+  "mirrors": [
+    {
+      "repo": "github.com/apache/kafka",
+      "rev": "3.7.0",
+      "mirror_id": "apache/kafka--3.7.0"
+    }
+  ]
+}

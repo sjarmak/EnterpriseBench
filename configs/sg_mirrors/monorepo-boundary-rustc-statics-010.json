@@ -1,0 +1,10 @@
+{
+  "task_id": "monorepo-boundary-rustc-statics-010",
+  "mirrors": [
+    {
+      "repo": "github.com/rust-lang/rust",
+      "rev": "1.76.0",
+      "mirror_id": "rust-lang/rust--1.76.0"
+    }
+  ]
+}

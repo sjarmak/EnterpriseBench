@@ -1,9 +1,11 @@
 {
   "candidate_id": "SE-8",
   "repo": "discourse/discourse",
-  "pr_refs": ["#20507"],
+  "pr_refs": [
+    "#20507"
+  ],
   "base_rev": "168de52538632ae18b95c0757ab2ae5e21ff240c",
-  "description": "Add auto_bump_cooldown_days to CategorySetting with backfill — model, controller, serializer, frontend, API JSON schema fixtures",
+  "description": "Add auto_bump_cooldown_days to CategorySetting with backfill \u2014 model, controller, serializer, frontend, API JSON schema fixtures",
   "schema_change": {
     "type": "add_column_with_backfill",
     "table": "CategorySetting",
@@ -21,8 +23,6 @@
     "app/serializers/category_serializer.rb"
   ],
   "sufficient_files": [
-    "db/migrate/20230301071240_add_auto_bump_cooldown_days_to_category_settings.rb",
-    "db/migrate/20230308042434_backfill_auto_bump_cooldown_days_category_setting.rb",
     "app/assets/javascripts/discourse/app/components/edit-category-settings.hbs",
     "app/assets/javascripts/discourse/app/models/category.js",
     "app/assets/javascripts/discourse/app/routes/new-category.js",
@@ -41,8 +41,6 @@
     "app/models/category_setting.rb",
     "app/serializers/category_serializer.rb",
     "config/locales/client.en.yml",
-    "db/migrate/20230301071240_add_auto_bump_cooldown_days_to_category_settings.rb",
-    "db/migrate/20230308042434_backfill_auto_bump_cooldown_days_category_setting.rb",
     "spec/models/category_setting_spec.rb",
     "spec/models/category_spec.rb",
     "spec/requests/api/schemas/json/category_create_response.json",

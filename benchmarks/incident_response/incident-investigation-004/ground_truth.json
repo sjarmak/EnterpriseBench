@@ -1,6 +1,8 @@
 {
   "candidate_id": "incident-inv-004",
-  "repos": ["moby/moby"],
+  "repos": [
+    "moby/moby"
+  ],
   "issue_refs": [],
   "fix_pr": "moby#52079",
   "fix_merged": "2026-02-23",
@@ -43,8 +45,7 @@
   "remediation": "In handleContainerExit: check if the error from ShouldRestart is ErrRestartCanceled; if so, do not log it as a warning (it's expected during shutdown). In libcontainerd/remote/client.go: change 'ignoring event' to a more descriptive message like 'received task-delete event from containerd'. Also split exitStatus into separate exitCode and exitedAt fields for readability.",
   "fix_files": [
     "daemon/monitor.go",
-    "daemon/container/container.go",
-    "daemon/internal/libcontainerd/remote/client.go"
+    "daemon/container.go"
   ],
   "difficulty": "hard",
   "confidence": 0.96

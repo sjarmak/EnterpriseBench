@@ -1,0 +1,71 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-err-click-flagval-002"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 10
+session_type = "single"
+task_type = "error_provenance"
+description = "Trace Click flag_value with default=True having undocumented ordering requirement"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/pallets/click"
+rev = "8.2.1"
+path = "click"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["click"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.50
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the source file handling flag_value parameter processing"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces how flag_value interacts with default parameter"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.20
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies the ordering dependency between flag_value and default"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Click is a small library; flag_value handling is in a single core module easily found with grep"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/click/core.py"
+repo = "click"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/click/decorators.py"
+repo = "click"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/click/types.py"
+repo = "click"
+confidence = 0.60

@@ -1,0 +1,76 @@
+difficulty_stratum = "calibration"
+
+[task]
+id = "cal-err-requests-proxy-003"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 10
+session_type = "single"
+task_type = "error_provenance"
+description = "Trace why manually set Proxy-Authorization header is stripped in requests 2.26+"
+prompt = "See instruction.md"
+
+[[repos]]
+url = "github.com/psf/requests"
+rev = "v2.32.3"
+path = "requests"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["requests"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.50
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the source file that strips Proxy-Authorization headers"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the request flow where proxy headers are removed"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.20
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies when Proxy-Authorization is stripped"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Requests is a small library; proxy header handling can be found by grepping for Proxy-Authorization"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/requests/utils.py"
+repo = "requests"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/requests/models.py"
+repo = "requests"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/requests/adapters.py"
+repo = "requests"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "src/requests/sessions.py"
+repo = "requests"
+confidence = 0.65
