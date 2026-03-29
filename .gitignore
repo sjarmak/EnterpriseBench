@@ -32,6 +32,8 @@ Thumbs.db
 # Benchmark runs
 runs/staging/
 runs/official/_quarantine/
+results/runs/
+runs/
 
 # Sandbox artifacts
 *.tar.gz
@@ -39,3 +41,6 @@ runs/official/_quarantine/
 
 # Prototype worktrees (managed by /diverge-prototype)
 .worktrees/
+
+# Infra account config (contains PII — use accounts_config.json.example as template)
+scripts/infra/accounts_config.json

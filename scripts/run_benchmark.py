@@ -176,7 +176,7 @@ def run_task(
     logger.info("[run] %s (session_type=%s)", task.task_id, task.session_type)
     t0 = time.monotonic()
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=None)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         result.duration_seconds = time.monotonic() - t0
 
         if proc.returncode != 0:
@@ -191,7 +191,7 @@ def run_task(
 
         # Try to read results.json from the run output directory
         for results_file in [
-            REPO_ROOT / "results" / "runs" / task.task_id / "results.json",
+            PROJECT_ROOT / "results" / "runs" / task.task_id / "results.json",
             task.toml_path.parent / "results.json",
         ]:
             if results_file.exists():

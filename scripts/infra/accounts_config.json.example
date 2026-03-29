@@ -1,0 +1,24 @@
+{
+  "email_to_acct": {
+    "user1@example.com": "account1",
+    "user2@example.com": "account2",
+    "user3@example.com": "account3",
+    "user4@example.com": "account4",
+    "user5@example.com": "account5"
+  },
+  "name_to_acct": {
+    "profile-name-1": "account1",
+    "profile-name-2": "account1",
+    "profile-name-3": "account2",
+    "profile-name-4": "account3",
+    "profile-name-5": "account4",
+    "profile-name-6": "account5"
+  },
+  "account_profiles": {
+    "account1": {"name": "profile-name-1", "email": "user1@example.com"},
+    "account2": {"name": "profile-name-3", "email": "user2@example.com"},
+    "account3": {"name": "profile-name-4", "email": "user3@example.com"},
+    "account4": {"name": "profile-name-5", "email": "user4@example.com"},
+    "account5": {"name": "profile-name-6", "email": "user5@example.com"}
+  }
+}

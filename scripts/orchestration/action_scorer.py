@@ -19,7 +19,7 @@ import json
 import sys
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 try:
     from .event_schema import Action, Event, load_actions, load_events
@@ -48,7 +48,7 @@ class ScoringConfig:
     # How to match agent actions to oracle actions
     # "type_and_target" = action_type + target must match
     # "type_only" = just action_type must match (looser)
-    match_strategy: str = "type_and_target"
+    match_strategy: Literal["type_and_target", "type_only"] = "type_and_target"
 
 
 # ---------------------------------------------------------------------------

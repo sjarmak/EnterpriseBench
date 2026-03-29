@@ -52,6 +52,7 @@ class ChainTaskDefinition:
 class ChainResult:
     """Complete result of running a chain task."""
     task_id: str
+    total_sessions: int = 0
     session_results: list[SessionResult] = field(default_factory=list)
     milestone_scores: list[SessionScore] = field(default_factory=list)
     final_score: float = 0.0
@@ -60,7 +61,7 @@ class ChainResult:
     def summary(self) -> str:
         lines = [
             f"Chain Result: {self.task_id}",
-            f"Sessions: {len(self.session_results)} / {len(self.session_results)}",
+            f"Sessions: {len(self.session_results)} / {self.total_sessions}",
             "",
         ]
         for sr in self.session_results:
@@ -147,7 +148,7 @@ def run_chain(
        d. Run milestone verifiers (if not the last session)
     2. After all sessions: run final checkpoints, compute total score.
     """
-    chain_result = ChainResult(task_id=task_def.task_id)
+    chain_result = ChainResult(task_id=task_def.task_id, total_sessions=task_def.session_count)
 
     if workspace_root is None:
         workspace_root = tempfile.mkdtemp(prefix=f"eb-chain-{task_def.task_id}-")

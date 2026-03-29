@@ -20,18 +20,21 @@ from pathlib import Path
 
 HOMES = Path.home() / ".claude-homes"
 USAGE_CACHE = Path.home() / ".claude-usage" / "usage_cache.json"
-
-# Map account dirs to profile names (must match Mac push agent format)
-ACCOUNT_PROFILES = {
-    "account1": {"name": "steph-gmail", "email": "steph.jarmak@gmail.com"},
-    "account2": {"name": "harvard", "email": "stephanie.jarmak@cfa.harvard.edu"},
-    "account3": {"name": "gmail-2", "email": "stephanie.jarmak@gmail.com"},
-    "account4": {"name": "gmail-3", "email": "stephanie.jarmak1@gmail.com"},
-    "account5": {"name": "gmail-4", "email": "gibsonsteph42@gmail.com"},
-}
+_ACCOUNTS_CONFIG_PATH = Path(__file__).parent / "accounts_config.json"
 
 API_URL = "https://api.anthropic.com/v1/messages"
 PROBE_MODEL = "claude-haiku-4-5-20251001"
+
+
+def _load_account_profiles() -> dict:
+    if not _ACCOUNTS_CONFIG_PATH.exists():
+        print(
+            f"ERROR: {_ACCOUNTS_CONFIG_PATH} not found. "
+            "Copy accounts_config.json.example to accounts_config.json and fill in real values.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return json.loads(_ACCOUNTS_CONFIG_PATH.read_text())["account_profiles"]
 
 
 def load_token(account_dir: Path) -> str | None:
@@ -187,7 +190,9 @@ def update_cache(accounts: list[dict]) -> None:
         "accounts": list(existing.values()),
         "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
-    USAGE_CACHE.write_text(json.dumps(output, indent=2))
+    tmp = USAGE_CACHE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(output, indent=2))
+    tmp.replace(USAGE_CACHE)
 
 
 def main():
@@ -211,16 +216,18 @@ def main():
         print("No account homes found.")
         sys.exit(1)
 
+    account_profiles = _load_account_profiles()
+
     if args.dry_run:
         for d in account_dirs:
-            profile = ACCOUNT_PROFILES.get(d.name, {})
+            profile = account_profiles.get(d.name, {})
             token = load_token(d)
             print(f"{d.name} ({profile.get('email', '?')}): token={'valid' if token else 'EXPIRED'}")
         return
 
     results = []
     for i, d in enumerate(account_dirs):
-        profile = ACCOUNT_PROFILES.get(d.name, {})
+        profile = account_profiles.get(d.name, {})
         acct_name = profile.get("name", d.name)
         email = profile.get("email", "")
 

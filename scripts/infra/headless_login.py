@@ -37,6 +37,7 @@ TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
 REDIRECT_URI = "https://platform.claude.com/oauth/code/callback"
 SCOPES = "user:profile user:inference user:sessions:claude_code user:mcp_servers"
 ACCOUNT_NAME_RE = re.compile(r"account(\d+)$")
+DEFAULT_TOKEN_LIFETIME_SECONDS = 28800  # 8 hours
 
 
 def generate_pkce():
@@ -97,10 +98,7 @@ def exchange_code(auth_code: str, code_verifier: str, state: str) -> dict:
     Matches the exact request format used by the Claude Code binary:
     JSON body with grant_type, code, redirect_uri, client_id, code_verifier, and state.
     """
-    import subprocess
-
     code = clean_auth_code(auth_code)
-    print(f"  Auth code (cleaned): {code[:8]}...{code[-4:]}")
 
     payload = json.dumps({
         "grant_type": "authorization_code",
@@ -109,26 +107,28 @@ def exchange_code(auth_code: str, code_verifier: str, state: str) -> dict:
         "client_id": CLIENT_ID,
         "code_verifier": code_verifier,
         "state": state,
-    })
+    }).encode()
 
-    result = subprocess.run(
-        [
-            "curl", "-s", "-w", "\n%{http_code}",
-            "-X", "POST",
-            "-H", "Content-Type: application/json",
-            "-H", "User-Agent: claude-code/2.1.31",
-            "-H", "x-app: cli",
-            "-L",  # follow redirects
-            "--post301", "--post302", "--post303",  # keep POST on redirects
-            "-d", payload,
-            TOKEN_URL,
-        ],
-        capture_output=True, text=True, timeout=30,
+    req = urllib.request.Request(
+        TOKEN_URL,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "claude-code/2.1.31",
+            "x-app": "cli",
+        },
+        method="POST",
     )
 
-    lines = result.stdout.strip().rsplit("\n", 1)
-    body = lines[0] if len(lines) > 0 else ""
-    status = int(lines[1]) if len(lines) > 1 else 0
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = resp.read().decode()
+            status = resp.status
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        status = e.code
+        print(f"  Token exchange failed (HTTP {status}): {body}", file=sys.stderr)
+        sys.exit(1)
 
     if status == 200:
         return json.loads(body)
@@ -151,7 +151,7 @@ def save_credentials(home_dir: str, token_data: dict):
         except (json.JSONDecodeError, OSError):
             pass
 
-    expires_in = token_data.get("expires_in", 28800)
+    expires_in = token_data.get("expires_in", DEFAULT_TOKEN_LIFETIME_SECONDS)
     existing["claudeAiOauth"] = {
         "accessToken": token_data["access_token"],
         "refreshToken": token_data.get("refresh_token", ""),
@@ -162,6 +162,7 @@ def save_credentials(home_dir: str, token_data: dict):
     }
 
     creds_file.write_text(json.dumps(existing, indent=2))
+    creds_file.chmod(0o600)
     print(f"  Credentials saved to {creds_file}")
     print(f"  Token valid for {expires_in // 60} minutes")
 

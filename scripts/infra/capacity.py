@@ -23,6 +23,18 @@ HOMES = Path.home() / ".claude-homes"
 USAGE_CACHE = Path.home() / ".claude-usage" / "usage_cache.json"
 DEFAULT_MAX_PER_ACCOUNT = 6
 SKIP_THRESHOLD = 5  # % remaining below which account is considered exhausted
+_ACCOUNTS_CONFIG_PATH = Path(__file__).parent / "accounts_config.json"
+
+
+def _load_accounts_config() -> dict:
+    if not _ACCOUNTS_CONFIG_PATH.exists():
+        print(
+            f"ERROR: {_ACCOUNTS_CONFIG_PATH} not found. "
+            "Copy accounts_config.json.example to accounts_config.json and fill in real values.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return json.loads(_ACCOUNTS_CONFIG_PATH.read_text())
 
 
 def load_tokens() -> dict:
@@ -58,22 +70,10 @@ def load_usage() -> tuple[dict, float]:
         age_min = 999
 
     usage = {}
-    email_to_acct = {
-        "steph.jarmak@gmail.com": "account1",
-        "stephanie.jarmak@cfa.harvard.edu": "account2",
-        "stephanie.jarmak@gmail.com": "account3",
-        "stephanie.jarmak1@gmail.com": "account4",
-        "gibsonsteph42@gmail.com": "account5",
-    }
+    cfg = _load_accounts_config()
+    email_to_acct = cfg["email_to_acct"]
     # Fallback: map profile names to accounts for cache entries missing email
-    name_to_acct = {
-        "steph-gmail": "account1",
-        "sourcegraph": "account1",
-        "harvard": "account2",
-        "gmail-2": "account3",
-        "gmail-3": "account4",
-        "gmail-4": "account5",
-    }
+    name_to_acct = cfg["name_to_acct"]
 
     for acct_data in data.get("accounts", []):
         email = acct_data.get("email", "")
@@ -173,7 +173,6 @@ def distribute_slots(accounts_info: list, total: int, max_per: int) -> dict:
 
     total_score = sum(i["capacity_score"] for _, i in eligible)
     alloc = {}
-    remaining = total
 
     # Proportional allocation, capped at max_per
     for acct, info in eligible:
@@ -204,18 +203,19 @@ def main():
         tok = tokens[acct]
         _no_data = acct not in usage
         _fetch_error = bool(usage.get(acct, {}).get("fetch_error"))
-        u = usage.get(acct, {"five_h_pct": 0, "seven_d_pct": 0,
-                              "five_h_remaining": 100, "seven_d_remaining": 100,
-                              "five_h_resets_at": None, "seven_d_resets_at": None,
-                              "seven_d_resets_in_h": None, "email": "?"})
-        u["no_usage_data"] = _no_data
-        u["fetch_error"] = u.get("fetch_error")
-
+        _base = usage.get(acct, {"five_h_pct": 0, "seven_d_pct": 0,
+                                  "five_h_remaining": 100, "seven_d_remaining": 100,
+                                  "five_h_resets_at": None, "seven_d_resets_at": None,
+                                  "seven_d_resets_in_h": None, "email": "?"})
         # Stale/errored accounts: assume 50% used to avoid over-allocation.
         # Better to under-assign than to rate-limit an account we can't measure.
-        if _no_data or _fetch_error:
-            u["five_h_remaining"] = 50
-            u["seven_d_remaining"] = 50
+        u = {
+            **_base,
+            "no_usage_data": _no_data,
+            "fetch_error": _base.get("fetch_error"),
+            "five_h_remaining": 50 if (_no_data or _fetch_error) else _base.get("five_h_remaining", 100),
+            "seven_d_remaining": 50 if (_no_data or _fetch_error) else _base.get("seven_d_remaining", 100),
+        }
 
         score = capacity_score(tok["token_ok"], u["five_h_remaining"],
                                u["seven_d_remaining"], u.get("seven_d_resets_in_h"))

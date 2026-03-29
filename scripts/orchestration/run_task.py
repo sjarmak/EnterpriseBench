@@ -14,9 +14,11 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -295,8 +297,10 @@ def _setup_container(
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write(combined)
             tmp_path = f.name
-        _docker_cp(tmp_path, f"{container_id}:/workspace/instruction.md")
-        os.unlink(tmp_path)
+        try:
+            _docker_cp(tmp_path, f"{container_id}:/workspace/instruction.md")
+        finally:
+            os.unlink(tmp_path)
         logger.info("Copied instruction.md with output appendix into container")
     else:
         logger.warning("No instruction.md found in %s", task_dir)
@@ -404,20 +408,33 @@ def _run_agent(
 
     Returns (exit_code, duration_seconds).
     """
+    _SAFE_AGENT_CMD_RE = re.compile(r'^[\w./@: -]+$')
+    if not _SAFE_AGENT_CMD_RE.match(agent_command):
+        raise ValueError(
+            f"agent_command contains unsafe characters: {agent_command!r}"
+        )
+
     logger.info("Running agent: %s (timeout=%ds)", agent_command, timeout)
 
-    # Build env flags for docker exec
-    env_flags: list[str] = []
-    for key, value in (env_extra or {}).items():
-        env_flags.extend(["-e", f"{key}={value}"])
+    # Write env vars to a temp file so they are not visible in `ps aux`
+    env_items = dict(env_extra or {})
+    env_items["HOME"] = "/home/agent"
 
+    tmp_env_file = None
     start = time.monotonic()
     try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".env", delete=False
+        ) as fh:
+            for key, value in env_items.items():
+                fh.write(f"{key}={value}\n")
+            tmp_env_file = fh.name
+
         full_cmd = (
-            ["docker", "exec"]
-            + env_flags
-            + ["-u", "agent", "-e", "HOME=/home/agent",
-               "-w", "/workspace", container_id]
+            ["docker", "exec",
+             "--env-file", tmp_env_file,
+             "-u", "agent",
+             "-w", "/workspace", container_id]
             + ["bash", "-c",
                "mkdir -p /workspace/agent_output && "
                f"{agent_command} < /workspace/instruction.md"]
@@ -442,6 +459,13 @@ def _run_agent(
         (output_dir / "agent_stdout.log").write_text("")
         (output_dir / "agent_stderr.log").write_text(f"TIMEOUT after {timeout}s\n")
         logger.error("Agent timed out after %ds", timeout)
+
+    finally:
+        if tmp_env_file is not None:
+            try:
+                os.unlink(tmp_env_file)
+            except OSError:
+                pass
 
     return exit_code, duration
 
@@ -633,10 +657,10 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         return result
 
     except Exception as e:
-        result.error = str(e)
+        result.error = type(e).__name__
         result.phase = "error"
         result.timing = timings
-        logger.error("Task run failed: %s", e)
+        logger.error("Task run failed: %s", e, exc_info=True)
         return result
 
     finally:
