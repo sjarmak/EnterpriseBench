@@ -2,20 +2,13 @@
 # check_architecture.sh — verify agent produced coherent architectural analysis
 set -euo pipefail
 
-ANSWER=""
-for f in "${WORKSPACE:-/workspace}/answer.json" "${WORKSPACE:-/workspace}/logs/agent/solution.md"; do
-    if [[ -f "$f" ]]; then
-        ANSWER="$f"
-        break
-    fi
-done
-
-if [[ -z "$ANSWER" ]]; then
+ANSWER="${WORKSPACE:-/workspace}/agent_output/answer.json"
+if [[ ! -f "$ANSWER" ]]; then
     printf '{"score": 0.0, "passed": false, "detail": "No agent output found"}\n'
     exit 0
 fi
 
-TEXT=$(cat "$ANSWER" | tr '[:upper:]' '[:lower:]')
+TEXT=$(tr '[:upper:]' '[:lower:]' < "$ANSWER")
 
 FOUND=0
 TOTAL=3

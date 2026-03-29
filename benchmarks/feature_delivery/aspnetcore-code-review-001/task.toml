@@ -9,7 +9,7 @@ suite = "feature_delivery"
 difficulty = "hard"
 estimated_duration_minutes = 20
 session_type = "single"
-task_type = "api_contract"
+task_type = "error_provenance"
 description = "Review ASP.NET Core Blazor DisplayName PR for injected bugs and compliance violations"
 prompt = "See instruction.md"
 

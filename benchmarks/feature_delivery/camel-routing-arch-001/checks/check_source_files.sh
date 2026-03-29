@@ -2,13 +2,13 @@
 # check_source_files.sh — verify agent identified the core routing hierarchy files
 set -euo pipefail
 
-ANSWER_FILE="${WORKSPACE:-/workspace}/answer.json"
+export ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
 if [[ ! -f "$ANSWER_FILE" ]]; then
-    # Also check the legacy output path
-    ANSWER_FILE="${WORKSPACE:-/workspace}/logs/agent/solution.md"
+    echo '{"score": 0.0, "passed": false, "detail": "No answer.json found"}'
+    exit 0
 fi
 
-GT_FILE="$TASK_DIR/ground_truth.json"
+export GT_FILE="$TASK_DIR/ground_truth.json"
 
 if [[ ! -f "$GT_FILE" ]]; then
     echo '{"score": 0.0, "passed": false, "detail": "No ground_truth.json found"}'
@@ -18,10 +18,10 @@ fi
 python3 -c "
 import json, os
 
-gt = json.load(open(os.environ.get('GT_FILE', '$GT_FILE')))
+gt = json.load(open(os.environ['GT_FILE']))
 gt_files = [f['path'] for f in gt.get('required_files', [])]
 
-answer_file = '$ANSWER_FILE'
+answer_file = os.environ['ANSWER_FILE']
 if answer_file.endswith('.json'):
     try:
         answer = json.load(open(answer_file))

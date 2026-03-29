@@ -1,5 +1,5 @@
 {
-  "repo": "gcc-mirror/gcc",
+  "repo": "sg-evals/llvm-project",
   "repo_rev": "a8f3c97d",
   "difficulty": "hard",
   "required_files": [

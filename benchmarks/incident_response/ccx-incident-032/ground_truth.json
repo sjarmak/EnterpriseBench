@@ -1,5 +1,5 @@
 {
-  "repo": "envoyproxy/envoy",
+  "repo": "sg-evals/envoy",
   "repo_rev": "v1.31.2",
   "difficulty": "hard",
   "required_files": [

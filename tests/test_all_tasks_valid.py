@@ -84,14 +84,28 @@ class TestTaskValid:
         )
 
     def test_ground_truth_json_exists(self, task_dir: Path) -> None:
-        """ground_truth.json must exist and be valid JSON."""
+        """ground_truth.json must exist, be valid JSON, and have substantive content."""
         gt_path = task_dir / "ground_truth.json"
         assert gt_path.exists(), f"Missing ground_truth.json in {task_dir.name}"
         content = gt_path.read_text()
         try:
-            json.loads(content)
+            gt = json.loads(content)
         except json.JSONDecodeError as exc:
             pytest.fail(f"Invalid JSON in ground_truth.json: {exc}")
+        # GT must have at least one substantive key (not just an empty dict)
+        # Different task types use different GT schemas:
+        #   required_files/sufficient_files (err-provenance, support-mapping, schema-evolution)
+        #   dead_code/live_code (dead-code)
+        #   dependency_graph/merge_order (refactor-orchestration)
+        #   affected_dependents (monorepo-boundary)
+        #   consumer_affected_files (api-contract)
+        #   drift_points (config-drift)
+        #   root_cause/error_chain (incident-investigation)
+        #   policy_chain/escalation_path (rbac-audit)
+        gt_block = gt.get("ground_truth", gt)
+        assert len(gt_block) > 0, (
+            f"{task_dir.name}: ground_truth.json is empty"
+        )
 
     def test_instruction_md_exists(self, task_dir: Path) -> None:
         """instruction.md must exist."""
@@ -124,5 +138,5 @@ class TestTaskValid:
         if "task_type" not in task_block:
             warnings.warn(
                 f"{task_dir.name}: missing task_type field",
-                stacklevel=1,
+                stacklevel=2,
             )

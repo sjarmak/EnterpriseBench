@@ -14,6 +14,8 @@ Also covers error cases: missing workspace, invalid output, missing task.toml.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -25,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 from eb_verify.task_parser import parse_task, TaskDefinition
 from eb_verify.runner import CheckpointRunner
-from eb_verify.scoring import CheckpointResult, VerificationResult, compute_score
+from eb_verify.scoring import VerificationResult
 
 BENCHMARKS = Path(__file__).parent.parent / "benchmarks"
 
@@ -261,7 +263,6 @@ class TestDepTraversal003:
         assert runner.sandbox_health_check() is True
 
         # Remove one repo — health check should fail
-        import shutil
         shutil.rmtree(workspace / "chi")
         assert runner.sandbox_health_check() is False
 
@@ -616,7 +617,7 @@ class TestCLISubprocess:
             text=True,
             timeout=30,
             env={
-                **dict(__import__("os").environ),
+                **os.environ,
                 "PYTHONPATH": str(Path(__file__).parent.parent / "lib"),
             },
         )
@@ -637,7 +638,7 @@ class TestCLISubprocess:
             text=True,
             timeout=10,
             env={
-                **dict(__import__("os").environ),
+                **os.environ,
                 "PYTHONPATH": str(Path(__file__).parent.parent / "lib"),
             },
         )
@@ -659,7 +660,7 @@ class TestCLISubprocess:
             text=True,
             timeout=10,
             env={
-                **dict(__import__("os").environ),
+                **os.environ,
                 "PYTHONPATH": str(Path(__file__).parent.parent / "lib"),
             },
         )
