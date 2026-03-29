@@ -3,8 +3,8 @@
   "mirrors": [
     {
       "repo": "github.com/gcc-mirror/gcc",
-      "rev": "a8f3c97d",
-      "mirror_id": "gcc-mirror/gcc--a8f3c97d"
+      "rev": "releases/gcc-14.2.0",
+      "mirror_id": "gcc-mirror/gcc--releases_gcc-14.2.0"
     }
   ]
 }

@@ -1,7 +1,5 @@
 # Migrated from CodeScaleBench: CCX-dep-trace-106
 # Origin suite: csb_org_crossrepo
-# NOTE: Task is about GCC optimization passes. The sg-evals mirror
-# contains the GCC source under the llvm-project mirror ID (CSB legacy naming).
 
 difficulty_stratum = "large_single"
 
@@ -17,7 +15,7 @@ prompt = "See instruction.md"
 
 [[repos]]
 url = "https://github.com/gcc-mirror/gcc"
-rev = "a8f3c97d"
+rev = "releases/gcc-14.2.0"
 path = "gcc"
 role = "primary"
 
@@ -51,7 +49,7 @@ mcp_benefit_rationale = "GCC pass infrastructure uses macro-based registration i
 
 [[tool_access.sourcegraph_mirrors]]
 repo = "github.com/gcc-mirror/gcc"
-mirror_id = "gcc-mirror/gcc--a8f3c97d"
+mirror_id = "gcc-mirror/gcc--releases_gcc-14.2.0"
 
 [ground_truth]
 tiers = ["curator"]
