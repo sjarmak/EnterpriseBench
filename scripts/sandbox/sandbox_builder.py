@@ -13,6 +13,7 @@ Flags:
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -160,12 +161,26 @@ def generate_dockerfile(task: dict, task_dir: str) -> str:
         path = repo['path']
 
         lines.append(f"# Clone {path} at {rev}")
-        lines.append(
-            f"RUN git clone --depth 1 --branch {rev} {clone_url} /workspace/{path} && \\"
-        )
-        lines.append(
-            f"    cd /workspace/{path} && \\"
-        )
+        # Detect if rev is a commit SHA (not a tag/branch name)
+        is_sha = bool(re.match(r'^[0-9a-f]{7,40}$', rev))
+        if is_sha:
+            # SHA-based revs: clone then checkout (--branch doesn't accept SHAs)
+            lines.append(
+                f"RUN git clone --filter=blob:none {clone_url} /workspace/{path} && \\"
+            )
+            lines.append(
+                f"    cd /workspace/{path} && \\"
+            )
+            lines.append(
+                f"    git checkout {rev} && \\"
+            )
+        else:
+            lines.append(
+                f"RUN git clone --depth 1 --branch {rev} {clone_url} /workspace/{path} && \\"
+            )
+            lines.append(
+                f"    cd /workspace/{path} && \\"
+            )
         lines.append(
             f"    git log --oneline -1 > /workspace/.markers/{path}.rev && \\"
         )
