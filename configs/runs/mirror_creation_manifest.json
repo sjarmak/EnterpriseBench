@@ -445,8 +445,8 @@
     },
     {
       "upstream": "github.com/gcc-mirror/gcc",
-      "commit": "a8f3c97d",
-      "mirror": "sg-evals/gcc--a8f3c97d",
+      "commit": "releases/gcc-14.2.0",
+      "mirror": "sg-evals/gcc--releases_gcc-14.2.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "ccx-dep-trace-106"
@@ -739,7 +739,7 @@
     },
     {
       "upstream": "github.com/apache/kafka",
-      "commit": "0753c489",
+      "commit": "0753c489afad403fb6e78fda4c4a380e46f500c0",
       "mirror": "sg-evals/kafka--0753c489",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
@@ -901,7 +901,7 @@
     {
       "upstream": "github.com/apache/logging-log4j2",
       "commit": "rel/2.14.1",
-      "mirror": "sg-evals/logging-log4j2--rel/2.14.1",
+      "mirror": "sg-evals/logging-log4j2--rel_2.14.1",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "dep-traversal-011"

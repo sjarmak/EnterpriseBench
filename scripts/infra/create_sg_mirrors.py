@@ -318,14 +318,18 @@ def create_mirror(entry: dict, dry_run: bool = False) -> tuple[bool, str]:
     commit = entry["commit"]
     org_repo = upstream.replace("github.com/", "")
 
-    # Check if already exists
+    # Check if already exists with content
     if repo_exists(mirror_name):
         r = run(["gh", "api", f"repos/{ORG}/{mirror_name}/commits",
-                 "--jq", "length", "-q"])
+                 "--jq", "length"])
         if r.returncode == 0 and r.stdout.strip() not in ("0", ""):
             return True, "already exists"
+        # Repo exists but is empty — delete so we can recreate cleanly
         if not dry_run:
-            run(["gh", "repo", "delete", f"{ORG}/{mirror_name}", "--confirm"])
+            r = run(["gh", "repo", "delete", f"{ORG}/{mirror_name}", "--yes"])
+            if r.returncode != 0:
+                return False, f"could not delete empty repo: {r.stderr.strip()}"
+            time.sleep(2)
 
     # Resolve short hashes to full
     is_tag = not all(c in "0123456789abcdef" for c in commit.lower())
@@ -350,11 +354,14 @@ def create_mirror(entry: dict, dry_run: bool = False) -> tuple[bool, str]:
 
     time.sleep(2)
 
-    # Disable push protection
+    # Disable secret scanning and push protection so OSS repos with test
+    # tokens/fixtures (vault, grafana, zulip, etc.) can be pushed
     run(["gh", "api", f"repos/{ORG}/{mirror_name}",
          "-X", "PATCH",
+         "-f", "security_and_analysis.secret_scanning.status=disabled",
          "-f", "security_and_analysis.secret_scanning_push_protection.status=disabled",
          "--silent"])
+    time.sleep(1)
 
     # Download archive to temp dir
     workdir = tempfile.mkdtemp(prefix=f"sgmirror-{mirror_name}-")
@@ -441,9 +448,25 @@ def execute_mirrors(manifest: dict, dry_run: bool = False, skip_existing: bool =
             else:
                 print(f"OK ({msg})")
                 created += 1
+                # Rate-limit to avoid "created too many repositories" errors
+                if not dry_run:
+                    time.sleep(5)
         else:
-            print(f"FAIL ({msg})")
-            failed.append((mirror, msg))
+            if "too quickly" in msg:
+                print(f"RATE LIMITED — waiting 60s")
+                time.sleep(60)
+                # Retry once
+                ok2, msg2 = create_mirror(entry, dry_run=dry_run)
+                if ok2:
+                    print(f"  RETRY OK ({msg2})")
+                    created += 1
+                    time.sleep(5)
+                else:
+                    print(f"  RETRY FAIL ({msg2})")
+                    failed.append((mirror, msg2))
+            else:
+                print(f"FAIL ({msg})")
+                failed.append((mirror, msg))
 
     print(f"\n=== Summary: {created} created, {len(failed)} failed ===")
     if failed:
@@ -467,6 +490,8 @@ def main():
                         help="Actually create mirrors (default: just generate manifest)")
     parser.add_argument("--dry-run", action="store_true",
                         help="With --execute, show what would be done without creating")
+    parser.add_argument("--no-skip", action="store_true",
+                        help="Don't skip repos that already exist (retry empty/failed ones)")
     parser.add_argument("--output", "-o", type=Path, default=None,
                         help="Output path for manifest JSON (default: configs/runs/mirror_creation_manifest.json)")
     args = parser.parse_args()
@@ -503,7 +528,8 @@ def main():
     # Optionally create mirrors
     if args.execute:
         print("\n" + "=" * 60)
-        execute_mirrors(manifest, dry_run=args.dry_run)
+        execute_mirrors(manifest, dry_run=args.dry_run,
+                        skip_existing=not args.no_skip)
 
 
 if __name__ == "__main__":
