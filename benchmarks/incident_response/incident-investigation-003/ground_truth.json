@@ -1,0 +1,46 @@
+{
+  "candidate_id": "incident-inv-003",
+  "repos": ["grafana/grafana", "prometheus/prometheus"],
+  "issue_refs": ["grafana#73747"],
+  "fix_pr": "grafana#73788",
+  "fix_merged": "2023-08-28",
+  "buggy_rev": "grafana v10.1.0",
+  "description": "Grafana Prometheus response JSON parser never checks iter.Error from jsoniter, causing silent data loss on truncated or malformed responses",
+  "root_cause": {
+    "file": "pkg/util/converter/prom.go",
+    "function": "Multiple parsing functions in the Prometheus response converter",
+    "summary": "The Prometheus response parser in Grafana uses json-iterator/go to parse responses. jsoniter's Iterator methods do not return errors; they set iter.Error. The converter code never checks iter.Error after parsing operations. When the response body is truncated (by dataproxy response_limit) or malformed, jsoniter stops parsing and sets iter.Error, but the converter ignores this and returns whatever partial data was extracted.",
+    "mechanism": "jsoniter iter.Error is never checked. Truncated JSON from response_limit causes jsoniter to stop mid-parse. Partial data frames are returned as if they were complete."
+  },
+  "error_chain": [
+    {
+      "component": "Prometheus HTTP API (web/api/v1/api.go)",
+      "action": "Returns complete, valid JSON response"
+    },
+    {
+      "component": "Grafana data proxy (response_limit setting)",
+      "action": "Truncates response body if it exceeds configured limit"
+    },
+    {
+      "component": "Grafana Prometheus datasource plugin",
+      "action": "Passes truncated body to converter"
+    },
+    {
+      "component": "Grafana converter (pkg/util/converter/prom.go)",
+      "action": "BUG: Parses JSON with jsoniter, never checks iter.Error, returns partial data"
+    }
+  ],
+  "affected_services": [
+    "Grafana Prometheus datasource",
+    "Grafana Loki datasource (shares the converter code path)",
+    "Any Grafana deployment with response_limit configured"
+  ],
+  "remediation": "Check iter.Error after every jsoniter parsing operation in prom.go. When an error is detected (including truncation/EOF errors), return the error instead of partial data. Consider wrapping jsoniter Iterator methods to return errors directly (the PR introduces a jsonitere package for this purpose).",
+  "fix_files": [
+    "pkg/util/converter/prom.go",
+    "pkg/util/converter/prom_test.go",
+    "pkg/util/converter/jsonitere/jsonitere.go"
+  ],
+  "difficulty": "hard",
+  "confidence": 0.96
+}

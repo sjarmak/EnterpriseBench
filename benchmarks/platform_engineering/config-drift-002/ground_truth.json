@@ -1,0 +1,50 @@
+{
+  "candidate_id": 2,
+  "repo": "bitnami/charts",
+  "pr_refs": ["#24493"],
+  "issues_refs": ["#24474", "#24475"],
+  "description": "External RabbitMQ configuration inconsistencies in spring-cloud-dataflow chart across values, helpers, secrets, and configmaps",
+  "drift_points": [
+    {
+      "file": "bitnami/spring-cloud-dataflow/values.yaml",
+      "key": "externalRabbitmq.existingPasswordSecret",
+      "expected": "Support specifying secret key name for password (like external database config does)",
+      "actual": "Only supports secret name, not the key within the secret that holds the password",
+      "override_chain": [
+        "values.yaml: externalRabbitmq.existingPasswordSecret (name only)",
+        "templates/_helpers.tpl: helper reads secret but assumes fixed key name",
+        "templates/externalrabbitmq-secrets.yaml: generates secret without configurable key"
+      ],
+      "severity": "functional_break"
+    },
+    {
+      "file": "bitnami/spring-cloud-dataflow/templates/_helpers.tpl",
+      "key": "rabbitmq.auth.password requirement",
+      "expected": "Password should be optional when using external RabbitMQ with existing secret",
+      "actual": "Password is required even when existingSecret is provided",
+      "override_chain": [
+        "values.yaml: rabbitmq.auth.password (always required)",
+        "templates/_helpers.tpl: helper checks password without considering existingSecret case"
+      ],
+      "severity": "functional_break"
+    },
+    {
+      "file": "bitnami/spring-cloud-dataflow/templates/_helpers.tpl",
+      "key": "rabbitmq.auth.erlangCookie requirement",
+      "expected": "erlangCookie should be optional when using external RabbitMQ",
+      "actual": "erlangCookie is required even for external RabbitMQ where it is irrelevant",
+      "override_chain": [
+        "values.yaml: rabbitmq.auth.erlangCookie (always required)",
+        "templates/_helpers.tpl: helper validates erlangCookie regardless of rabbitmq mode"
+      ],
+      "severity": "configuration_inconsistency"
+    }
+  ],
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_url": "https://github.com/bitnami/charts/pull/24493",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.90
+}

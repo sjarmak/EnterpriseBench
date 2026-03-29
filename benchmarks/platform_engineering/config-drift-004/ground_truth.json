@@ -1,0 +1,30 @@
+{
+  "candidate_id": 4,
+  "repo": "argoproj/argo-cd",
+  "pr_refs": ["#22035"],
+  "issues_refs": ["#22034"],
+  "description": "Null securityContext overrides in ArgoCD redis-ha values.yaml cause drift under Helm 3.17.1 strict validation",
+  "drift_points": [
+    {
+      "file": "manifests/ha/base/redis-ha/chart/values.yaml",
+      "key": "securityContext",
+      "expected": "Remove null override to let upstream redis-ha chart defaults apply",
+      "actual": "securityContext: null (explicit null override of upstream defaults)",
+      "override_chain": [
+        "upstream redis-ha chart: securityContext has default non-null values",
+        "manifests/ha/base/redis-ha/chart/values.yaml: securityContext: null (overrides to null)",
+        "Helm 3.17.1: stricter validation rejects null securityContext, producing different rendered output"
+      ],
+      "severity": "breaking",
+      "impact": "CI failure due to manifest diff between rendered output and checked-in upstream.yaml"
+    }
+  ],
+  "helm_version_notes": "Helm 3.17.1 tightened validation of null values in YAML. Previously, securityContext: null was silently treated as 'omit this field'. In 3.17.1, it produces different rendered output (explicit null vs omitted field), causing a diff in the generated manifests.",
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_url": "https://github.com/argoproj/argo-cd/pull/22035",
+    "verified": true
+  },
+  "difficulty": "medium",
+  "confidence": 0.93
+}

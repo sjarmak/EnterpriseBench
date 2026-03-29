@@ -1,0 +1,116 @@
+# Incident Investigation: K8s Watch Cache Delete Event Wrong ResourceVersion
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "incident-inv-watch-delete-002"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Trace root cause of incorrect resourceVersion in DELETE watch events from K8s API server watch cache"
+prompt = """
+Your SRE team has reported a subtle but critical issue: Kubernetes informers
+occasionally enter a broken state where they miss subsequent events after
+receiving a DELETE watch event. The informer's internal bookkeeping of
+resourceVersion gets set backwards, causing it to miss events between the
+stale version and the current version.
+
+The error scenario from the incident investigation so far:
+
+  1. A namespace-scoped watch is established via the API server watch cache
+  2. An object is modified such that it no longer matches the namespace filter
+  3. The watch cache correctly converts this to a DELETE event for the watcher
+  4. BUT: the DELETE event carries the PREVIOUS object's resourceVersion
+     instead of the current event's resourceVersion
+  5. The informer records this stale resourceVersion
+  6. If the watch is interrupted and re-established, events between the stale
+     and current version are permanently missed
+
+The etcd direct watchers handle this correctly, but the watch cache layer
+does not.
+
+Your task:
+1. Identify the root cause file and the specific code path where the bug
+   occurs in the watch cache filtering logic.
+2. Trace the error chain from the client through the watch cache to etcd.
+3. List all affected components.
+4. Propose the correct remediation.
+
+Write your incident report to /workspace/kubernetes/INCIDENT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.9.1"
+path = "kubernetes"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+total_loc = 2_500_000
+dependency_depth = 1
+frameworks = ["kubernetes"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies cacher.go processEvent filtering logic as root cause"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the error chain from client-go through watch cache to etcd watcher"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_services"
+weight = 0.15
+verifier = "checks/check_affected_services.sh"
+description = "Agent identifies affected components including client-go informers"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes setting the event resourceVersion on the PrevObject for delete events"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing the resourceVersion propagation path requires cross-package symbol navigation between cacher.go, watch_cache.go, etcd3/watcher.go, and etcd/etcd_watcher.go to compare implementations"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "staging/src/k8s.io/apiserver/pkg/storage/cacher.go"
+repo = "kubernetes"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "staging/src/k8s.io/apiserver/pkg/storage/etcd3/watcher.go"
+repo = "kubernetes"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "staging/src/k8s.io/apiserver/pkg/storage/etcd/etcd_watcher.go"
+repo = "kubernetes"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go"
+repo = "kubernetes"
+confidence = 0.75

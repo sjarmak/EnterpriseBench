@@ -1,0 +1,119 @@
+# Incident Investigation: Grafana Prometheus Response Parsing Silent Failure
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "incident-inv-prom-parse-003"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Trace root cause of silent data loss in Grafana when Prometheus responses are truncated or malformed"
+prompt = """
+Users have reported that Grafana dashboards sometimes show incomplete data
+from Prometheus queries with no error indication. Panels display partial
+results or empty charts, but Grafana shows no error banner or warning.
+
+The issue was traced to the Grafana data proxy's response_limit setting.
+When a Prometheus API response exceeds the configured limit, the response
+body is truncated. However, instead of surfacing this as an error, Grafana
+silently parses the truncated JSON and displays whatever partial data it
+managed to extract.
+
+Investigation notes:
+- The issue affects both Prometheus and Loki datasources
+- Setting `[dataproxy] response_limit` in Grafana config triggers it
+- Malformed JSON from any source (not just truncation) also silently fails
+- The JSON parser uses the jsoniter library, which sets iter.Error instead
+  of returning errors from its methods
+
+Your task:
+1. Identify the root cause file where JSON parsing errors are not checked.
+2. Trace the error chain from the Prometheus API response through the
+   Grafana data proxy to the JSON parser.
+3. List all affected datasource components.
+4. Propose the correct remediation.
+
+Write your incident report to /workspace/grafana/INCIDENT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/grafana/grafana"
+rev = "v10.1.0"
+path = "grafana"
+role = "primary"
+
+[[repos]]
+url = "github.com/prometheus/prometheus"
+rev = "v2.46.0"
+path = "prometheus"
+role = "dependency"
+
+[metadata]
+languages = ["go", "typescript"]
+total_loc = 3_500_000
+dependency_depth = 2
+frameworks = ["grafana", "prometheus"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies pkg/util/converter/prom.go as root cause where iter.Error is not checked"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces: Prometheus API -> dataproxy (response_limit) -> converter/prom.go (jsoniter)"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_services"
+weight = 0.15
+verifier = "checks/check_affected_services.sh"
+description = "Agent identifies Prometheus and Loki datasources as affected"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes checking iter.Error after JSON parsing operations"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo investigation: understanding how Prometheus API response format interacts with Grafana's response parsing requires navigating both codebases to understand the data flow"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pkg/util/converter/prom.go"
+repo = "grafana"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/util/converter/prom_test.go"
+repo = "grafana"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pkg/tsdb/prometheus/healthcheck_test.go"
+repo = "grafana"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "web/api/v1/api.go"
+repo = "prometheus"
+confidence = 0.65

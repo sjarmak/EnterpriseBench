@@ -1,0 +1,51 @@
+{
+  "candidate_id": 3,
+  "repo": "bitnami/charts",
+  "pr_refs": ["#36231"],
+  "issues_refs": ["#15626", "#32497"],
+  "description": "Redis password generation drift caused by Helm include re-evaluation producing different random passwords across templates",
+  "root_cause": "Helm's {{ include }} directive re-evaluates the named template on every call. When the redis.password helper generates a random password (no explicit password set), each {{ include \"redis.password\" }} invocation produces a DIFFERENT random value. This means templates/secret.yaml, templates/health-configmap.yaml, and the ServiceBinding resource all get different passwords.",
+  "drift_points": [
+    {
+      "file": "bitnami/redis/templates/secret.yaml",
+      "key": "redis-password in Secret data",
+      "expected": "Single consistent generated password",
+      "actual": "Random password A (generated on first include call)",
+      "override_chain": [
+        "values.yaml: auth.password (empty/unset)",
+        "templates/_helpers.tpl: redis.password helper generates random value",
+        "templates/secret.yaml: {{ include \"redis.password\" }} -> random password A"
+      ]
+    },
+    {
+      "file": "bitnami/redis/templates/health-configmap.yaml",
+      "key": "REDISCLI_AUTH in health check script",
+      "expected": "Same password as Secret",
+      "actual": "Random password B (different from Secret due to re-evaluation)",
+      "override_chain": [
+        "values.yaml: auth.password (empty/unset)",
+        "templates/_helpers.tpl: redis.password helper generates NEW random value",
+        "templates/health-configmap.yaml: {{ include \"redis.password\" }} -> random password B"
+      ]
+    },
+    {
+      "file": "bitnami/redis/templates/master/application.yaml",
+      "key": "REDIS_PASSWORD environment variable",
+      "expected": "Same password as Secret",
+      "actual": "Random password C (yet another re-evaluation)",
+      "override_chain": [
+        "values.yaml: auth.password (empty/unset)",
+        "templates/_helpers.tpl: redis.password helper generates NEW random value",
+        "templates/master/application.yaml: {{ include \"redis.password\" }} -> random password C"
+      ]
+    }
+  ],
+  "fix_approach": "Store the generated password in .Values.global.redis.password on first call so subsequent include calls reuse it instead of regenerating",
+  "verification": {
+    "method": "gh_api_pr_files",
+    "pr_url": "https://github.com/bitnami/charts/pull/36231",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.92
+}

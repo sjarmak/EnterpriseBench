@@ -1,0 +1,119 @@
+# RBAC Audit: Keycloak privilege escalation via manage-clients (CVE-2026-3121)
+# Source: keycloak/keycloak PR #46895, Issue #46719
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "rbac-audit-002"
+suite = "security_operations"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Audit Keycloak fine-grained admin permissions for privilege escalation via manage-clients"
+prompt = """
+# Task: Permission Escalation Audit — Keycloak Fine-Grained Admin Permissions
+
+## Context
+A security researcher reported CVE-2026-3121: an administrator with only
+`manage-clients` permission can escalate their privileges when the realm has
+Admin Permissions enabled. The vulnerability is in the fine-grained admin
+permissions V2 (FGAP) implementation.
+
+## Objective
+Audit the Keycloak FGAP V2 implementation to identify how `manage-clients`
+permission can be leveraged for privilege escalation, and document the
+authorization boundary that is violated.
+
+## Steps
+1. Locate the FGAP V2 realm permissions implementation. Start with
+   `services/src/main/java/org/keycloak/services/resources/admin/fgap/`.
+2. Find `RealmPermissionsV2.java` and analyze which permissions are checked
+   when a client administrator performs operations.
+3. Determine how `manage-clients` permission interacts with other admin
+   permissions (e.g., manage-realm, manage-users). Is there a scope boundary
+   that should prevent escalation?
+4. Identify the specific code path where the permission check is insufficient,
+   allowing a client-admin to perform operations beyond their scope.
+5. Write `/workspace/security_audit.md` documenting:
+   - Overview of the FGAP V2 permission model
+   - The manage-clients permission scope and its intended boundaries
+   - The specific escalation path (how manage-clients leads to broader access)
+   - Affected file paths and method names
+   - Severity assessment (CVSS-like)
+   - Remediation recommendations
+
+## Success Criteria
+- References RealmPermissionsV2.java
+- Identifies the manage-clients escalation path
+- Describes the FGAP V2 permission model
+- Provides severity and remediation
+"""
+
+[[repos]]
+url = "github.com/keycloak/keycloak"
+rev = "bfcb150e312362fa6fd9c6ac080bf58989949d93~1"
+path = "keycloak"
+role = "primary"
+
+[metadata]
+languages = ["java"]
+total_loc = 1500000
+dependency_depth = 1
+frameworks = ["quarkus", "jakarta-ee"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "locate_fgap"
+weight = 0.20
+verifier = "checks/check_fgap_location.sh"
+description = "Agent locates the FGAP V2 implementation files"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "permission_model"
+weight = 0.25
+verifier = "checks/check_permission_model.sh"
+description = "Agent describes the FGAP V2 permission model and manage-clients scope"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "escalation_path"
+weight = 0.30
+verifier = "checks/check_escalation_path.sh"
+description = "Agent identifies the specific escalation path from manage-clients"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity_remediation"
+weight = 0.25
+verifier = "checks/check_severity_remediation.sh"
+description = "Agent provides severity assessment and remediation"
+timeout_seconds = 60
+
+[artifacts]
+required = ["security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Large single repo requiring navigation of permission model across admin resource classes"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "services/src/main/java/org/keycloak/services/resources/admin/fgap/RealmPermissionsV2.java"
+repo = "keycloak"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "tests/base/src/test/java/org/keycloak/tests/admin/authz/fgap/PermissionRESTTest.java"
+repo = "keycloak"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "tests/base/src/test/java/org/keycloak/tests/admin/authz/fgap/AbstractPermissionTest.java"
+repo = "keycloak"
+confidence = 0.80

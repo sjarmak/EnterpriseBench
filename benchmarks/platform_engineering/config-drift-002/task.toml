@@ -1,0 +1,124 @@
+# Config Drift: Spring Cloud Dataflow external RabbitMQ configuration inconsistencies
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "config-drift-scdf-rabbitmq-002"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "hard"
+estimated_duration_minutes = 25
+session_type = "single"
+description = "Identify configuration drift in Spring Cloud Dataflow's external RabbitMQ config across values, helpers, secrets, and configmaps"
+prompt = """
+The bitnami/spring-cloud-dataflow Helm chart supports connecting to an external
+RabbitMQ server instead of deploying the bundled RabbitMQ subchart. However, users
+are reporting that the external RabbitMQ configuration path is broken — secrets
+don't work with existing secrets, and some required parameters are missing.
+
+Your task:
+1. Trace the external RabbitMQ configuration flow through the chart hierarchy:
+   - values.yaml (externalRabbitmq.* parameters)
+   - templates/_helpers.tpl (RabbitMQ connection helpers)
+   - templates/externalrabbitmq-secrets.yaml (secret generation)
+   - templates/skipper/configmap.yaml (Skipper service config)
+2. Identify all configuration drift points where values are defined inconsistently,
+   missing, or incorrectly referenced across these layers.
+3. Compare the external RabbitMQ config path against the external database config
+   path for consistency gaps.
+4. For each drift point, specify file, key, expected value, actual value, and the
+   override chain.
+
+Write your analysis to /workspace/charts/DRIFT_REPORT.json with the following
+structure:
+{
+  "drift_points": [
+    {
+      "file": "<file path>",
+      "key": "<config key>",
+      "expected": "<what should be>",
+      "actual": "<what is>",
+      "override_chain": ["layer1 -> layer2 -> ..."]
+    }
+  ]
+}
+"""
+
+[[repos]]
+url = "github.com/bitnami/charts"
+rev = "24493~1"
+path = "charts"
+role = "primary"
+
+[metadata]
+languages = ["yaml", "go-template"]
+total_loc = 2_000_000
+dependency_depth = 2
+frameworks = ["helm", "kubernetes", "spring-cloud"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_drift_points"
+weight = 0.40
+verifier = "checks/check_drift_points.sh"
+description = "Agent identifies drift points in external RabbitMQ config: missing secret key parameter, unnecessary required fields, inconsistent config paths"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "determine_expected_values"
+weight = 0.35
+verifier = "checks/check_expected_values.sh"
+description = "Agent correctly determines expected values for each drift point including secret key name and optional password fields"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "validate_corrected_config"
+weight = 0.25
+verifier = "checks/check_config_valid.sh"
+description = "If corrected config provided, validate it renders without errors"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-file search across values.yaml, multiple templates, and helper files to trace config value flow through 4-layer Helm hierarchy"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "bitnami/spring-cloud-dataflow/values.yaml"
+repo = "charts"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "bitnami/spring-cloud-dataflow/templates/_helpers.tpl"
+repo = "charts"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "bitnami/spring-cloud-dataflow/templates/externalrabbitmq-secrets.yaml"
+repo = "charts"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "bitnami/spring-cloud-dataflow/templates/skipper/configmap.yaml"
+repo = "charts"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "bitnami/spring-cloud-dataflow/Chart.yaml"
+repo = "charts"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "bitnami/spring-cloud-dataflow/templates/NOTES.txt"
+repo = "charts"
+confidence = 0.60

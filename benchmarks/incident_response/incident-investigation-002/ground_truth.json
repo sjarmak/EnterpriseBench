@@ -1,0 +1,45 @@
+{
+  "candidate_id": "incident-inv-002",
+  "repos": ["kubernetes/kubernetes"],
+  "issue_refs": ["#58545", "kubernetes/client-go#338"],
+  "fix_pr": "#58547",
+  "fix_merged": "2018-01-23",
+  "buggy_rev": "v1.9.1",
+  "description": "Watch cache sends DELETE events with PrevObject's stale resourceVersion instead of the event's current resourceVersion, causing informers to track wrong version",
+  "root_cause": {
+    "file": "staging/src/k8s.io/apiserver/pkg/storage/cacher.go",
+    "function": "processEvent (watch cache event filtering)",
+    "summary": "In the switch statement that converts watch events based on filter matching, the case for DELETE events (!curObjPasses && oldObjPasses) uses event.PrevObject.DeepCopyObject() which retains the previous resourceVersion. The event's actual resourceVersion should be set on the returned object. The etcd3/watcher.go and etcd/etcd_watcher.go have the correct logic.",
+    "mechanism": "The watch cache filtering logic: case !curObjPasses && oldObjPasses: watchEvent = watch.Event{Type: watch.Deleted, Object: event.PrevObject.DeepCopyObject()} -- this sends the old object's content with the old resourceVersion. It should set the event's resourceVersion on the copy."
+  },
+  "error_chain": [
+    {
+      "component": "client-go informer",
+      "action": "Establishes namespace-scoped watch, tracks resourceVersion from events"
+    },
+    {
+      "component": "API Server watch handler",
+      "action": "Routes watch to storage cacher"
+    },
+    {
+      "component": "Watch Cache (cacher.go) - processEvent",
+      "action": "BUG: Converts Modified->Deleted event using PrevObject with stale resourceVersion"
+    },
+    {
+      "component": "etcd3 storage (watcher.go)",
+      "action": "Correctly handles resourceVersion on delete events (reference implementation)"
+    }
+  ],
+  "affected_services": [
+    "kube-apiserver (watch cache cacher.go)",
+    "client-go informers (all controllers)",
+    "Any namespace-scoped or label-filtered watch"
+  ],
+  "remediation": "After constructing the DELETE watch event from PrevObject.DeepCopyObject(), set the event's resourceVersion on the copied object using the versioner. This matches the existing logic in etcd3/watcher.go (lines 373-378) and etcd/etcd_watcher.go (lines 401-403).",
+  "fix_files": [
+    "staging/src/k8s.io/apiserver/pkg/storage/cacher.go",
+    "staging/src/k8s.io/apiserver/pkg/storage/cacher_whitebox_test.go"
+  ],
+  "difficulty": "hard",
+  "confidence": 0.97
+}

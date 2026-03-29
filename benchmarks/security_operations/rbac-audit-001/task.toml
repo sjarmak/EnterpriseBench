@@ -1,0 +1,132 @@
+# RBAC Audit: Calico tier policy authorization bypass
+# Source: projectcalico/calico PR #12006
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "rbac-audit-001"
+suite = "security_operations"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Audit Calico RBAC authorization for policy tier changes — find dual-path authorization bypass"
+prompt = """
+# Task: RBAC Authorization Audit — Calico Network Policy Tier Changes
+
+## Context
+Your security team has received a report that Calico network policies can be
+moved between tiers by users who lack permissions on the destination tier. The
+suspected root cause is an inconsistency between how the Kubernetes apiserver
+and the admission webhook each authorize tier changes.
+
+## Objective
+Audit the RBAC authorization logic in Calico's apiserver storage layer and
+admission webhook to identify how a user could bypass tier authorization when
+updating a network policy's tier assignment.
+
+## Steps
+1. Locate the apiserver storage implementations for network policies. Check
+   `apiserver/pkg/registry/projectcalico/` for the policy types:
+   GlobalNetworkPolicy, NetworkPolicy, StagedGlobalNetworkPolicy, and
+   StagedNetworkPolicy.
+2. In each storage type's `Update()` method, determine which tier is checked
+   for authorization — the old tier, the new tier, or both.
+3. Locate the webhook RBAC authorization in `webhooks/pkg/rbac/rbac.go`. In
+   the `authorize()` function, determine which tier is checked on UPDATE
+   operations — old, new, or both.
+4. Identify the authorization gap: if the apiserver only checks one tier and
+   the webhook only checks the other, a user can exploit either path.
+5. Write `/workspace/security_audit.md` documenting:
+   - The affected policy types and their storage files
+   - The authorization logic in the apiserver Update() path
+   - The authorization logic in the webhook authorize() path
+   - The specific bypass scenario (which tier each path misses)
+   - Severity assessment and remediation recommendations
+
+## Success Criteria
+- Identifies all 4 affected policy types
+- Correctly describes the dual-path authorization gap
+- References specific files and functions
+- Provides remediation recommendations
+"""
+
+[[repos]]
+url = "github.com/projectcalico/calico"
+rev = "1ea2a4ea3e0407c97d387cc8dbe5f80db7e2e430~1"
+path = "calico"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+total_loc = 1200000
+dependency_depth = 1
+frameworks = ["kubernetes"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_policy_types"
+weight = 0.20
+verifier = "checks/check_policy_types.sh"
+description = "Agent identifies all 4 affected policy types and their storage files"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "apiserver_authorization"
+weight = 0.25
+verifier = "checks/check_apiserver_auth.sh"
+description = "Agent correctly describes the apiserver Update() authorization path"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "webhook_authorization"
+weight = 0.25
+verifier = "checks/check_webhook_auth.sh"
+description = "Agent correctly describes the webhook authorize() path"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "bypass_and_remediation"
+weight = 0.30
+verifier = "checks/check_bypass_remediation.sh"
+description = "Agent identifies the bypass scenario and provides remediation"
+timeout_seconds = 60
+
+[artifacts]
+required = ["security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Single large repo but requires cross-component analysis between apiserver and webhook packages"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "apiserver/pkg/registry/projectcalico/globalpolicy/storage.go"
+repo = "calico"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "apiserver/pkg/registry/projectcalico/networkpolicy/storage.go"
+repo = "calico"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "webhooks/pkg/rbac/rbac.go"
+repo = "calico"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "apiserver/pkg/registry/projectcalico/stagedglobalnetworkpolicy/storage.go"
+repo = "calico"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "apiserver/pkg/registry/projectcalico/stagednetworkpolicy/storage.go"
+repo = "calico"
+confidence = 0.90

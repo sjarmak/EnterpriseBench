@@ -1,0 +1,117 @@
+# Incident Investigation: Docker Daemon Spurious Restart Warnings on Shutdown
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "incident-inv-docker-shutdown-004"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Trace root cause of spurious ShouldRestart warnings during Docker daemon shutdown involving containerd shim lifecycle"
+prompt = """
+Your operations team has flagged confusing warning messages during Docker
+daemon graceful shutdown. When the daemon receives SIGINT/SIGTERM and begins
+shutting down, the following warnings appear in logs:
+
+  WARN ShouldRestart failed, container will not be restarted
+    container=1ed1fcfd71c2 daemonShuttingDown=true
+    error="restart canceled" exitStatus="{0 2026-02-21 20:04:43 +0000 UTC}"
+    hasBeenManuallyStopped=false restartCount=0
+
+  INFO ignoring event container=1ed1fcfd71c2 module=libcontainerd
+    namespace=moby topic=/tasks/delete type="*events.TaskDelete"
+
+These warnings trigger PagerDuty alerts because the monitoring system
+interprets "ShouldRestart failed" as a container health issue. The
+"ignoring event" message is also confusing -- it suggests containerd events
+are being dropped.
+
+Your task:
+1. Identify the root cause: which file and function produces the spurious
+   warning, and why is ErrRestartCanceled treated as a warning during
+   normal shutdown?
+2. Trace the error chain: how does a SIGINT flow through the daemon
+   shutdown path, interact with the containerd shim lifecycle, and
+   produce these misleading log messages?
+3. List all affected components in the daemon/containerd interaction.
+4. Propose the correct remediation.
+
+Write your incident report to /workspace/moby/INCIDENT_REPORT.md.
+"""
+
+[[repos]]
+url = "github.com/moby/moby"
+rev = "v28.0.0"
+path = "moby"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+total_loc = 800_000
+dependency_depth = 2
+frameworks = ["docker", "containerd"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies daemon/monitor.go handleContainerExit as the source of spurious warning"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces: SIGINT -> ExitOnNext -> containerd TaskDelete -> handleContainerExit -> ShouldRestart -> ErrRestartCanceled"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_services"
+weight = 0.15
+verifier = "checks/check_affected_services.sh"
+description = "Agent identifies daemon, restart manager, containerd shim, and libcontainerd client"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes suppressing ErrRestartCanceled warning during shutdown and improving log messages"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-component tracing needed between daemon shutdown, restart manager, containerd event handling, and libcontainerd client across multiple packages"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "daemon/monitor.go"
+repo = "moby"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "daemon/container/container.go"
+repo = "moby"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "daemon/internal/libcontainerd/remote/client.go"
+repo = "moby"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "container/container.go"
+repo = "moby"
+confidence = 0.75

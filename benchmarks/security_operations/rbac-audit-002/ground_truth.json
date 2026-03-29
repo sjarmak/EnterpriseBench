@@ -1,0 +1,28 @@
+{
+  "candidate_id": "rbac-audit-002",
+  "cve": "CVE-2026-3121",
+  "source_pr": "keycloak/keycloak#46895",
+  "source_issue": "keycloak/keycloak#46719",
+  "description": "Privilege escalation in Keycloak FGAP V2: manage-clients permission allows broader admin operations when Admin Permissions are enabled at realm level",
+  "affected_files": [
+    "services/src/main/java/org/keycloak/services/resources/admin/fgap/RealmPermissionsV2.java"
+  ],
+  "escalation_details": {
+    "entry_permission": "manage-clients",
+    "escalation_target": "broader admin permissions via FGAP V2 realm permission model",
+    "root_cause": "Insufficient scope boundary enforcement in RealmPermissionsV2 when Admin Permissions feature is enabled",
+    "prerequisite": "Admin Permissions must be enabled at the realm level"
+  },
+  "remediation": [
+    "Add explicit scope boundary checks in RealmPermissionsV2.java",
+    "Ensure manage-clients permission cannot grant access to non-client admin operations",
+    "Add regression tests for permission boundary enforcement"
+  ],
+  "verification": {
+    "method": "pr_diff_analysis",
+    "verified": true,
+    "fix_commit": "bfcb150e312362fa6fd9c6ac080bf58989949d93"
+  },
+  "difficulty": "hard",
+  "confidence": 0.92
+}

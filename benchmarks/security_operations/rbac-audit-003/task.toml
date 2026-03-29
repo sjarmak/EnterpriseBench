@@ -1,0 +1,118 @@
+# RBAC Audit: Harbor robot account wildcard permission gap
+# Source: goharbor/harbor Issue #21406, PR #22352
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "rbac-audit-003"
+suite = "security_operations"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Audit Harbor robot account RBAC for wildcard permission bypass in system-to-project robot creation"
+prompt = """
+# Task: RBAC Gap Analysis — Harbor Robot Account Wildcard Permissions
+
+## Context
+Harbor uses a layered RBAC model for robot accounts: system-level robots can be
+granted wildcard permissions (e.g., `/project/*/robot`) to operate across all
+projects, while project-level robots are scoped to a single project. A bug
+report indicates that system robots with wildcard permissions are getting 403
+errors when trying to create project-level robot accounts.
+
+## Objective
+Audit the RBAC evaluation chain for robot accounts in Harbor to identify the
+permission gap between system-level and project-level robot authorization.
+
+## Steps
+1. Locate the robot security context in `src/common/security/robot/context.go`.
+   Understand how system robots build their RBAC evaluator chain.
+2. Compare how system robots vs project robots configure the RBAC evaluator.
+   Look for `filterRobotPolicies` — is it applied consistently?
+3. Examine the robot handler in `src/server/v2.0/handler/robot.go`. Trace the
+   `CreateRobot()` flow and the `requireAccess()` permission check.
+4. Identify the gap: why does a system robot with `/project/*/robot` permission
+   fail the RBAC check when creating a project-level robot?
+5. Write `/workspace/security_audit.md` documenting:
+   - Harbor's robot account RBAC architecture (system vs project robots)
+   - The RBAC evaluator chain construction for each robot type
+   - The specific gap in `filterRobotPolicies` application
+   - The failing permission check path
+   - Remediation: what changes to context.go and robot.go would fix this
+
+## Success Criteria
+- Describes the system vs project robot RBAC model
+- Identifies the filterRobotPolicies gap in evaluator construction
+- Traces the CreateRobot permission check flow
+- Provides specific remediation steps
+"""
+
+[[repos]]
+url = "github.com/goharbor/harbor"
+rev = "v2.12.0"
+path = "harbor"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+total_loc = 400000
+dependency_depth = 1
+frameworks = ["harbor"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "rbac_architecture"
+weight = 0.20
+verifier = "checks/check_rbac_architecture.sh"
+description = "Agent describes the system vs project robot RBAC model"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "evaluator_chain"
+weight = 0.30
+verifier = "checks/check_evaluator_chain.sh"
+description = "Agent identifies the RBAC evaluator chain gap"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "permission_check_flow"
+weight = 0.25
+verifier = "checks/check_permission_flow.sh"
+description = "Agent traces the CreateRobot permission check path"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation"
+weight = 0.25
+verifier = "checks/check_remediation.sh"
+description = "Agent provides specific remediation steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Single repo requiring cross-package analysis between security context, RBAC evaluator, and API handler"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/common/security/robot/context.go"
+repo = "harbor"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/server/v2.0/handler/robot.go"
+repo = "harbor"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/common/rbac/project/rbac_role.go"
+repo = "harbor"
+confidence = 0.80

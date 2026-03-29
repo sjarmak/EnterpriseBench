@@ -1,0 +1,35 @@
+{
+  "candidate_id": "rbac-audit-004",
+  "cve": "CVE-2026-0707",
+  "ghsa": "GHSA-gv94-wp4h-vv8p",
+  "source_pr": "keycloak/keycloak#45787",
+  "source_issue": "keycloak/keycloak#45649",
+  "description": "Keycloak Authorization header Bearer token extraction does not validate per RFC 6750, allowing non-standard whitespace and malformed tokens",
+  "affected_files": [
+    "services/src/main/java/org/keycloak/services/managers/AppAuthManager.java"
+  ],
+  "rfc_violations": [
+    "Bearer scheme not validated case-insensitively",
+    "No strict enforcement of single ASCII space separator",
+    "Non-standard whitespace characters not rejected (tabs, zero-width spaces)",
+    "Token value not validated against b64token production rule"
+  ],
+  "attack_vectors": [
+    "Whitespace smuggling: non-ASCII space characters between Bearer and token",
+    "Token injection: characters outside the b64token charset accepted",
+    "Case manipulation: inconsistent Bearer scheme matching"
+  ],
+  "remediation": [
+    "Case-insensitive validation of the Bearer scheme",
+    "Strict enforcement of a single ASCII space separator",
+    "Rejection of non-standard whitespace characters",
+    "Validate token value matches RFC 6750 b64token production rule"
+  ],
+  "verification": {
+    "method": "pr_diff_analysis",
+    "verified": true,
+    "fix_commit": "05ff44b8a0ea57ba9c68c4b416f8b90f5116bb83"
+  },
+  "difficulty": "medium",
+  "confidence": 0.95
+}

@@ -1,0 +1,113 @@
+# Incident Investigation: K8s Watch Cache Missing Events
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "incident-inv-watch-cache-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Trace root cause of missing watch events in K8s API server watch cache interacting with etcd storage"
+prompt = """
+Your monitoring has flagged intermittent issues: Kubernetes controllers are
+missing watch events after establishing watches on custom resource types.
+The symptom is that newly created objects are not seen by controllers that
+established their watch just before the object was created.
+
+Here is the relevant error scenario from the incident log:
+
+  1. Controller lists resources, gets list at resourceVersion=10
+  2. Controller starts watch from resourceVersion=10
+  3. Another client creates an object at resourceVersion=11
+  4. The controller NEVER receives the watch event for resourceVersion=11
+  5. Controller is stuck with stale state until it is restarted
+
+This particularly affects controllers that watch newly registered CRD types
+where the watch cache is still initializing.
+
+Your task:
+1. Identify the root cause file and function where the bug occurs.
+2. Trace the error chain: how does the watch request flow from the API
+   server through the watch cache to the etcd storage layer?
+3. List all affected components/services in the error chain.
+4. Propose the correct remediation (what the fix should do).
+
+Write your incident report to /workspace/kubernetes/INCIDENT_REPORT.md with
+sections: Root Cause, Error Chain, Affected Components, Remediation.
+"""
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.7.3"
+path = "kubernetes"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+total_loc = 2_200_000
+dependency_depth = 1
+frameworks = ["kubernetes"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies watch_cache.go as root cause file with the empty cache off-by-one error"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the error chain: API server -> watch cache (cacher) -> etcd storage"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_services"
+weight = 0.15
+verifier = "checks/check_affected_services.sh"
+description = "Agent identifies affected components: API server, watch cache, etcd storage, controllers"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes returning 410 Gone for watches the cache cannot serve"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-package code navigation needed to trace watch request flow from API handler through cacher to etcd3 storage layer; symbol references cross staging package boundaries"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go"
+repo = "kubernetes"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "staging/src/k8s.io/apiserver/pkg/storage/cacher.go"
+repo = "kubernetes"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "staging/src/k8s.io/apiserver/pkg/storage/etcd3/watcher.go"
+repo = "kubernetes"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "staging/src/k8s.io/apiserver/pkg/storage/tests/cacher_test.go"
+repo = "kubernetes"
+confidence = 0.75

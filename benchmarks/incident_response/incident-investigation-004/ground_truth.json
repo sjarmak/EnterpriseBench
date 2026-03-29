@@ -1,0 +1,51 @@
+{
+  "candidate_id": "incident-inv-004",
+  "repos": ["moby/moby"],
+  "issue_refs": [],
+  "fix_pr": "moby#52079",
+  "fix_merged": "2026-02-23",
+  "buggy_rev": "v28.0.0",
+  "description": "Docker daemon logs spurious 'ShouldRestart failed' warnings during graceful shutdown because handleContainerExit treats ErrRestartCanceled the same as genuine errors",
+  "root_cause": {
+    "file": "daemon/monitor.go",
+    "function": "handleContainerExit",
+    "summary": "When the daemon shuts down, it calls container.ExitOnNext() to stop the restart manager. When containerd sends the TaskDelete event, handleContainerExit calls RestartManager().ShouldRestart(), which returns ErrRestartCanceled. This error is logged as a WARN regardless of whether the daemon is shutting down. The 'ignoring event' message in libcontainerd/remote/client.go is also misleading.",
+    "mechanism": "handleContainerExit does not distinguish between ErrRestartCanceled (expected during shutdown) and other errors (genuine failures). Both are logged at WARN level."
+  },
+  "error_chain": [
+    {
+      "component": "Signal handler",
+      "action": "Receives SIGINT, initiates daemon shutdown"
+    },
+    {
+      "component": "Daemon shutdown",
+      "action": "Calls container.ExitOnNext() to stop restart manager for each container"
+    },
+    {
+      "component": "containerd shim",
+      "action": "Container exits, shim sends TaskDelete event"
+    },
+    {
+      "component": "libcontainerd/remote/client.go",
+      "action": "Receives TaskDelete, logs confusing 'ignoring event' message"
+    },
+    {
+      "component": "daemon/monitor.go handleContainerExit",
+      "action": "BUG: Calls ShouldRestart(), gets ErrRestartCanceled, logs as WARN"
+    }
+  ],
+  "affected_services": [
+    "daemon/monitor.go (handleContainerExit)",
+    "daemon/container/container.go (ExitOnNext, RestartManager)",
+    "daemon/internal/libcontainerd/remote/client.go (event logging)",
+    "container restart manager"
+  ],
+  "remediation": "In handleContainerExit: check if the error from ShouldRestart is ErrRestartCanceled; if so, do not log it as a warning (it's expected during shutdown). In libcontainerd/remote/client.go: change 'ignoring event' to a more descriptive message like 'received task-delete event from containerd'. Also split exitStatus into separate exitCode and exitedAt fields for readability.",
+  "fix_files": [
+    "daemon/monitor.go",
+    "daemon/container/container.go",
+    "daemon/internal/libcontainerd/remote/client.go"
+  ],
+  "difficulty": "hard",
+  "confidence": 0.96
+}

@@ -1,0 +1,110 @@
+# Config Drift: ArgoCD redis-ha subchart values securityContext null override drift
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "config-drift-argocd-redis-ha-004"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "medium"
+estimated_duration_minutes = 20
+session_type = "single"
+description = "Identify securityContext null override drift in ArgoCD's nested redis-ha Helm chart values"
+prompt = """
+ArgoCD's HA deployment mode bundles a redis-ha Helm chart as a dependency. After
+upgrading Helm to version 3.17.1, the CI pipeline started failing because the
+rendered manifests (upstream.yaml) now differ from what was previously generated.
+
+The issue is in ArgoCD's value overrides for the redis-ha subchart. Something in
+the override chain between the upstream redis-ha defaults and ArgoCD's customizations
+is producing invalid or unexpected rendered output under the stricter Helm 3.17.1
+validation.
+
+Your task:
+1. Examine the ArgoCD HA manifest configuration hierarchy:
+   - manifests/ha/base/redis-ha/chart/Chart.yaml (subchart definition)
+   - manifests/ha/base/redis-ha/chart/values.yaml (ArgoCD's overrides)
+   - The upstream redis-ha chart's own default values
+2. Identify all configuration drift points where ArgoCD's value overrides
+   conflict with or incorrectly override the upstream defaults.
+3. Focus on securityContext and any null/empty values that may behave
+   differently under strict Helm validation.
+4. For each drift point, specify the file, key, expected value, actual value,
+   and the override chain through the Helm value precedence layers.
+
+Write your analysis to /workspace/argo-cd/DRIFT_REPORT.json with the following
+structure:
+{
+  "drift_points": [
+    {
+      "file": "<file path>",
+      "key": "<config key>",
+      "expected": "<what should be>",
+      "actual": "<what is>",
+      "override_chain": ["layer1 -> layer2 -> ..."]
+    }
+  ]
+}
+"""
+
+[[repos]]
+url = "github.com/argoproj/argo-cd"
+rev = "v2.14.0-rc3"
+path = "argo-cd"
+role = "primary"
+
+[metadata]
+languages = ["yaml", "go-template", "go"]
+total_loc = 350_000
+dependency_depth = 2
+frameworks = ["helm", "kubernetes", "argocd"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_drift_points"
+weight = 0.40
+verifier = "checks/check_drift_points.sh"
+description = "Agent identifies null securityContext overrides in redis-ha values as drift points"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "determine_expected_values"
+weight = 0.35
+verifier = "checks/check_expected_values.sh"
+description = "Agent correctly determines that null overrides should be removed to let upstream defaults apply"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "validate_corrected_config"
+weight = 0.25
+verifier = "checks/check_config_valid.sh"
+description = "If corrected config provided, validate it renders without null securityContext issues"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Cross-file search helps trace value override chain from ArgoCD's values.yaml through the subchart dependency, but the drift is contained in a known file"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "manifests/ha/base/redis-ha/chart/values.yaml"
+repo = "argo-cd"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "manifests/ha/base/redis-ha/chart/Chart.yaml"
+repo = "argo-cd"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "manifests/ha/base/kustomization.yaml"
+repo = "argo-cd"
+confidence = 0.70

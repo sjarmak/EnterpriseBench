@@ -1,0 +1,109 @@
+# Config Drift: Consul serfLAN/serfWAN port mismatch in headless service
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "config-drift-consul-serf-port-001"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "medium"
+estimated_duration_minutes = 15
+session_type = "single"
+description = "Identify port mapping drift between values.yaml and consul-headless-service template after serfWAN addition"
+prompt = """
+The bitnami/consul Helm chart recently added serfWAN port support alongside the
+existing serfLAN ports. After this change, Helm upgrades from version 11.0.x to
+11.1.x started failing.
+
+Your task:
+1. Examine the Helm chart's configuration hierarchy: values.yaml defines
+   containerPorts.serfLAN and containerPorts.serfWAN, which are consumed by
+   both the StatefulSet and the headless Service templates.
+2. Identify all configuration drift points where port values are referenced
+   inconsistently across the template hierarchy.
+3. For each drift point, specify the file, the config key, the expected value
+   (what should be used), and the actual value (what is currently used).
+4. Trace the override chain showing how the incorrect value propagates.
+
+Write your analysis to /workspace/charts/DRIFT_REPORT.json with the following
+structure for each drift point:
+{
+  "drift_points": [
+    {
+      "file": "<template file path>",
+      "key": "<config key or template expression>",
+      "expected": "<correct value/expression>",
+      "actual": "<incorrect value/expression>",
+      "override_chain": ["layer1 -> layer2 -> ..."]
+    }
+  ]
+}
+"""
+
+[[repos]]
+url = "github.com/bitnami/charts"
+rev = "33114~1"
+path = "charts"
+role = "primary"
+
+[metadata]
+languages = ["yaml", "go-template"]
+total_loc = 2_000_000
+dependency_depth = 1
+frameworks = ["helm", "kubernetes"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_drift_points"
+weight = 0.40
+verifier = "checks/check_drift_points.sh"
+description = "Agent identifies all port mapping drift points in consul templates"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "determine_expected_values"
+weight = 0.35
+verifier = "checks/check_expected_values.sh"
+description = "Agent correctly determines that serflan-udp should use containerPorts.serfLAN not serfWAN"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "validate_corrected_config"
+weight = 0.25
+verifier = "checks/check_config_valid.sh"
+description = "If corrected config provided, validate it renders without errors"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Cross-file search helps trace port value references from values.yaml through multiple templates, but the chart is contained in a single directory"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "bitnami/consul/values.yaml"
+repo = "charts"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "bitnami/consul/templates/consul-headless-service.yaml"
+repo = "charts"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "bitnami/consul/templates/statefulset.yaml"
+repo = "charts"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "bitnami/consul/Chart.yaml"
+repo = "charts"
+confidence = 0.70

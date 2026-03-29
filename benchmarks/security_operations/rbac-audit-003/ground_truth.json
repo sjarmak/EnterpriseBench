@@ -1,0 +1,32 @@
+{
+  "candidate_id": "rbac-audit-003",
+  "source_issue": "goharbor/harbor#21406",
+  "source_pr": "goharbor/harbor#22352",
+  "description": "Harbor system robot wildcard permission gap: filterRobotPolicies missing from system robot RBAC evaluator chain, causing 403 on project robot creation",
+  "affected_files": [
+    "src/common/security/robot/context.go",
+    "src/server/v2.0/handler/robot.go"
+  ],
+  "rbac_gap": {
+    "system_robot_evaluator": "System robots construct RBAC evaluator without filterRobotPolicies parameter",
+    "project_robot_evaluator": "Project robots include filterRobotPolicies in their evaluator construction",
+    "missing_parameter": "filterRobotPolicies not passed to NewBuilderForPolicies for system robots",
+    "consequence": "System robot wildcard permissions for robot operations not correctly filtered through project RBAC evaluator"
+  },
+  "permission_check_flow": {
+    "entry": "CreateRobot() in robot.go",
+    "check": "requireAccess() validates robot creation permission",
+    "failure": "RBAC evaluator for system robot does not include robot-specific policy filtering, causing permission denial"
+  },
+  "remediation": [
+    "Add filterRobotPolicies parameter to system robot RBAC evaluator construction in context.go",
+    "Add hasWildcardRobotPermission() validation in robot.go",
+    "Update requireAccess() to handle system robot wildcard permissions"
+  ],
+  "verification": {
+    "method": "issue_and_pr_analysis",
+    "verified": true
+  },
+  "difficulty": "hard",
+  "confidence": 0.90
+}

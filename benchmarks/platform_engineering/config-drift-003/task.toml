@@ -1,0 +1,120 @@
+# Config Drift: Redis password generation drift across Helm template includes
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "config-drift-redis-password-003"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "hard"
+estimated_duration_minutes = 25
+session_type = "single"
+description = "Identify password generation drift caused by Helm include re-evaluation across multiple Redis templates"
+prompt = """
+The bitnami/redis Helm chart has a subtle bug: when service bindings are enabled
+and no explicit password is set, different components end up with different
+passwords, causing authentication failures at runtime.
+
+Your task:
+1. Trace the password resolution flow through the chart hierarchy:
+   - values.yaml: auth.password, global.redis.password, serviceBindings.enabled
+   - templates/_helpers.tpl: the redis.password helper template
+   - All templates that call {{ include "redis.password" ... }}
+2. Identify the root cause of the password drift — why do different templates
+   end up with different password values?
+3. Document each drift point where a password value diverges from what other
+   templates receive.
+4. Explain the Helm template evaluation mechanism that causes this drift.
+
+Write your analysis to /workspace/charts/DRIFT_REPORT.json with the following
+structure:
+{
+  "drift_points": [
+    {
+      "file": "<template file path>",
+      "key": "<config key or template call>",
+      "expected": "<what the value should be>",
+      "actual": "<what the value actually is>",
+      "override_chain": ["layer1 -> layer2 -> ..."]
+    }
+  ],
+  "root_cause": "<explanation of why the drift occurs>"
+}
+"""
+
+[[repos]]
+url = "github.com/bitnami/charts"
+rev = "36231~1"
+path = "charts"
+role = "primary"
+
+[metadata]
+languages = ["yaml", "go-template"]
+total_loc = 2_000_000
+dependency_depth = 1
+frameworks = ["helm", "kubernetes", "redis"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "identify_drift_points"
+weight = 0.40
+verifier = "checks/check_drift_points.sh"
+description = "Agent identifies that multiple template includes of redis.password produce different values"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "determine_expected_values"
+weight = 0.35
+verifier = "checks/check_expected_values.sh"
+description = "Agent correctly identifies the root cause as Helm include re-evaluation generating different random passwords"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "validate_corrected_config"
+weight = 0.25
+verifier = "checks/check_config_valid.sh"
+description = "If corrected config provided, validate password consistency across templates"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-file search needed to find all call sites of redis.password helper across templates, understanding Helm include semantics requires tracing through helper chain"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "bitnami/redis/templates/_helpers.tpl"
+repo = "charts"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "bitnami/redis/values.yaml"
+repo = "charts"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "bitnami/redis/templates/secret.yaml"
+repo = "charts"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "bitnami/redis/templates/master/application.yaml"
+repo = "charts"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "bitnami/redis/templates/health-configmap.yaml"
+repo = "charts"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "bitnami/redis/Chart.yaml"
+repo = "charts"
+confidence = 0.60

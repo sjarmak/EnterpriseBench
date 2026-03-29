@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Checkpoint 1: Verify agent identifies all 4 affected policy types
+set -euo pipefail
+
+REPORT="${WORKSPACE:-/workspace}/security_audit.md"
+if [[ ! -f "$REPORT" ]]; then
+  printf '{"score": 0.0, "passed": false, "reason": "security_audit.md not found"}\n'
+  exit 0
+fi
+
+FOUND=0
+TOTAL=4
+if grep -qiE 'GlobalNetworkPolic' "$REPORT"; then FOUND=$((FOUND + 1)); fi
+if grep -qiE 'NetworkPolic[^y]|[^l]NetworkPolicy' "$REPORT"; then FOUND=$((FOUND + 1)); fi
+if grep -qiE 'StagedGlobalNetwork' "$REPORT"; then FOUND=$((FOUND + 1)); fi
+if grep -qiE 'StagedNetworkPolic' "$REPORT"; then FOUND=$((FOUND + 1)); fi
+
+SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
+if [ "$FOUND" -ge 3 ]; then PASSED=true; else PASSED=false; fi
+
+printf '{"score": %s, "passed": %s, "reason": "Identified %d/%d policy types"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"

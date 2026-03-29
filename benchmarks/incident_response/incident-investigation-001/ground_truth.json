@@ -1,0 +1,50 @@
+{
+  "candidate_id": "incident-inv-001",
+  "repos": ["kubernetes/kubernetes"],
+  "issue_refs": ["#49956"],
+  "fix_pr": "#49992",
+  "fix_merged": "2017-08-02",
+  "buggy_rev": "v1.7.3",
+  "description": "Watch cache allows watches at resourceVersion it cannot serve when event cache is empty, causing missed events",
+  "root_cause": {
+    "file": "staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go",
+    "function": "GetAllEventsSinceThreadUnsafe",
+    "summary": "When the watch event cache is empty, the watch cache incorrectly allows establishing a watch as if it can deliver events for its currently synced resourceVersion. This off-by-one error means it won't send the event that brought the cache to its current state, and the etcd listerwatcher starts watching from the current version, so that event is permanently lost.",
+    "mechanism": "The oldest available resourceVersion was not adjusted for an empty watch event cache. The cache should return a 'too old resource version' error (410 Gone) to force the client to relist."
+  },
+  "error_chain": [
+    {
+      "component": "Controller (client-go informer)",
+      "action": "Lists resources at resourceVersion=N, then watches from resourceVersion=N"
+    },
+    {
+      "component": "API Server watch handler",
+      "action": "Routes watch request to storage layer"
+    },
+    {
+      "component": "Watch Cache (cacher.go)",
+      "action": "Accepts watch, delegates to watch_cache for initial events"
+    },
+    {
+      "component": "Watch Cache (watch_cache.go)",
+      "action": "BUG: Empty event cache allows watch at resourceVersion=N but cannot deliver event N+1"
+    },
+    {
+      "component": "etcd3 storage (watcher.go)",
+      "action": "Starts watching from current resourceVersion, missing the gap event"
+    }
+  ],
+  "affected_services": [
+    "kube-apiserver (watch cache layer)",
+    "etcd3 storage backend",
+    "All controllers using informers (client-go)",
+    "CRD/TPR registration flow"
+  ],
+  "remediation": "When the watch event cache is empty, the watch cache should compare the requested resourceVersion against its synced resourceVersion. If the requested version is older than the synced version and there are no cached events to serve the gap, return a '410 Gone' error to force the client to relist and re-watch from the current version.",
+  "fix_files": [
+    "staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go",
+    "staging/src/k8s.io/apiserver/pkg/storage/tests/cacher_test.go"
+  ],
+  "difficulty": "hard",
+  "confidence": 0.97
+}

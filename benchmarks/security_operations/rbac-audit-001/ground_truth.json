@@ -1,0 +1,35 @@
+{
+  "candidate_id": "rbac-audit-001",
+  "source_pr": "projectcalico/calico#12006",
+  "description": "Calico tier RBAC authorization bypass: apiserver only checks old tier, webhook only checks new tier on policy UPDATE operations",
+  "affected_policy_types": [
+    "GlobalNetworkPolicy",
+    "NetworkPolicy",
+    "StagedGlobalNetworkPolicy",
+    "StagedNetworkPolicy"
+  ],
+  "authorization_gap": {
+    "apiserver_path": "Update() in storage.go checks authorization against the OLD tier only — does not resolve the new object to check the destination tier",
+    "webhook_path": "authorize() in rbac.go checks the NEW object's tier on UPDATE — does not parse OldObject to check the source tier",
+    "bypass_scenario": "User with permission on tier A but not tier B can move a policy from tier A to tier B: apiserver allows (checks old=A, user has permission), webhook allows (checks new=B... but actually webhook checked new tier only, so if user has new tier permission it passes). The real gap: apiserver checks old tier only, webhook checks new tier only — neither checks BOTH tiers."
+  },
+  "affected_files": [
+    "apiserver/pkg/registry/projectcalico/globalpolicy/storage.go",
+    "apiserver/pkg/registry/projectcalico/networkpolicy/storage.go",
+    "apiserver/pkg/registry/projectcalico/stagedglobalnetworkpolicy/storage.go",
+    "apiserver/pkg/registry/projectcalico/stagednetworkpolicy/storage.go",
+    "webhooks/pkg/rbac/rbac.go"
+  ],
+  "remediation": [
+    "Apiserver Update() must call objInfo.UpdatedObject() to resolve the new object and check the new tier if it differs from the old",
+    "Webhook authorize() must parse request.OldObject on UPDATE operations and check the old tier if it differs from the new",
+    "Both paths must authorize against BOTH old and new tiers on tier-changing updates"
+  ],
+  "verification": {
+    "method": "pr_diff_analysis",
+    "verified": true,
+    "fix_commit": "1ea2a4ea3e0407c97d387cc8dbe5f80db7e2e430"
+  },
+  "difficulty": "hard",
+  "confidence": 0.95
+}

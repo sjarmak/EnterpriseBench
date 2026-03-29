@@ -1,0 +1,114 @@
+# RBAC Audit: Keycloak Bearer token validation bypass (CVE-2026-0707)
+# Source: keycloak/keycloak PR #45787, Issue #45649, GHSA-gv94-wp4h-vv8p
+
+difficulty_stratum = "large_single"
+
+[task]
+id = "rbac-audit-004"
+suite = "security_operations"
+task_type = "incident_investigation"
+difficulty = "medium"
+estimated_duration_minutes = 25
+session_type = "single"
+description = "Audit Keycloak Authorization header Bearer token validation for RFC 6750 compliance"
+prompt = """
+# Task: Authentication Header Audit — Keycloak Bearer Token Validation
+
+## Context
+CVE-2026-0707 (GHSA-gv94-wp4h-vv8p) affects Keycloak's handling of the
+Authorization header with Bearer tokens. The token extraction logic does not
+properly validate the Bearer scheme format per RFC 6750, potentially allowing
+injection of malformed tokens.
+
+## Objective
+Audit the Authorization header parsing in Keycloak's AppAuthManager to identify
+RFC 6750 compliance violations and document the attack surface.
+
+## Steps
+1. Locate `AppAuthManager.java` in the services module
+   (`services/src/main/java/org/keycloak/services/managers/`).
+2. Find the method that extracts Bearer tokens from the Authorization header.
+3. Check RFC 6750 compliance:
+   - Is the "Bearer" scheme validated case-insensitively?
+   - Is the separator between "Bearer" and the token strictly a single ASCII
+     space?
+   - Are non-standard whitespace characters (tabs, zero-width spaces) rejected?
+   - Does the token value match the b64token production rule:
+     `1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="`?
+4. Identify what malformed input could bypass the current validation.
+5. Write `/workspace/security_audit.md` documenting:
+   - The current token extraction logic
+   - Each RFC 6750 violation found
+   - Potential attack vectors (token injection, whitespace smuggling)
+   - Severity assessment
+   - Specific remediation code changes
+
+## Success Criteria
+- References AppAuthManager.java
+- Identifies at least 2 RFC 6750 violations
+- Describes attack vectors
+- Provides remediation recommendations
+"""
+
+[[repos]]
+url = "github.com/keycloak/keycloak"
+rev = "05ff44b8a0ea57ba9c68c4b416f8b90f5116bb83~1"
+path = "keycloak"
+role = "primary"
+
+[metadata]
+languages = ["java"]
+total_loc = 1500000
+dependency_depth = 1
+frameworks = ["quarkus", "jakarta-ee"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "locate_auth_manager"
+weight = 0.15
+verifier = "checks/check_auth_manager.sh"
+description = "Agent locates AppAuthManager.java and the token extraction method"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "rfc_violations"
+weight = 0.35
+verifier = "checks/check_rfc_violations.sh"
+description = "Agent identifies RFC 6750 compliance violations"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "attack_vectors"
+weight = 0.25
+verifier = "checks/check_attack_vectors.sh"
+description = "Agent describes potential attack vectors"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation"
+weight = 0.25
+verifier = "checks/check_remediation.sh"
+description = "Agent provides specific remediation recommendations"
+timeout_seconds = 60
+
+[artifacts]
+required = ["security_assessment"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Single file analysis — standard code search is sufficient"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "services/src/main/java/org/keycloak/services/managers/AppAuthManager.java"
+repo = "keycloak"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "tests/base/src/test/java/org/keycloak/tests/admin/AppAuthManagerTest.java"
+repo = "keycloak"
+confidence = 0.85
