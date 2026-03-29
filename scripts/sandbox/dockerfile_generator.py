@@ -76,6 +76,25 @@ def sourcegraph_env_var(repos: list[dict]) -> tuple[str, str]:
 #  DOCKERFILE GENERATION
 # ═══════════════════════════════════════════════════════════════
 
+def _base_image_for_languages(languages: list[str]) -> str:
+    """Select Docker base image based on task's primary language."""
+    if "go" in languages:
+        return "golang:1.21-bookworm"
+    if "python" in languages:
+        return "python:3.11-bookworm"
+    if "java" in languages:
+        return "eclipse-temurin:17-jdk-jammy"
+    if "rust" in languages:
+        return "rust:1.75-bookworm"
+    if "javascript" in languages or "typescript" in languages:
+        return "node:20-bookworm"
+    if "c++" in languages or "c" in languages:
+        return "gcc:13-bookworm"
+    if "csharp" in languages:
+        return "mcr.microsoft.com/dotnet/sdk:8.0-bookworm-slim"
+    return "ubuntu:22.04"
+
+
 def generate_standard_dockerfile(task_data: dict) -> str:
     """Generate standard Dockerfile: local clone from sg-evals mirrors."""
     repos = task_data.get("repos", [])
@@ -83,15 +102,7 @@ def generate_standard_dockerfile(task_data: dict) -> str:
     languages = task_data.get("metadata", {}).get("languages", [])
 
     # Choose base image based on primary language
-    base_image = "ubuntu:22.04"
-    if "go" in languages:
-        base_image = "golang:1.21-bookworm"
-    elif "python" in languages:
-        base_image = "python:3.11-bookworm"
-    elif "java" in languages:
-        base_image = "eclipse-temurin:17-jdk-jammy"
-    elif "rust" in languages:
-        base_image = "rust:1.75-bookworm"
+    base_image = _base_image_for_languages(languages)
 
     lines = [
         f"# EnterpriseBench task: {task_info.get('id', 'unknown')}",
@@ -161,15 +172,7 @@ def generate_hybrid_dockerfile(task_data: dict) -> str:
     env_name, env_value = sourcegraph_env_var(repos)
 
     # Same base image logic as standard
-    base_image = "ubuntu:22.04"
-    if "go" in languages:
-        base_image = "golang:1.21-bookworm"
-    elif "python" in languages:
-        base_image = "python:3.11-bookworm"
-    elif "java" in languages:
-        base_image = "eclipse-temurin:17-jdk-jammy"
-    elif "rust" in languages:
-        base_image = "rust:1.75-bookworm"
+    base_image = _base_image_for_languages(languages)
 
     lines = [
         f"# EnterpriseBench task: {task_info.get('id', 'unknown')}",
