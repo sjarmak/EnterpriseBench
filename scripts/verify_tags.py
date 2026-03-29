@@ -7,17 +7,15 @@ import sys
 import tomllib
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.tasks import find_task_dirs
+
 BENCHMARKS = Path("/home/ds/EnterpriseBench/benchmarks")
-SKIP_DIRS = {"_archived", "mined"}
 
 
-def find_task_tomls():
-    results = []
-    for toml_path in sorted(BENCHMARKS.rglob("task.toml")):
-        if any(skip in toml_path.parts for skip in SKIP_DIRS):
-            continue
-        results.append(toml_path)
-    return results
+def find_task_tomls() -> list[Path]:
+    """Find all task.toml files from active task directories."""
+    return [task_dir / "task.toml" for task_dir in find_task_dirs(BENCHMARKS)]
 
 
 def normalize_url(url: str) -> str:

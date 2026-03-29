@@ -72,7 +72,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "New model creation requires tracing export references; MCP helps but model names and import patterns are grepable in a single Django codebase"
+mcp_benefit_rationale = "Creating a new RealmExport model requires tracing all export-related references through views, workers, and management commands; MCP helps but single-codebase Django imports are straightforward to search"
 
 [ground_truth]
 tiers = ["deterministic"]

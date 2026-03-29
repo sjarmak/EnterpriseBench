@@ -88,7 +88,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Tracing resourceVersion propagation across cacher.go, watch_cache.go, and etcd3/watcher.go; MCP helps compare implementations but resourceVersion is a grepable string across these known files"
+mcp_benefit_rationale = "Tracing resourceVersion propagation across the watch cache and etcd3 watcher layers; MCP helps compare how each layer transforms event metadata, though the field name is easy to search"
 
 [ground_truth]
 tiers = ["deterministic"]

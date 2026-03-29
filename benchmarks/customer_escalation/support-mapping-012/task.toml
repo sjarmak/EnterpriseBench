@@ -55,7 +55,7 @@ optional = ["kb_article", "reproduction_script"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Race condition spans Sender, BufferPool, and RecordAccumulator with subtle concurrency semantics; MCP helps but class names are grepable and Kafka's producer module is well-organized"
+mcp_benefit_rationale = "Race condition spans multiple producer internals with subtle concurrency semantics; MCP helps trace buffer reuse across classes, though Kafka's producer module is well-organized for text search"
 
 [ground_truth]
 tiers = ["deterministic"]

@@ -85,7 +85,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Watch request flow crosses staging package boundaries (cacher → etcd3 storage); MCP helps but function names like watchHandler, cacheWatcher are directly grepable in single repo"
+mcp_benefit_rationale = "Watch request flow crosses staging package boundaries from the watch cache layer to etcd3 storage; MCP helps trace the event handling chain, though the single-repo layout keeps text search effective"
 
 [ground_truth]
 tiers = ["deterministic"]

@@ -46,7 +46,7 @@ required = ["answer"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "GCC pass infrastructure uses macro-based registration in passes.def; MCP helps navigate pass_manager → concrete implementations but macro patterns and pass names are grepable"
+mcp_benefit_rationale = "GCC pass infrastructure uses macro-based registration in passes.def; MCP helps navigate from the pass manager to concrete implementations, though macro patterns can be found with text search"
 
 [[tool_access.sourcegraph_mirrors]]
 repo = "github.com/gcc-mirror/gcc"

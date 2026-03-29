@@ -84,7 +84,7 @@ optional = ["config"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Config value flow through 4-layer Helm hierarchy (values.yaml → helpers → templates); MCP helps but Helm template variable names are directly grepable across chart files"
+mcp_benefit_rationale = "Tracing external RabbitMQ config flow through a 4-layer Helm hierarchy (values.yaml → helpers → secrets → configmaps) benefits from MCP, though template variable names are searchable across chart files"
 
 [ground_truth]
 tiers = ["deterministic"]

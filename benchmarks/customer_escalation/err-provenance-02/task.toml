@@ -48,7 +48,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Error wraps through proxy -> vendor knftables library; cross-package boundary tracing benefits from MCP but error strings and vendor paths are grepable in single repo"
+mcp_benefit_rationale = "Error wraps through kube-proxy into the vendored knftables library; cross-package boundary tracing benefits from MCP, though the single-repo layout keeps discovery straightforward"
 
 [ground_truth]
 tiers = ["deterministic"]

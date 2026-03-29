@@ -48,7 +48,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Error string in AttachSchemaTransformer is grepable; tracing to the builtin provider requires understanding the transform pipeline"
+mcp_benefit_rationale = "The error string is easy to locate, but tracing it to the builtin Terraform provider requires understanding the schema transform pipeline and how providers are registered"
 
 [ground_truth]
 tiers = ["deterministic"]

@@ -88,7 +88,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Cross-component tracing between daemon shutdown, restart manager, and containerd event handling; MCP helps but component names and function signatures are grepable in Docker/Moby"
+mcp_benefit_rationale = "Tracing spurious restart warnings requires following the shutdown signal through the daemon, restart manager, and containerd event handling; MCP helps navigate these cross-component interactions"
 
 [ground_truth]
 tiers = ["deterministic"]

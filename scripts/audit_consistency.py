@@ -17,6 +17,9 @@ import stat
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.tasks import find_task_dirs
+
 try:
     import tomllib
 except ImportError:
@@ -33,21 +36,9 @@ ARCHIVED = {"_archived"}
 SKIP_DIRS = {"_archived", "mined"}
 
 
-def find_active_tasks():
+def find_active_tasks() -> list[Path]:
     """Find all active task directories with task.toml files."""
-    tasks = []
-    for suite_dir in sorted(BENCH_DIR.iterdir()):
-        if not suite_dir.is_dir() or suite_dir.name in SKIP_DIRS:
-            continue
-        if suite_dir.name.endswith(".toml"):
-            continue
-        for task_dir in sorted(suite_dir.iterdir()):
-            if not task_dir.is_dir():
-                continue
-            toml_path = task_dir / "task.toml"
-            if toml_path.exists():
-                tasks.append(task_dir)
-    return tasks
+    return find_task_dirs(BENCH_DIR)
 
 
 def parse_toml(path):

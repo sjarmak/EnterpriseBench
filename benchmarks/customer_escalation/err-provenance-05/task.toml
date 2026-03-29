@@ -48,7 +48,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Warning string is grepable but understanding why it fires requires tracing the defaulting logic for SessionAffinity"
+mcp_benefit_rationale = "The warning string is easy to locate, but understanding why it fires requires tracing the SessionAffinity defaulting logic across service validation and admission paths"
 
 [ground_truth]
 tiers = ["deterministic"]

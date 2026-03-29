@@ -72,7 +72,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Tracing a field moving between models requires finding all references; MCP helps but field names and model class names are directly grepable in a single codebase"
+mcp_benefit_rationale = "Moving default_avatar_source between UserProfile and Realm requires finding all references in avatar logic, importers, and frontend templates; single-codebase layout keeps text search effective"
 
 [ground_truth]
 tiers = ["deterministic"]

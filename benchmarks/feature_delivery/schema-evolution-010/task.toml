@@ -72,7 +72,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Go monorepo with SQL migrations, Go structs, and OpenAPI spec; MCP helps navigate across directories but struct field names and SQL column names are directly grepable"
+mcp_benefit_rationale = "Dropping the icon column and removing nested subviews touches SQL migrations, Go structs, and OpenAPI specs across the Mattermost monorepo; MCP helps navigate across directories but field names are easy to search"
 
 [ground_truth]
 tiers = ["deterministic"]

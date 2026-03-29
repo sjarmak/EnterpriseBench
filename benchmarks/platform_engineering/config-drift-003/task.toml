@@ -82,7 +82,7 @@ optional = ["config"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Finding all call sites of redis.password helper across templates; MCP helps but Helm include/template names are directly grepable in a single chart repo"
+mcp_benefit_rationale = "Finding all call sites of the Redis password helper across templates to detect password generation drift; MCP helps identify re-evaluation points, though Helm include names are searchable in a single chart repo"
 
 [ground_truth]
 tiers = ["deterministic"]

@@ -44,7 +44,7 @@ required = ["answer"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Access logger implementations are spread across extensions/access_loggers/; MCP helps navigate but directory structure and class names are grepable in single repo"
+mcp_benefit_rationale = "Access logger implementations are spread across the extensions/access_loggers/ directory; MCP helps classify structured vs unstructured logging support per implementation"
 
 [[tool_access.sourcegraph_mirrors]]
 repo = "github.com/envoyproxy/envoy"

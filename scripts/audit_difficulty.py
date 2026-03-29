@@ -12,6 +12,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.tasks import find_task_dirs as _find_task_dirs
+
 try:
     import tomllib
 except ImportError:
@@ -103,15 +106,7 @@ def load_sample_scores() -> dict[str, dict[str, float]]:
 
 def find_task_dirs() -> list[Path]:
     """Find all active task directories (containing task.toml, not in _archived)."""
-    tasks = []
-    for toml_path in sorted(BENCHMARKS.rglob("task.toml")):
-        if "_archived" in str(toml_path):
-            continue
-        # Skip example files at benchmarks root
-        if toml_path.parent == BENCHMARKS:
-            continue
-        tasks.append(toml_path.parent)
-    return tasks
+    return _find_task_dirs(BENCHMARKS)
 
 
 def parse_task(task_path: Path, sample_scores: dict) -> TaskInfo:

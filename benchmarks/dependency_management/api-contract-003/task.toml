@@ -88,7 +88,7 @@ optional = ["migration_guide"]
 
 [tool_access]
 expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Three-repo dependency chain (grpc-go → etcd → kubernetes) requires cross-repo import graph traversal. Transport types are re-exported and wrapped across package boundaries, making grep insufficient for tracing the full impact chain. Empirical baseline score 0.80 reflects that direct consumers are grepable, but transitive impact through re-exports requires semantic navigation"
+mcp_benefit_rationale = "Three-repo dependency chain (grpc-go → etcd → kubernetes) requires cross-repo import graph traversal. Transport types are re-exported and wrapped across package boundaries, so direct consumers are findable with text search but transitive impact through re-exports requires semantic navigation"
 
 [ground_truth]
 tiers = ["deterministic"]

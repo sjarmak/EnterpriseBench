@@ -9,8 +9,10 @@ import time
 import tomllib
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.tasks import find_task_dirs
+
 BENCHMARKS = Path("/home/ds/EnterpriseBench/benchmarks")
-SKIP_DIRS = {"_archived", "mined"}
 
 # Rate limit: GitHub API allows 5000/hr for authenticated users
 API_CALLS = 0
@@ -18,13 +20,12 @@ MAX_CALLS_PER_BATCH = 50
 SLEEP_BETWEEN_BATCHES = 2
 
 
-def find_tasks():
+def find_tasks() -> list[tuple[Path, Path]]:
     """Find all task directories with both task.toml and ground_truth.json."""
     results = []
-    for toml_path in sorted(BENCHMARKS.rglob("task.toml")):
-        if any(skip in toml_path.parts for skip in SKIP_DIRS):
-            continue
-        gt_path = toml_path.parent / "ground_truth.json"
+    for task_dir in find_task_dirs(BENCHMARKS):
+        toml_path = task_dir / "task.toml"
+        gt_path = task_dir / "ground_truth.json"
         if gt_path.exists():
             results.append((toml_path, gt_path))
     return results

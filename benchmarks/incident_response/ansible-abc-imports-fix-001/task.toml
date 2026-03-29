@@ -52,7 +52,7 @@ optional = ["answer"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Single-repo Python codebase; import pattern is grepable but understanding which imports are internal vs external requires navigating module_utils structure"
+mcp_benefit_rationale = "Single-repo Python codebase; the import pattern is easy to find with text search, but understanding which imports are internal compatibility shims vs external requires navigating Ansible's module_utils structure"
 
 [ground_truth]
 tiers = ["curator"]

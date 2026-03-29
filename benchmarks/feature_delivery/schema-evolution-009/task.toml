@@ -71,7 +71,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Cross-layer tracing from Django model through backup system to React TypeScript frontend; MCP helps bridge layers but model field names and API endpoints are grepable across the stack"
+mcp_benefit_rationale = "Creating DashboardLastVisited requires cross-layer tracing from Django model through the backup system to React TypeScript frontend; MCP helps bridge backend and frontend layers"
 
 [ground_truth]
 tiers = ["deterministic"]

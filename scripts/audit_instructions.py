@@ -17,6 +17,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.tasks import find_task_dirs
+
 try:
     import tomllib
 except ImportError:
@@ -24,18 +27,6 @@ except ImportError:
 
 BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results" / "analysis"
-
-
-def find_task_dirs():
-    tasks = []
-    for suite_dir in sorted(BENCHMARKS_DIR.iterdir()):
-        if not suite_dir.is_dir() or suite_dir.name.startswith("_"):
-            continue
-        for task_dir in sorted(suite_dir.iterdir()):
-            if not task_dir.is_dir() or task_dir.name.startswith("_"):
-                continue
-            tasks.append(task_dir)
-    return tasks
 
 
 def load_task_toml(task_dir):

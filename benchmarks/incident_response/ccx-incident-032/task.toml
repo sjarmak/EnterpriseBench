@@ -52,7 +52,7 @@ optional = ["incident_report"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Tracing overflow reset across conn_pool, router, and HTTP layers; MCP helps navigate Envoy's module structure but reset reason enums and config names are grepable"
+mcp_benefit_rationale = "Tracing connection pool overflow requires following reset reason propagation across the connection pool, router, and HTTP filter layers; MCP helps navigate Envoy's layered module structure"
 
 [[tool_access.sourcegraph_mirrors]]
 repo = "github.com/envoyproxy/envoy"
