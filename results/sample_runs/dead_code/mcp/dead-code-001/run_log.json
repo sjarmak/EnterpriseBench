@@ -1,0 +1,38 @@
+{
+  "task_id": "dead-code-001",
+  "task_dir": "dead-code-001",
+  "mode": "mcp",
+  "model": "claude-sonnet-4-6",
+  "checkpoints": [
+    {
+      "name": "check_dead_code",
+      "weight": 0.50,
+      "score": 0.92,
+      "passed": true,
+      "detail": "Precision=1.00 (12/12 correct), Recall=0.92 (12/13 dead items found). Found dead files, dead functions in live files, and dead feature flag branches."
+    },
+    {
+      "name": "check_feature_flags",
+      "weight": 0.30,
+      "score": 1.0,
+      "passed": true,
+      "detail": "Correctly identified enableDeprecatedFlareAPI as permanently off"
+    },
+    {
+      "name": "check_evidence",
+      "weight": 0.20,
+      "score": 1.0,
+      "passed": true,
+      "detail": "Evidence provided for all items with reachability analysis"
+    }
+  ],
+  "total_score": 0.96,
+  "tool_usage": {
+    "sourcegraph_searches": 11,
+    "symbol_navigations": 22,
+    "file_reads": 34,
+    "total_tokens": 28800
+  },
+  "infrastructure_errors": [],
+  "notes": "MCP agent used Sourcegraph 'find references' to determine reachability of individual functions within live files. Symbol navigation revealed getPooled/destructor/addEventPoolingTo have zero callers. Cross-file reference search on enableDeprecatedFlareAPI showed it is defined as false in ReactFeatureFlags.js with no override."
+}

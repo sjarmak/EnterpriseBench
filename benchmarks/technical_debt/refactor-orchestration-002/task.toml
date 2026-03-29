@@ -1,0 +1,94 @@
+# Refactor Orchestration: cobra v1.10 version bump cascade
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "refactor-orch-002"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "medium"
+estimated_duration_minutes = 20
+session_type = "single"
+description = "Plan the ordering for cobra v1.10 CLI framework bump into Kubernetes"
+prompt = """
+The spf13/cobra CLI framework has released v1.10.2 with improved command
+suggestion logic and bug fixes. Kubernetes uses cobra extensively for kubectl
+and all control plane binaries.
+
+Your task is to produce a topologically sorted execution plan for updating
+cobra across the dependency chain:
+
+1. Identify which repos need changes and in what order.
+2. Determine the dependency relationships.
+3. Produce a numbered, ordered list of repos to update.
+4. Identify any steps that can be done in parallel.
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of repos to update
+- Dependency graph explanation
+- Parallelization annotations
+- Risk assessment for each step
+"""
+
+[[repos]]
+url = "github.com/spf13/cobra"
+rev = "v1.10.2"
+path = "cobra"
+role = "upstream"
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.33.0"
+path = "kubernetes"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 3600000
+dependency_depth = 2
+frameworks = ["cobra", "kubernetes"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies all repos requiring changes"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Dependency graph traversal through go.mod to find all cobra consumers in k8s staging repos"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "cobra"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "kubernetes"
+confidence = 0.95
+source = "deterministic"

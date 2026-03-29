@@ -1,0 +1,113 @@
+# Refactor Orchestration: protobuf v1 to v2 migration cascade
+
+difficulty_stratum = "tri_repo"
+
+[task]
+id = "refactor-orch-004"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Plan the ordering for golang/protobuf to google.golang.org/protobuf migration across grpc-go and etcd"
+prompt = """
+The Go protobuf ecosystem migrated from the legacy github.com/golang/protobuf
+module to google.golang.org/protobuf. This is a major import path change
+affecting the entire Go gRPC ecosystem.
+
+The cascade flows:
+  protobuf (google.golang.org/protobuf) -> grpc-go -> etcd
+
+grpc-go PR #6919 performed this migration internally. Downstream consumers
+like etcd must update their protobuf imports accordingly.
+
+Your task is to produce a topologically sorted execution plan:
+
+1. Identify all repos requiring changes and in what order.
+2. Map the dependency relationships.
+3. Produce a numbered, ordered list of repos to update.
+4. Identify any steps that can be done in parallel.
+5. Note import path changes required at each step.
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of repos to update
+- Dependency graph explanation
+- Import path migration details per repo
+- Parallelization annotations
+- Risk assessment per step
+"""
+
+[[repos]]
+url = "github.com/protocolbuffers/protobuf-go"
+rev = "v1.32.0"
+path = "protobuf-go"
+role = "upstream"
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.62.0"
+path = "grpc-go"
+role = "intermediary"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.5.12"
+path = "etcd"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 2800000
+dependency_depth = 3
+frameworks = ["protobuf", "grpc", "etcd"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies all repos requiring changes"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Import path migration requires finding all protobuf imports across 3 repos and understanding which use the legacy vs new API"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "protobuf-go"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "grpc-go"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "etcd"
+confidence = 0.95
+source = "deterministic"

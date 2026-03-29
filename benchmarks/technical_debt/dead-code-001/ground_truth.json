@@ -1,0 +1,136 @@
+{
+  "dead_code": [
+    {
+      "file": "packages/react-dom/src/legacy-events/EventPluginRegistry.js",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is dead — modern event system uses packages/react-dom/src/events/EventPluginRegistry.js instead"
+    },
+    {
+      "file": "packages/react-dom/src/legacy-events/EventPluginUtils.js",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is dead — utilities only used by legacy event dispatching"
+    },
+    {
+      "file": "packages/react-dom/src/legacy-events/accumulateInto.js",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is dead — accumulateInto only used by legacy event accumulation"
+    },
+    {
+      "file": "packages/react-dom/src/legacy-events/forEachAccumulated.js",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is dead — only used by legacy event dispatching loop"
+    },
+    {
+      "file": "packages/react-dom/src/client/ReactDOMClientInjection.js",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is dead — plugin injection moved inline to EventPluginRegistry"
+    },
+    {
+      "file": "packages/react-dom/src/events/SyntheticEvent.js",
+      "symbol": "getPooled",
+      "kind": "function",
+      "evidence": "Event pooling removed — getPooled is never called"
+    },
+    {
+      "file": "packages/react-dom/src/events/SyntheticEvent.js",
+      "symbol": "destructor",
+      "kind": "function",
+      "evidence": "Event pooling removed — destructor is never called"
+    },
+    {
+      "file": "packages/react-dom/src/events/SyntheticEvent.js",
+      "symbol": "addEventPoolingTo",
+      "kind": "function",
+      "evidence": "Event pooling removed — pool setup function is never called"
+    },
+    {
+      "file": "packages/react-dom/src/events/ReactSyntheticEventType.js",
+      "symbol": "DispatchConfig",
+      "kind": "export",
+      "evidence": "DispatchConfig type only used by legacy event system"
+    },
+    {
+      "file": "packages/react-dom/src/events/TopLevelEventTypes.js",
+      "symbol": "getRawEventName",
+      "kind": "function",
+      "evidence": "Helper only used by legacy event registration"
+    },
+    {
+      "file": "packages/react-dom/src/test-utils/ReactTestUtils.js",
+      "symbol": "accumulateInto",
+      "kind": "function",
+      "evidence": "Imported from dead legacy-events module, unused in test utils"
+    },
+    {
+      "file": "packages/react-dom/src/test-utils/ReactTestUtils.js",
+      "symbol": "forEachAccumulated",
+      "kind": "function",
+      "evidence": "Imported from dead legacy-events module, unused in test utils"
+    },
+    {
+      "file": "packages/react-dom/src/client/ReactDOM.js",
+      "symbol": "enableDeprecatedFlareAPI branch",
+      "kind": "branch",
+      "evidence": "enableDeprecatedFlareAPI is permanently off — all code guarded by this flag is dead"
+    }
+  ],
+  "live_code": [
+    {
+      "file": "packages/react-dom/src/events/SyntheticEvent.js",
+      "symbol": "SyntheticEvent",
+      "reachability": "direct",
+      "evidence": "Core synthetic event constructor — used by all event plugins"
+    },
+    {
+      "file": "packages/react-dom/src/events/DOMModernPluginEventSystem.js",
+      "symbol": "listenToAllSupportedEvents",
+      "reachability": "direct",
+      "evidence": "Main entry point for modern event system registration"
+    },
+    {
+      "file": "packages/react-dom/src/events/DOMEventProperties.js",
+      "symbol": "getEventPriorityForPluginSystem",
+      "reachability": "direct",
+      "evidence": "Used by modern event listener setup"
+    },
+    {
+      "file": "packages/react-dom/src/events/EventPluginRegistry.js",
+      "symbol": "registrationNameDependencies",
+      "reachability": "direct",
+      "evidence": "Used by modern event system for event name resolution"
+    },
+    {
+      "file": "packages/react-dom/src/client/ReactDOM.js",
+      "symbol": "render",
+      "reachability": "direct",
+      "evidence": "Public API — main render entry point"
+    },
+    {
+      "file": "packages/react-dom/src/events/ReactDOMEventListener.js",
+      "symbol": "dispatchEvent",
+      "reachability": "dynamic",
+      "evidence": "Called via addEventListener callback — dynamic dispatch"
+    },
+    {
+      "file": "packages/react-dom/src/events/plugins/ModernSimpleEventPlugin.js",
+      "symbol": "extractEvents",
+      "reachability": "dynamic",
+      "evidence": "Called through plugin interface via registeredPlugins array — dynamic dispatch"
+    }
+  ],
+  "feature_flags": [
+    {
+      "flag": "enableDeprecatedFlareAPI",
+      "status": "permanently_off",
+      "dead_branches": "all code guarded by enableDeprecatedFlareAPI === true",
+      "files_affected": [
+        "packages/react-dom/src/client/ReactDOM.js"
+      ]
+    }
+  ]
+}

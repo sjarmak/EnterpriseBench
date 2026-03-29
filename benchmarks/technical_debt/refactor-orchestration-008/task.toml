@@ -1,0 +1,114 @@
+# Refactor Orchestration: go-grpc-middleware removal cascade
+
+difficulty_stratum = "tri_repo"
+
+[task]
+id = "refactor-orch-008"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "expert"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Plan the ordering for go-grpc-middleware v1 removal cascade across etcd and Kubernetes"
+prompt = """
+The grpc-ecosystem/go-grpc-middleware v1 library has been archived. Its
+functionality was partially absorbed into grpc-go core and partially into
+go-grpc-middleware v2 (incompatible API).
+
+The removal cascade involves multiple steps across repos:
+
+1. etcd migrated logging to grpc-middleware v2 (PR #20420, 2025-08-07)
+2. etcd removed the v1 dependency entirely (PR #21295, 2026-02-12)
+3. Kubernetes dropped go-grpc-prometheus (which depended on middleware v1)
+   (PR #135538, 2025-12-18)
+
+This is complex because:
+- go-grpc-middleware v1 and v2 have incompatible APIs
+- go-grpc-prometheus (separate repo) also depends on middleware v1
+- Some functionality must be reimplemented, not just updated
+- etcd and k8s have different middleware usage patterns
+
+Your task is to produce a topologically sorted execution plan:
+
+1. Identify all repos and components requiring changes.
+2. Map the dependency relationships.
+3. Produce a numbered, ordered list of changes.
+4. Identify any steps that can be done in parallel.
+5. Detail what needs reimplementation vs. simple update.
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of changes
+- Dependency graph
+- Migration strategy per component (v2 update vs. reimplement vs. remove)
+- Parallelization annotations
+- Risk assessment
+"""
+
+[[repos]]
+url = "github.com/grpc-ecosystem/go-grpc-middleware"
+rev = "v1.4.0"
+path = "go-grpc-middleware"
+role = "deprecated_upstream"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.5.17"
+path = "etcd"
+role = "intermediary"
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.33.0"
+path = "kubernetes"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 5000000
+dependency_depth = 3
+frameworks = ["grpc", "etcd", "kubernetes", "prometheus"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies all repos and components requiring changes"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Understanding which middleware features are used where across 3 repos requires cross-repo code search and import analysis"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "etcd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "kubernetes"
+confidence = 0.95
+source = "deterministic"

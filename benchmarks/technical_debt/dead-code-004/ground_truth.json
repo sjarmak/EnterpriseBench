@@ -1,0 +1,169 @@
+{
+  "dead_code": [
+    {
+      "file": "src/compiler/core.ts",
+      "symbol": "reduceLeft",
+      "kind": "function",
+      "evidence": "Unused utility function — no callers in codebase (replaced by native Array.reduce)"
+    },
+    {
+      "file": "src/compiler/core.ts",
+      "symbol": "addRange",
+      "kind": "function",
+      "evidence": "Unused utility function — no remaining callers after refactoring"
+    },
+    {
+      "file": "src/compiler/core.ts",
+      "symbol": "hasProperty",
+      "kind": "function",
+      "evidence": "Unused utility — callers switched to direct hasOwnProperty"
+    },
+    {
+      "file": "src/compiler/core.ts",
+      "symbol": "getProperty",
+      "kind": "function",
+      "evidence": "Unused utility — callers switched to direct property access"
+    },
+    {
+      "file": "src/compiler/corePublic.ts",
+      "symbol": "ReadonlyCollection",
+      "kind": "type",
+      "evidence": "Unused type definition — no references in any module"
+    },
+    {
+      "file": "src/compiler/corePublic.ts",
+      "symbol": "Collection",
+      "kind": "type",
+      "evidence": "Unused type definition — no references in any module"
+    },
+    {
+      "file": "src/compiler/utilities.ts",
+      "symbol": "getExternalModuleNameFromDeclaration",
+      "kind": "function",
+      "evidence": "Unused export — no callers found"
+    },
+    {
+      "file": "src/compiler/utilities.ts",
+      "symbol": "isDeclarationNameOfEnumMember",
+      "kind": "function",
+      "evidence": "Unused export — no callers found"
+    },
+    {
+      "file": "src/compiler/utilities.ts",
+      "symbol": "getNodeId",
+      "kind": "function",
+      "evidence": "Unused export — previous callers removed"
+    },
+    {
+      "file": "src/compiler/utilities.ts",
+      "symbol": "getSymbolId",
+      "kind": "function",
+      "evidence": "Unused export — previous callers removed"
+    },
+    {
+      "file": "src/compiler/utilitiesPublic.ts",
+      "symbol": "getLineAndCharacterOfPosition",
+      "kind": "function",
+      "evidence": "Re-export that shadows direct usage — unused indirection"
+    },
+    {
+      "file": "src/compiler/factory/utilities.ts",
+      "symbol": "isSimpleInlineableExpression",
+      "kind": "function",
+      "evidence": "Unused factory utility — no transform calls it"
+    },
+    {
+      "file": "src/compiler/factory/utilities.ts",
+      "symbol": "createExternalHelpersImportDeclarationIfNeeded",
+      "kind": "function",
+      "evidence": "Unused factory utility — external helpers import handled differently"
+    },
+    {
+      "file": "src/compiler/factory/emitHelpers.ts",
+      "symbol": "valuesHelper",
+      "kind": "function",
+      "evidence": "Unused emit helper — downlevel iteration handled differently"
+    },
+    {
+      "file": "src/compiler/factory/emitHelpers.ts",
+      "symbol": "readHelper",
+      "kind": "function",
+      "evidence": "Unused emit helper — destructuring handled differently"
+    },
+    {
+      "file": "src/compiler/types.ts",
+      "symbol": "FlowFlags",
+      "kind": "type",
+      "evidence": "Unused flow analysis type — dead enum members"
+    },
+    {
+      "file": "src/compiler/resolutionCache.ts",
+      "symbol": "getModuleResolutionHost",
+      "kind": "function",
+      "evidence": "Unused export — resolution host accessed directly"
+    },
+    {
+      "file": "src/services/utilities.ts",
+      "symbol": "getMappedDocumentSpan",
+      "kind": "function",
+      "evidence": "Unused service utility — document mapping refactored"
+    },
+    {
+      "file": "src/services/utilities.ts",
+      "symbol": "createBackgroundCompilerHost",
+      "kind": "function",
+      "evidence": "Unused service utility — background compilation removed"
+    },
+    {
+      "file": "src/server/utilities.ts",
+      "symbol": "combineProjectOutput",
+      "kind": "function",
+      "evidence": "Unused server utility — project output combined differently"
+    }
+  ],
+  "live_code": [
+    {
+      "file": "src/compiler/core.ts",
+      "symbol": "forEach",
+      "reachability": "direct",
+      "evidence": "Core utility — used extensively throughout compiler"
+    },
+    {
+      "file": "src/compiler/core.ts",
+      "symbol": "map",
+      "reachability": "direct",
+      "evidence": "Core utility — used extensively throughout compiler"
+    },
+    {
+      "file": "src/compiler/checker.ts",
+      "symbol": "createTypeChecker",
+      "reachability": "direct",
+      "evidence": "Main type checker factory — entry point"
+    },
+    {
+      "file": "src/compiler/parser.ts",
+      "symbol": "createSourceFile",
+      "reachability": "direct",
+      "evidence": "Public API — main parser entry point"
+    },
+    {
+      "file": "src/compiler/utilities.ts",
+      "symbol": "getSourceFileOfNode",
+      "reachability": "direct",
+      "evidence": "Heavily used utility across compiler"
+    },
+    {
+      "file": "src/compiler/factory/emitHelpers.ts",
+      "symbol": "spreadArrayHelper",
+      "reachability": "direct",
+      "evidence": "Active emit helper — used by array spread transform"
+    },
+    {
+      "file": "src/services/completions.ts",
+      "symbol": "getCompletionsAtPosition",
+      "reachability": "dynamic",
+      "evidence": "Called through language service interface — dynamic dispatch"
+    }
+  ],
+  "feature_flags": []
+}

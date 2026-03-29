@@ -1,0 +1,95 @@
+# Refactor Orchestration: Go 1.26 + distroless image update cascade in Kubernetes
+
+difficulty_stratum = "monorepo_cross_pkg"
+
+[task]
+id = "refactor-orch-006"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Plan the ordering for Go 1.26 toolchain and distroless image update across Kubernetes staging repos"
+prompt = """
+Go 1.26.0 has been released with performance improvements and language changes.
+Kubernetes needs to update its Go toolchain version, which cascades through:
+
+1. Build infrastructure (Makefile, go.mod toolchain directive)
+2. Staging repos (k8s.io/client-go, k8s.io/api, k8s.io/apimachinery, etc.)
+3. Distroless base images for container builds
+4. E2E test infrastructure
+
+The staging repos have inter-dependencies (e.g., client-go depends on
+apimachinery, api depends on apimachinery). The Go version bump must propagate
+in dependency order.
+
+Your task is to produce a topologically sorted execution plan:
+
+1. Identify all staging repos and infrastructure components needing updates.
+2. Map the dependency relationships between staging repos.
+3. Produce a numbered, ordered list of components to update.
+4. Identify any steps that can be done in parallel.
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of components to update
+- Staging repo dependency graph
+- Parallelization annotations
+- Risk assessment per step
+"""
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.34.0"
+path = "kubernetes"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+total_loc = 4200000
+dependency_depth = 4
+frameworks = ["kubernetes"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies key staging repos and infrastructure components"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Kubernetes staging repo dependency graph is complex; requires go.mod analysis across 20+ staging repos"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "kubernetes"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "staging/src/k8s.io/client-go/go.mod"
+repo = "kubernetes"
+confidence = 0.90
+source = "deterministic"

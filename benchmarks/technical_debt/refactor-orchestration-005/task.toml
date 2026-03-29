@@ -1,0 +1,94 @@
+# Refactor Orchestration: Babel 8 plugin-transform removal cascade
+
+difficulty_stratum = "monorepo_cross_pkg"
+
+[task]
+id = "refactor-orch-005"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Plan the ordering for Babel 8 breaking plugin removal across monorepo packages"
+prompt = """
+Babel 8 is removing several deprecated plugin-transform packages from the
+monorepo. The removal cascade involves internal package dependencies:
+
+- @babel/plugin-transform-react-compat (removed)
+- @babel/plugin-transform-react-source (removed)
+- @babel/plugin-transform-react-self (removed)
+- @babel/plugin-transform-property-mutators (removed)
+
+These removals affect @babel/preset-env and @babel/preset-react, which
+re-export or depend on these plugins. Consumer packages must update.
+
+Your task is to produce a topologically sorted execution plan:
+
+1. Map the internal dependency graph of affected packages.
+2. Determine the safe removal order (which packages can be updated first).
+3. Produce a numbered, ordered list of packages to update.
+4. Identify any removals that can be done in parallel (independent packages).
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of packages to update
+- Internal dependency graph
+- Parallelization annotations
+- Breaking change impact per package
+"""
+
+[[repos]]
+url = "github.com/babel/babel"
+rev = "v7.25.0"
+path = "babel"
+role = "primary"
+
+[metadata]
+languages = ["javascript", "typescript"]
+total_loc = 450000
+dependency_depth = 3
+frameworks = ["babel"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies all packages requiring changes"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Monorepo internal dependency graph requires resolving package.json cross-references across 200+ packages"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "packages/babel-preset-env/package.json"
+repo = "babel"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/babel-plugin-transform-property-mutators/package.json"
+repo = "babel"
+confidence = 0.90
+source = "deterministic"

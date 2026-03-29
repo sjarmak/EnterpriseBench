@@ -1,0 +1,36 @@
+{
+  "candidate_id": "refactor-orch-007",
+  "description": "grpc.Dial to grpc.NewClient API migration across grpc-go, etcd, and Kubernetes",
+  "repos": ["grpc/grpc-go", "etcd-io/etcd", "kubernetes/kubernetes"],
+  "merge_order": [
+    {
+      "repo": "grpc/grpc-go",
+      "description": "Deprecate grpc.Dial/DialContext, introduce grpc.NewClient (v1.64)",
+      "pr_ref": "grpc-go v1.64.0 release"
+    },
+    {
+      "repo": "etcd-io/etcd",
+      "description": "Replace all grpc.Dial calls with grpc.NewClient, preserve DialTimeout via health endpoint",
+      "pr_ref": "etcd-io/etcd#21282",
+      "merged_at": "2026-02-26T11:27:16Z"
+    },
+    {
+      "repo": "kubernetes/kubernetes",
+      "description": "Update to etcd client with NewClient, update k8s own grpc.Dial call sites",
+      "pr_ref": "kubernetes/kubernetes#128419",
+      "merged_at": "2025-05-16T02:23:13Z"
+    }
+  ],
+  "dependency_graph": {
+    "grpc/grpc-go": [],
+    "etcd-io/etcd": ["grpc/grpc-go"],
+    "kubernetes/kubernetes": ["grpc/grpc-go", "etcd-io/etcd"]
+  },
+  "parallelizable_steps": [],
+  "difficulty": "expert",
+  "confidence": 0.90,
+  "verification": {
+    "method": "pr_chronology",
+    "verified": true
+  }
+}

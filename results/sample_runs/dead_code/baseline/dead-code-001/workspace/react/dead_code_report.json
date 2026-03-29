@@ -1,0 +1,51 @@
+[
+  {
+    "file": "packages/react-dom/src/legacy-events/EventPluginRegistry.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "No imports found in codebase — entire file appears unused"
+  },
+  {
+    "file": "packages/react-dom/src/legacy-events/EventPluginUtils.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "No imports found in codebase"
+  },
+  {
+    "file": "packages/react-dom/src/legacy-events/accumulateInto.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "grep found zero imports of accumulateInto from this module"
+  },
+  {
+    "file": "packages/react-dom/src/legacy-events/forEachAccumulated.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "grep found zero imports of forEachAccumulated from this module"
+  },
+  {
+    "file": "packages/react-dom/src/client/ReactDOMClientInjection.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "No imports found — injection moved to EventPluginRegistry"
+  },
+  {
+    "file": "packages/react-dom/src/test-utils/ReactTestUtils.js",
+    "symbol": "accumulateInto",
+    "kind": "function",
+    "confidence": "medium",
+    "evidence": "Imported from dead module but usage unclear"
+  },
+  {
+    "file": "packages/react-dom/src/test-utils/ReactTestUtils.js",
+    "symbol": "forEachAccumulated",
+    "kind": "function",
+    "confidence": "medium",
+    "evidence": "Imported from dead module but usage unclear"
+  }
+]

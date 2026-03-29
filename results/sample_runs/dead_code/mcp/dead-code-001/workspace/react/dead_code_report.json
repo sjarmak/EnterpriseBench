@@ -1,0 +1,86 @@
+[
+  {
+    "file": "packages/react-dom/src/legacy-events/EventPluginRegistry.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "Entire file is dead — modern event system uses packages/react-dom/src/events/EventPluginRegistry.js instead. Sourcegraph find-references: 0 importers."
+  },
+  {
+    "file": "packages/react-dom/src/legacy-events/EventPluginUtils.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "Entire file is dead — utilities only used by legacy event dispatching. Sourcegraph find-references: 0 importers."
+  },
+  {
+    "file": "packages/react-dom/src/legacy-events/accumulateInto.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "Entire file is dead — accumulateInto only used by legacy event accumulation. Sourcegraph find-references: 0 importers."
+  },
+  {
+    "file": "packages/react-dom/src/legacy-events/forEachAccumulated.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "Entire file is dead — only used by legacy event dispatching loop. Sourcegraph find-references: 0 importers."
+  },
+  {
+    "file": "packages/react-dom/src/client/ReactDOMClientInjection.js",
+    "symbol": "default",
+    "kind": "file",
+    "confidence": "high",
+    "evidence": "Entire file is dead — plugin injection moved inline to EventPluginRegistry. Sourcegraph find-references: 0 importers."
+  },
+  {
+    "file": "packages/react-dom/src/events/SyntheticEvent.js",
+    "symbol": "getPooled",
+    "kind": "function",
+    "confidence": "high",
+    "evidence": "Event pooling removed — getPooled is never called. Sourcegraph find-references for SyntheticEvent.getPooled: 0 call sites."
+  },
+  {
+    "file": "packages/react-dom/src/events/SyntheticEvent.js",
+    "symbol": "destructor",
+    "kind": "function",
+    "confidence": "high",
+    "evidence": "Event pooling removed — destructor is never called. Sourcegraph find-references: 0 call sites."
+  },
+  {
+    "file": "packages/react-dom/src/events/SyntheticEvent.js",
+    "symbol": "addEventPoolingTo",
+    "kind": "function",
+    "confidence": "high",
+    "evidence": "Event pooling removed — pool setup function is never called. Sourcegraph find-references: 0 call sites."
+  },
+  {
+    "file": "packages/react-dom/src/events/ReactSyntheticEventType.js",
+    "symbol": "DispatchConfig",
+    "kind": "export",
+    "confidence": "high",
+    "evidence": "DispatchConfig type only used by legacy event system. Sourcegraph find-references: 0 importers in modern event code."
+  },
+  {
+    "file": "packages/react-dom/src/events/TopLevelEventTypes.js",
+    "symbol": "getRawEventName",
+    "kind": "function",
+    "confidence": "high",
+    "evidence": "Helper only used by legacy event registration. Sourcegraph find-references: 0 call sites in modern code."
+  },
+  {
+    "file": "packages/react-dom/src/test-utils/ReactTestUtils.js",
+    "symbol": "accumulateInto",
+    "kind": "function",
+    "confidence": "high",
+    "evidence": "Imported from dead legacy-events module, unused in test utils. Sourcegraph symbol search: imported but never invoked."
+  },
+  {
+    "file": "packages/react-dom/src/client/ReactDOM.js",
+    "symbol": "enableDeprecatedFlareAPI branch",
+    "kind": "branch",
+    "confidence": "high",
+    "evidence": "enableDeprecatedFlareAPI is permanently off (false in ReactFeatureFlags.js, no override in any config). Sourcegraph find-references: flag defined in shared/ReactFeatureFlags.js as false, no setter found. All code guarded by this flag is dead."
+  }
+]

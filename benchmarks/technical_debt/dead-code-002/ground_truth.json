@@ -1,0 +1,148 @@
+{
+  "dead_code": [
+    {
+      "file": "packages/react/src/ReactContext.js",
+      "symbol": "REACT_PROVIDER_TYPE branch",
+      "kind": "branch",
+      "evidence": "enableRenderableContext is permanently true — else branch creating REACT_PROVIDER_TYPE wrapper is dead (73 lines)"
+    },
+    {
+      "file": "packages/react-reconciler/src/ReactFiber.js",
+      "symbol": "createFiberFromTypeAndProps REACT_PROVIDER_TYPE case",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — REACT_PROVIDER_TYPE fiber creation is dead (19 lines)"
+    },
+    {
+      "file": "packages/react-reconciler/src/ReactFiberBeginWork.js",
+      "symbol": "beginWork REACT_PROVIDER_TYPE case",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider handling dead (25 lines)"
+    },
+    {
+      "file": "packages/react-reconciler/src/ReactFiberCompleteWork.js",
+      "symbol": "completeWork REACT_PROVIDER_TYPE case",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider complete dead (7 lines)"
+    },
+    {
+      "file": "packages/react-reconciler/src/ReactFiberNewContext.js",
+      "symbol": "readContext REACT_PROVIDER_TYPE check",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider context read dead (8 lines)"
+    },
+    {
+      "file": "packages/react-reconciler/src/ReactFiberScope.js",
+      "symbol": "scope REACT_PROVIDER_TYPE check",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider scope check dead (8 lines)"
+    },
+    {
+      "file": "packages/react-reconciler/src/ReactFiberUnwindWork.js",
+      "symbol": "unwindWork REACT_PROVIDER_TYPE case",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider unwind dead (13 lines)"
+    },
+    {
+      "file": "packages/react-reconciler/src/getComponentNameFromFiber.js",
+      "symbol": "getComponentNameFromFiber REACT_PROVIDER_TYPE case",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider name resolution dead (15 lines)"
+    },
+    {
+      "file": "packages/react-server/src/ReactFizzServer.js",
+      "symbol": "renderNodeDestructive REACT_PROVIDER_TYPE case",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider server rendering dead (31 lines)"
+    },
+    {
+      "file": "packages/react-is/src/ReactIs.js",
+      "symbol": "isContextProvider REACT_PROVIDER_TYPE check",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider type check dead (28 lines)"
+    },
+    {
+      "file": "packages/react-client/src/ReactFlightReplyClient.js",
+      "symbol": "REACT_PROVIDER_TYPE case",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider flight reply dead (7 lines)"
+    },
+    {
+      "file": "packages/react-devtools-shared/src/utils.js",
+      "symbol": "REACT_PROVIDER_TYPE check",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider devtools check dead (11 lines)"
+    },
+    {
+      "file": "packages/shared/getComponentNameFromType.js",
+      "symbol": "REACT_PROVIDER_TYPE case",
+      "kind": "branch",
+      "evidence": "enableRenderableContext true — old provider name resolution dead (20 lines)"
+    },
+    {
+      "file": "packages/shared/ReactSymbols.js",
+      "symbol": "REACT_PROVIDER_TYPE",
+      "kind": "export",
+      "evidence": "Symbol only used by dead branches — no live code references it"
+    },
+    {
+      "file": "packages/shared/ReactFeatureFlags.js",
+      "symbol": "enableRenderableContext",
+      "kind": "export",
+      "evidence": "Feature flag permanently true — flag declaration itself is dead"
+    }
+  ],
+  "live_code": [
+    {
+      "file": "packages/react/src/ReactContext.js",
+      "symbol": "createContext",
+      "reachability": "direct",
+      "evidence": "Public API — React.createContext"
+    },
+    {
+      "file": "packages/react-reconciler/src/ReactFiberBeginWork.js",
+      "symbol": "beginWork",
+      "reachability": "direct",
+      "evidence": "Core reconciler entry point"
+    },
+    {
+      "file": "packages/react-reconciler/src/ReactFiber.js",
+      "symbol": "createFiberFromTypeAndProps",
+      "reachability": "direct",
+      "evidence": "Core fiber creation — always called"
+    },
+    {
+      "file": "packages/react-server/src/ReactFizzServer.js",
+      "symbol": "renderNodeDestructive",
+      "reachability": "direct",
+      "evidence": "Core server rendering function"
+    },
+    {
+      "file": "packages/react-is/src/ReactIs.js",
+      "symbol": "isValidElementType",
+      "reachability": "direct",
+      "evidence": "Public API for type checking"
+    }
+  ],
+  "feature_flags": [
+    {
+      "flag": "enableRenderableContext",
+      "status": "permanently_on",
+      "dead_branches": "all else branches where enableRenderableContext is checked — these handle the old REACT_PROVIDER_TYPE wrapper pattern",
+      "files_affected": [
+        "packages/react/src/ReactContext.js",
+        "packages/react-reconciler/src/ReactFiber.js",
+        "packages/react-reconciler/src/ReactFiberBeginWork.js",
+        "packages/react-reconciler/src/ReactFiberCompleteWork.js",
+        "packages/react-reconciler/src/ReactFiberNewContext.js",
+        "packages/react-reconciler/src/ReactFiberScope.js",
+        "packages/react-reconciler/src/ReactFiberUnwindWork.js",
+        "packages/react-reconciler/src/getComponentNameFromFiber.js",
+        "packages/react-server/src/ReactFizzServer.js",
+        "packages/react-is/src/ReactIs.js",
+        "packages/react-client/src/ReactFlightReplyClient.js",
+        "packages/react-devtools-shared/src/utils.js",
+        "packages/shared/getComponentNameFromType.js"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "candidate_id": "refactor-orch-001",
+  "description": "etcd 3.6 client library update cascade into Kubernetes",
+  "repos": ["etcd-io/etcd", "kubernetes/kubernetes"],
+  "merge_order": [
+    {
+      "repo": "etcd-io/etcd",
+      "description": "Release etcd v3.6 client libraries with reduced dependency footprint",
+      "pr_ref": "etcd 3.6.0 release"
+    },
+    {
+      "repo": "kubernetes/kubernetes",
+      "description": "Update to etcd 3.6 client libraries, drop cloud library dependencies",
+      "pr_ref": "kubernetes/kubernetes#128419",
+      "merged_at": "2025-05-16T02:23:13Z"
+    }
+  ],
+  "dependency_graph": {
+    "etcd-io/etcd": [],
+    "kubernetes/kubernetes": ["etcd-io/etcd"]
+  },
+  "parallelizable_steps": [],
+  "difficulty": "medium",
+  "confidence": 0.95,
+  "verification": {
+    "method": "pr_chronology",
+    "verified": true
+  }
+}

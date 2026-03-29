@@ -1,0 +1,62 @@
+{
+  "candidate_id": "refactor-orch-005",
+  "description": "Babel 8 plugin-transform removal cascade across monorepo packages",
+  "repos": [
+    "@babel/core",
+    "@babel/preset-env",
+    "@babel/preset-react",
+    "@babel/plugin-transform-react-compat",
+    "@babel/plugin-transform-react-source",
+    "@babel/plugin-transform-react-self",
+    "@babel/plugin-transform-property-mutators"
+  ],
+  "merge_order": [
+    {
+      "repo": "@babel/core",
+      "description": "Update core to no longer reference removed plugins"
+    },
+    {
+      "repo": "@babel/plugin-transform-react-compat",
+      "description": "Remove plugin package"
+    },
+    {
+      "repo": "@babel/plugin-transform-react-source",
+      "description": "Remove plugin package"
+    },
+    {
+      "repo": "@babel/plugin-transform-react-self",
+      "description": "Remove plugin package"
+    },
+    {
+      "repo": "@babel/plugin-transform-property-mutators",
+      "description": "Remove plugin package"
+    },
+    {
+      "repo": "@babel/preset-react",
+      "description": "Remove references to deleted react plugins"
+    },
+    {
+      "repo": "@babel/preset-env",
+      "description": "Remove references to deleted plugins, remove isPluginRequired export"
+    }
+  ],
+  "dependency_graph": {
+    "@babel/core": [],
+    "@babel/plugin-transform-react-compat": ["@babel/core"],
+    "@babel/plugin-transform-react-source": ["@babel/core"],
+    "@babel/plugin-transform-react-self": ["@babel/core"],
+    "@babel/plugin-transform-property-mutators": ["@babel/core"],
+    "@babel/preset-react": ["@babel/core", "@babel/plugin-transform-react-compat", "@babel/plugin-transform-react-source", "@babel/plugin-transform-react-self"],
+    "@babel/preset-env": ["@babel/core", "@babel/plugin-transform-property-mutators"]
+  },
+  "parallelizable_steps": [
+    ["@babel/plugin-transform-react-compat", "@babel/plugin-transform-react-source", "@babel/plugin-transform-react-self", "@babel/plugin-transform-property-mutators"],
+    ["@babel/preset-react", "@babel/preset-env"]
+  ],
+  "difficulty": "hard",
+  "confidence": 0.88,
+  "verification": {
+    "method": "pr_chronology",
+    "verified": true
+  }
+}

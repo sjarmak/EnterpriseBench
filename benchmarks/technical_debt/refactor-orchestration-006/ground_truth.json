@@ -1,0 +1,63 @@
+{
+  "candidate_id": "refactor-orch-006",
+  "description": "Go 1.26 toolchain and distroless image update across Kubernetes staging repos",
+  "repos": [
+    "build-infra",
+    "k8s.io/apimachinery",
+    "k8s.io/api",
+    "k8s.io/client-go",
+    "k8s.io/apiserver",
+    "distroless-images",
+    "e2e-infra"
+  ],
+  "merge_order": [
+    {
+      "repo": "build-infra",
+      "description": "Update go.mod toolchain directive, Makefile GO_VERSION"
+    },
+    {
+      "repo": "k8s.io/apimachinery",
+      "description": "Update go.mod in staging/src/k8s.io/apimachinery"
+    },
+    {
+      "repo": "k8s.io/api",
+      "description": "Update go.mod in staging/src/k8s.io/api"
+    },
+    {
+      "repo": "k8s.io/client-go",
+      "description": "Update go.mod in staging/src/k8s.io/client-go"
+    },
+    {
+      "repo": "k8s.io/apiserver",
+      "description": "Update go.mod in staging/src/k8s.io/apiserver"
+    },
+    {
+      "repo": "distroless-images",
+      "description": "Rebuild distroless iptables images with Go 1.26"
+    },
+    {
+      "repo": "e2e-infra",
+      "description": "Update e2e test images and CI configuration"
+    }
+  ],
+  "dependency_graph": {
+    "build-infra": [],
+    "k8s.io/apimachinery": ["build-infra"],
+    "k8s.io/api": ["build-infra", "k8s.io/apimachinery"],
+    "k8s.io/client-go": ["build-infra", "k8s.io/apimachinery", "k8s.io/api"],
+    "k8s.io/apiserver": ["build-infra", "k8s.io/apimachinery", "k8s.io/api", "k8s.io/client-go"],
+    "distroless-images": ["build-infra"],
+    "e2e-infra": ["build-infra", "distroless-images"]
+  },
+  "parallelizable_steps": [
+    ["k8s.io/apimachinery", "distroless-images"],
+    ["k8s.io/api"],
+    ["k8s.io/client-go", "e2e-infra"]
+  ],
+  "difficulty": "hard",
+  "confidence": 0.90,
+  "verification": {
+    "method": "pr_chronology",
+    "verified": true
+  }
+}

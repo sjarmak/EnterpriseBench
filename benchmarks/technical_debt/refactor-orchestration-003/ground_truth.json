@@ -1,0 +1,36 @@
+{
+  "candidate_id": "refactor-orch-003",
+  "description": "grpc-go v1.72 version bump cascade through etcd into Kubernetes",
+  "repos": ["grpc/grpc-go", "etcd-io/etcd", "kubernetes/kubernetes"],
+  "merge_order": [
+    {
+      "repo": "grpc/grpc-go",
+      "description": "Release grpc-go v1.72.1 with ServiceRegistrar interface change",
+      "pr_ref": "grpc/grpc-go v1.72.1 release",
+      "published_at": "2025-05-14T16:39:09Z"
+    },
+    {
+      "repo": "etcd-io/etcd",
+      "description": "Update grpc dependency to v1.72.x, fix mock server compilation",
+      "pr_ref": "etcd compatibility update"
+    },
+    {
+      "repo": "kubernetes/kubernetes",
+      "description": "Bump google.golang.org/grpc to v1.72.1, fix test mock implementations",
+      "pr_ref": "kubernetes/kubernetes#131838",
+      "merged_at": "2025-05-20T14:07:17Z"
+    }
+  ],
+  "dependency_graph": {
+    "grpc/grpc-go": [],
+    "etcd-io/etcd": ["grpc/grpc-go"],
+    "kubernetes/kubernetes": ["grpc/grpc-go", "etcd-io/etcd"]
+  },
+  "parallelizable_steps": [],
+  "difficulty": "hard",
+  "confidence": 0.95,
+  "verification": {
+    "method": "pr_chronology",
+    "verified": true
+  }
+}

@@ -1,0 +1,111 @@
+# Refactor Orchestration: grpc-go v1.72 version bump cascade
+
+difficulty_stratum = "tri_repo"
+
+[task]
+id = "refactor-orch-003"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Plan the ordering for grpc-go v1.72 bump cascade through etcd into Kubernetes"
+prompt = """
+The grpc-go project has released v1.72.1 with breaking API changes that require
+consumer updates. The dependency chain is:
+
+  grpc-go -> etcd -> kubernetes
+
+A breaking change in grpc-go v1.72 (PR grpc/grpc-go#8155) changed the
+grpc.ServiceRegistrar interface, causing compilation failures in downstream
+consumers that implement mock servers for testing.
+
+Your task is to produce a topologically sorted execution plan:
+
+1. Identify all repos requiring changes and in what order.
+2. Map the dependency relationships between repos.
+3. Produce a numbered, ordered list of repos to update.
+4. Identify any steps that can be done in parallel.
+5. Note which changes are breaking vs. compatible.
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of repos to update
+- Dependency graph explanation
+- Parallelization annotations
+- Risk assessment and breaking change annotations
+"""
+
+[[repos]]
+url = "github.com/grpc/grpc-go"
+rev = "v1.72.1"
+path = "grpc-go"
+role = "upstream"
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.5.17"
+path = "etcd"
+role = "intermediary"
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.32.0"
+path = "kubernetes"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 5200000
+dependency_depth = 3
+frameworks = ["grpc", "etcd", "kubernetes"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies all repos requiring changes"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "3-repo dependency chain requires cross-repo go.mod analysis and interface compatibility checking"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "grpc-go"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "etcd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "kubernetes"
+confidence = 0.95
+source = "deterministic"

@@ -1,0 +1,90 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "dead-code-003"
+suite = "technical_debt"
+task_type = "dead_code_necropsy"
+difficulty = "medium"
+estimated_duration_minutes = 20
+session_type = "single"
+description = "Identify dead code in React Compiler's compilation pipeline after feature removal"
+prompt = """
+# Task: Dead Code / Feature Flag Necropsy — React Compiler Pipeline
+
+## Background
+The React Compiler (babel-plugin-react-compiler) recently removed several features: retryCompileFunction, enableFire, and inferEffectDependencies. After these removals, dead code was left behind in the compilation pipeline. Your job is to find it.
+
+## Objective
+Analyze the React Compiler source and identify:
+1. Files that are entirely dead (no callers)
+2. Functions, types, and exports that are no longer used
+3. Output modes that are no longer reachable
+4. Return types that are unnecessarily complex due to removed code paths
+
+## Output Format
+Write your findings to `/workspace/react/dead_code_report.json` as a JSON array:
+```json
+[
+  {
+    "file": "path/to/file.ts",
+    "symbol": "functionName or type name",
+    "kind": "function|class|method|file|export|type",
+    "confidence": "high|medium|low",
+    "evidence": "explanation"
+  }
+]
+```
+
+## Key Areas to Investigate
+- `compiler/packages/babel-plugin-react-compiler/src/Entrypoint/` — compilation pipeline entry
+- `compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Program.ts` — compileProgram function
+- `compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Options.ts` — output modes
+- `compiler/packages/babel-plugin-react-compiler/src/Babel/BabelPlugin.ts` — plugin entry
+- `compiler/packages/babel-plugin-react-compiler/src/HIR/Environment.ts` — environment config
+- Look for validation passes that are always no-ops
+
+## Success Criteria
+- Precision ≥ 0.9, Recall ≥ 0.6
+- Must identify the dead validation pass by name
+"""
+
+[[repos]]
+url = "github.com/facebook/react"
+rev = "ab18f33d46171ed1963ae1ac955c5110bb1eb199"
+path = "react"
+role = "primary"
+
+[metadata]
+languages = ["typescript"]
+dependency_depth = 1
+
+[[checkpoints]]
+name = "check_dead_code"
+weight = 0.50
+verifier = "checks/check_dead_code.sh"
+description = "Verify dead code identification: precision ≥ 0.9, recall ≥ 0.6"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "check_feature_flags"
+weight = 0.30
+verifier = "checks/check_feature_flags.sh"
+description = "Verify removed feature identification"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "check_evidence"
+weight = 0.20
+verifier = "checks/check_evidence.sh"
+description = "Validate reasoning and evidence quality"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+
+[ground_truth]
+tiers = ["deterministic", "curator"]

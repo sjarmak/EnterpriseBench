@@ -1,0 +1,90 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "dead-code-005"
+suite = "technical_debt"
+task_type = "dead_code_necropsy"
+difficulty = "expert"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Identify dead ViewEngine code in Angular's language service package"
+prompt = """
+# Task: Dead Code / Feature Flag Necropsy — Angular ViewEngine Dead Code
+
+## Background
+Angular completed its transition from ViewEngine to Ivy as the rendering/compilation pipeline. The language service package (`packages/language-service/`) still contains ViewEngine-specific code that is dead now that Ivy is the sole compiler. Your job is to identify this dead code.
+
+## Objective
+Analyze Angular's language service package and identify:
+1. Entire files that are ViewEngine-only and no longer needed
+2. Functions and classes specific to ViewEngine that have zero callers
+3. ViewEngine adapters, diagnostics, and expression evaluators that are dead
+4. The `ivy/` subdirectory files that were eventually merged into `src/`
+
+## Output Format
+Write your findings to `/workspace/angular/dead_code_report.json` as a JSON array:
+```json
+[
+  {
+    "file": "packages/language-service/src/file.ts",
+    "symbol": "functionName or default",
+    "kind": "function|class|method|file|export",
+    "confidence": "high|medium|low",
+    "evidence": "explanation"
+  }
+]
+```
+
+## Key Areas to Investigate
+- `packages/language-service/src/` — ViewEngine-specific modules
+- `packages/language-service/ivy/` — Ivy implementation (duplicated then merged)
+- Look for: expression_diagnostics, expression_type, expressions, global_symbols, hover, html_info, locate_symbol, diagnostic_messages, binding_utils
+- ViewEngine template analysis code vs Ivy template analysis
+- Dead adapter patterns
+
+## Success Criteria
+- Precision ≥ 0.9, Recall ≥ 0.6
+- Must identify at least 8 dead files
+- Evidence must explain ViewEngine vs Ivy context
+"""
+
+[[repos]]
+url = "github.com/angular/angular"
+rev = "891318e805da3cdfb9839bf6cb3412c15c146253"
+path = "angular"
+role = "primary"
+
+[metadata]
+languages = ["typescript"]
+dependency_depth = 1
+
+[[checkpoints]]
+name = "check_dead_code"
+weight = 0.50
+verifier = "checks/check_dead_code.sh"
+description = "Verify dead code identification: precision ≥ 0.9, recall ≥ 0.6"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "check_feature_flags"
+weight = 0.30
+verifier = "checks/check_feature_flags.sh"
+description = "Verify identification of ViewEngine-specific dead modules"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "check_evidence"
+weight = 0.20
+verifier = "checks/check_evidence.sh"
+description = "Validate reasoning and evidence quality"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+
+[ground_truth]
+tiers = ["deterministic", "curator"]

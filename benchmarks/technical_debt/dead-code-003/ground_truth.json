@@ -1,0 +1,100 @@
+{
+  "dead_code": [
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/ValidateNoUntransformedReferences.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is dead — ValidateNoUntransformedReferences is always a no-op after removal of retryCompileFunction (162 lines)"
+    },
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Program.ts",
+      "symbol": "CompileProgramMetadata",
+      "kind": "type",
+      "evidence": "Type only existed to carry retryErrors — no longer used after retryCompileFunction removal"
+    },
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Program.ts",
+      "symbol": "retryErrors",
+      "kind": "export",
+      "evidence": "Field in ProgramContext for retry error tracking — retryCompileFunction removed, field is dead"
+    },
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Options.ts",
+      "symbol": "client-no-memo",
+      "kind": "export",
+      "evidence": "Output mode 'client-no-memo' is no longer reachable after feature removal"
+    },
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/Babel/BabelPlugin.ts",
+      "symbol": "retryCompileFunction handling",
+      "kind": "branch",
+      "evidence": "Dead code path for retry compilation in BabelPlugin (9 lines)"
+    },
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Imports.ts",
+      "symbol": "fire import handling",
+      "kind": "branch",
+      "evidence": "Dead import handling for enableFire feature (6 lines)"
+    },
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/HIR/Environment.ts",
+      "symbol": "enableFire config",
+      "kind": "branch",
+      "evidence": "Dead environment configuration for enableFire feature (8 lines)"
+    },
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Program.ts",
+      "symbol": "inferEffectDependencies handling",
+      "kind": "branch",
+      "evidence": "Dead code path for inferEffectDependencies feature — removed, branch is unreachable"
+    }
+  ],
+  "live_code": [
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Program.ts",
+      "symbol": "compileProgram",
+      "reachability": "direct",
+      "evidence": "Main compilation entry point — always called"
+    },
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/Babel/BabelPlugin.ts",
+      "symbol": "BabelPlugin",
+      "reachability": "direct",
+      "evidence": "Babel plugin export — entry point for the compiler"
+    },
+    {
+      "file": "compiler/packages/babel-plugin-react-compiler/src/HIR/Environment.ts",
+      "symbol": "Environment",
+      "reachability": "direct",
+      "evidence": "Core compilation environment — always instantiated"
+    }
+  ],
+  "feature_flags": [
+    {
+      "flag": "retryCompileFunction",
+      "status": "removed",
+      "dead_branches": "all retry logic in BabelPlugin.ts and Program.ts",
+      "files_affected": [
+        "compiler/packages/babel-plugin-react-compiler/src/Babel/BabelPlugin.ts",
+        "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Program.ts"
+      ]
+    },
+    {
+      "flag": "enableFire",
+      "status": "removed",
+      "dead_branches": "fire-related import handling and environment config",
+      "files_affected": [
+        "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Imports.ts",
+        "compiler/packages/babel-plugin-react-compiler/src/HIR/Environment.ts"
+      ]
+    },
+    {
+      "flag": "inferEffectDependencies",
+      "status": "removed",
+      "dead_branches": "effect dependency inference logic",
+      "files_affected": [
+        "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Program.ts"
+      ]
+    }
+  ]
+}

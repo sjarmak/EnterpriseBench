@@ -1,0 +1,91 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "dead-code-002"
+suite = "technical_debt"
+task_type = "dead_code_necropsy"
+difficulty = "hard"
+estimated_duration_minutes = 25
+session_type = "single"
+description = "Identify dead code from permanently-enabled enableRenderableContext feature flag in React"
+prompt = """
+# Task: Dead Code / Feature Flag Necropsy — React enableRenderableContext
+
+## Background
+React uses feature flags to gate experimental features. When a feature flag becomes permanently enabled, the `else` branches guarded by that flag become dead code. Your job is to identify the dead branches and related dead code left behind by the `enableRenderableContext` feature flag.
+
+## Objective
+Analyze the React codebase and identify:
+1. Feature flags that are permanently on or off
+2. Dead branches in files that check these flags
+3. Dead symbols (types, functions, constants) that only exist to support the dead branches
+4. Any dead feature flag fork files
+
+## Output Format
+Write your findings to `/workspace/react/dead_code_report.json` as a JSON array:
+```json
+[
+  {
+    "file": "path/to/file.js",
+    "symbol": "functionName or branch description",
+    "kind": "function|class|method|export|branch",
+    "confidence": "high|medium|low",
+    "evidence": "explanation"
+  }
+]
+```
+
+## Key Areas to Investigate
+- `packages/shared/ReactFeatureFlags.js` and all fork files in `packages/shared/forks/`
+- `packages/react/src/ReactContext.js` — context provider/consumer logic
+- `packages/react-reconciler/src/` — fiber creation and begin work
+- `packages/react-server/src/ReactFizzServer.js`
+- `packages/react-is/src/ReactIs.js`
+- `packages/shared/ReactSymbols.js`
+
+## Success Criteria
+- Precision ≥ 0.9, Recall ≥ 0.6
+- Must identify the primary feature flag by name
+- Evidence must explain why branches are dead
+"""
+
+[[repos]]
+url = "github.com/facebook/react"
+rev = "56408a5b12fa4099e9dbbeca7f6bc59e1307e507"
+path = "react"
+role = "primary"
+
+[metadata]
+languages = ["javascript"]
+dependency_depth = 1
+
+[[checkpoints]]
+name = "check_dead_code"
+weight = 0.50
+verifier = "checks/check_dead_code.sh"
+description = "Verify dead code identification: precision ≥ 0.9, recall ≥ 0.6"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "check_feature_flags"
+weight = 0.30
+verifier = "checks/check_feature_flags.sh"
+description = "Verify feature flag identification"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "check_evidence"
+weight = 0.20
+verifier = "checks/check_evidence.sh"
+description = "Validate reasoning and evidence quality"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+
+[ground_truth]
+tiers = ["deterministic", "curator"]

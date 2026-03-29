@@ -1,0 +1,37 @@
+{
+  "task_id": "refactor-orch-003",
+  "task_dir": "refactor-orchestration-003",
+  "mode": "baseline",
+  "model": "claude-sonnet-4-6",
+  "checkpoints": [
+    {
+      "name": "identify_repos",
+      "weight": 0.25,
+      "score": 0.67,
+      "passed": true,
+      "detail": "Found 2/3 repos in plan (missed etcd as intermediary)"
+    },
+    {
+      "name": "topological_order",
+      "weight": 0.45,
+      "score": 0.33,
+      "passed": false,
+      "detail": "Partially valid ordering; 1/3 dependency constraints satisfied; 2/3 repos covered; missing: etcd-io/etcd"
+    },
+    {
+      "name": "parallelism",
+      "weight": 0.30,
+      "score": 1.0,
+      "passed": true,
+      "detail": "No parallelism expected or claimed"
+    }
+  ],
+  "total_score": 0.62,
+  "tool_usage": {
+    "grep_calls": 24,
+    "file_reads": 68,
+    "total_tokens": 32400
+  },
+  "infrastructure_errors": [],
+  "notes": "Baseline agent found grpc-go and k8s but failed to identify etcd as intermediary. Without cross-repo dependency graph, agent proposed updating k8s directly after grpc-go, skipping etcd client library update."
+}

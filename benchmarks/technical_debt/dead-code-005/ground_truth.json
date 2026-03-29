@@ -1,0 +1,139 @@
+{
+  "dead_code": [
+    {
+      "file": "packages/language-service/src/expression_diagnostics.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — expression diagnostics replaced by Ivy template type checker"
+    },
+    {
+      "file": "packages/language-service/src/expression_type.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — expression type evaluation replaced by Ivy"
+    },
+    {
+      "file": "packages/language-service/src/expressions.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — template expression analysis dead"
+    },
+    {
+      "file": "packages/language-service/src/global_symbols.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — global symbol resolution dead"
+    },
+    {
+      "file": "packages/language-service/src/hover.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — hover provider replaced by Ivy implementation"
+    },
+    {
+      "file": "packages/language-service/src/html_info.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — HTML info/schema dead (455 lines)"
+    },
+    {
+      "file": "packages/language-service/src/locate_symbol.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — symbol location replaced by Ivy definition provider"
+    },
+    {
+      "file": "packages/language-service/src/diagnostic_messages.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — diagnostic messages only used by dead VE code"
+    },
+    {
+      "file": "packages/language-service/src/binding_utils.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — binding utilities dead (69 lines)"
+    },
+    {
+      "file": "packages/language-service/src/diagnostics.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Entire file is ViewEngine-only — diagnostics module replaced by Ivy"
+    },
+    {
+      "file": "packages/language-service/ivy/completions.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Ivy subdirectory file to be merged into src/ — separate copy is dead"
+    },
+    {
+      "file": "packages/language-service/ivy/definitions.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Ivy subdirectory file to be merged into src/ — separate copy is dead"
+    },
+    {
+      "file": "packages/language-service/ivy/language_service.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Ivy subdirectory file to be merged into src/ — separate copy is dead"
+    },
+    {
+      "file": "packages/language-service/ivy/ts_plugin.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Ivy subdirectory file to be merged into src/ — separate copy is dead"
+    },
+    {
+      "file": "packages/language-service/ivy/ts_utils.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Ivy subdirectory file to be merged into src/ — separate copy is dead"
+    },
+    {
+      "file": "packages/language-service/ivy/utils.ts",
+      "symbol": "default",
+      "kind": "file",
+      "evidence": "Ivy subdirectory file to be merged into src/ — separate copy is dead"
+    }
+  ],
+  "live_code": [
+    {
+      "file": "packages/language-service/src/completions.ts",
+      "symbol": "CompletionBuilder",
+      "reachability": "direct",
+      "evidence": "Active completions implementation — used by language service"
+    },
+    {
+      "file": "packages/language-service/src/definitions.ts",
+      "symbol": "getDefinitionAndBoundSpan",
+      "reachability": "direct",
+      "evidence": "Active definitions implementation — used by language service"
+    },
+    {
+      "file": "packages/language-service/src/language_service.ts",
+      "symbol": "LanguageService",
+      "reachability": "direct",
+      "evidence": "Main language service class — active entry point"
+    },
+    {
+      "file": "packages/language-service/src/compiler_factory.ts",
+      "symbol": "CompilerFactory",
+      "reachability": "direct",
+      "evidence": "Ivy compiler factory — active"
+    },
+    {
+      "file": "packages/language-service/src/display_parts.ts",
+      "symbol": "getDisplayParts",
+      "reachability": "direct",
+      "evidence": "Display parts utility — used by both completions and hover"
+    },
+    {
+      "file": "packages/language-service/src/attribute_completions.ts",
+      "symbol": "getAttributeCompletionEntries",
+      "reachability": "direct",
+      "evidence": "Attribute completions — used by active completions module"
+    }
+  ],
+  "feature_flags": []
+}

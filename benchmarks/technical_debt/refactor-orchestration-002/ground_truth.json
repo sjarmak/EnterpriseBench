@@ -1,0 +1,29 @@
+{
+  "candidate_id": "refactor-orch-002",
+  "description": "cobra v1.10 CLI framework bump cascade into Kubernetes",
+  "repos": ["spf13/cobra", "kubernetes/kubernetes"],
+  "merge_order": [
+    {
+      "repo": "spf13/cobra",
+      "description": "Release cobra v1.10.2 with improved command suggestions",
+      "pr_ref": "spf13/cobra v1.10.2 release"
+    },
+    {
+      "repo": "kubernetes/kubernetes",
+      "description": "Bump cobra to v1.10.2 across all binaries",
+      "pr_ref": "kubernetes/kubernetes#137843",
+      "merged_at": "2026-03-18T15:24:55Z"
+    }
+  ],
+  "dependency_graph": {
+    "spf13/cobra": [],
+    "kubernetes/kubernetes": ["spf13/cobra"]
+  },
+  "parallelizable_steps": [],
+  "difficulty": "medium",
+  "confidence": 0.95,
+  "verification": {
+    "method": "pr_chronology",
+    "verified": true
+  }
+}

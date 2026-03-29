@@ -1,0 +1,35 @@
+{
+  "candidate_id": "refactor-orch-004",
+  "description": "golang/protobuf to google.golang.org/protobuf import migration across grpc-go and etcd",
+  "repos": ["protocolbuffers/protobuf-go", "grpc/grpc-go", "etcd-io/etcd"],
+  "merge_order": [
+    {
+      "repo": "protocolbuffers/protobuf-go",
+      "description": "google.golang.org/protobuf is the canonical v2 module (already released)",
+      "pr_ref": "protobuf-go v1.32.0 release"
+    },
+    {
+      "repo": "grpc/grpc-go",
+      "description": "Migrate all imports from github.com/golang/protobuf to google.golang.org/protobuf",
+      "pr_ref": "grpc/grpc-go#6919",
+      "merged_at": "2024-01-30T18:59:11Z"
+    },
+    {
+      "repo": "etcd-io/etcd",
+      "description": "Update etcd to use grpc-go with new protobuf imports, update own protobuf usage",
+      "pr_ref": "etcd protobuf migration"
+    }
+  ],
+  "dependency_graph": {
+    "protocolbuffers/protobuf-go": [],
+    "grpc/grpc-go": ["protocolbuffers/protobuf-go"],
+    "etcd-io/etcd": ["grpc/grpc-go", "protocolbuffers/protobuf-go"]
+  },
+  "parallelizable_steps": [],
+  "difficulty": "hard",
+  "confidence": 0.92,
+  "verification": {
+    "method": "pr_chronology",
+    "verified": true
+  }
+}

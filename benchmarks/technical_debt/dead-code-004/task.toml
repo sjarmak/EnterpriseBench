@@ -1,0 +1,94 @@
+difficulty_stratum = "large_single"
+
+[task]
+id = "dead-code-004"
+suite = "technical_debt"
+task_type = "dead_code_necropsy"
+difficulty = "expert"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Identify unused exports and dead code across the TypeScript compiler"
+prompt = """
+# Task: Dead Code / Feature Flag Necropsy — TypeScript Compiler Dead Exports
+
+## Background
+The TypeScript compiler codebase (~900K LoC) has accumulated unused exports and dead utility functions over years of development. Your job is to systematically identify these.
+
+## Objective
+Analyze the TypeScript compiler source and identify:
+1. Exported functions that are never imported by any other module
+2. Dead utility functions in core.ts, utilities.ts, utilitiesPublic.ts
+3. Unused type definitions and interfaces
+4. Dead helper functions in factory modules
+
+## Output Format
+Write your findings to `/workspace/TypeScript/dead_code_report.json` as a JSON array:
+```json
+[
+  {
+    "file": "src/compiler/core.ts",
+    "symbol": "functionName",
+    "kind": "function|export|type",
+    "confidence": "high|medium|low",
+    "evidence": "explanation"
+  }
+]
+```
+
+## Key Areas to Investigate
+- `src/compiler/core.ts` — core utility functions (many unused)
+- `src/compiler/utilities.ts` — compiler utilities (193 lines of dead code)
+- `src/compiler/utilitiesPublic.ts` — public utilities
+- `src/compiler/factory/utilities.ts` — factory helpers
+- `src/compiler/factory/emitHelpers.ts` — emit helper dead code
+- `src/compiler/types.ts` — unused type definitions
+- `src/compiler/corePublic.ts` — dead public exports
+- `src/services/utilities.ts` — service layer dead exports
+- `src/server/utilities.ts` — server dead exports
+
+## Success Criteria
+- Precision ≥ 0.9, Recall ≥ 0.6
+- Must find dead exports in at least 5 different files
+- Evidence must show zero importers/callers
+"""
+
+[[repos]]
+url = "github.com/microsoft/TypeScript"
+rev = "f7833b2a72309dd695b45cf2cf2187e2f2f264df"
+path = "TypeScript"
+role = "primary"
+
+[metadata]
+languages = ["typescript"]
+dependency_depth = 1
+
+[[checkpoints]]
+name = "check_dead_code"
+weight = 0.50
+verifier = "checks/check_dead_code.sh"
+description = "Verify dead code identification: precision ≥ 0.9, recall ≥ 0.6"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "check_feature_flags"
+weight = 0.30
+verifier = "checks/check_feature_flags.sh"
+description = "Verify identification of dead export patterns"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "check_evidence"
+weight = 0.20
+verifier = "checks/check_evidence.sh"
+description = "Validate reasoning and evidence quality"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+
+[ground_truth]
+tiers = ["deterministic", "curator"]

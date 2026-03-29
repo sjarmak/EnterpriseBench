@@ -1,0 +1,94 @@
+# Refactor Orchestration: etcd 3.6 client update cascade
+
+difficulty_stratum = "dual_repo"
+
+[task]
+id = "refactor-orch-001"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "medium"
+estimated_duration_minutes = 20
+session_type = "single"
+description = "Plan the ordering for etcd 3.6 client library update cascade into Kubernetes"
+prompt = """
+The etcd project has released v3.6 client libraries, dropping several cloud
+library dependencies and reducing the transitive dependency footprint from 365
+to 247 packages.
+
+Kubernetes depends on etcd client libraries. Your task is to produce a
+topologically sorted execution plan for updating these repositories:
+
+1. Identify which repos need changes and in what order.
+2. Determine the dependency relationships (who depends on whom).
+3. Produce a numbered, ordered list of repos to update.
+4. Identify any steps that can be done in parallel (independent repos).
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of repos to update
+- Dependency graph explanation
+- Parallelization annotations (which steps are independent)
+- Risk assessment for each step
+"""
+
+[[repos]]
+url = "github.com/etcd-io/etcd"
+rev = "v3.6.0"
+path = "etcd"
+role = "upstream"
+
+[[repos]]
+url = "github.com/kubernetes/kubernetes"
+rev = "v1.32.0"
+path = "kubernetes"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 4500000
+dependency_depth = 2
+frameworks = ["etcd", "kubernetes"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies all repos requiring changes"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo dependency graph traversal through go.mod files benefits from Sourcegraph dependency indexing"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "etcd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "kubernetes"
+confidence = 0.95
+source = "deterministic"

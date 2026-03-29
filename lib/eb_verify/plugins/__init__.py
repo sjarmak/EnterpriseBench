@@ -61,6 +61,8 @@ from eb_verify.plugins.runbook import RunbookValidator
 from eb_verify.plugins.reproduction_script import ReproductionScriptValidator
 from eb_verify.plugins.security_assessment import SecurityAssessmentValidator
 from eb_verify.plugins.answer import AnswerValidator
+from eb_verify.plugins.call_graph import CallGraphValidator
+from eb_verify.plugins.topological_order import TopologicalOrderValidator
 
 register(CodePatchValidator())
 register(ConfigValidator())
@@ -69,3 +71,5 @@ register(RunbookValidator())
 register(ReproductionScriptValidator())
 register(SecurityAssessmentValidator())
 register(AnswerValidator())
+register(CallGraphValidator())
+register(TopologicalOrderValidator())
