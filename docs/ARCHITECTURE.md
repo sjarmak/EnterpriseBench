@@ -16,14 +16,15 @@ EnterpriseBench/
 │   └── converge.md             # Structured debate via Agent Teams
 ├── schemas/
 │   └── task.schema.json        # Task definition schema
-├── benchmarks/                 # Task definitions by suite
+├── benchmarks/                 # Task definitions by suite (100 tasks)
 │   ├── dependency_management/
 │   ├── incident_response/
 │   ├── platform_engineering/
 │   ├── security_operations/
 │   ├── customer_escalation/
 │   ├── feature_delivery/
-│   └── technical_debt/
+│   ├── technical_debt/
+│   └── mined/                  # Mining candidate lists and provenance
 ├── lib/
 │   └── eb_verify/              # Centralized verification library
 ├── scripts/
@@ -31,6 +32,8 @@ EnterpriseBench/
 │   ├── sandbox/                # Multi-repo sandbox management
 │   └── orchestration/          # Session chaining, event replay
 ├── configs/                    # Run configurations
+├── results/                    # Run results and sample outputs
+│   └── sample_runs/            # Sample verification outputs by task type
 └── docs/                       # Design docs, technical reports
 ```
 
