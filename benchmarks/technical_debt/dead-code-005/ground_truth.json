@@ -123,7 +123,7 @@
       "evidence": "Ivy compiler factory — active"
     },
     {
-      "file": "packages/language-service/src/display_parts.ts",
+      "file": "packages/language-service/ivy/display_parts.ts",
       "symbol": "getDisplayParts",
       "reachability": "direct",
       "evidence": "Display parts utility — used by both completions and hover"

@@ -61,19 +61,19 @@ mcp_benefit_rationale = "Medium TypeScript codebase; component hierarchy is disc
 tiers = ["deterministic"]
 
 [[ground_truth.required_files]]
-path = "src/components/views/rooms/RoomHeader/RoomHeaderButtons.tsx"
+path = "src/components/views/right_panel/RoomHeaderButtons.tsx"
 repo = "element-web"
 confidence = 0.95
 source = "deterministic"
 
 [[ground_truth.required_files]]
-path = "src/components/views/right_panel/ThreadPanel.tsx"
+path = "src/components/structures/ThreadPanel.tsx"
 repo = "element-web"
 confidence = 0.85
 source = "deterministic"
 
 [[ground_truth.sufficient_files]]
-path = "src/components/views/rooms/RoomHeader/RoomHeader.tsx"
+path = "src/components/views/rooms/RoomHeader.tsx"
 repo = "element-web"
 confidence = 0.75
 

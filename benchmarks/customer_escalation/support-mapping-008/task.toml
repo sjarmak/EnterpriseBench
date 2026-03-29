@@ -12,7 +12,7 @@ prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/qutebrowser/qutebrowser"
-rev = ""
+rev = "v3.0.0"
 path = "qutebrowser"
 role = "primary"
 

@@ -54,18 +54,18 @@ mcp_benefit_rationale = "Panic points to the file but not the condition; MCP hel
 tiers = ["deterministic"]
 
 [[ground_truth.required_files]]
-path = "pkg/tsdb/jaeger/client.go"
+path = "public/app/plugins/datasource/jaeger/datasource.ts"
 repo = "grafana"
 confidence = 0.95
 source = "deterministic"
 
 [[ground_truth.required_files]]
-path = "pkg/tsdb/jaeger/client_test.go"
+path = "public/app/plugins/datasource/jaeger/datasource.test.ts"
 repo = "grafana"
 confidence = 0.85
 source = "deterministic"
 
 [[ground_truth.sufficient_files]]
-path = "pkg/tsdb/jaeger/trace.go"
+path = "public/app/plugins/datasource/jaeger/graphTransform.ts"
 repo = "grafana"
 confidence = 0.55

@@ -14,7 +14,7 @@ description = "Compliance Audit: Envoy Access Logging Configuration Coverage"
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/sg-evals/envoy"
+url = "github.com/envoyproxy/envoy"
 rev = "v1.31.2"
 path = "envoy"
 role = "primary"
@@ -43,12 +43,12 @@ timeout_seconds = 120
 required = ["answer"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Access logger implementations are spread across extensions/access_loggers/ with proto definitions in a separate API repo — MCP cross-reference search accelerates discovery"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Access logger implementations are spread across extensions/access_loggers/; MCP helps navigate but directory structure and class names are grepable in single repo"
 
 [[tool_access.sourcegraph_mirrors]]
-repo = "github.com/sg-evals/envoy"
-mirror_id = "sg-evals/envoy--v1.31.2"
+repo = "github.com/envoyproxy/envoy"
+mirror_id = "envoyproxy/envoy--v1.31.2"
 
 [ground_truth]
 tiers = ["curator"]

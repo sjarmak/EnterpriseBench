@@ -71,8 +71,8 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "New model creation requires tracing all existing export references from JSON-based tracking to understand migration scope"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "New model creation requires tracing export references; MCP helps but model names and import patterns are grepable in a single Django codebase"
 
 [ground_truth]
 tiers = ["deterministic"]

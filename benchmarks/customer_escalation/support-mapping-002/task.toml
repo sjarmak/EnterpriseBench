@@ -12,7 +12,7 @@ prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/llvm/llvm-project"
-rev = ""
+rev = "llvmorg-18.1.0"
 path = "llvm-project"
 role = "primary"
 

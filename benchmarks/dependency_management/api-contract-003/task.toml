@@ -88,7 +88,7 @@ optional = ["migration_guide"]
 
 [tool_access]
 expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Three-repo dependency chain requires cross-repo import graph traversal. Transport types are re-exported and wrapped, making grep insufficient."
+mcp_benefit_rationale = "Three-repo dependency chain requires cross-repo import graph traversal. Transport types are re-exported and wrapped, making grep insufficient. Note: empirical gap was 0.20 (baseline 0.80) — baseline benefits from shallow grep across repos, but the chain depth (grpc-go → etcd → kubernetes) still warrants high"
 
 [ground_truth]
 tiers = ["deterministic"]

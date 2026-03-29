@@ -88,11 +88,6 @@ path = "src/components/views/rooms/NotificationBadge.tsx"
 repo = "element-web"
 confidence = 0.65
 
-[[ground_truth.sufficient_files]]
-path = "src/models/Room.ts"
-repo = "element-web"
-confidence = 0.55
-
 [csb_lineage]
 parent_csb_id = "element-web-unread-indicators-diverge-fix-001"
 origin_suite = "csb_sdlc_fix"

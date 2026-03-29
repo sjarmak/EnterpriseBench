@@ -71,8 +71,8 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Go monorepo with SQL migrations, Go structs, and OpenAPI spec requires tracing across server/public/model, server/channels/store, and api/v4 directories"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Go monorepo with SQL migrations, Go structs, and OpenAPI spec; MCP helps navigate across directories but struct field names and SQL column names are directly grepable"
 
 [ground_truth]
 tiers = ["deterministic"]
@@ -94,16 +94,6 @@ path = "api/v4/source/definitions.yaml"
 repo = "mattermost"
 confidence = 0.95
 source = "deterministic"
-
-[[ground_truth.sufficient_files]]
-path = "server/channels/db/migrations/postgres/000167_views_drop_icon.up.sql"
-repo = "mattermost"
-confidence = 0.98
-
-[[ground_truth.sufficient_files]]
-path = "server/channels/db/migrations/postgres/000167_views_drop_icon.down.sql"
-repo = "mattermost"
-confidence = 0.90
 
 [[ground_truth.sufficient_files]]
 path = "server/channels/db/migrations/migrations.list"

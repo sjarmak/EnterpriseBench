@@ -86,6 +86,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Proving feature flag branches are dead requires exhaustive search for all enableRenderableContext references across React packages and fork files; MCP accelerates confirming zero live callers of dead branches"
 
 [ground_truth]
 tiers = ["deterministic", "curator"]

@@ -87,8 +87,8 @@ required = ["incident_report"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Cross-component tracing needed between daemon shutdown, restart manager, containerd event handling, and libcontainerd client across multiple packages"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Cross-component tracing between daemon shutdown, restart manager, and containerd event handling; MCP helps but component names and function signatures are grepable in Docker/Moby"
 
 [ground_truth]
 tiers = ["deterministic"]

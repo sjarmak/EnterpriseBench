@@ -89,6 +89,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Proving exports are dead in a 900K LoC TypeScript compiler requires exhaustive cross-file reference search; MCP accelerates confirming zero importers across compiler, services, and server layers"
 
 [ground_truth]
 tiers = ["deterministic", "curator"]

@@ -85,6 +85,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Compiler pipeline is contained within a single package directory; grep suffices for tracing removed feature references, but MCP helps navigate the compilation pass chain to confirm dead validation passes"
 
 [ground_truth]
 tiers = ["deterministic", "curator"]

@@ -47,8 +47,8 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Multiple interleaved error messages from different subsystems; MCP needed to trace PostStartHook registration, RepairIPAddress controller, and API admission simultaneously"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Multiple interleaved error messages from different subsystems; MCP helps navigate PostStartHook registration and RepairIPAddress controller, but error strings and function names are grepable"
 
 [ground_truth]
 tiers = ["deterministic"]

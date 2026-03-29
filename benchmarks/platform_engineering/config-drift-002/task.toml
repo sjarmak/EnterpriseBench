@@ -46,7 +46,7 @@ structure:
 
 [[repos]]
 url = "github.com/bitnami/charts"
-rev = "24493~1"
+rev = "53aca51120f86086e6780dc0453b93fbf49766b4"
 path = "charts"
 role = "primary"
 
@@ -83,8 +83,8 @@ required = ["answer"]
 optional = ["config"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Cross-file search across values.yaml, multiple templates, and helper files to trace config value flow through 4-layer Helm hierarchy"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Config value flow through 4-layer Helm hierarchy (values.yaml → helpers → templates); MCP helps but Helm template variable names are directly grepable across chart files"
 
 [ground_truth]
 tiers = ["deterministic"]

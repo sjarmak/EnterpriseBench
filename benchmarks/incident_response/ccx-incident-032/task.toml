@@ -14,7 +14,7 @@ description = "Incident Debugging: Envoy Connection Pool Exhaustion"
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/sg-evals/envoy"
+url = "github.com/envoyproxy/envoy"
 rev = "v1.31.2"
 path = "envoy"
 role = "primary"
@@ -51,12 +51,12 @@ required = ["answer"]
 optional = ["incident_report"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Tracing overflow reset across conn_pool, router, and HTTP layers requires cross-file symbol search — MCP accelerates finding the connection between reset reason enum and circuit breaker config"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Tracing overflow reset across conn_pool, router, and HTTP layers; MCP helps navigate Envoy's module structure but reset reason enums and config names are grepable"
 
 [[tool_access.sourcegraph_mirrors]]
-repo = "github.com/sg-evals/envoy"
-mirror_id = "sg-evals/envoy--v1.31.2"
+repo = "github.com/envoyproxy/envoy"
+mirror_id = "envoyproxy/envoy--v1.31.2"
 
 [ground_truth]
 tiers = ["curator"]

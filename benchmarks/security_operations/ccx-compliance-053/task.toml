@@ -14,7 +14,7 @@ description = "Compliance Audit: Kafka Audit Logging and Authorization Events"
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/sg-evals/kafka"
+url = "github.com/apache/kafka"
 rev = "0753c489"
 path = "kafka"
 role = "primary"
@@ -43,12 +43,12 @@ timeout_seconds = 120
 required = ["answer"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Audit logging spans Scala core and Java clients packages — MCP symbol search for AuditLogger and authorization result types accelerates discovery"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Audit logging spans Scala core and Java clients packages; MCP helps but AuditLogger class name and authorization types are directly grepable in single repo"
 
 [[tool_access.sourcegraph_mirrors]]
-repo = "github.com/sg-evals/kafka"
-mirror_id = "sg-evals/kafka--0753c489"
+repo = "github.com/apache/kafka"
+mirror_id = "apache/kafka--0753c489"
 
 [ground_truth]
 tiers = ["curator"]

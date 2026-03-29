@@ -12,7 +12,7 @@ prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/LibreOffice/core"
-rev = ""
+rev = "61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e"
 path = "core"
 role = "primary"
 

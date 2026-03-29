@@ -75,8 +75,8 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Cross-stack tracing from Django model through Python events to JavaScript settings UI requires understanding both backend and frontend codepaths"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Cross-stack tracing from Django model through Python events to JavaScript settings UI; MCP helps bridge backend/frontend but field names and event identifiers are grepable across both stacks"
 
 [ground_truth]
 tiers = ["deterministic"]

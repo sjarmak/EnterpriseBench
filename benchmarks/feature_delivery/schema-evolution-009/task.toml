@@ -70,8 +70,8 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Cross-layer tracing from Django model through backup system to React TypeScript frontend in a very large codebase benefits from semantic search"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Cross-layer tracing from Django model through backup system to React TypeScript frontend; MCP helps bridge layers but model field names and API endpoints are grepable across the stack"
 
 [ground_truth]
 tiers = ["deterministic"]

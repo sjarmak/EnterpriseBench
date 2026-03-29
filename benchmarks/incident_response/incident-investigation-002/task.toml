@@ -87,8 +87,8 @@ required = ["incident_report"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Tracing the resourceVersion propagation path requires cross-package symbol navigation between cacher.go, watch_cache.go, etcd3/watcher.go, and etcd/etcd_watcher.go to compare implementations"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Tracing resourceVersion propagation across cacher.go, watch_cache.go, and etcd3/watcher.go; MCP helps compare implementations but resourceVersion is a grepable string across these known files"
 
 [ground_truth]
 tiers = ["deterministic"]

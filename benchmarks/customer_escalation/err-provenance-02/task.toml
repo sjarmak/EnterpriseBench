@@ -47,8 +47,8 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Error wraps through proxy -> vendor knftables library; MCP cross-symbol navigation needed to trace the error chain across package boundaries"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Error wraps through proxy -> vendor knftables library; cross-package boundary tracing benefits from MCP but error strings and vendor paths are grepable in single repo"
 
 [ground_truth]
 tiers = ["deterministic"]

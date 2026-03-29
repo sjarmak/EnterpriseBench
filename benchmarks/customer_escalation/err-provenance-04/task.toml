@@ -47,8 +47,8 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "No visible error string to grep; requires understanding prober worker logic and sidecar lifecycle semantics — MCP symbol navigation essential"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "No visible error string to grep directly, but prober worker logic is localized in pkg/kubelet/prober/; MCP helps navigate sidecar lifecycle semantics but the code path is discoverable via package structure"
 
 [ground_truth]
 tiers = ["deterministic"]

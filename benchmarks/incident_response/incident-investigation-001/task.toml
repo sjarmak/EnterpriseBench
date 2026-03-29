@@ -84,8 +84,8 @@ required = ["incident_report"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Cross-package code navigation needed to trace watch request flow from API handler through cacher to etcd3 storage layer; symbol references cross staging package boundaries"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Watch request flow crosses staging package boundaries (cacher → etcd3 storage); MCP helps but function names like watchHandler, cacheWatcher are directly grepable in single repo"
 
 [ground_truth]
 tiers = ["deterministic"]

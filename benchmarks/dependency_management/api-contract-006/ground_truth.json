@@ -13,7 +13,7 @@
   "breakage_type": "runtime_fatal",
   "description": "Envoy xDS v2 API deprecation and removal caused go-control-plane v2 removal and istio migration to xDS v3",
   "producer_changed_files_envoy": [
-    "source/common/config/api_version_impl.cc",
+    "source/common/config/api_type_oracle.cc",
     "test/integration/ads_integration_test.cc",
     "test/config_test/config_test.cc"
   ],

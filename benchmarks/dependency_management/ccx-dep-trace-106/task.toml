@@ -16,9 +16,9 @@ description = "Trace GCC optimization pass registration and execution chain"
 prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/sg-evals/llvm-project"
+url = "github.com/gcc-mirror/gcc"
 rev = "a8f3c97d"
-path = "llvm-project"
+path = "gcc"
 role = "primary"
 
 [metadata]
@@ -45,43 +45,43 @@ timeout_seconds = 120
 required = ["answer"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "GCC pass infrastructure spans multiple files with macro-based registration — MCP symbol search accelerates tracing pass_manager -> passes.def -> concrete pass implementations"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "GCC pass infrastructure uses macro-based registration in passes.def; MCP helps navigate pass_manager → concrete implementations but macro patterns and pass names are grepable"
 
 [[tool_access.sourcegraph_mirrors]]
-repo = "github.com/sg-evals/llvm-project"
-mirror_id = "sg-evals/llvm-project--a8f3c97d"
+repo = "github.com/gcc-mirror/gcc"
+mirror_id = "gcc-mirror/gcc--a8f3c97d"
 
 [ground_truth]
 tiers = ["curator"]
 
 [[ground_truth.required_files]]
 path = "gcc/passes.def"
-repo = "llvm-project"
+repo = "gcc"
 confidence = 0.8
 source = "curator"
 
 [[ground_truth.required_files]]
 path = "gcc/passes.cc"
-repo = "llvm-project"
+repo = "gcc"
 confidence = 0.8
 source = "curator"
 
 [[ground_truth.required_files]]
 path = "gcc/pass_manager.h"
-repo = "llvm-project"
+repo = "gcc"
 confidence = 0.8
 source = "curator"
 
 [[ground_truth.required_files]]
 path = "gcc/tree-ssa-dce.cc"
-repo = "llvm-project"
+repo = "gcc"
 confidence = 0.8
 source = "curator"
 
 [[ground_truth.required_files]]
 path = "gcc/tree-pass.h"
-repo = "llvm-project"
+repo = "gcc"
 confidence = 0.8
 source = "curator"
 

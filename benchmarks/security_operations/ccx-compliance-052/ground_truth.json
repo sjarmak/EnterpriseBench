@@ -41,10 +41,10 @@
   ],
   "sufficient_files": [
     {
-      "path": "source/extensions/access_loggers/file/file_access_log_impl.h",
+      "path": "source/extensions/access_loggers/file/config.h",
       "repo": "envoy",
       "confidence": 0.6,
-      "rationale": "File-based access logger extension"
+      "rationale": "File-based access logger extension config"
     },
     {
       "path": "source/extensions/access_loggers/grpc/grpc_access_log_impl.h",

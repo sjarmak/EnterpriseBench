@@ -12,7 +12,7 @@ prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/grafana/grafana"
-rev = ""
+rev = "v10.2.0"
 path = "grafana"
 role = "primary"
 

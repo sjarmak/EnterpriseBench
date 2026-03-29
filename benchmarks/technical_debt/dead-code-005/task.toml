@@ -85,6 +85,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Proving ViewEngine code is dead requires exhaustive search across Angular's package structure to confirm no remaining imports; MCP accelerates confirming zero callers of ViewEngine-specific modules vs Ivy replacements"
 
 [ground_truth]
 tiers = ["deterministic", "curator"]

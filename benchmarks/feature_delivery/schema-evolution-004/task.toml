@@ -71,8 +71,8 @@ required = ["answer"]
 optional = ["code_patch"]
 
 [tool_access]
-expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Tracing a field that moves between models requires finding all references in both models plus all importers that set avatar source"
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Tracing a field moving between models requires finding all references; MCP helps but field names and model class names are directly grepable in a single codebase"
 
 [ground_truth]
 tiers = ["deterministic"]

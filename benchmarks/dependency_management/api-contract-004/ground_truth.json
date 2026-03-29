@@ -17,14 +17,9 @@
     "xds/internal/balancer/outlierdetection/balancer.go"
   ],
   "consumer_affected_files": {
-    "etcd": [
-      "client/v3/balancer/",
-      "server/etcdserver/api/rafthttp/"
-    ]
+    "etcd": ["server/etcdserver/api/rafthttp/"]
   },
-  "breaking_symbols": [
-    "balancer.ClientConn"
-  ],
+  "breaking_symbols": ["balancer.ClientConn"],
   "difficulty": "hard",
   "confidence": 0.92
 }
