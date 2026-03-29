@@ -88,7 +88,7 @@ def _base_image_for_languages(languages: list[str]) -> str:
         return "rust:1.75-bookworm"
     if "javascript" in languages or "typescript" in languages:
         return "node:20-bookworm"
-    if "c++" in languages or "c" in languages:
+    if "c++" in languages or "cpp" in languages or "c" in languages:
         return "gcc:13-bookworm"
     if "csharp" in languages:
         return "mcr.microsoft.com/dotnet/sdk:8.0-bookworm-slim"
