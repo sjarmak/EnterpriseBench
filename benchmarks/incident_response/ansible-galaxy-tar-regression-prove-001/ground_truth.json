@@ -1,0 +1,29 @@
+{
+  "repo": "ansible/ansible",
+  "repo_rev": "v2.16.0",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "lib/ansible/galaxy/collection/__init__.py",
+      "repo": "ansible",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Collection installation code with custom tar member cache"
+    },
+    {
+      "path": "lib/ansible/galaxy/collection/concrete_artifact_manager.py",
+      "repo": "ansible",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Artifact manager handling tar extraction for collections"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "lib/ansible/galaxy/collection/galaxy_api_proxy.py",
+      "repo": "ansible",
+      "confidence": 0.5,
+      "rationale": "Galaxy API proxy involved in collection download"
+    }
+  ]
+}

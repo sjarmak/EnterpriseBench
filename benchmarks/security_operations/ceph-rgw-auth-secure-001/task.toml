@@ -9,68 +9,84 @@ suite = "security_operations"
 difficulty = "hard"
 estimated_duration_minutes = 20
 session_type = "single"
+task_type = "config_drift"
 description = "Audit and harden S3 authentication in Ceph RADOS Gateway"
-prompt = """
-# Task: Security Audit of Ceph RADOS Gateway S3 Authentication
-
-## Objective
-Perform a security audit of the S3 authentication implementation in Ceph's RADOS Gateway (RGW) and create a findings report with remediation recommendations.
-
-## Steps
-1. Find the S3 authentication implementation in `src/rgw/` (look for AWS Signature V4 handling)
-2. Identify the request signing and verification flow
-3. Check for common S3 auth vulnerabilities:
-   - Signature version fallback (V2 vs V4)
-   - Timing attacks in signature comparison
-   - Request replay prevention (timestamp validation window)
-   - Secret key storage and access patterns
-4. Create `security_audit.md` in `/workspace/` documenting:
-   - Authentication flow overview (file paths and key functions)
-   - Each finding with severity, description, file location, and remediation
-   - At least 3 specific findings with code references
-   - Summary risk assessment
-
-## Key Reference Files
-- `src/rgw/rgw_auth_s3.h` and `src/rgw/rgw_auth_s3.cc` — S3 auth
-- `src/rgw/rgw_rest_s3.cc` — S3 REST handler
-- `src/rgw/rgw_auth.h` — auth framework
-
-## Success Criteria
-- security_audit.md exists
-- Contains file paths from src/rgw/
-- Identifies at least 3 security findings
-- Includes remediation recommendations
-"""
+prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/ceph/ceph"
-rev = "HEAD"
+rev = "v19.2.0"
 path = "ceph"
 role = "primary"
 
 [metadata]
 languages = ["cpp"]
 dependency_depth = 1
+frameworks = ["ceph", "rgw"]
+multi_repo_pattern = "investigate"
 
 [[checkpoints]]
-name = "primary_verification"
-weight = 1.0
-verifier = "tests/test.sh"
-description = "Primary verification: Audit and harden S3 authentication in Ceph RADOS Gateway"
+name = "auth_flow_documented"
+weight = 0.35
+verifier = "checks/check_auth_flow.sh"
+description = "Agent documents the S3 authentication flow with file paths and key functions"
 timeout_seconds = 120
 
+[[checkpoints]]
+name = "findings_identified"
+weight = 0.40
+verifier = "checks/check_findings.sh"
+description = "Agent identifies at least 3 security findings with code references"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "remediations_proposed"
+weight = 0.25
+verifier = "checks/check_remediations.sh"
+description = "Agent proposes remediation recommendations for identified findings"
+timeout_seconds = 60
+
 [artifacts]
-required = ["code_patch"]
+required = ["security_assessment"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Single-repo but large C++ codebase; MCP helps navigate the RGW auth subsystem and find S3 signature verification code paths"
 
 [ground_truth]
 tiers = ["curator"]
 
+[[ground_truth.required_files]]
+path = "src/rgw/rgw_auth_s3.h"
+repo = "ceph"
+confidence = 0.9
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "src/rgw/rgw_auth_s3.cc"
+repo = "ceph"
+confidence = 0.9
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "src/rgw/rgw_rest_s3.cc"
+repo = "ceph"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "src/rgw/rgw_auth.h"
+repo = "ceph"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.sufficient_files]]
+path = "src/rgw/rgw_auth.cc"
+repo = "ceph"
+confidence = 0.6
+
 [csb_lineage]
 parent_csb_id = "ceph-rgw-auth-secure-001"
 origin_suite = "csb_sdlc_secure"
-migration_status = "metadata_merged"
+migration_status = "verified"
 metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "instruction.md", "ground_truth.json"]
-

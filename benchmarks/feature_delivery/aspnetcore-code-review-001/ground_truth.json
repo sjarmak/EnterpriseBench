@@ -1,0 +1,29 @@
+{
+  "repo": "dotnet/aspnetcore",
+  "repo_rev": "v9.0.0",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "src/Components/Web/src/Forms/DisplayName.cs",
+      "repo": "aspnetcore",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Component class implementing IComponent with For expression parameter"
+    },
+    {
+      "path": "src/Components/Web/src/Forms/ExpressionMemberAccessor.cs",
+      "repo": "aspnetcore",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Static helper with caching for expression-to-member and member-to-display-name mappings"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/Components/Web/src/Forms/InputBase.cs",
+      "repo": "aspnetcore",
+      "confidence": 0.5,
+      "rationale": "Base input component that establishes the For expression pattern"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "repo": "ceph/ceph",
+  "repo_rev": "v19.2.0",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "src/rgw/rgw_auth_s3.h",
+      "repo": "ceph",
+      "confidence": 0.9,
+      "source": "curator",
+      "rationale": "S3 authentication header with signature verification interfaces"
+    },
+    {
+      "path": "src/rgw/rgw_auth_s3.cc",
+      "repo": "ceph",
+      "confidence": 0.9,
+      "source": "curator",
+      "rationale": "S3 auth implementation including AWS Signature V4 handling"
+    },
+    {
+      "path": "src/rgw/rgw_rest_s3.cc",
+      "repo": "ceph",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "S3 REST handler that routes auth requests"
+    },
+    {
+      "path": "src/rgw/rgw_auth.h",
+      "repo": "ceph",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Auth framework header defining the authentication pipeline"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/rgw/rgw_auth.cc",
+      "repo": "ceph",
+      "confidence": 0.6,
+      "rationale": "Auth framework implementation"
+    }
+  ]
+}

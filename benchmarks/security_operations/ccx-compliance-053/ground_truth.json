@@ -1,0 +1,50 @@
+{
+  "repo": "apache/kafka",
+  "repo_rev": "0753c489",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "metadata/src/main/java/org/apache/kafka/metadata/authorizer/StandardAuthorizerData.java",
+      "repo": "kafka",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Core authorization data and audit decision logic"
+    },
+    {
+      "path": "metadata/src/main/java/org/apache/kafka/metadata/authorizer/StandardAuthorizer.java",
+      "repo": "kafka",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Standard authorizer implementation producing ALLOWED/DENIED decisions"
+    },
+    {
+      "path": "core/src/main/scala/kafka/server/AuthHelper.scala",
+      "repo": "kafka",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Auth helper in Scala core that invokes authorizer and logs results"
+    },
+    {
+      "path": "clients/src/main/java/org/apache/kafka/server/authorizer/AuthorizationResult.java",
+      "repo": "kafka",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Authorization result enum (ALLOWED/DENIED)"
+    },
+    {
+      "path": "clients/src/main/java/org/apache/kafka/server/authorizer/Action.java",
+      "repo": "kafka",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Action class representing authorization request"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "clients/src/main/java/org/apache/kafka/server/authorizer/Authorizer.java",
+      "repo": "kafka",
+      "confidence": 0.6,
+      "rationale": "Authorizer interface definition"
+    }
+  ]
+}

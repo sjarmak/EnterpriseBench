@@ -1,0 +1,50 @@
+{
+  "repo": "gcc-mirror/gcc",
+  "repo_rev": "a8f3c97d",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "gcc/passes.def",
+      "repo": "llvm-project",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Master list of all optimization passes and their execution order"
+    },
+    {
+      "path": "gcc/passes.cc",
+      "repo": "llvm-project",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Pass manager implementation orchestrating pass execution"
+    },
+    {
+      "path": "gcc/pass_manager.h",
+      "repo": "llvm-project",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "opt_pass base class and pass manager interface"
+    },
+    {
+      "path": "gcc/tree-ssa-dce.cc",
+      "repo": "llvm-project",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Concrete GIMPLE dead code elimination pass implementation"
+    },
+    {
+      "path": "gcc/tree-pass.h",
+      "repo": "llvm-project",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Tree-SSA pass header with pass registration macros"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "gcc/tree-optimize.cc",
+      "repo": "llvm-project",
+      "confidence": 0.5,
+      "rationale": "Tree optimization driver that invokes the pass manager"
+    }
+  ]
+}

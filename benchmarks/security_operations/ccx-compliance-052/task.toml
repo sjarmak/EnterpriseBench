@@ -9,52 +9,9 @@ suite = "security_operations"
 difficulty = "hard"
 estimated_duration_minutes = 15
 session_type = "single"
+task_type = "config_drift"
 description = "Compliance Audit: Envoy Access Logging Configuration Coverage"
-prompt = """
-# Compliance Audit: Envoy Access Logging Configuration Coverage
-
-## Your Task
-
-Audit the access logging infrastructure in `envoyproxy/envoy`. Find all C++ source files under `source/extensions/access_loggers/` and `source/common/access_log/` that define access log filter implementations or access log sink implementations. Also find the corresponding `.proto` definitions in `envoyproxy/data-plane-api` under `envoy/extensions/access_loggers/`. For each implementation, report whether it supports structured (JSON) logging or only unstructured text logging.
-
-## Context
-
-You are working on a codebase task involving repos from the compliance domain.
-
-## Available Resources
-
-## Output Format
-
-Use the published task contract:
-
-- `TASK_WORKDIR=/workspace`
-- `TASK_REPO_ROOT=/workspace`
-- `TASK_OUTPUT=/workspace/answer.json`
-
-Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
-
-```json
-{
-  "files": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go"}
-  ],
-  "symbols": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
-  ],
-  "chain": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "FunctionName"}
-  ],
-  "text": "Narrative explanation of your findings, citing repos and file paths."
-}
-```
-
-Include only the fields relevant to this task. Your answer is evaluated against a closed-world oracle — completeness matters.
-
-## Evaluation
-
-Your answer will be scored on:
-- **File recall and precision**: Did you find all relevant files?
-"""
+prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/sg-evals/envoy"
@@ -65,12 +22,21 @@ role = "primary"
 [metadata]
 languages = ["cpp"]
 dependency_depth = 1
+frameworks = ["envoy"]
+multi_repo_pattern = "enforce"
 
 [[checkpoints]]
-name = "primary_verification"
-weight = 1.0
-verifier = "tests/test.sh"
-description = "Primary verification: Compliance Audit: Envoy Access Logging Configuration Coverage"
+name = "source_files_identified"
+weight = 0.50
+verifier = "checks/check_source_files.sh"
+description = "Agent finds access log filter and sink implementation files"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "logging_type_classified"
+weight = 0.50
+verifier = "checks/check_logging_classification.sh"
+description = "Agent correctly classifies structured vs unstructured logging support per implementation"
 timeout_seconds = 120
 
 [artifacts]
@@ -78,6 +44,7 @@ required = ["answer"]
 
 [tool_access]
 expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Access logger implementations are spread across extensions/access_loggers/ with proto definitions in a separate API repo — MCP cross-reference search accelerates discovery"
 
 [[tool_access.sourcegraph_mirrors]]
 repo = "github.com/sg-evals/envoy"
@@ -119,6 +86,5 @@ source = "curator"
 [csb_lineage]
 parent_csb_id = "CCX-compliance-052"
 origin_suite = "csb_org_compliance"
-migration_status = "metadata_merged"
+migration_status = "verified"
 metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "task_spec.json", "instruction.md", "ground_truth.json"]
-

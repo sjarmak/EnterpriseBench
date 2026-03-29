@@ -9,56 +9,41 @@ suite = "incident_response"
 difficulty = "hard"
 estimated_duration_minutes = 30
 session_type = "single"
-description = "Two-phase navprove verification: regression test must fail on buggy code and pass after reference fix"
-prompt = """
-# Bug Investigation: Galaxy Collection Tar Directory Extraction Fails for Certain Archive Layouts
-
-**Repository:** ansible/ansible
-**Task Type:** Find and Prove (write a regression test)
-
-## Reported Issue
-
-When installing Ansible Galaxy collections from tarball archives, the extraction process fails or behaves incorrectly for archives where directory entries have trailing path separators in their member names.
-
-Specifically:
-
-1. **Directory lookup uses a custom cache instead of standard tarfile API**: The collection installation code builds a private normalized-name index of tar members and uses that for directory lookups, rather than using the standard library's member lookup. This custom cache strips trailing path separators from names, which creates a fragile mismatch between how directories are looked up versus how they're actually stored in the archive.
-
-2. **Extraction breaks when member names don't match the normalized form**: If a tar archive stores a directory entry with its canonical name (without a trailing separator), but the custom cache was built expecting to strip separators, the lookup can silently retrieve the wrong member or fail entirely.
-
-3. **The workaround is no longer necessary**: The custom cache was originally added as a workaround for a CPython tarfile bug. On current Python versions, the standard `getmember()` API handles directory member lookups correctly, making the workaround unnecessary overhead that adds fragility.
-
-These issues affect `ansible-galaxy collection install` when processing collection tarballs.
-
-## Your Task
-
-1. Investigate the codebase to find the root cause of the tar directory extraction fragility
-2. Write a regression test as a single file at `/workspace/regression_test.py`
-3. Your test must be self-contained and runnable with `python3 -m pytest --timeout=60 /workspace/regression_test.py`
-
-## Constraints
-
-- Do NOT fix the bug — only write a test that demonstrates it
-- Your test must fail on the current (buggy) code for the RIGHT reason
-- The test should cover: directory extraction behavior with standard tar member names, demonstrating the fragility of the custom cache approach
-- Test timeout: 60 seconds
-"""
+task_type = "error_provenance"
+description = "Write a regression test proving Galaxy collection tar extraction fragility"
+prompt = "See instruction.md"
 
 [[repos]]
-url = "github.com/unknown/repo"
-rev = "HEAD"
-path = "repo"
+url = "github.com/ansible/ansible"
+rev = "v2.16.0"
+path = "ansible"
 role = "primary"
 
 [metadata]
 languages = ["python"]
 dependency_depth = 1
+frameworks = ["ansible", "pytest"]
+multi_repo_pattern = "investigate"
 
 [[checkpoints]]
-name = "primary_verification"
-weight = 1.0
-verifier = "tests/test.sh"
-description = "Primary verification: Two-phase navprove verification: regression test must fail on buggy code and pass after reference fix"
+name = "root_cause_identified"
+weight = 0.30
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies the tar extraction fragility in the collection installation code"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "regression_test_written"
+weight = 0.40
+verifier = "checks/check_regression_test.sh"
+description = "Agent writes a regression test at /workspace/regression_test.py"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "test_fails_on_buggy_code"
+weight = 0.30
+verifier = "checks/check_test_fails.sh"
+description = "Regression test fails on current buggy code for the correct reason"
 timeout_seconds = 120
 
 [artifacts]
@@ -66,25 +51,25 @@ required = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Single-repo; root cause is in Galaxy collection module — MCP helps navigate the ansible-galaxy installation code path"
 
 [ground_truth]
 tiers = ["curator"]
 
 [[ground_truth.required_files]]
 path = "lib/ansible/galaxy/collection/__init__.py"
-repo = "repo"
+repo = "ansible"
 confidence = 0.8
 source = "curator"
 
 [[ground_truth.required_files]]
 path = "lib/ansible/galaxy/collection/concrete_artifact_manager.py"
-repo = "repo"
+repo = "ansible"
 confidence = 0.8
 source = "curator"
 
 [csb_lineage]
 parent_csb_id = "ansible-galaxy-tar-regression-prove-001"
 origin_suite = "csb_sdlc_debug"
-migration_status = "metadata_merged"
+migration_status = "verified"
 metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "instruction.md", "ground_truth.json"]
-

@@ -9,52 +9,9 @@ suite = "security_operations"
 difficulty = "hard"
 estimated_duration_minutes = 15
 session_type = "single"
+task_type = "config_drift"
 description = "Compliance Audit: Kafka Audit Logging and Authorization Events"
-prompt = """
-# Compliance Audit: Kafka Audit Logging and Authorization Events
-
-## Your Task
-
-Find all Java source files in `apache/kafka` that produce audit log entries for authorization decisions. Search `core/src/main/scala/` and `clients/src/main/java/` for files that log `ALLOWED` or `DENIED` authorization events, reference `AuditLogger`, or implement audit trail functionality for ACL decisions. Report the file path and the class name producing audit events.
-
-## Context
-
-You are working on a codebase task involving repos from the compliance domain.
-
-## Available Resources
-
-## Output Format
-
-Use the published task contract:
-
-- `TASK_WORKDIR=/workspace`
-- `TASK_REPO_ROOT=/workspace`
-- `TASK_OUTPUT=/workspace/answer.json`
-
-Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
-
-```json
-{
-  "files": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go"}
-  ],
-  "symbols": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
-  ],
-  "chain": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "FunctionName"}
-  ],
-  "text": "Narrative explanation of your findings, citing repos and file paths."
-}
-```
-
-Include only the fields relevant to this task. Your answer is evaluated against a closed-world oracle — completeness matters.
-
-## Evaluation
-
-Your answer will be scored on:
-- **File recall and precision**: Did you find all relevant files?
-"""
+prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/sg-evals/kafka"
@@ -65,12 +22,21 @@ role = "primary"
 [metadata]
 languages = ["java"]
 dependency_depth = 1
+frameworks = ["kafka"]
+multi_repo_pattern = "enforce"
 
 [[checkpoints]]
-name = "primary_verification"
-weight = 1.0
-verifier = "tests/test.sh"
-description = "Primary verification: Compliance Audit: Kafka Audit Logging and Authorization Events"
+name = "source_files_identified"
+weight = 0.50
+verifier = "checks/check_source_files.sh"
+description = "Agent finds Java/Scala files that produce audit log entries for authorization decisions"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "symbols_identified"
+weight = 0.50
+verifier = "checks/check_symbols.sh"
+description = "Agent identifies the correct class names producing audit events"
 timeout_seconds = 120
 
 [artifacts]
@@ -78,6 +44,7 @@ required = ["answer"]
 
 [tool_access]
 expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Audit logging spans Scala core and Java clients packages — MCP symbol search for AuditLogger and authorization result types accelerates discovery"
 
 [[tool_access.sourcegraph_mirrors]]
 repo = "github.com/sg-evals/kafka"
@@ -119,6 +86,5 @@ source = "curator"
 [csb_lineage]
 parent_csb_id = "CCX-compliance-053"
 origin_suite = "csb_org_compliance"
-migration_status = "metadata_merged"
+migration_status = "verified"
 metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "task_spec.json", "instruction.md", "ground_truth.json"]
-

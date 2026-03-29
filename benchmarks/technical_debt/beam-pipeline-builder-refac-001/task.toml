@@ -9,52 +9,41 @@ suite = "technical_debt"
 difficulty = "hard"
 estimated_duration_minutes = 20
 session_type = "single"
+task_type = "refactor_orchestration"
 description = "Refactor Apache Beam PipelineOptions validation to use the Builder pattern"
-prompt = """
-# Task: Refactor PipelineOptions Validation in Apache Beam
-
-## Background
-The PipelineOptions validation in Apache Beam is scattered across multiple locations. This task consolidates validation into a dedicated validator class using the Builder pattern.
-
-## Objective
-Create a `PipelineOptionsValidator` class that centralizes validation for PipelineOptions, replacing scattered validation calls.
-
-## Steps
-1. Study the existing PipelineOptions interface in `sdks/java/core/src/main/java/org/apache/beam/sdk/options/`
-2. Identify validation logic in `PipelineOptionsFactory` and `PipelineOptionsValidator` (if exists)
-3. Create `/workspace/sdks/java/core/src/main/java/org/apache/beam/sdk/options/PipelineOptionsValidator.java` with:
-   - A Builder that accumulates validation rules
-   - Methods: `validateRequired()`, `validateType()`, `validateRange()`
-   - A `validate()` method that runs all accumulated rules and returns a `ValidationResult`
-4. Create a `ValidationResult` class that holds errors and warnings
-5. Create a test file for the validator
-
-## Key Reference Files
-- `sdks/java/core/src/main/java/org/apache/beam/sdk/options/PipelineOptions.java`
-- `sdks/java/core/src/main/java/org/apache/beam/sdk/options/PipelineOptionsFactory.java`
-
-## Success Criteria
-- PipelineOptionsValidator.java exists with Builder pattern
-- ValidationResult class exists
-- Test file exists
-- Validator has validateRequired, validateType, and validate methods
-"""
+prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/apache/beam"
-rev = "HEAD"
+rev = "v2.55.0"
 path = "beam"
 role = "primary"
 
 [metadata]
 languages = ["java"]
 dependency_depth = 1
+frameworks = ["beam"]
+multi_repo_pattern = "orchestrate"
 
 [[checkpoints]]
-name = "primary_verification"
-weight = 1.0
-verifier = "tests/test.sh"
-description = "Primary verification: Refactor Apache Beam PipelineOptions validation to use the Builder pattern"
+name = "validator_created"
+weight = 0.40
+verifier = "checks/check_validator_created.sh"
+description = "PipelineOptionsValidator.java exists with Builder pattern"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "validation_result_created"
+weight = 0.30
+verifier = "checks/check_validation_result.sh"
+description = "ValidationResult class exists with errors and warnings"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "test_file_created"
+weight = 0.30
+verifier = "checks/check_test_exists.sh"
+description = "Test file for the validator exists"
 timeout_seconds = 120
 
 [artifacts]
@@ -62,13 +51,25 @@ required = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Single-repo Java refactoring; MCP helps navigate the PipelineOptions interface hierarchy in the Beam SDK"
 
 [ground_truth]
 tiers = ["curator"]
 
+[[ground_truth.required_files]]
+path = "sdks/java/core/src/main/java/org/apache/beam/sdk/options/PipelineOptions.java"
+repo = "beam"
+confidence = 0.8
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "sdks/java/core/src/main/java/org/apache/beam/sdk/options/PipelineOptionsFactory.java"
+repo = "beam"
+confidence = 0.8
+source = "curator"
+
 [csb_lineage]
 parent_csb_id = "beam-pipeline-builder-refac-001"
 origin_suite = "csb_sdlc_refactor"
-migration_status = "metadata_merged"
+migration_status = "verified"
 metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "instruction.md", "ground_truth.json"]
-

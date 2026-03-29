@@ -1,5 +1,7 @@
 # Migrated from CodeScaleBench: CCX-dep-trace-106
 # Origin suite: csb_org_crossrepo
+# NOTE: Task is about GCC optimization passes. The sg-evals mirror
+# contains the GCC source under the llvm-project mirror ID (CSB legacy naming).
 
 difficulty_stratum = "large_single"
 
@@ -9,52 +11,9 @@ suite = "dependency_management"
 difficulty = "hard"
 estimated_duration_minutes = 15
 session_type = "single"
-description = "GCC Optimization Pass Registration and Execution Chain"
-prompt = """
-# GCC Optimization Pass Registration and Execution Chain
-
-## Your Task
-
-Trace how GCC's optimization passes are registered and executed during compilation. Find all C/C++ source files in `gcc-mirror/gcc` that: 1. Define the pass execution order (`gcc/passes.def` — the master list of all passes). 2. Implement the pass manager that orchestrates pass execution (`gcc/passes.cc`). 3. Define the `opt_pass` base class and pass manager interface (`gcc/pass_manager.h`). 4. Implement a concrete GIMPLE optimization pass — specifically dead code elimination (`gcc/tree-ssa-dce.cc`). 5. Define the tree-SSA pass header (`gcc/tree-pass.h`) that declares pass registration macros. Report the repo, file path, and key struct/function name for each file.
-
-## Context
-
-You are working on a codebase task involving repos from the crossrepo domain.
-
-## Available Resources
-
-## Output Format
-
-Use the published task contract:
-
-- `TASK_WORKDIR=/workspace`
-- `TASK_REPO_ROOT=/workspace`
-- `TASK_OUTPUT=/workspace/answer.json`
-
-Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
-
-```json
-{
-  "files": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go"}
-  ],
-  "symbols": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
-  ],
-  "chain": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "FunctionName"}
-  ],
-  "text": "Narrative explanation of your findings, citing repos and file paths."
-}
-```
-
-Include only the fields relevant to this task. Your answer is evaluated against a closed-world oracle — completeness matters.
-
-## Evaluation
-
-Your answer will be scored on:
-- **File recall and precision**: Did you find all relevant files?
-"""
+task_type = "dependency_graph"
+description = "Trace GCC optimization pass registration and execution chain"
+prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/sg-evals/llvm-project"
@@ -65,12 +24,21 @@ role = "primary"
 [metadata]
 languages = ["cpp"]
 dependency_depth = 1
+frameworks = ["gcc"]
+multi_repo_pattern = "investigate"
 
 [[checkpoints]]
-name = "primary_verification"
-weight = 1.0
-verifier = "tests/test.sh"
-description = "Primary verification: GCC Optimization Pass Registration and Execution Chain"
+name = "source_files_identified"
+weight = 0.50
+verifier = "checks/check_source_files.sh"
+description = "Agent identifies the pass manager, pass definition, and concrete pass implementation files"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "symbols_identified"
+weight = 0.50
+verifier = "checks/check_symbols.sh"
+description = "Agent identifies key structs/functions in the pass registration chain"
 timeout_seconds = 120
 
 [artifacts]
@@ -78,6 +46,7 @@ required = ["answer"]
 
 [tool_access]
 expected_mcp_benefit = "high"
+mcp_benefit_rationale = "GCC pass infrastructure spans multiple files with macro-based registration — MCP symbol search accelerates tracing pass_manager -> passes.def -> concrete pass implementations"
 
 [[tool_access.sourcegraph_mirrors]]
 repo = "github.com/sg-evals/llvm-project"
@@ -119,6 +88,5 @@ source = "curator"
 [csb_lineage]
 parent_csb_id = "CCX-dep-trace-106"
 origin_suite = "csb_org_crossrepo"
-migration_status = "metadata_merged"
+migration_status = "verified"
 metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "task_spec.json", "instruction.md", "ground_truth.json"]
-

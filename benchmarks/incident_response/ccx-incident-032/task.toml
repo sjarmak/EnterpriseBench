@@ -9,52 +9,9 @@ suite = "incident_response"
 difficulty = "hard"
 estimated_duration_minutes = 15
 session_type = "single"
+task_type = "incident_investigation"
 description = "Incident Debugging: Envoy Connection Pool Exhaustion"
-prompt = """
-# Incident Debugging: Envoy Connection Pool Exhaustion
-
-## Your Task
-
-A production Envoy proxy is logging `upstream connect error or disconnect/reset before headers. reset reason: overflow`. Trace the error to its source in `envoyproxy/envoy`. Find: 1. The C++ source file that defines the `overflow` reset reason string. 2. The connection pool implementation files under `source/common/conn_pool/` or `source/common/http/` that trigger this overflow condition. 3. The configuration protobuf in `envoyproxy/data-plane-api` that controls `max_connections` and `max_pending_requests` circuit breaker thresholds.
-
-## Context
-
-You are working on a codebase task involving repos from the incident domain.
-
-## Available Resources
-
-## Output Format
-
-Use the published task contract:
-
-- `TASK_WORKDIR=/workspace`
-- `TASK_REPO_ROOT=/workspace`
-- `TASK_OUTPUT=/workspace/answer.json`
-
-Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
-
-```json
-{
-  "files": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go"}
-  ],
-  "symbols": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "SymbolName"}
-  ],
-  "chain": [
-    {"repo": "repo-name", "path": "relative/path/to/file.go", "symbol": "FunctionName"}
-  ],
-  "text": "Narrative explanation of your findings, citing repos and file paths."
-}
-```
-
-Include only the fields relevant to this task. Your answer is evaluated against a closed-world oracle — completeness matters.
-
-## Evaluation
-
-Your answer will be scored on:
-- **File recall and precision**: Did you find all relevant files?
-"""
+prompt = "See instruction.md"
 
 [[repos]]
 url = "github.com/sg-evals/envoy"
@@ -65,19 +22,37 @@ role = "primary"
 [metadata]
 languages = ["cpp"]
 dependency_depth = 1
+frameworks = ["envoy"]
+multi_repo_pattern = "investigate"
 
 [[checkpoints]]
-name = "primary_verification"
-weight = 1.0
-verifier = "tests/test.sh"
-description = "Primary verification: Incident Debugging: Envoy Connection Pool Exhaustion"
+name = "source_files_identified"
+weight = 0.40
+verifier = "checks/check_source_files.sh"
+description = "Agent identifies the source files defining overflow reset reason and connection pool logic"
 timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain_traced"
+weight = 0.35
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the error propagation chain from overflow to user-visible error"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "config_identified"
+weight = 0.25
+verifier = "checks/check_config_identified.sh"
+description = "Agent identifies the circuit breaker configuration controlling connection limits"
+timeout_seconds = 60
 
 [artifacts]
 required = ["answer"]
+optional = ["incident_report"]
 
 [tool_access]
 expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing overflow reset across conn_pool, router, and HTTP layers requires cross-file symbol search — MCP accelerates finding the connection between reset reason enum and circuit breaker config"
 
 [[tool_access.sourcegraph_mirrors]]
 repo = "github.com/sg-evals/envoy"
@@ -119,6 +94,5 @@ source = "curator"
 [csb_lineage]
 parent_csb_id = "CCX-incident-032"
 origin_suite = "csb_org_incident"
-migration_status = "metadata_merged"
+migration_status = "verified"
 metadata_sources = ["task.toml", "CANONICAL.json", "ground_truth_meta.json", "task_spec.json", "instruction.md", "ground_truth.json"]
-

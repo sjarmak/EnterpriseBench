@@ -1,0 +1,57 @@
+{
+  "repo": "envoyproxy/envoy",
+  "repo_rev": "v1.31.2",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "source/common/http/utility.cc",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Defines the overflow reset reason string mapping"
+    },
+    {
+      "path": "envoy/http/stream_reset_handler.h",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Declares the stream reset handler interface including overflow reason"
+    },
+    {
+      "path": "source/common/conn_pool/conn_pool_base.cc",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Connection pool implementation that triggers overflow when limits exceeded"
+    },
+    {
+      "path": "source/common/conn_pool/conn_pool_base.h",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Connection pool base header defining pool interface and overflow logic"
+    },
+    {
+      "path": "source/common/router/upstream_request.cc",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Upstream request handling that surfaces the overflow error to the downstream client"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "source/common/upstream/cluster_manager_impl.cc",
+      "repo": "envoy",
+      "confidence": 0.6,
+      "rationale": "Cluster manager may reference circuit breaker thresholds"
+    }
+  ],
+  "error_chain": [
+    "Connection pool receives new stream request",
+    "conn_pool_base.cc checks circuit breaker limits (max_connections, max_pending_requests)",
+    "Limit exceeded triggers overflow reset reason",
+    "upstream_request.cc propagates reset to downstream",
+    "Client sees upstream connect error with reset reason: overflow"
+  ]
+}

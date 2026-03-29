@@ -1,0 +1,50 @@
+{
+  "repo": "apache/camel",
+  "repo_rev": "camel-4.4.0",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "core/camel-api/src/main/java/org/apache/camel/Component.java",
+      "repo": "camel",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Top of the Component->Endpoint->Consumer->Processor->Producer hierarchy"
+    },
+    {
+      "path": "core/camel-api/src/main/java/org/apache/camel/Endpoint.java",
+      "repo": "camel",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Endpoint interface in the routing hierarchy"
+    },
+    {
+      "path": "core/camel-api/src/main/java/org/apache/camel/Consumer.java",
+      "repo": "camel",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Consumer interface that receives messages from endpoints"
+    },
+    {
+      "path": "core/camel-api/src/main/java/org/apache/camel/Processor.java",
+      "repo": "camel",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Core Processor interface in the EIP pipeline"
+    },
+    {
+      "path": "core/camel-api/src/main/java/org/apache/camel/Producer.java",
+      "repo": "camel",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Producer interface that sends messages to endpoints"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "core/camel-core-reifier/src/main/java/org/apache/camel/reifier/RouteReifier.java",
+      "repo": "camel",
+      "confidence": 0.7,
+      "rationale": "RouteReifier bridges DSL model to runtime Route"
+    }
+  ]
+}

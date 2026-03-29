@@ -1,0 +1,56 @@
+{
+  "repo": "envoyproxy/envoy",
+  "repo_rev": "v1.31.2",
+  "difficulty": "hard",
+  "required_files": [
+    {
+      "path": "source/common/access_log/access_log_impl.h",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Core access log implementation header"
+    },
+    {
+      "path": "source/common/access_log/access_log_impl.cc",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Core access log implementation"
+    },
+    {
+      "path": "source/common/access_log/access_log_manager_impl.h",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Access log manager header"
+    },
+    {
+      "path": "source/common/access_log/access_log_manager_impl.cc",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Access log manager implementation"
+    },
+    {
+      "path": "source/extensions/access_loggers/common/access_log_base.h",
+      "repo": "envoy",
+      "confidence": 0.8,
+      "source": "curator",
+      "rationale": "Base class for access logger extensions"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "source/extensions/access_loggers/file/file_access_log_impl.h",
+      "repo": "envoy",
+      "confidence": 0.6,
+      "rationale": "File-based access logger extension"
+    },
+    {
+      "path": "source/extensions/access_loggers/grpc/grpc_access_log_impl.h",
+      "repo": "envoy",
+      "confidence": 0.6,
+      "rationale": "gRPC-based access logger extension"
+    }
+  ]
+}

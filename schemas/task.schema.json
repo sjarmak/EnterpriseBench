@@ -93,7 +93,7 @@
           },
           "role": {
             "type": "string",
-            "enum": ["primary", "dependency", "consumer"],
+            "enum": ["primary", "dependency", "consumer", "upstream", "intermediary", "deprecated_upstream"],
             "description": "Repo's role in the task"
           }
         }
@@ -180,7 +180,8 @@
               "kb_article",
               "security_assessment",
               "migration_guide",
-              "answer"
+              "answer",
+              "topological_order"
             ]
           }
         },
@@ -257,7 +258,9 @@
         "large_single",
         "dual_repo",
         "multi_repo",
-        "monorepo_cross_package"
+        "monorepo_cross_package",
+        "tri_repo",
+        "monorepo_cross_pkg"
       ],
       "description": "Task mix stratum for benchmark distribution (15% calibration, 25% large_single, 30% dual_repo, 20% multi_repo, 10% monorepo)"
     },
