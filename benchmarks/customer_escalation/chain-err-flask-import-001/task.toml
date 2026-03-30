@@ -1,0 +1,159 @@
+# 2-session chain task: Investigate then fix Flask circular import issue.
+#
+# Session 1: Agent investigates a circular import triggered by importing
+#   flask.json inside a blueprint callback, identifies affected modules.
+# Session 2: Agent receives the investigation (via git branch) and implements
+#   a patch to break the circular dependency.
+
+difficulty_stratum = "calibration"
+
+[task]
+id = "chain-err-flask-import-001"
+suite = "customer_escalation"
+difficulty = "medium"
+estimated_duration_minutes = 20
+session_type = "chain"
+session_count = 2
+task_type = "error_provenance"
+description = "Two-session chain: investigate then fix Flask circular import in json module"
+
+[[repos]]
+url = "https://github.com/pallets/flask"
+rev = "3.1.0"
+path = "flask"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["flask"]
+multi_repo_pattern = "investigate"
+
+# --- Per-session definitions ---
+
+[[sessions]]
+prompt = """
+A user reports an ImportError when running a Flask app that imports
+flask.json.dumps inside a blueprint request handler at module level.
+
+YOUR TASK (Investigation Phase):
+1. Examine the Flask codebase under /workspace/flask/
+2. Trace the import chain: flask -> flask.json -> flask.globals -> flask.app -> flask.json
+3. Identify ALL modules involved in the circular import
+4. Write your findings to /workspace/flask/INVESTIGATION.md with:
+   - The exact import cycle (module A -> module B -> ... -> module A)
+   - Which symbols trigger the cycle
+   - Severity assessment and workaround recommendations
+
+Do NOT make code changes yet. Investigation only.
+"""
+
+[[sessions.milestones]]
+name = "investigation_report_exists"
+verifier = "checks/check_investigation.sh"
+
+[[sessions.milestones]]
+name = "import_cycle_identified"
+verifier = "checks/check_cycle.sh"
+
+[[sessions]]
+prompt = """
+You are continuing work on the Flask circular import investigation.
+
+A previous investigation was completed (see /workspace/flask/INVESTIGATION.md).
+Review the investigation report, then:
+
+1. Create a patch that breaks the circular import cycle
+2. The fix should use lazy imports or deferred loading to resolve the cycle
+3. Write a brief /workspace/flask/FIX_SUMMARY.md noting:
+   - What was changed and why
+   - Which files were modified
+   - How to verify the fix works
+
+The investigation from the previous session is available on the current branch.
+"""
+
+[[sessions.milestones]]
+name = "fix_applied"
+verifier = "checks/check_fix.sh"
+
+# --- Final checkpoints (run after all sessions) ---
+
+[[checkpoints]]
+name = "investigation_quality"
+weight = 0.30
+verifier = "checks/check_investigation.sh"
+description = "Investigation report is complete and identifies the import cycle"
+
+[[checkpoints]]
+name = "cycle_identified"
+weight = 0.30
+verifier = "checks/check_cycle.sh"
+description = "The circular import chain is correctly identified"
+
+[[checkpoints]]
+name = "fix_applied"
+weight = 0.40
+verifier = "checks/check_fix.sh"
+description = "A code fix or fix summary exists that addresses the circular import"
+
+[artifacts]
+required = ["code_patch"]
+optional = ["incident_report"]
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Flask is small; circular imports can be traced by reading import statements"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/flask/json/__init__.py"
+repo = "flask"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/flask/globals.py"
+repo = "flask"
+confidence = 0.85
+source = "deterministic"
+
+# --- Simulation data (for --simulate mode) ---
+
+[simulation.session_1]
+actions = [
+    { repo = "flask", file = "INVESTIGATION.md", content = """# Circular Import Investigation
+
+## Import Cycle
+flask/__init__.py -> flask/json/__init__.py -> flask/globals.py -> flask/app.py -> flask/__init__.py
+
+## Affected Modules
+1. flask/__init__.py - top-level package init
+2. flask/json/__init__.py - JSON serialization utilities
+3. flask/globals.py - application/request context globals
+4. flask/app.py - Flask application class
+
+## Severity
+Medium - only triggered when importing flask.json at module level in certain configurations.
+
+## Workaround
+Import flask.json inside functions rather than at module level.
+""" },
+]
+
+[simulation.session_2]
+actions = [
+    { repo = "flask", file = "FIX_SUMMARY.md", content = """# Fix Summary
+
+## Changes
+- Modified flask/json/__init__.py to use lazy import for flask.globals
+- This breaks the circular dependency chain
+
+## Files Modified
+- src/flask/json/__init__.py
+
+## Verification
+Run: python -c "from flask.json import dumps; print('OK')"
+""" },
+]

@@ -74,6 +74,9 @@ class TaskInfo:
     toml_path: Path
 
 
+VALID_MODES = ("baseline", "mcp_only", "hybrid")
+
+
 @dataclass
 class TaskResult:
     task_id: str
@@ -81,6 +84,7 @@ class TaskResult:
     score: float | None = None
     duration_seconds: float = 0.0
     status: str = "pending"
+    mode: str = "baseline"
 
 
 # ---------------------------------------------------------------------------
@@ -158,9 +162,10 @@ def run_task(
     *,
     passthrough_args: Sequence[str],
     dry_run: bool = False,
+    mode: str = "baseline",
 ) -> TaskResult:
     """Dispatch a single task to the appropriate runner."""
-    result = TaskResult(task_id=task.task_id, difficulty=task.difficulty)
+    result = TaskResult(task_id=task.task_id, difficulty=task.difficulty, mode=mode)
 
     if task.session_type == "resume":
         logger.info("[skip] %s — session_type 'resume' not yet implemented", task.task_id)
@@ -198,6 +203,7 @@ def run_task(
 
         # Try to read results.json from the run output directory
         for results_file in [
+            PROJECT_ROOT / "results" / "runs" / task.task_id / mode / "results.json",
             PROJECT_ROOT / "results" / "runs" / task.task_id / "results.json",
             task.toml_path.parent / "results.json",
         ]:
@@ -249,13 +255,13 @@ def write_summary(results: list[TaskResult], run_id: str) -> Path:
 
 def print_summary_table(results: list[TaskResult]) -> None:
     """Print a human-readable summary table to stdout."""
-    header = f"{'task_id':<45} {'difficulty':<10} {'score':>6} {'duration':>10} {'status':<10}"
+    header = f"{'task_id':<45} {'mode':<12} {'difficulty':<10} {'score':>6} {'duration':>10} {'status':<10}"
     print("\n" + header)
     print("-" * len(header))
     for r in results:
         score_str = f"{r.score:.2f}" if r.score is not None else "—"
         dur_str = f"{r.duration_seconds:.1f}s" if r.duration_seconds > 0 else "—"
-        print(f"{r.task_id:<45} {r.difficulty:<10} {score_str:>6} {dur_str:>10} {r.status:<10}")
+        print(f"{r.task_id:<45} {r.mode:<12} {r.difficulty:<10} {score_str:>6} {dur_str:>10} {r.status:<10}")
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +304,21 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     runner_group.add_argument("--dry-run", action="store_true", help="List tasks without running")
+    runner_group.add_argument(
+        "--mode",
+        choices=list(VALID_MODES),
+        default="baseline",
+        help="Tool-access mode (default: baseline)",
+    )
+    runner_group.add_argument(
+        "--modes",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated list of modes to run each task in "
+            "(e.g. 'baseline,mcp_only,hybrid'). Overrides --mode."
+        ),
+    )
 
     # Parallelism
     parallel_group = parser.add_argument_group("parallelism")
@@ -336,11 +357,13 @@ def collect_passthrough_args(
     args: argparse.Namespace,
     *,
     account_override: int | None = None,
+    mode_override: str | None = None,
 ) -> list[str]:
     """Build list of flags to pass through to underlying runner scripts.
 
     If *account_override* is given it replaces whatever --account was on the CLI
     (used by the parallel dispatcher to rotate accounts per task).
+    If *mode_override* is given it replaces the --mode flag.
     """
     result: list[str] = []
     if args.source:
@@ -356,6 +379,9 @@ def collect_passthrough_args(
         accounts = parse_accounts(args.account)
         if len(accounts) == 1:
             result.extend(["--account", str(accounts[0])])
+    # Mode passthrough
+    mode = mode_override if mode_override is not None else args.mode
+    result.extend(["--mode", mode])
     if args.dry_run:
         result.append("--dry-run")
     return result
@@ -412,6 +438,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.info("No tasks match the given filters.")
         return 0
 
+    # Resolve modes list
+    if args.modes:
+        modes = [m.strip() for m in args.modes.split(",")]
+        for m in modes:
+            if m not in VALID_MODES:
+                parser.error(
+                    f"Invalid mode '{m}' in --modes. "
+                    f"Valid modes: {', '.join(VALID_MODES)}"
+                )
+    else:
+        modes = [args.mode]
+
+    logger.info("Tool-access mode(s): %s", ", ".join(modes))
+
     # Execute
     accounts = parse_accounts(args.account)
     workers = args.parallel
@@ -422,61 +462,103 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     results: list[TaskResult] = []
 
-    if workers <= 1 or args.dry_run:
-        # Sequential execution
-        for task in tasks:
-            account_id = accounts[0] if len(accounts) == 1 else None
-            passthrough = collect_passthrough_args(args, account_override=account_id)
-            result = run_task(task, passthrough_args=passthrough, dry_run=args.dry_run)
-            results.append(result)
-    else:
-        # Parallel execution with round-robin account distribution
-        logger.info(
-            "Parallel mode: %d workers, %d account(s)",
-            workers, len(accounts) or 1,
-        )
+    for current_mode in modes:
+        if len(modes) > 1:
+            logger.info("--- Running mode: %s ---", current_mode)
 
-        def _run_with_account(
-            task: TaskInfo, account_id: int | None,
-        ) -> TaskResult:
-            pt = collect_passthrough_args(args, account_override=account_id)
-            return run_task(task, passthrough_args=pt)
+        # When using multi-mode, set output-dir to include mode subdirectory
+        mode_passthrough_extra: list[str] = []
+        if len(modes) > 1:
+            # Tell runners to use mode-specific output directories
+            for task in tasks:
+                pass  # output-dir override handled per-task below
 
-        # Build (task, account) pairs via round-robin
-        task_assignments: list[tuple[TaskInfo, int | None]] = []
-        for i, task in enumerate(tasks):
-            acct = accounts[i % len(accounts)] if accounts else None
-            task_assignments.append((task, acct))
-
-        # Submit all tasks to the pool
-        result_map: dict[str, TaskResult] = {}
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            future_to_task = {
-                pool.submit(_run_with_account, task, acct): task
-                for task, acct in task_assignments
-            }
-            for future in as_completed(future_to_task):
-                task = future_to_task[future]
-                try:
-                    r = future.result()
-                except Exception as exc:
-                    r = TaskResult(
-                        task_id=task.task_id,
-                        difficulty=task.difficulty,
-                        status="error",
-                    )
-                    logger.error("[error] %s — %s", task.task_id, exc)
-                result_map[task.task_id] = r
-                logger.info(
-                    "[done] %s  score=%s  %s  (%.0fs)",
-                    r.task_id,
-                    f"{r.score:.2f}" if r.score is not None else "—",
-                    r.status,
-                    r.duration_seconds,
+        if workers <= 1 or args.dry_run:
+            # Sequential execution
+            for task in tasks:
+                account_id = accounts[0] if len(accounts) == 1 else None
+                passthrough = collect_passthrough_args(
+                    args,
+                    account_override=account_id,
+                    mode_override=current_mode,
                 )
+                # For multi-mode runs, use mode-specific output directory
+                if len(modes) > 1:
+                    mode_output = (
+                        PROJECT_ROOT / "results" / "runs"
+                        / task.task_id / current_mode
+                    )
+                    passthrough.extend(["--output-dir", str(mode_output)])
+                result = run_task(
+                    task,
+                    passthrough_args=passthrough,
+                    dry_run=args.dry_run,
+                    mode=current_mode,
+                )
+                results.append(result)
+        else:
+            # Parallel execution with round-robin account distribution
+            logger.info(
+                "Parallel mode: %d workers, %d account(s)",
+                workers, len(accounts) or 1,
+            )
 
-        # Preserve original task order in results
-        results = [result_map[t.task_id] for t in tasks]
+            def _run_with_account(
+                task: TaskInfo,
+                account_id: int | None,
+                mode: str = current_mode,
+            ) -> TaskResult:
+                pt = collect_passthrough_args(
+                    args,
+                    account_override=account_id,
+                    mode_override=mode,
+                )
+                if len(modes) > 1:
+                    mode_output = (
+                        PROJECT_ROOT / "results" / "runs"
+                        / task.task_id / mode
+                    )
+                    pt.extend(["--output-dir", str(mode_output)])
+                return run_task(task, passthrough_args=pt, mode=mode)
+
+            # Build (task, account) pairs via round-robin
+            task_assignments: list[tuple[TaskInfo, int | None]] = []
+            for i, task in enumerate(tasks):
+                acct = accounts[i % len(accounts)] if accounts else None
+                task_assignments.append((task, acct))
+
+            # Submit all tasks to the pool
+            # Use (task_id, mode) as key to handle multi-mode runs
+            result_map: dict[str, TaskResult] = {}
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                future_to_task = {
+                    pool.submit(_run_with_account, task, acct): task
+                    for task, acct in task_assignments
+                }
+                for future in as_completed(future_to_task):
+                    task = future_to_task[future]
+                    try:
+                        r = future.result()
+                    except Exception as exc:
+                        r = TaskResult(
+                            task_id=task.task_id,
+                            difficulty=task.difficulty,
+                            status="error",
+                            mode=current_mode,
+                        )
+                        logger.error("[error] %s — %s", task.task_id, exc)
+                    result_map[task.task_id] = r
+                    logger.info(
+                        "[done] %s [%s]  score=%s  %s  (%.0fs)",
+                        r.task_id,
+                        r.mode,
+                        f"{r.score:.2f}" if r.score is not None else "—",
+                        r.status,
+                        r.duration_seconds,
+                    )
+
+            # Preserve original task order in results
+            results.extend(result_map[t.task_id] for t in tasks)
 
     # Summary
     print_summary_table(results)

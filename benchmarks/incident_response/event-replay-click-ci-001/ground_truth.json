@@ -1,0 +1,12 @@
+{
+  "root_cause": "markupsafe 2.1.5 removed the deprecated soft_str function that click.utils.echo depends on",
+  "affected_files": ["src/click/utils.py"],
+  "affected_tests": [
+    "test_echo_stdin_and_stderr",
+    "test_echo_color_flag",
+    "test_echo_with_encoding",
+    "test_open_file_atomic_write"
+  ],
+  "severity": "medium",
+  "fix": "Replace markupsafe.soft_str usage with compatible alternative in click.utils"
+}

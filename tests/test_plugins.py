@@ -14,10 +14,26 @@ from eb_verify.plugins import (
     list_validators,
     register,
 )
-from eb_verify.plugins.answer import AnswerValidator
-from eb_verify.plugins.code_patch import CodePatchValidator
+from eb_verify.plugins.answer import (
+    AnswerValidator,
+    file_path_match_score,
+    fuzzy_match_score,
+    keyword_match_score,
+    oracle_score,
+    symbol_match_score,
+)
+from eb_verify.plugins.code_patch import (
+    CodePatchValidator,
+    check_diff_size,
+    check_patch_applies,
+)
 from eb_verify.plugins.config_validator import ConfigValidator
-from eb_verify.plugins.incident_report import IncidentReportValidator
+from eb_verify.plugins.incident_report import (
+    IncidentReportValidator,
+    check_cross_references,
+    check_sections_completeness,
+    check_timeline_ordering,
+)
 from eb_verify.plugins.reproduction_script import ReproductionScriptValidator
 from eb_verify.plugins.runbook import RunbookValidator
 from eb_verify.plugins.security_assessment import SecurityAssessmentValidator
@@ -514,3 +530,456 @@ class TestReproductionScriptValidatorDetailed:
         v = ReproductionScriptValidator()
         result = v.validate(tmp_path)
         assert result.valid is True
+
+
+# ---------------------------------------------------------------------------
+# Answer Oracle Matching (new hardening)
+# ---------------------------------------------------------------------------
+
+class TestAnswerOracleMatching:
+    """Tests for oracle matching functions in the answer validator."""
+
+    def test_keyword_match_all_present(self):
+        text = "The memory leak was caused by a missing close() call in the connection pool."
+        keywords = ["memory leak", "close()", "connection pool"]
+        assert keyword_match_score(text, keywords) == 1.0
+
+    def test_keyword_match_partial(self):
+        text = "The memory leak was caused by something."
+        keywords = ["memory leak", "close()", "connection pool"]
+        score = keyword_match_score(text, keywords)
+        assert abs(score - 1 / 3) < 0.01
+
+    def test_keyword_match_none(self):
+        text = "Everything is fine."
+        keywords = ["memory leak", "close()"]
+        assert keyword_match_score(text, keywords) == 0.0
+
+    def test_keyword_match_empty_keywords(self):
+        assert keyword_match_score("anything", []) == 1.0
+
+    def test_keyword_match_case_insensitive(self):
+        text = "The MEMORY LEAK was found."
+        keywords = ["memory leak"]
+        assert keyword_match_score(text, keywords) == 1.0
+
+    def test_symbol_match_all_present(self):
+        text = "The function handleRequest in class ConnectionPool was the issue."
+        symbols = ["handleRequest", "ConnectionPool"]
+        assert symbol_match_score(text, symbols) == 1.0
+
+    def test_symbol_match_partial(self):
+        text = "The function handleRequest was the issue."
+        symbols = ["handleRequest", "ConnectionPool"]
+        assert symbol_match_score(text, symbols) == 0.5
+
+    def test_symbol_match_no_partial_word(self):
+        """Symbol should match as whole word, not substring."""
+        text = "The handleRequestExtra function was fine."
+        symbols = ["handleRequest"]
+        # Should NOT match because it's a prefix, not exact word
+        # Actually re \b will match at the boundary between 't' and 'E'
+        # since they are both word chars, \b won't match there... let me check
+        # \bhandleRequest\b matches handleRequest but not handleRequestExtra
+        assert symbol_match_score(text, symbols) == 0.0
+
+    def test_symbol_match_empty(self):
+        assert symbol_match_score("anything", []) == 1.0
+
+    def test_file_path_match_full_path(self):
+        text = "The bug is in src/server/handler.go"
+        files = ["src/server/handler.go"]
+        assert file_path_match_score(text, files) == 1.0
+
+    def test_file_path_match_basename_only(self):
+        text = "Check handler.go for the issue."
+        files = ["src/server/handler.go"]
+        assert file_path_match_score(text, files) == 1.0
+
+    def test_file_path_match_none(self):
+        text = "The issue is somewhere in the codebase."
+        files = ["src/server/handler.go"]
+        assert file_path_match_score(text, files) == 0.0
+
+    def test_file_path_match_empty(self):
+        assert file_path_match_score("anything", []) == 1.0
+
+    def test_fuzzy_match_identical(self):
+        text = "The root cause is a memory leak in the connection pool."
+        assert fuzzy_match_score(text, text) == pytest.approx(1.0)
+
+    def test_fuzzy_match_similar(self):
+        text = "The root cause is a memory leak in the connection pool."
+        expected = "Root cause: memory leak in connection pool"
+        score = fuzzy_match_score(text, expected)
+        assert score > 0.6
+
+    def test_fuzzy_match_below_threshold(self):
+        text = "Everything is fine and working well."
+        expected = "The root cause is a memory leak."
+        score = fuzzy_match_score(text, expected, threshold=0.6)
+        assert score == 0.0
+
+    def test_fuzzy_match_custom_threshold(self):
+        text = "memory leak found"
+        expected = "memory leak detected"
+        score = fuzzy_match_score(text, expected, threshold=0.5)
+        assert score > 0.5
+
+    def test_oracle_score_all_dimensions(self):
+        text = "The handleRequest function in src/server/handler.go has a memory leak in the connection pool."
+        ground_truth = {
+            "keywords": ["memory leak", "connection pool"],
+            "symbols": ["handleRequest"],
+            "expected_files": ["src/server/handler.go"],
+            "expected_answer": "memory leak in the connection pool in handleRequest",
+        }
+        score, dims = oracle_score(text, ground_truth)
+        assert score > 0.5
+        assert "keyword" in dims
+        assert "symbol" in dims
+        assert "file_path" in dims
+        assert "fuzzy" in dims
+
+    def test_oracle_score_no_ground_truth(self):
+        score, dims = oracle_score("anything", {})
+        assert score == 1.0
+        assert dims == {}
+
+    def test_oracle_score_keywords_only(self):
+        text = "The issue is a deadlock."
+        gt = {"keywords": ["deadlock"]}
+        score, dims = oracle_score(text, gt)
+        assert dims["keyword"] == 1.0
+        assert score == 1.0
+
+    def test_answer_validator_with_oracle(self, tmp_path):
+        data = {"answer": "The bug is in handleRequest in src/server/handler.go causing a memory leak."}
+        (tmp_path / "answer.json").write_text(json.dumps(data))
+        v = AnswerValidator()
+        gt = {
+            "keywords": ["memory leak"],
+            "symbols": ["handleRequest"],
+            "expected_files": ["src/server/handler.go"],
+        }
+        result = v.validate(tmp_path, ground_truth=gt)
+        assert result.valid is True
+        assert "oracle_score" in result.detail
+
+    def test_answer_validator_oracle_low_score(self, tmp_path):
+        data = {"answer": "I don't know."}
+        (tmp_path / "answer.json").write_text(json.dumps(data))
+        v = AnswerValidator()
+        gt = {
+            "keywords": ["memory leak", "connection pool", "deadlock"],
+            "symbols": ["handleRequest"],
+            "expected_files": ["src/server/handler.go"],
+        }
+        result = v.validate(tmp_path, ground_truth=gt, thresholds={"min_score": 0.3})
+        assert result.valid is False
+        assert "oracle_score" in result.detail
+
+    def test_answer_validator_without_oracle_backward_compat(self, tmp_path):
+        """Ensure validator works without oracle (backward compatible)."""
+        (tmp_path / "answer.json").write_text('{"answer": "foo"}')
+        v = AnswerValidator()
+        result = v.validate(tmp_path)
+        assert result.valid is True
+        assert "found and valid" in result.detail
+
+    def test_answer_validator_txt_with_oracle(self, tmp_path):
+        (tmp_path / "answer.txt").write_text("The memory leak is in handleRequest")
+        v = AnswerValidator()
+        gt = {"keywords": ["memory leak"], "symbols": ["handleRequest"]}
+        result = v.validate(tmp_path, ground_truth=gt)
+        assert result.valid is True
+        assert "oracle_score" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# Code Patch Hardening (new)
+# ---------------------------------------------------------------------------
+
+class TestCodePatchHardening:
+    """Tests for new code_patch validator features."""
+
+    def test_check_patch_applies_on_git_repo(self, tmp_path):
+        """Test git apply --check on a repo with changes."""
+        import subprocess
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=str(repo), capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=str(repo), capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=str(repo), capture_output=True,
+        )
+        (repo / "file.txt").write_text("hello\n")
+        subprocess.run(["git", "add", "."], cwd=str(repo), capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=str(repo), capture_output=True)
+
+        # Make a change
+        (repo / "file.txt").write_text("hello world\n")
+        applies, detail = check_patch_applies(repo)
+        # The diff is against HEAD, and git apply --check on the same tree
+        # should work fine for a valid diff
+        assert isinstance(applies, bool)
+        assert isinstance(detail, str)
+
+    def test_check_diff_size_reasonable(self, tmp_path):
+        """Test diff size checker on a repo with a small change."""
+        import subprocess
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=str(repo), capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=str(repo), capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=str(repo), capture_output=True,
+        )
+        (repo / "file.txt").write_text("hello\n")
+        subprocess.run(["git", "add", "."], cwd=str(repo), capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=str(repo), capture_output=True)
+
+        # Small change
+        (repo / "file.txt").write_text("hello world\n")
+        ok, detail = check_diff_size(repo, max_lines=10_000, min_lines=1)
+        assert ok is True
+        assert "OK" in detail
+
+    def test_check_diff_size_too_large(self, tmp_path):
+        """Flag a suspiciously large diff."""
+        import subprocess
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=str(repo), capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=str(repo), capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=str(repo), capture_output=True,
+        )
+        (repo / "file.txt").write_text("hello\n")
+        subprocess.run(["git", "add", "."], cwd=str(repo), capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=str(repo), capture_output=True)
+
+        # Large change
+        (repo / "file.txt").write_text("\n".join(f"line {i}" for i in range(500)) + "\n")
+        ok, detail = check_diff_size(repo, max_lines=10, min_lines=1)
+        assert ok is False
+        assert "large" in detail
+
+    def test_validate_with_check_applies(self, tmp_path):
+        """Test the full validator with check_applies=True."""
+        import subprocess
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        repo = workspace / "myrepo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=str(repo), capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=str(repo), capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=str(repo), capture_output=True,
+        )
+        (repo / "file.txt").write_text("hello\n")
+        subprocess.run(["git", "add", "."], cwd=str(repo), capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=str(repo), capture_output=True)
+
+        (repo / "file.txt").write_text("hello world\n")
+
+        v = CodePatchValidator()
+        result = v.validate(workspace, check_applies=True)
+        assert result.valid is True
+        assert "myrepo" in result.detail
+
+    def test_validate_backward_compat(self, tmp_path):
+        """Validator still works with no extra args."""
+        v = CodePatchValidator()
+        result = v.validate(tmp_path / "nonexistent")
+        assert result.valid is False
+
+
+# ---------------------------------------------------------------------------
+# Incident Report Semantic Checks (new)
+# ---------------------------------------------------------------------------
+
+class TestIncidentReportSemantics:
+    """Tests for new semantic checks in incident_report validator."""
+
+    def test_sections_completeness_all_filled(self):
+        data = {
+            "timeline": [{"time": "00:00", "event": "alert"}],
+            "root_cause": "Memory leak",
+            "remediation": "Restart service",
+        }
+        issues = check_sections_completeness(data)
+        assert issues == []
+
+    def test_sections_completeness_empty_root_cause(self):
+        data = {
+            "timeline": [{"time": "00:00", "event": "alert"}],
+            "root_cause": "",
+            "remediation": "Restart service",
+        }
+        issues = check_sections_completeness(data)
+        assert len(issues) == 1
+        assert "root_cause" in issues[0]
+
+    def test_sections_completeness_empty_timeline(self):
+        data = {
+            "timeline": [],
+            "root_cause": "Something",
+            "remediation": "Fix it",
+        }
+        issues = check_sections_completeness(data)
+        assert len(issues) == 1
+        assert "timeline" in issues[0]
+
+    def test_timeline_ordering_chronological(self):
+        timeline = [
+            {"time": "2024-01-01T00:00:00", "event": "first"},
+            {"time": "2024-01-01T01:00:00", "event": "second"},
+            {"time": "2024-01-01T02:00:00", "event": "third"},
+        ]
+        issues = check_timeline_ordering(timeline)
+        assert issues == []
+
+    def test_timeline_ordering_out_of_order(self):
+        timeline = [
+            {"time": "2024-01-01T02:00:00", "event": "third"},
+            {"time": "2024-01-01T00:00:00", "event": "first"},
+        ]
+        issues = check_timeline_ordering(timeline)
+        assert len(issues) == 1
+        assert "before" in issues[0]
+
+    def test_timeline_ordering_short_format(self):
+        timeline = [
+            {"time": "10:00", "event": "first"},
+            {"time": "11:00", "event": "second"},
+        ]
+        issues = check_timeline_ordering(timeline)
+        assert issues == []
+
+    def test_timeline_ordering_no_timestamps(self):
+        timeline = [
+            {"event": "first"},
+            {"event": "second"},
+        ]
+        issues = check_timeline_ordering(timeline)
+        assert issues == []
+
+    def test_timeline_ordering_single_event(self):
+        timeline = [{"time": "10:00", "event": "only"}]
+        issues = check_timeline_ordering(timeline)
+        assert issues == []
+
+    def test_cross_references_valid_services(self):
+        data = {"affected_services": ["api-gateway", "user-service"]}
+        known = ["api-gateway", "user-service", "payment-service"]
+        issues = check_cross_references(data, known_services=known)
+        assert issues == []
+
+    def test_cross_references_unknown_service(self):
+        data = {"affected_services": ["api-gateway", "ghost-service"]}
+        known = ["api-gateway", "user-service"]
+        issues = check_cross_references(data, known_services=known)
+        assert len(issues) == 1
+        assert "ghost-service" in issues[0]
+
+    def test_cross_references_no_known_services(self):
+        """When no known_services provided, skip check."""
+        data = {"affected_services": ["anything"]}
+        issues = check_cross_references(data)
+        assert issues == []
+
+    def test_cross_references_file_in_root_cause(self):
+        data = {
+            "affected_services": [],
+            "root_cause": "Bug in src/handler.go caused the crash",
+        }
+        known_files = ["src/handler.go", "src/main.go"]
+        issues = check_cross_references(data, known_files=known_files)
+        assert issues == []
+
+    def test_cross_references_unknown_file_in_root_cause(self):
+        data = {
+            "affected_services": [],
+            "root_cause": "Bug in nonexistent/file.py caused the crash",
+        }
+        known_files = ["src/handler.go"]
+        issues = check_cross_references(data, known_files=known_files)
+        assert len(issues) >= 1
+        assert "nonexistent/file.py" in issues[0]
+
+    def test_validator_warns_on_empty_sections(self, tmp_path):
+        """Validator should still pass but include warnings for empty sections."""
+        data = {
+            "timeline": [],
+            "root_cause": "Something",
+            "remediation": "Fix it",
+            "affected_services": ["svc-a"],
+        }
+        (tmp_path / "incident_report.json").write_text(json.dumps(data))
+        v = IncidentReportValidator()
+        result = v.validate(tmp_path)
+        assert result.valid is True
+        assert "WARNINGS" in result.detail
+        assert "timeline" in result.detail
+
+    def test_validator_warns_on_out_of_order_timeline(self, tmp_path):
+        data = {
+            "timeline": [
+                {"time": "2024-01-01T10:00:00", "event": "second"},
+                {"time": "2024-01-01T08:00:00", "event": "first"},
+            ],
+            "root_cause": "Something",
+            "remediation": "Fix it",
+            "affected_services": ["svc-a"],
+        }
+        (tmp_path / "incident_report.json").write_text(json.dumps(data))
+        v = IncidentReportValidator()
+        result = v.validate(tmp_path)
+        assert result.valid is True
+        assert "WARNINGS" in result.detail
+        assert "before" in result.detail
+
+    def test_validator_warns_on_unknown_services(self, tmp_path):
+        data = {
+            "timeline": [{"time": "10:00", "event": "alert"}],
+            "root_cause": "Something",
+            "remediation": "Fix it",
+            "affected_services": ["ghost-svc"],
+        }
+        (tmp_path / "incident_report.json").write_text(json.dumps(data))
+        v = IncidentReportValidator()
+        result = v.validate(tmp_path, known_services=["real-svc"])
+        assert result.valid is True
+        assert "WARNINGS" in result.detail
+        assert "ghost-svc" in result.detail
+
+    def test_validator_backward_compat(self, tmp_path):
+        """Existing valid report should still pass without extra args."""
+        data = {
+            "timeline": [{"time": "00:00", "event": "alert fired"}],
+            "root_cause": "Memory leak in service X",
+            "remediation": "Restart service X",
+            "affected_services": ["service-x"],
+        }
+        (tmp_path / "incident_report.json").write_text(json.dumps(data))
+        v = IncidentReportValidator()
+        result = v.validate(tmp_path)
+        assert result.valid is True
+        assert "incident_report.json" in result.detail

@@ -1,0 +1,89 @@
+# Event-replay task: CI failure cascade in Click test suite after dependency update.
+#
+# Scenario: A Dependabot PR updates markupsafe in Click's dependencies.
+# This triggers a cascade of test failures in Click's test suite.
+# The agent must investigate, triage, communicate, and remediate.
+
+difficulty_stratum = "calibration"
+
+[task]
+id = "event-replay-click-ci-001"
+suite = "incident_response"
+difficulty = "medium"
+estimated_duration_minutes = 15
+session_type = "event_replay"
+task_type = "incident_investigation"
+description = "CI failure cascade in Click after markupsafe dependency update"
+prompt = """
+You are on-call for the Click CLI framework project. You will receive a stream of
+events in /workspace/events.jsonl representing CI/CD alerts, GitHub notifications,
+and team messages related to a dependency update causing test failures.
+
+Read the event stream and respond with appropriate actions in
+/workspace/actions.jsonl. Each action should be a JSON object on its own line
+with fields: timestamp_ms, action_type, target, description.
+
+Valid action_types: investigate, escalate, remediate, communicate, deploy,
+rollback, triage, monitor, no_op.
+
+Your goal: identify the root cause of the CI failures, communicate findings,
+and propose or implement a fix.
+
+The Click source code is available under /workspace/click/.
+"""
+
+[[repos]]
+url = "https://github.com/pallets/click"
+rev = "8.1.7"
+path = "click"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+frameworks = ["click"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_root_cause"
+weight = 0.30
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies the markupsafe update as the root cause of test failures"
+
+[[checkpoints]]
+name = "triage_severity"
+weight = 0.20
+verifier = "checks/check_triage.sh"
+description = "Agent triages the issue appropriately (not critical for end users)"
+
+[[checkpoints]]
+name = "communication"
+weight = 0.20
+verifier = "checks/check_communication.sh"
+description = "Agent communicates status to stakeholders"
+
+[[checkpoints]]
+name = "remediation"
+weight = 0.30
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes or implements a fix (pin dependency or update code)"
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "low"
+mcp_benefit_rationale = "Single repo, test failures are directly in CI logs"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/click/utils.py"
+repo = "click"
+confidence = 0.85
+source = "deterministic"
+
+[events]
+event_file = "events.jsonl"
+oracle_actions = "oracle_actions.jsonl"

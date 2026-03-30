@@ -42,6 +42,15 @@ HEALTH_CHECK_SH = REPO_ROOT / "scripts" / "sandbox" / "health_check.sh"
 EB_VERIFY_LIB = REPO_ROOT / "lib" / "eb_verify"
 
 
+VALID_MODES = ("baseline", "mcp_only", "hybrid")
+
+SOURCEGRAPH_MCP_ENDPOINT = "https://demo.sourcegraph.com/.api/mcp"
+SOURCEGRAPH_MCP_ADD_CMD = (
+    "claude mcp add --transport http sg "
+    "https://demo.sourcegraph.com/.api/mcp"
+)
+
+
 @dataclass(frozen=True)
 class TaskRunConfig:
     """Immutable configuration for a single task run."""
@@ -56,6 +65,7 @@ class TaskRunConfig:
     keep_container: bool = False
     verbose: bool = False
     account: int | None = None
+    mode: str = "baseline"
 
 
 @dataclass
@@ -71,6 +81,7 @@ class TaskRunResult:
     scores: dict = field(default_factory=dict)
     timing: dict = field(default_factory=dict)
     output_dir: str = ""
+    tool_usage: dict = field(default_factory=dict)
 
 
 def _load_oauth_token(account: int) -> str:
@@ -527,11 +538,13 @@ def _save_results(
         "image_tag": result.image_tag,
         "scores": result.scores,
         "timing": result.timing,
+        "tool_usage": result.tool_usage,
         "config": {
             "source": config.source,
             "agent_command": config.agent_command,
             "timeout": config.timeout,
             "dry_run": config.dry_run,
+            "mode": config.mode,
         },
         "task_metadata": {
             "suite": task_data.get("task", {}).get("suite", ""),
@@ -544,6 +557,97 @@ def _save_results(
     results_path.write_text(json.dumps(payload, indent=2) + "\n")
     logger.info("Results saved to: %s", results_path)
     return results_path
+
+
+def _configure_mcp(container_id: str, mode: str) -> None:
+    """Configure Sourcegraph MCP endpoint inside the container for mcp_only/hybrid modes."""
+    if mode not in ("mcp_only", "hybrid"):
+        return
+
+    logger.info("Configuring Sourcegraph MCP endpoint (mode=%s)", mode)
+    # Create MCP config directory and write the server configuration
+    mcp_config = json.dumps({
+        "mcpServers": {
+            "sg": {
+                "type": "http",
+                "url": SOURCEGRAPH_MCP_ENDPOINT,
+            }
+        }
+    })
+    _docker_exec(container_id, [
+        "bash", "-c",
+        "mkdir -p /home/agent/.claude && "
+        f"echo '{mcp_config}' > /home/agent/.claude/settings.json && "
+        "chown -R agent:agent /home/agent/.claude"
+    ])
+    logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
+
+
+def _extract_tool_usage(output_dir: Path) -> dict:
+    """Parse the agent's stdout log for tool-usage metadata.
+
+    Claude Code JSON output includes modelUsage data with token counts,
+    cost, and turn information. Returns a dict suitable for results.json.
+    """
+    usage: dict = {
+        "total_input_tokens": 0,
+        "total_output_tokens": 0,
+        "cost_usd": 0.0,
+        "num_turns": 0,
+        "mcp_tool_calls": 0,
+    }
+
+    stdout_log = output_dir / "agent_stdout.log"
+    if not stdout_log.exists():
+        return usage
+
+    content = stdout_log.read_text()
+    if not content.strip():
+        return usage
+
+    # Claude Code --output-format json produces a JSON object on stdout.
+    # Try to parse the entire output as JSON first.
+    try:
+        data = json.loads(content)
+        model_usage = data.get("modelUsage", {})
+        usage["total_input_tokens"] = model_usage.get("inputTokens", 0)
+        usage["total_output_tokens"] = model_usage.get("outputTokens", 0)
+        usage["cost_usd"] = model_usage.get("costUSD", 0.0)
+        usage["num_turns"] = data.get("numTurns", 0)
+
+        # Count MCP-specific tool calls from the conversation
+        for msg in data.get("messages", []):
+            if isinstance(msg, dict):
+                tool_use = msg.get("tool_use", msg.get("content", []))
+                if isinstance(tool_use, list):
+                    for item in tool_use:
+                        if isinstance(item, dict) and item.get("type") == "tool_use":
+                            tool_name = item.get("name", "")
+                            if tool_name.startswith("mcp__sg__") or "sourcegraph" in tool_name.lower():
+                                usage["mcp_tool_calls"] += 1
+
+        return usage
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Fallback: scan for JSON fragments with modelUsage
+    for line in content.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+            if "modelUsage" in obj:
+                mu = obj["modelUsage"]
+                usage["total_input_tokens"] += mu.get("inputTokens", 0)
+                usage["total_output_tokens"] += mu.get("outputTokens", 0)
+                usage["cost_usd"] += mu.get("costUSD", 0.0)
+            if "numTurns" in obj:
+                usage["num_turns"] = max(usage["num_turns"], obj["numTurns"])
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+    return usage
 
 
 def run_task(config: TaskRunConfig) -> TaskRunResult:
@@ -608,18 +712,38 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         if not healthy:
             logger.warning("Health check reported issues (continuing anyway)")
 
+        # --- Configure MCP if needed ---
+        if config.mode in ("mcp_only", "hybrid"):
+            _configure_mcp(container_id, config.mode)
+
         # --- Dry run stops here ---
         if config.dry_run:
             result.phase = "dry_run_complete"
             result.success = True
             result.timing = timings
-            logger.info("Dry run complete. Container: %s, Image: %s", container_name, image_tag)
+            logger.info(
+                "Dry run complete. Container: %s, Image: %s, Mode: %s",
+                container_name, image_tag, config.mode,
+            )
             return result
 
         # --- Phase 4: Agent ---
         # Resolve OAuth token if --account was specified
         env_extra: dict[str, str] = {}
         agent_command = config.agent_command
+
+        # Set Sourcegraph access token for MCP modes
+        if config.mode in ("mcp_only", "hybrid"):
+            sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
+            if sg_token:
+                env_extra["SOURCEGRAPH_ACCESS_TOKEN"] = sg_token
+            else:
+                logger.warning(
+                    "SOURCEGRAPH_ACCESS_TOKEN not set in environment; "
+                    "MCP endpoint may not authenticate (mode=%s)",
+                    config.mode,
+                )
+
         if config.account is not None:
             oauth_token = _load_oauth_token(config.account)
             env_extra["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
@@ -639,6 +763,9 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 env_extra=env_extra,
             )
             timings["agent"] = agent_duration
+
+            # Extract tool-usage metadata from agent output
+            result.tool_usage = _extract_tool_usage(output_dir)
         else:
             logger.info("No agent command specified, skipping agent phase")
 
@@ -744,6 +871,16 @@ Examples:
         ),
     )
     parser.add_argument(
+        "--mode",
+        choices=list(VALID_MODES),
+        default="baseline",
+        help=(
+            "Tool-access mode: 'baseline' (no MCP), 'mcp_only' "
+            "(Sourcegraph MCP only), or 'hybrid' (local + MCP). "
+            "Default: baseline"
+        ),
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable debug logging",
@@ -767,6 +904,7 @@ Examples:
         keep_container=args.keep_container,
         verbose=args.verbose,
         account=args.account,
+        mode=args.mode,
     )
 
     result = run_task(config)
@@ -775,6 +913,7 @@ Examples:
     print()
     print("=" * 60)
     print(f"Task:      {result.task_id}")
+    print(f"Mode:      {config.mode}")
     print(f"Phase:     {result.phase}")
     print(f"Success:   {result.success}")
     if result.error:

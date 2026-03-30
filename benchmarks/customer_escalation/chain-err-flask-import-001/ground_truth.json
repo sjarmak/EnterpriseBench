@@ -1,0 +1,10 @@
+{
+  "import_cycle": [
+    "flask/__init__.py",
+    "flask/json/__init__.py",
+    "flask/globals.py",
+    "flask/app.py"
+  ],
+  "root_cause": "Circular import between flask.json and flask.globals when flask.json is imported at module level before Flask app is initialized",
+  "fix_approach": "Use lazy/deferred imports in flask/json/__init__.py to avoid importing flask.globals at module load time"
+}
