@@ -18,6 +18,9 @@ import tempfile
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
 # Support both toml (Python 3.11+) and tomli
 try:
     import tomllib
@@ -27,9 +30,9 @@ except ImportError:
     except ImportError:
         tomllib = None
 
-from .session import SessionConfig, SessionResult, run_session
-from .milestone import SessionScore, run_session_milestones
-from .branch_manager import list_session_branches
+from orchestration.session import SessionConfig, SessionResult, run_session
+from orchestration.milestone import SessionScore, run_session_milestones
+from orchestration.branch_manager import list_session_branches
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +258,12 @@ def main():
     parser.add_argument("--workspace", default=None,
                         help="Workspace root directory (default: temp dir)")
     parser.add_argument("--verbose", "-v", action="store_true")
+    # Passthrough args forwarded by run_benchmark.py (accepted but not used here)
+    parser.add_argument("--source", choices=["mirror", "upstream"])
+    parser.add_argument("--agent", type=str)
+    parser.add_argument("--timeout", type=int)
+    parser.add_argument("--account", type=int)
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     logging.basicConfig(

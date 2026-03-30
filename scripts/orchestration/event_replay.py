@@ -152,6 +152,12 @@ def main():
     )
     parser.add_argument("--json", action="store_true", help="Output raw JSON instead of report")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
+    # Passthrough args forwarded by run_benchmark.py (accepted but not used here)
+    parser.add_argument("--source", choices=["mirror", "upstream"])
+    parser.add_argument("--agent", type=str)
+    parser.add_argument("--timeout", type=int)
+    parser.add_argument("--account", type=int)
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     task_dir = args.task_dir.resolve()

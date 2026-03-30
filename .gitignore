@@ -39,6 +39,10 @@ runs/
 *.tar.gz
 *.docker
 
+# Generated Dockerfiles (created by run_task.py at build time)
+benchmarks/**/environment/Dockerfile
+benchmarks/**/environment/Dockerfile.*
+
 # Prototype worktrees (managed by /diverge-prototype)
 .worktrees/
 

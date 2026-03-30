@@ -13,6 +13,12 @@ Usage:
     # All tasks with filters
     python3 scripts/run_benchmark.py benchmarks/ --all --difficulty medium --limit 5
 
+    # Parallel across 5 accounts (auto workers = one per account)
+    python3 scripts/run_benchmark.py benchmarks/ --all --account 1-5 -j0
+
+    # 3 parallel workers on accounts 1,3,5
+    python3 scripts/run_benchmark.py benchmarks/ --all --account 1,3,5 -j3
+
     # Dry run (list matching tasks without executing)
     python3 scripts/run_benchmark.py benchmarks/ --all --dry-run
 """
@@ -25,6 +31,7 @@ import logging
 import subprocess
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -282,21 +289,59 @@ def build_parser() -> argparse.ArgumentParser:
     runner_group.add_argument("--timeout", type=int)
     runner_group.add_argument(
         "--account",
-        type=int,
+        type=str,
         default=None,
         help=(
-            "OAuth account number N (loads token from "
-            "~/.claude-homes/accountN/.claude/.credentials.json)"
+            "OAuth account(s): single number (1), range (1-5), or "
+            "comma-separated (1,3,5). Tasks are distributed round-robin "
+            "across accounts when multiple are given."
         ),
     )
     runner_group.add_argument("--dry-run", action="store_true", help="List tasks without running")
+
+    # Parallelism
+    parallel_group = parser.add_argument_group("parallelism")
+    parallel_group.add_argument(
+        "--parallel", "-j",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Max parallel tasks (default: 1). Set to 0 for auto (one per account).",
+    )
 
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
 
 
-def collect_passthrough_args(args: argparse.Namespace) -> list[str]:
-    """Build list of flags to pass through to underlying runner scripts."""
+def parse_accounts(account_str: str | None) -> list[int]:
+    """Parse account spec into a list of account numbers.
+
+    Supports: "1", "1-5", "1,3,5", "1-3,5".
+    Returns an empty list if account_str is None.
+    """
+    if not account_str:
+        return []
+    accounts: list[int] = []
+    for part in account_str.split(","):
+        part = part.strip()
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            accounts.extend(range(int(lo), int(hi) + 1))
+        else:
+            accounts.append(int(part))
+    return accounts
+
+
+def collect_passthrough_args(
+    args: argparse.Namespace,
+    *,
+    account_override: int | None = None,
+) -> list[str]:
+    """Build list of flags to pass through to underlying runner scripts.
+
+    If *account_override* is given it replaces whatever --account was on the CLI
+    (used by the parallel dispatcher to rotate accounts per task).
+    """
     result: list[str] = []
     if args.source:
         result.extend(["--source", args.source])
@@ -304,8 +349,13 @@ def collect_passthrough_args(args: argparse.Namespace) -> list[str]:
         result.extend(["--agent", args.agent])
     if args.timeout:
         result.extend(["--timeout", str(args.timeout)])
-    if args.account is not None:
-        result.extend(["--account", str(args.account)])
+    if account_override is not None:
+        result.extend(["--account", str(account_override)])
+    elif args.account is not None:
+        # Single-account legacy path
+        accounts = parse_accounts(args.account)
+        if len(accounts) == 1:
+            result.extend(["--account", str(accounts[0])])
     if args.dry_run:
         result.append("--dry-run")
     return result
@@ -363,13 +413,70 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     # Execute
-    passthrough = collect_passthrough_args(args)
+    accounts = parse_accounts(args.account)
+    workers = args.parallel
+    if workers == 0:
+        # Auto: one worker per account, minimum 1
+        workers = max(len(accounts), 1)
+
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     results: list[TaskResult] = []
 
-    for task in tasks:
-        result = run_task(task, passthrough_args=passthrough, dry_run=args.dry_run)
-        results.append(result)
+    if workers <= 1 or args.dry_run:
+        # Sequential execution
+        for task in tasks:
+            account_id = accounts[0] if len(accounts) == 1 else None
+            passthrough = collect_passthrough_args(args, account_override=account_id)
+            result = run_task(task, passthrough_args=passthrough, dry_run=args.dry_run)
+            results.append(result)
+    else:
+        # Parallel execution with round-robin account distribution
+        logger.info(
+            "Parallel mode: %d workers, %d account(s)",
+            workers, len(accounts) or 1,
+        )
+
+        def _run_with_account(
+            task: TaskInfo, account_id: int | None,
+        ) -> TaskResult:
+            pt = collect_passthrough_args(args, account_override=account_id)
+            return run_task(task, passthrough_args=pt)
+
+        # Build (task, account) pairs via round-robin
+        task_assignments: list[tuple[TaskInfo, int | None]] = []
+        for i, task in enumerate(tasks):
+            acct = accounts[i % len(accounts)] if accounts else None
+            task_assignments.append((task, acct))
+
+        # Submit all tasks to the pool
+        result_map: dict[str, TaskResult] = {}
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            future_to_task = {
+                pool.submit(_run_with_account, task, acct): task
+                for task, acct in task_assignments
+            }
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                try:
+                    r = future.result()
+                except Exception as exc:
+                    r = TaskResult(
+                        task_id=task.task_id,
+                        difficulty=task.difficulty,
+                        status="error",
+                    )
+                    logger.error("[error] %s — %s", task.task_id, exc)
+                result_map[task.task_id] = r
+                logger.info(
+                    "[done] %s  score=%s  %s  (%.0fs)",
+                    r.task_id,
+                    f"{r.score:.2f}" if r.score is not None else "—",
+                    r.status,
+                    r.duration_seconds,
+                )
+
+        # Preserve original task order in results
+        results = [result_map[t.task_id] for t in tasks]
 
     # Summary
     print_summary_table(results)
