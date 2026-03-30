@@ -472,11 +472,16 @@ def _run_agent(
         (output_dir / "agent_stderr.log").write_text(result.stderr)
         logger.info("Agent finished in %.1fs (exit %d)", duration, exit_code)
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as te:
         duration = time.monotonic() - start
         exit_code = 124
-        (output_dir / "agent_stdout.log").write_text("")
-        (output_dir / "agent_stderr.log").write_text(f"TIMEOUT after {timeout}s\n")
+        # Capture any partial output the agent produced before timeout
+        partial_stdout = te.stdout or "" if hasattr(te, "stdout") else ""
+        partial_stderr = te.stderr or "" if hasattr(te, "stderr") else ""
+        (output_dir / "agent_stdout.log").write_text(partial_stdout)
+        (output_dir / "agent_stderr.log").write_text(
+            f"{partial_stderr}\nTIMEOUT after {timeout}s\n"
+        )
         logger.error("Agent timed out after %ds", timeout)
 
     finally:
@@ -864,6 +869,11 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # failure_class may already be set by inner handlers that re-raised
             pass
         logger.error("Task run failed: %s", e, exc_info=True)
+        # Always save results, even on error — so we have a record
+        try:
+            _save_results(result, task_data, output_dir, config)
+        except Exception:
+            logger.warning("Failed to save error results for %s", result.task_id)
         return result
 
     finally:
