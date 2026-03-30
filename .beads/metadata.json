@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "EnterpriseBench",
+  "project_id": "2bb74343-6e63-435f-863e-c536f21a537a"
+}

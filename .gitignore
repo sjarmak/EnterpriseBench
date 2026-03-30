@@ -48,3 +48,8 @@ benchmarks/**/environment/Dockerfile.*
 
 # Infra account config (contains PII — use accounts_config.json.example as template)
 scripts/infra/accounts_config.json
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
