@@ -60,6 +60,9 @@ class TaskRunConfig:
     source: str = "mirror"
     agent_command: str = ""
     timeout: int = 1800
+    build_timeout: int = 1800
+    verifier_timeout: int = 600
+    memory_mb: int = 8192
     output_dir: Path | None = None
     dry_run: bool = False
     no_build: bool = False
@@ -207,11 +210,14 @@ def _docker_build(dockerfile_path: Path, image_tag: str) -> None:
 def _docker_create_container(
     image_tag: str,
     container_name: str,
+    memory_mb: int = 8192,
 ) -> str:
     """Create (but do not start) a container, returning the container ID."""
     cmd = [
         "docker", "create",
         "--name", container_name,
+        f"--memory={memory_mb}m",
+        f"--memory-swap={memory_mb * 2}m",
         image_tag,
         "sleep", "infinity",
     ]
@@ -483,9 +489,9 @@ def _run_agent(
     return exit_code, duration
 
 
-def _run_scoring(container_id: str) -> dict:
+def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
     """Run /workspace/test.sh and capture the JSON results."""
-    logger.info("Running checkpoint verifiers...")
+    logger.info("Running checkpoint verifiers (timeout=%ds)...", verifier_timeout)
 
     result = _docker_exec(
         container_id,
@@ -493,7 +499,7 @@ def _run_scoring(container_id: str) -> dict:
          "export WORKSPACE=/workspace TASK_DIR=/workspace/.task "
          "PYTHONPATH=/workspace/.eb_verify:${PYTHONPATH:-}; "
          "bash /workspace/test.sh"],
-        timeout=300,
+        timeout=verifier_timeout,
     )
 
     # test.sh outputs JSON to stdout, diagnostics to stderr
@@ -744,7 +750,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         # --- Phase 3: Setup ---
         t0 = time.monotonic()
         try:
-            container_id = _docker_create_container(image_tag, container_name)
+            container_id = _docker_create_container(image_tag, container_name, config.memory_mb)
             result.container_id = container_id
             _docker_start(container_id)
             _setup_container(container_id, task_dir, task_data)
@@ -836,7 +842,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
 
         # --- Phase 5: Score ---
         t0 = time.monotonic()
-        scores = _run_scoring(container_id)
+        scores = _run_scoring(container_id, config.verifier_timeout)
         timings["scoring"] = time.monotonic() - t0
         result.scores = scores
 
@@ -910,6 +916,25 @@ Examples:
         help="Max seconds for agent execution (default: 1800)",
     )
     parser.add_argument(
+        "--build-timeout",
+        type=int,
+        default=1800,
+        help="Max seconds for Docker image build (default: 1800)",
+    )
+    parser.add_argument(
+        "--verifier-timeout",
+        type=int,
+        default=600,
+        help="Max seconds for verifier/scoring (default: 600)",
+    )
+    parser.add_argument(
+        "--memory",
+        type=int,
+        default=8192,
+        dest="memory_mb",
+        help="Container memory limit in MB (default: 8192)",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
@@ -977,6 +1002,9 @@ Examples:
         source=args.source,
         agent_command=args.agent_command,
         timeout=args.timeout,
+        build_timeout=args.build_timeout,
+        verifier_timeout=args.verifier_timeout,
+        memory_mb=args.memory_mb,
         output_dir=args.output_dir.resolve() if args.output_dir else None,
         dry_run=args.dry_run,
         no_build=args.no_build,
