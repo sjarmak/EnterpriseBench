@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # check_ownership.sh — verify agent identified correct code owners or subsystem
 # Reads agent output from $WORKSPACE/agent_output/answer.json
-# Checks for correct ownership attribution against ground truth keywords
+# Checks for implementation-specific ownership terms from the Envoy codebase
 set -euo pipefail
 
-export ANSWER_FILE="$WORKSPACE/agent_output/answer.json"
-export GT_FILE="$TASK_DIR/ground_truth.json"
+export ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
+export GT_FILE="${TASK_DIR:-/task}/ground_truth.json"
 
 if [[ ! -f "$ANSWER_FILE" ]]; then
     echo '{"score": 0.0, "passed": false, "detail": "No answer.json found"}'
@@ -18,23 +18,15 @@ if [[ ! -f "$GT_FILE" ]]; then
 fi
 
 python3 -c "
-import json, sys, os
+import json, sys, os, re
 
 gt = json.load(open(os.environ['GT_FILE']))
 answer = json.load(open(os.environ['ANSWER_FILE']))
 
-# Get ownership keywords from ground truth
+# Implementation-specific ownership terms from the Envoy codebase.
+# Generic words like 'overflow' or 'upstream' are NOT sufficient —
+# the agent must reference actual file names or class names.
 ownership_kw = gt.get('ownership_keywords', [])
-
-if not ownership_kw:
-    # Fallback: extract from required_files rationale
-    required = gt.get('ground_truth', gt).get('required_files', [])
-    for rf in required:
-        rat = rf.get('rationale', '').lower()
-        for word in rat.split():
-            if len(word) > 4 and word.isalpha():
-                ownership_kw.append(word)
-    ownership_kw = list(set(ownership_kw))[:10]
 
 if not ownership_kw:
     print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'No ownership keywords in ground truth'}))
@@ -49,13 +41,31 @@ elif isinstance(ownership, list):
 else:
     ownership_text = str(ownership).lower()
 
+# Also search the full answer text in case ownership is embedded elsewhere
+full_answer_text = json.dumps(answer).lower()
+search_text = ownership_text + ' ' + full_answer_text
+
 if not ownership_text.strip():
     print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'Agent provided no ownership info'}))
     sys.exit(0)
 
-# Score based on keyword matches
-matched = sum(1 for kw in ownership_kw if kw.lower().replace('-', ' ') in ownership_text or kw.lower().replace('-', '') in ownership_text.replace(' ', ''))
-score = round(min(1.0, matched / max(len(ownership_kw) * 0.4, 1)), 2)
-detail = f'Matched {matched}/{len(ownership_kw)} ownership keywords'
-print(json.dumps({'score': score, 'passed': score >= 0.3, 'detail': detail}))
+def keyword_present(kw, text):
+    # Match case-insensitively; treat underscores and hyphens as interchangeable
+    kw_norm = kw.lower().replace('-', '_')
+    text_norm = text.replace('-', '_')
+    return kw_norm in text_norm
+
+matched_kw = [kw for kw in ownership_kw if keyword_present(kw, search_text)]
+matched = len(matched_kw)
+
+# Need at least 2 implementation-specific keyword hits to pass.
+# Score is proportional to matches (full score at 4+ out of 8 keywords).
+score = round(min(1.0, matched / 4.0), 2)
+passed = matched >= 2
+
+detail = (
+    f'Matched {matched}/{len(ownership_kw)} implementation-specific ownership keywords: '
+    f'{matched_kw}'
+)
+print(json.dumps({'score': score, 'passed': passed, 'detail': detail}))
 "
