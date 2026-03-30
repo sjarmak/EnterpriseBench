@@ -1,0 +1,15 @@
+# Phase 4 Graduated Pilot — 10 tasks (1 per type)
+# Selection criteria: large repos, difficulty spread, single-session, suite diversity
+# Repo sizes from GitHub API (KB), converted to approx MB
+#
+# task_type | difficulty | session | suite | repos (estimated size)
+benchmarks/dependency_management/api-contract-006/task.toml  # api_contract | expert | single | dependency_management | envoy(287MB)+go-control-plane(60MB)+istio(287MB) = ~634MB
+benchmarks/security_operations/ceph-rgw-auth-secure-001/task.toml  # config_drift | hard | single | security_operations | ceph(878MB) = ~878MB
+benchmarks/feature_delivery/schema-evolution-010/task.toml  # db_schema_evolution | hard | single | feature_delivery | mattermost(980MB) = ~980MB
+benchmarks/technical_debt/dead-code-004/task.toml  # dead_code_necropsy | expert | single | technical_debt | TypeScript(2888MB) = ~2888MB
+benchmarks/dependency_management/dep-traversal-012/task.toml  # dependency_graph | expert | single | dependency_management | curl(131MB)+git(294MB)+kubernetes(1427MB) = ~1852MB
+benchmarks/customer_escalation/err-provenance-010/task.toml  # error_provenance | hard | single | customer_escalation | grafana(1524MB) = ~1524MB
+benchmarks/incident_response/incident-investigation-001/task.toml  # incident_investigation | hard | single | incident_response | kubernetes(1427MB) = ~1427MB
+benchmarks/feature_delivery/monorepo-boundary-009/task.toml  # monorepo_boundary | expert | single | feature_delivery | rust-lang/rust(844MB) = ~844MB
+benchmarks/technical_debt/refactor-orchestration-007/task.toml  # refactor_orchestration | expert | single | technical_debt | grpc-go(44MB)+etcd(94MB)+kubernetes(1427MB) = ~1565MB
+benchmarks/customer_escalation/support-mapping-002/task.toml  # support_code_mapping | hard | single | customer_escalation | llvm-project(3643MB) = ~3643MB

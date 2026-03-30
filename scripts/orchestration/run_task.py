@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from typing import Optional
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -82,6 +83,7 @@ class TaskRunResult:
     timing: dict = field(default_factory=dict)
     output_dir: str = ""
     tool_usage: dict = field(default_factory=dict)
+    failure_class: Optional[str] = None
 
 
 def _load_oauth_token(account: int) -> str:
@@ -535,6 +537,7 @@ def _save_results(
         "success": result.success,
         "phase": result.phase,
         "error": result.error,
+        "failure_class": result.failure_class,
         "image_tag": result.image_tag,
         "scores": result.scores,
         "timing": result.timing,
@@ -650,6 +653,29 @@ def _extract_tool_usage(output_dir: Path) -> dict:
     return usage
 
 
+def _check_disk_space(min_gb: float = 5.0) -> bool:
+    """Check available disk space on the Docker storage path.
+
+    Returns True if available space exceeds min_gb, False otherwise.
+    Logs a warning when space is insufficient.
+    """
+    check_path = "/var/lib/docker" if os.path.exists("/var/lib/docker") else "/"
+    try:
+        usage = shutil.disk_usage(check_path)
+        available_gb = usage.free / (1024 ** 3)
+        if available_gb < min_gb:
+            logger.warning(
+                "Low disk space on %s: %.1f GB available (minimum %.1f GB required)",
+                check_path, available_gb, min_gb,
+            )
+            return False
+        logger.debug("Disk space OK on %s: %.1f GB available", check_path, available_gb)
+        return True
+    except OSError as exc:
+        logger.warning("Could not check disk space on %s: %s", check_path, exc)
+        return True  # Fail open — don't block if we can't check
+
+
 def run_task(config: TaskRunConfig) -> TaskRunResult:
     """Execute the full single-session task lifecycle.
 
@@ -690,21 +716,45 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         logger.info("Task: %s (suite=%s, type=%s)", task_id,
                      task_info.get("suite"), task_info.get("task_type"))
 
+        # --- Disk pre-flight ---
+        if not _check_disk_space():
+            result.phase = "preflight_failed"
+            result.error = "Insufficient disk space"
+            result.failure_class = "infra_disk"
+            _save_results(result, task_data, output_dir, config)
+            return result
+
         # --- Phase 2: Build ---
         if not config.no_build:
             t0 = time.monotonic()
-            dockerfile_path = _generate_dockerfile(config.task_toml, config.source)
-            _docker_build(dockerfile_path, image_tag)
+            try:
+                dockerfile_path = _generate_dockerfile(config.task_toml, config.source)
+                _docker_build(dockerfile_path, image_tag)
+            except Exception as build_exc:
+                result.phase = "build_failed"
+                result.error = str(build_exc)
+                result.failure_class = "infra_build"
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                raise
             timings["build"] = time.monotonic() - t0
         else:
             logger.info("Skipping Docker build (--no-build)")
 
         # --- Phase 3: Setup ---
         t0 = time.monotonic()
-        container_id = _docker_create_container(image_tag, container_name)
-        result.container_id = container_id
-        _docker_start(container_id)
-        _setup_container(container_id, task_dir, task_data)
+        try:
+            container_id = _docker_create_container(image_tag, container_name)
+            result.container_id = container_id
+            _docker_start(container_id)
+            _setup_container(container_id, task_dir, task_data)
+        except Exception as setup_exc:
+            result.phase = "setup_failed"
+            result.error = str(setup_exc)
+            result.failure_class = "infra_clone"
+            result.timing = timings
+            _save_results(result, task_data, output_dir, config)
+            raise
 
         healthy = _run_health_check(container_id, repos)
         timings["setup"] = time.monotonic() - t0
@@ -745,7 +795,15 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 )
 
         if config.account is not None:
-            oauth_token = _load_oauth_token(config.account)
+            try:
+                oauth_token = _load_oauth_token(config.account)
+            except (FileNotFoundError, ValueError) as auth_exc:
+                result.phase = "setup_failed"
+                result.error = str(auth_exc)
+                result.failure_class = "infra_auth"
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
             env_extra["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
             # Use default OAuth agent command if none was explicitly provided
             if not agent_command:
@@ -754,6 +812,9 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             if not _install_claude_cli(container_id):
                 result.phase = "setup_failed"
                 result.error = "Failed to install Claude Code CLI"
+                result.failure_class = "infra_clone"
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
                 return result
 
         if agent_command:
@@ -763,6 +824,10 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 env_extra=env_extra,
             )
             timings["agent"] = agent_duration
+
+            if agent_exit != 0:
+                result.failure_class = "agent_error"
+                logger.warning("Agent exited with non-zero code: %d", agent_exit)
 
             # Extract tool-usage metadata from agent output
             result.tool_usage = _extract_tool_usage(output_dir)
@@ -787,6 +852,11 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         result.error = type(e).__name__
         result.phase = "error"
         result.timing = timings
+        if isinstance(e, subprocess.TimeoutExpired):
+            result.failure_class = "infra_timeout"
+        elif result.failure_class is None:
+            # failure_class may already be set by inner handlers that re-raised
+            pass
         logger.error("Task run failed: %s", e, exc_info=True)
         return result
 
@@ -878,6 +948,15 @@ Examples:
             "Tool-access mode: 'baseline' (no MCP), 'mcp_only' "
             "(Sourcegraph MCP only), or 'hybrid' (local + MCP). "
             "Default: baseline"
+        ),
+    )
+    parser.add_argument(
+        "--max-concurrent-large",
+        type=int,
+        default=3,
+        help=(
+            "Maximum number of large tasks to run concurrently (default: 3). "
+            "Accepted for future use; not yet enforced by this script."
         ),
     )
     parser.add_argument(
