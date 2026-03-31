@@ -1,4 +1,4 @@
-"""Tests for scripts/run_benchmark.py — --skip-completed flag."""
+"""Tests for scripts/run_benchmark.py — skip-completed and token watchdog."""
 
 from __future__ import annotations
 
@@ -13,9 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from run_benchmark import (
     TaskInfo,
+    TaskResult,
+    TokenBudget,
     is_task_completed,
     filter_completed_tasks,
     build_parser,
+    write_summary,
     main,
     PROJECT_ROOT,
 )
@@ -204,3 +207,166 @@ class TestSummarySkipCount:
             assert data["previously_completed"] == 3
         finally:
             run_benchmark.PROJECT_ROOT = original_root
+
+
+# ---------------------------------------------------------------------------
+# TokenBudget
+# ---------------------------------------------------------------------------
+
+class TestTokenBudget:
+    def test_no_budget_is_unlimited(self) -> None:
+        budget = TokenBudget(budget_usd=None, warn_pct=80)
+        assert budget.is_exceeded(999.0) is False
+        assert budget.should_warn(999.0) is False
+
+    def test_budget_not_exceeded_when_under(self) -> None:
+        budget = TokenBudget(budget_usd=10.0, warn_pct=80)
+        assert budget.is_exceeded(5.0) is False
+
+    def test_budget_exceeded_when_at_limit(self) -> None:
+        budget = TokenBudget(budget_usd=10.0, warn_pct=80)
+        assert budget.is_exceeded(10.0) is True
+
+    def test_budget_exceeded_when_over(self) -> None:
+        budget = TokenBudget(budget_usd=10.0, warn_pct=80)
+        assert budget.is_exceeded(15.0) is True
+
+    def test_warn_triggers_at_threshold(self) -> None:
+        budget = TokenBudget(budget_usd=10.0, warn_pct=80)
+        assert budget.should_warn(7.99) is False
+        assert budget.should_warn(8.0) is True
+        assert budget.should_warn(9.5) is True
+
+    def test_warn_not_triggered_when_no_budget(self) -> None:
+        budget = TokenBudget(budget_usd=None, warn_pct=80)
+        assert budget.should_warn(100.0) is False
+
+    def test_remaining_usd(self) -> None:
+        budget = TokenBudget(budget_usd=10.0, warn_pct=80)
+        assert budget.remaining_usd(3.5) == pytest.approx(6.5)
+
+    def test_remaining_usd_no_budget(self) -> None:
+        budget = TokenBudget(budget_usd=None, warn_pct=80)
+        assert budget.remaining_usd(100.0) == float("inf")
+
+    def test_pct_used(self) -> None:
+        budget = TokenBudget(budget_usd=10.0, warn_pct=80)
+        assert budget.pct_used(2.5) == pytest.approx(25.0)
+
+    def test_pct_used_no_budget(self) -> None:
+        budget = TokenBudget(budget_usd=None, warn_pct=80)
+        assert budget.pct_used(100.0) == 0.0
+
+
+class TestTokenBudgetCli:
+    def test_budget_usd_flag_exists(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["benchmarks/", "--all", "--budget-usd", "25.0"])
+        assert args.budget_usd == 25.0
+
+    def test_budget_usd_default_none(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["benchmarks/", "--all"])
+        assert args.budget_usd is None
+
+    def test_budget_warn_pct_flag(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["benchmarks/", "--all", "--budget-usd", "10", "--budget-warn-pct", "70"])
+        assert args.budget_warn_pct == 70
+
+    def test_budget_warn_pct_default(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["benchmarks/", "--all"])
+        assert args.budget_warn_pct == 80
+
+
+class TestTokenBudgetInSummary:
+    def test_summary_includes_cost_tracking(self, tmp_path: Path) -> None:
+        results = [
+            TaskResult(task_id="t1", difficulty="medium", status="completed", score=1.0),
+        ]
+        import run_benchmark
+        original_root = run_benchmark.PROJECT_ROOT
+        run_benchmark.PROJECT_ROOT = tmp_path
+        try:
+            summary_path = write_summary(
+                results, "test_run",
+                previously_completed=0,
+                cumulative_cost_usd=5.25,
+                budget_usd=10.0,
+            )
+            data = json.loads(summary_path.read_text())
+            assert data["cumulative_cost_usd"] == pytest.approx(5.25)
+            assert data["budget_usd"] == 10.0
+        finally:
+            run_benchmark.PROJECT_ROOT = original_root
+
+    def test_summary_omits_budget_when_none(self, tmp_path: Path) -> None:
+        results = [
+            TaskResult(task_id="t1", difficulty="medium", status="completed", score=1.0),
+        ]
+        import run_benchmark
+        original_root = run_benchmark.PROJECT_ROOT
+        run_benchmark.PROJECT_ROOT = tmp_path
+        try:
+            summary_path = write_summary(results, "test_run")
+            data = json.loads(summary_path.read_text())
+            assert data["cumulative_cost_usd"] == 0.0
+            assert data.get("budget_usd") is None
+        finally:
+            run_benchmark.PROJECT_ROOT = original_root
+
+
+class TestExtractCostFromResult:
+    """Test that cost is extracted from results.json tool_usage after task runs."""
+
+    def test_extract_cost_from_results_json(self, tmp_path: Path) -> None:
+        from run_benchmark import extract_task_cost
+
+        results_dir = tmp_path / "results" / "runs" / "task-001"
+        results_dir.mkdir(parents=True)
+        results_file = results_dir / "results.json"
+        results_file.write_text(json.dumps({
+            "task_id": "task-001",
+            "success": True,
+            "tool_usage": {
+                "total_input_tokens": 50000,
+                "total_output_tokens": 10000,
+                "cost_usd": 1.23,
+            },
+        }))
+        assert extract_task_cost("task-001", results_dir=tmp_path / "results" / "runs") == pytest.approx(1.23)
+
+    def test_extract_cost_missing_results(self, tmp_path: Path) -> None:
+        from run_benchmark import extract_task_cost
+
+        assert extract_task_cost("task-missing", results_dir=tmp_path / "results" / "runs") == 0.0
+
+    def test_extract_cost_no_tool_usage(self, tmp_path: Path) -> None:
+        from run_benchmark import extract_task_cost
+
+        results_dir = tmp_path / "results" / "runs" / "task-001"
+        results_dir.mkdir(parents=True)
+        results_file = results_dir / "results.json"
+        results_file.write_text(json.dumps({
+            "task_id": "task-001",
+            "success": True,
+        }))
+        assert extract_task_cost("task-001", results_dir=tmp_path / "results" / "runs") == 0.0
+
+    def test_extract_cost_with_mode_subdirectory(self, tmp_path: Path) -> None:
+        from run_benchmark import extract_task_cost
+
+        results_dir = tmp_path / "results" / "runs" / "task-001" / "mcp_only"
+        results_dir.mkdir(parents=True)
+        results_file = results_dir / "results.json"
+        results_file.write_text(json.dumps({
+            "task_id": "task-001",
+            "success": True,
+            "tool_usage": {"cost_usd": 2.50},
+        }))
+        assert extract_task_cost(
+            "task-001",
+            results_dir=tmp_path / "results" / "runs",
+            mode="mcp_only",
+        ) == pytest.approx(2.50)

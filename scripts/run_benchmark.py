@@ -87,6 +87,43 @@ class TaskResult:
     mode: str = "baseline"
 
 
+@dataclass(frozen=True)
+class TokenBudget:
+    """Immutable token/cost budget tracker.
+
+    Checks cumulative cost against a budget limit and a warning threshold.
+    When budget_usd is None, all checks return False (unlimited).
+    """
+
+    budget_usd: float | None
+    warn_pct: int = 80
+
+    def is_exceeded(self, cumulative_cost: float) -> bool:
+        """Return True if cumulative cost meets or exceeds the budget."""
+        if self.budget_usd is None:
+            return False
+        return cumulative_cost >= self.budget_usd
+
+    def should_warn(self, cumulative_cost: float) -> bool:
+        """Return True if cumulative cost is at or above the warning threshold."""
+        if self.budget_usd is None:
+            return False
+        threshold = self.budget_usd * (self.warn_pct / 100.0)
+        return cumulative_cost >= threshold
+
+    def remaining_usd(self, cumulative_cost: float) -> float:
+        """Return remaining budget in USD, or inf if no budget."""
+        if self.budget_usd is None:
+            return float("inf")
+        return self.budget_usd - cumulative_cost
+
+    def pct_used(self, cumulative_cost: float) -> float:
+        """Return percentage of budget consumed, or 0.0 if no budget."""
+        if self.budget_usd is None:
+            return 0.0
+        return (cumulative_cost / self.budget_usd) * 100.0
+
+
 # ---------------------------------------------------------------------------
 # Discovery & Filtering
 # ---------------------------------------------------------------------------
@@ -209,6 +246,42 @@ def filter_completed_tasks(
 
 
 # ---------------------------------------------------------------------------
+# Cost Extraction
+# ---------------------------------------------------------------------------
+
+def extract_task_cost(
+    task_id: str,
+    *,
+    results_dir: Path | None = None,
+    mode: str = "baseline",
+) -> float:
+    """Read cost_usd from a task's results.json tool_usage section.
+
+    Checks mode-specific and top-level results locations.
+    Returns 0.0 if the file is missing or has no cost data.
+    """
+    if results_dir is None:
+        results_dir = PROJECT_ROOT / "results" / "runs"
+
+    candidates = [
+        results_dir / task_id / mode / "results.json",
+        results_dir / task_id / "results.json",
+    ]
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text())
+            tool_usage = data.get("tool_usage", {})
+            cost = tool_usage.get("cost_usd", 0.0)
+            if cost:
+                return float(cost)
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            continue
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
 # Execution
 # ---------------------------------------------------------------------------
 
@@ -293,13 +366,15 @@ def write_summary(
     results: list[TaskResult],
     run_id: str,
     previously_completed: int = 0,
+    cumulative_cost_usd: float = 0.0,
+    budget_usd: float | None = None,
 ) -> Path:
     """Write results/runs/<run_id>/summary.json and return the path."""
     out_dir = PROJECT_ROOT / "results" / "runs" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     summary_path = out_dir / "summary.json"
 
-    payload = {
+    payload: dict = {
         "run_id": run_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "total": len(results),
@@ -307,8 +382,11 @@ def write_summary(
         "errors": sum(1 for r in results if r.status == "error"),
         "skipped": sum(1 for r in results if r.status == "skipped"),
         "previously_completed": previously_completed,
-        "tasks": [asdict(r) for r in results],
+        "cumulative_cost_usd": cumulative_cost_usd,
     }
+    if budget_usd is not None:
+        payload["budget_usd"] = budget_usd
+    payload["tasks"] = [asdict(r) for r in results]
     summary_path.write_text(json.dumps(payload, indent=2) + "\n")
     return summary_path
 
@@ -397,6 +475,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         metavar="N",
         help="Max parallel tasks (default: 1). Set to 0 for auto (one per account).",
+    )
+
+    # Budget watchdog
+    budget_group = parser.add_argument_group("budget watchdog")
+    budget_group.add_argument(
+        "--budget-usd",
+        type=float,
+        default=None,
+        help="Maximum cumulative cost in USD. Stops execution when exceeded.",
+    )
+    budget_group.add_argument(
+        "--budget-warn-pct",
+        type=int,
+        default=80,
+        metavar="PCT",
+        help="Warn when cumulative cost reaches this %% of budget (default: 80).",
     )
 
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -549,7 +643,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     results: list[TaskResult] = []
 
+    # Token budget watchdog
+    budget = TokenBudget(
+        budget_usd=args.budget_usd,
+        warn_pct=args.budget_warn_pct,
+    )
+    cumulative_cost_usd: float = 0.0
+    budget_exceeded = False
+    budget_warned = False
+
+    if budget.budget_usd is not None:
+        logger.info(
+            "Budget watchdog: $%.2f limit, warn at %d%%",
+            budget.budget_usd, budget.warn_pct,
+        )
+
+    results_dir = PROJECT_ROOT / "results" / "runs"
+
     for current_mode in modes:
+        if budget_exceeded:
+            break
+
         if len(modes) > 1:
             logger.info("--- Running mode: %s ---", current_mode)
 
@@ -563,6 +677,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         if workers <= 1 or args.dry_run:
             # Sequential execution
             for task in tasks:
+                # Check budget before starting each task
+                if budget.is_exceeded(cumulative_cost_usd):
+                    logger.warning(
+                        "[budget] STOPPED — cumulative cost $%.2f exceeds "
+                        "budget $%.2f. Remaining tasks skipped.",
+                        cumulative_cost_usd, budget.budget_usd,
+                    )
+                    budget_exceeded = True
+                    break
+
                 account_id = accounts[0] if len(accounts) == 1 else None
                 passthrough = collect_passthrough_args(
                     args,
@@ -583,6 +707,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                     mode=current_mode,
                 )
                 results.append(result)
+
+                # Track cost after task completion
+                if not args.dry_run:
+                    task_cost = extract_task_cost(
+                        task.task_id,
+                        results_dir=results_dir,
+                        mode=current_mode,
+                    )
+                    cumulative_cost_usd += task_cost
+
+                    if not budget_warned and budget.should_warn(cumulative_cost_usd):
+                        logger.warning(
+                            "[budget] WARNING — cumulative cost $%.2f has "
+                            "reached %.0f%% of $%.2f budget",
+                            cumulative_cost_usd,
+                            budget.pct_used(cumulative_cost_usd),
+                            budget.budget_usd,
+                        )
+                        budget_warned = True
         else:
             # Parallel execution with round-robin account distribution
             logger.info(
@@ -635,23 +778,67 @@ def main(argv: Sequence[str] | None = None) -> int:
                         )
                         logger.error("[error] %s — %s", task.task_id, exc)
                     result_map[task.task_id] = r
+
+                    # Track cost from completed parallel task
+                    task_cost = extract_task_cost(
+                        task.task_id,
+                        results_dir=results_dir,
+                        mode=current_mode,
+                    )
+                    cumulative_cost_usd += task_cost
+
                     logger.info(
-                        "[done] %s [%s]  score=%s  %s  (%.0fs)",
+                        "[done] %s [%s]  score=%s  %s  (%.0fs)  cost=$%.2f  cumulative=$%.2f",
                         r.task_id,
                         r.mode,
                         f"{r.score:.2f}" if r.score is not None else "—",
                         r.status,
                         r.duration_seconds,
+                        task_cost,
+                        cumulative_cost_usd,
                     )
 
+                    if not budget_warned and budget.should_warn(cumulative_cost_usd):
+                        logger.warning(
+                            "[budget] WARNING — cumulative cost $%.2f has "
+                            "reached %.0f%% of $%.2f budget",
+                            cumulative_cost_usd,
+                            budget.pct_used(cumulative_cost_usd),
+                            budget.budget_usd,
+                        )
+                        budget_warned = True
+
+                    # Note: we cannot cancel in-flight futures, but we can
+                    # stop picking up new results processing. The pool will
+                    # finish existing tasks but no new ones are submitted.
+                    if budget.is_exceeded(cumulative_cost_usd):
+                        logger.warning(
+                            "[budget] STOPPED — cumulative cost $%.2f exceeds "
+                            "budget $%.2f. In-flight tasks will finish.",
+                            cumulative_cost_usd, budget.budget_usd,
+                        )
+                        budget_exceeded = True
+
             # Preserve original task order in results
-            results.extend(result_map[t.task_id] for t in tasks)
+            results.extend(result_map[t.task_id] for t in tasks if t.task_id in result_map)
 
     # Summary
     print_summary_table(results)
     if not args.dry_run:
-        summary_path = write_summary(results, run_id, previously_completed=previously_completed)
+        summary_path = write_summary(
+            results, run_id,
+            previously_completed=previously_completed,
+            cumulative_cost_usd=cumulative_cost_usd,
+            budget_usd=budget.budget_usd,
+        )
         logger.info("Summary written to %s", summary_path)
+
+    if budget_exceeded:
+        logger.warning(
+            "[budget] Run terminated early. Cumulative cost: $%.2f / $%.2f",
+            cumulative_cost_usd, budget.budget_usd,
+        )
+        return 3
 
     return 0
 
