@@ -482,9 +482,13 @@ def _run_agent(
         duration = time.monotonic() - start
         exit_code = result.returncode
 
-        # Save agent logs
+        # Save agent logs to both flat (backward compat) and agent/ subdir
+        agent_dir = output_dir / "agent"
+        agent_dir.mkdir(exist_ok=True)
         (output_dir / "agent_stdout.log").write_text(result.stdout)
         (output_dir / "agent_stderr.log").write_text(result.stderr)
+        (agent_dir / "stdout.log").write_text(result.stdout)
+        (agent_dir / "stderr.log").write_text(result.stderr)
         logger.info("Agent finished in %.1fs (exit %d)", duration, exit_code)
 
     except subprocess.TimeoutExpired as te:
@@ -493,10 +497,13 @@ def _run_agent(
         # Capture any partial output the agent produced before timeout
         partial_stdout = te.stdout or "" if hasattr(te, "stdout") else ""
         partial_stderr = te.stderr or "" if hasattr(te, "stderr") else ""
+        stderr_content = f"{partial_stderr}\nTIMEOUT after {timeout}s\n"
+        agent_dir = output_dir / "agent"
+        agent_dir.mkdir(exist_ok=True)
         (output_dir / "agent_stdout.log").write_text(partial_stdout)
-        (output_dir / "agent_stderr.log").write_text(
-            f"{partial_stderr}\nTIMEOUT after {timeout}s\n"
-        )
+        (output_dir / "agent_stderr.log").write_text(stderr_content)
+        (agent_dir / "stdout.log").write_text(partial_stdout)
+        (agent_dir / "stderr.log").write_text(stderr_content)
         logger.error("Agent timed out after %ds", timeout)
 
     finally:
@@ -554,9 +561,18 @@ def _save_results(
     output_dir: Path,
     config: TaskRunConfig,
 ) -> Path:
-    """Save run results, metadata, and scores to the output directory."""
+    """Save run results, metadata, and scores to the output directory.
+
+    Produces an enriched directory layout:
+        results.json       — top-level results (backward compatible)
+        config.json        — snapshot of run configuration
+        task_metrics.json   — timing, tool_usage, status for skip-completed
+        agent/              — agent stdout/stderr logs (created for later use)
+        verifier/output.json — verifier scoring output
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # --- results.json (backward compatible) ---
     results_path = output_dir / "results.json"
     payload = {
         "task_id": result.task_id,
@@ -582,8 +598,44 @@ def _save_results(
             "languages": task_data.get("metadata", {}).get("languages", []),
         },
     }
-
     results_path.write_text(json.dumps(payload, indent=2) + "\n")
+
+    # --- config.json — run configuration snapshot ---
+    config_payload = {
+        "source": config.source,
+        "agent_command": config.agent_command,
+        "timeout": config.timeout,
+        "build_timeout": config.build_timeout,
+        "verifier_timeout": config.verifier_timeout,
+        "memory_mb": config.memory_mb,
+        "dry_run": config.dry_run,
+        "no_build": config.no_build,
+        "keep_container": config.keep_container,
+        "mode": config.mode,
+    }
+    (output_dir / "config.json").write_text(json.dumps(config_payload, indent=2) + "\n")
+
+    # --- task_metrics.json — timing, tool_usage, status ---
+    metrics_payload = {
+        "task_id": result.task_id,
+        "success": result.success,
+        "phase": result.phase,
+        "error": result.error,
+        "failure_class": result.failure_class,
+        "timing": result.timing,
+        "tool_usage": result.tool_usage,
+    }
+    (output_dir / "task_metrics.json").write_text(json.dumps(metrics_payload, indent=2) + "\n")
+
+    # --- agent/ subdirectory (logs written here by _run_agent) ---
+    (output_dir / "agent").mkdir(exist_ok=True)
+
+    # --- verifier/ subdirectory with scoring output ---
+    verifier_dir = output_dir / "verifier"
+    verifier_dir.mkdir(exist_ok=True)
+    if result.scores:
+        (verifier_dir / "output.json").write_text(json.dumps(result.scores, indent=2) + "\n")
+
     logger.info("Results saved to: %s", results_path)
     return results_path
 
@@ -677,6 +729,71 @@ def _extract_tool_usage(output_dir: Path) -> dict:
             continue
 
     return usage
+
+
+def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
+    """Copy the Claude Code conversation trace from the container.
+
+    Claude Code stores session JSONL files under
+    /home/agent/.claude/projects/<hash>/.  This function finds the most
+    recent conversation JSONL and copies it to output_dir/agent_trace.jsonl.
+
+    Returns True if a trace was successfully copied, False otherwise.
+    Never raises — failures are logged and the run continues.
+    """
+    try:
+        # Find JSONL conversation files, sorted newest-first
+        find_result = subprocess.run(
+            [
+                "docker", "exec", container_id,
+                "bash", "-c",
+                "find /home/agent/.claude/projects -name '*.jsonl' -type f "
+                "2>/dev/null | head -20",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        if find_result.returncode != 0 or not find_result.stdout.strip():
+            logger.info("No agent conversation trace found in container")
+            return False
+
+        # Take the first (or newest) file
+        trace_files = [
+            f.strip()
+            for f in find_result.stdout.strip().splitlines()
+            if f.strip()
+        ]
+        if not trace_files:
+            logger.info("No agent conversation trace found in container")
+            return False
+
+        trace_path = trace_files[0]
+        dest = str(output_dir / "agent_trace.jsonl")
+
+        cp_result = subprocess.run(
+            ["docker", "cp", f"{container_id}:{trace_path}", dest],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        if cp_result.returncode != 0:
+            logger.warning(
+                "Failed to copy agent trace: %s", cp_result.stderr.strip()
+            )
+            return False
+
+        logger.info("Copied agent conversation trace to %s", dest)
+        return True
+
+    except subprocess.TimeoutExpired:
+        logger.warning("Timed out while copying agent trace from container")
+        return False
+    except Exception as exc:
+        logger.warning("Error copying agent trace: %s", exc)
+        return False
 
 
 def _check_disk_space(min_gb: float = 5.0) -> bool:
@@ -857,6 +974,9 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
 
             # Extract tool-usage metadata from agent output
             result.tool_usage = _extract_tool_usage(output_dir)
+
+            # Copy full conversation trace from container
+            _copy_agent_trace(container_id, output_dir)
         else:
             logger.info("No agent command specified, skipping agent phase")
 
