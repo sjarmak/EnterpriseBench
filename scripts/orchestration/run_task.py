@@ -45,10 +45,10 @@ EB_VERIFY_LIB = REPO_ROOT / "lib" / "eb_verify"
 
 VALID_MODES = ("baseline", "mcp_only", "hybrid")
 
-SOURCEGRAPH_MCP_ENDPOINT = "https://demo.sourcegraph.com/.api/mcp"
+SOURCEGRAPH_MCP_ENDPOINT = "https://sourcegraph.sourcegraph.com/.api/mcp/all"
 SOURCEGRAPH_MCP_ADD_CMD = (
     "claude mcp add --transport http sg "
-    "https://demo.sourcegraph.com/.api/mcp"
+    "https://sourcegraph.sourcegraph.com/.api/mcp/all"
 )
 
 
@@ -100,7 +100,13 @@ def _load_oauth_token(account: int) -> str:
         ValueError: If the token is expired or the credentials are malformed.
     """
     real_home = Path(os.environ.get("HOME", str(Path.home())))
-    creds_path = real_home / ".claude-homes" / f"account{account}" / ".claude" / ".credentials.json"
+    creds_path = (
+        real_home
+        / ".claude-homes"
+        / f"account{account}"
+        / ".claude"
+        / ".credentials.json"
+    )
 
     if not creds_path.is_file():
         raise FileNotFoundError(
@@ -116,9 +122,7 @@ def _load_oauth_token(account: int) -> str:
 
     oauth = creds.get("claudeAiOauth")
     if not oauth or not isinstance(oauth, dict):
-        raise ValueError(
-            f"Missing or invalid claudeAiOauth section in {creds_path}"
-        )
+        raise ValueError(f"Missing or invalid claudeAiOauth section in {creds_path}")
 
     access_token = oauth.get("accessToken")
     if not access_token:
@@ -138,9 +142,7 @@ def _load_oauth_token(account: int) -> str:
     return access_token
 
 
-DEFAULT_OAUTH_AGENT_COMMAND = (
-    "claude --dangerously-skip-permissions --max-turns 30 --output-format stream-json -p"
-)
+DEFAULT_OAUTH_AGENT_COMMAND = "claude --dangerously-skip-permissions --max-turns 30 --output-format stream-json -p"
 
 
 def _parse_task(toml_path: Path) -> dict:
@@ -176,7 +178,9 @@ def _generate_dockerfile(task_toml: Path, source: str) -> Path:
     results = generate_for_task(task_toml, source=source)
     dockerfile_path = results.get("standard")
     if dockerfile_path is None or not dockerfile_path.exists():
-        raise RuntimeError("Dockerfile generation failed: no standard Dockerfile produced")
+        raise RuntimeError(
+            "Dockerfile generation failed: no standard Dockerfile produced"
+        )
 
     logger.info("Generated Dockerfile: %s", dockerfile_path)
     return dockerfile_path
@@ -186,9 +190,12 @@ def _docker_build(dockerfile_path: Path, image_tag: str) -> None:
     """Build a Docker image from the generated Dockerfile."""
     context_dir = str(dockerfile_path.parent)
     cmd = [
-        "docker", "build",
-        "-f", str(dockerfile_path),
-        "-t", image_tag,
+        "docker",
+        "build",
+        "-f",
+        str(dockerfile_path),
+        "-t",
+        image_tag,
         context_dir,
     ]
     logger.info("Building Docker image: %s", image_tag)
@@ -214,12 +221,15 @@ def _docker_create_container(
 ) -> str:
     """Create (but do not start) a container, returning the container ID."""
     cmd = [
-        "docker", "create",
-        "--name", container_name,
+        "docker",
+        "create",
+        "--name",
+        container_name,
         f"--memory={memory_mb}m",
         f"--memory-swap={memory_mb * 2}m",
         image_tag,
-        "sleep", "infinity",
+        "sleep",
+        "infinity",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
@@ -234,7 +244,9 @@ def _docker_start(container_id: str) -> None:
     """Start an existing container."""
     result = subprocess.run(
         ["docker", "start", container_id],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode != 0:
         raise RuntimeError(f"docker start failed: {result.stderr.strip()}")
@@ -260,7 +272,9 @@ def _docker_cp(src: str, dest: str) -> None:
     """Copy files into or out of a container."""
     result = subprocess.run(
         ["docker", "cp", src, dest],
-        capture_output=True, text=True, timeout=60,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     if result.returncode != 0:
         raise RuntimeError(f"docker cp failed: {result.stderr.strip()}")
@@ -270,18 +284,84 @@ def _docker_stop_rm(container_id: str) -> None:
     """Stop and remove a container."""
     subprocess.run(
         ["docker", "stop", "-t", "5", container_id],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     subprocess.run(
         ["docker", "rm", "-f", container_id],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
+
+
+def _build_instruction_text(
+    task_dir: Path,
+    mode: str,
+) -> str | None:
+    """Build the full instruction text with optional MCP preamble and output appendix.
+
+    For mcp_only/hybrid modes, prepends instruction_mcp.md (if present) and a
+    mode-specific header line. For baseline mode, uses instruction.md as-is.
+
+    Returns the combined text, or None if instruction.md does not exist.
+    """
+    instruction = task_dir / "instruction.md"
+    if not instruction.exists():
+        return None
+
+    instruction_text = instruction.read_text()
+
+    # Build MCP preamble for non-baseline modes
+    preamble_parts: list[str] = []
+    if mode in ("mcp_only", "hybrid"):
+        # Mode-specific header
+        if mode == "mcp_only":
+            preamble_parts.append(
+                "**IMPORTANT: Local source files are not present in /workspace. "
+                "You MUST use Sourcegraph MCP tools for all code access.**"
+            )
+        else:  # hybrid
+            preamble_parts.append(
+                "**Both local files and Sourcegraph MCP tools are available. "
+                "Use MCP for cross-repo search and local files for direct reading/editing.**"
+            )
+
+        # Append instruction_mcp.md content if it exists
+        instruction_mcp = task_dir / "instruction_mcp.md"
+        if instruction_mcp.exists():
+            preamble_parts.append(instruction_mcp.read_text())
+
+    output_appendix = (
+        "\n\n---\n\n## Output Requirements\n\n"
+        "Write your findings as a JSON file to `/workspace/agent_output/answer.json`.\n"
+        "Create the directory first: `mkdir -p /workspace/agent_output`\n\n"
+        "Include all relevant fields for this task type. Example structure:\n"
+        "```json\n"
+        "{\n"
+        '  "source_files": [{"path": "relative/path/to/file"}],\n'
+        '  "error_chain": ["Step 1", "Step 2"],\n'
+        '  "trigger_conditions": ["Condition 1"],\n'
+        '  "code_paths": [{"path": "relative/path"}],\n'
+        '  "ownership": "subsystem description",\n'
+        '  "severity": {"level": "high", "rationale": "..."}\n'
+        "}\n```\n"
+        "Include only the fields relevant to this task. "
+        "Your answer is evaluated against a closed-world oracle — completeness matters.\n"
+    )
+
+    if preamble_parts:
+        preamble = "\n\n".join(preamble_parts)
+        return preamble + "\n\n---\n\n" + instruction_text + output_appendix
+    return instruction_text + output_appendix
 
 
 def _setup_container(
     container_id: str,
     task_dir: Path,
     task_data: dict,
+    mode: str = "baseline",
 ) -> None:
     """Copy task files into the running container.
 
@@ -290,29 +370,11 @@ def _setup_container(
     - test_runner.sh -> /workspace/test.sh
     - eb_verify library -> /workspace/.eb_verify/ (if needed by check scripts)
     """
-    # Copy instruction.md with output format appendix
-    instruction = task_dir / "instruction.md"
-    if instruction.exists():
+    # Copy instruction.md with output format appendix and optional MCP preamble
+    combined = _build_instruction_text(task_dir, mode)
+    if combined is not None:
         import tempfile
-        instruction_text = instruction.read_text()
-        output_appendix = (
-            "\n\n---\n\n## Output Requirements\n\n"
-            "Write your findings as a JSON file to `/workspace/agent_output/answer.json`.\n"
-            "Create the directory first: `mkdir -p /workspace/agent_output`\n\n"
-            "Include all relevant fields for this task type. Example structure:\n"
-            "```json\n"
-            "{\n"
-            '  "source_files": [{"path": "relative/path/to/file"}],\n'
-            '  "error_chain": ["Step 1", "Step 2"],\n'
-            '  "trigger_conditions": ["Condition 1"],\n'
-            '  "code_paths": [{"path": "relative/path"}],\n'
-            '  "ownership": "subsystem description",\n'
-            '  "severity": {"level": "high", "rationale": "..."}\n'
-            "}\n```\n"
-            "Include only the fields relevant to this task. "
-            "Your answer is evaluated against a closed-world oracle — completeness matters.\n"
-        )
-        combined = instruction_text + output_appendix
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write(combined)
             tmp_path = f.name
@@ -320,7 +382,10 @@ def _setup_container(
             _docker_cp(tmp_path, f"{container_id}:/workspace/instruction.md")
         finally:
             os.unlink(tmp_path)
-        logger.info("Copied instruction.md with output appendix into container")
+        logger.info(
+            "Copied instruction.md (mode=%s) with output appendix into container",
+            mode,
+        )
     else:
         logger.warning("No instruction.md found in %s", task_dir)
 
@@ -334,11 +399,16 @@ def _setup_container(
             # then rename to just <name>.sh for test_runner.sh compatibility
             name = check_script.stem
             if name.startswith("check_"):
-                name = name[len("check_"):]
+                name = name[len("check_") :]
             dest = f"{container_id}:/workspace/.verifiers/{name}.sh"
             _docker_cp(str(check_script), dest)
-            _docker_exec(container_id, ["chmod", "+x", f"/workspace/.verifiers/{name}.sh"])
-        logger.info("Copied %d check scripts into .verifiers/", len(list(checks_dir.glob("*.sh"))))
+            _docker_exec(
+                container_id, ["chmod", "+x", f"/workspace/.verifiers/{name}.sh"]
+            )
+        logger.info(
+            "Copied %d check scripts into .verifiers/",
+            len(list(checks_dir.glob("*.sh"))),
+        )
     else:
         logger.warning("No checks/ directory found in %s", task_dir)
 
@@ -378,14 +448,24 @@ def _install_claude_cli(container_id: str) -> bool:
         check_node = _docker_exec(container_id, ["which", "node"])
         if check_node.returncode != 0:
             logger.info("Node.js not found, installing via apt...")
-            _docker_exec(container_id, [
-                "bash", "-c",
-                "apt-get update -qq && apt-get install -y -qq nodejs npm >/dev/null 2>&1"
-            ], timeout=300)
-        result = _docker_exec(container_id, [
-            "bash", "-c",
-            "npm install -g @anthropic-ai/claude-code@latest 2>&1 | tail -3"
-        ], timeout=300)
+            _docker_exec(
+                container_id,
+                [
+                    "bash",
+                    "-c",
+                    "apt-get update -qq && apt-get install -y -qq nodejs npm >/dev/null 2>&1",
+                ],
+                timeout=300,
+            )
+        result = _docker_exec(
+            container_id,
+            [
+                "bash",
+                "-c",
+                "npm install -g @anthropic-ai/claude-code@latest 2>&1 | tail -3",
+            ],
+            timeout=300,
+        )
         if result.returncode != 0:
             logger.error("Failed to install Claude Code CLI: %s", result.stderr)
             return False
@@ -395,12 +475,16 @@ def _install_claude_cli(container_id: str) -> bool:
     # user owning /workspace (USER agent before git clone), so cloned repos are
     # correctly owned. For older images we still create the user and fix up
     # output dirs only (never chown -R on /workspace — too slow for large repos).
-    _docker_exec(container_id, [
-        "bash", "-c",
-        "id agent >/dev/null 2>&1 || useradd -m -s /bin/bash agent; "
-        "mkdir -p /workspace/agent_output /workspace/.task /workspace/.verifiers; "
-        "chown -R agent:agent /home/agent /workspace/agent_output /workspace/.task /workspace/.verifiers"
-    ])
+    _docker_exec(
+        container_id,
+        [
+            "bash",
+            "-c",
+            "id agent >/dev/null 2>&1 || useradd -m -s /bin/bash agent; "
+            "mkdir -p /workspace/agent_output /workspace/.task /workspace/.verifiers; "
+            "chown -R agent:agent /home/agent /workspace/agent_output /workspace/.task /workspace/.verifiers",
+        ],
+    )
 
     # Final verification
     ver = _docker_exec(container_id, ["claude", "--version"])
@@ -442,11 +526,9 @@ def _run_agent(
 
     Returns (exit_code, duration_seconds).
     """
-    _SAFE_AGENT_CMD_RE = re.compile(r'^[\w./@: -]+$')
+    _SAFE_AGENT_CMD_RE = re.compile(r"^[\w./@: -]+$")
     if not _SAFE_AGENT_CMD_RE.match(agent_command):
-        raise ValueError(
-            f"agent_command contains unsafe characters: {agent_command!r}"
-        )
+        raise ValueError(f"agent_command contains unsafe characters: {agent_command!r}")
 
     logger.info("Running agent: %s (timeout=%ds)", agent_command, timeout)
 
@@ -457,22 +539,27 @@ def _run_agent(
     tmp_env_file = None
     start = time.monotonic()
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".env", delete=False
-        ) as fh:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as fh:
             for key, value in env_items.items():
                 fh.write(f"{key}={value}\n")
             tmp_env_file = fh.name
 
-        full_cmd = (
-            ["docker", "exec",
-             "--env-file", tmp_env_file,
-             "-u", "agent",
-             "-w", "/workspace", container_id]
-            + ["bash", "-c",
-               "mkdir -p /workspace/agent_output && "
-               f"{agent_command} < /workspace/instruction.md"]
-        )
+        full_cmd = [
+            "docker",
+            "exec",
+            "--env-file",
+            tmp_env_file,
+            "-u",
+            "agent",
+            "-w",
+            "/workspace",
+            container_id,
+        ] + [
+            "bash",
+            "-c",
+            "mkdir -p /workspace/agent_output && "
+            f"{agent_command} < /workspace/instruction.md",
+        ]
         result = subprocess.run(
             full_cmd,
             capture_output=True,
@@ -522,10 +609,13 @@ def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
 
     result = _docker_exec(
         container_id,
-        ["bash", "-c",
-         "export WORKSPACE=/workspace TASK_DIR=/workspace/.task "
-         "PYTHONPATH=/workspace/.eb_verify:${PYTHONPATH:-}; "
-         "bash /workspace/test.sh"],
+        [
+            "bash",
+            "-c",
+            "export WORKSPACE=/workspace TASK_DIR=/workspace/.task "
+            "PYTHONPATH=/workspace/.eb_verify:${PYTHONPATH:-}; "
+            "bash /workspace/test.sh",
+        ],
         timeout=verifier_timeout,
     )
 
@@ -625,7 +715,9 @@ def _save_results(
         "timing": result.timing,
         "tool_usage": result.tool_usage,
     }
-    (output_dir / "task_metrics.json").write_text(json.dumps(metrics_payload, indent=2) + "\n")
+    (output_dir / "task_metrics.json").write_text(
+        json.dumps(metrics_payload, indent=2) + "\n"
+    )
 
     # --- agent/ subdirectory (logs written here by _run_agent) ---
     (output_dir / "agent").mkdir(exist_ok=True)
@@ -634,7 +726,9 @@ def _save_results(
     verifier_dir = output_dir / "verifier"
     verifier_dir.mkdir(exist_ok=True)
     if result.scores:
-        (verifier_dir / "output.json").write_text(json.dumps(result.scores, indent=2) + "\n")
+        (verifier_dir / "output.json").write_text(
+            json.dumps(result.scores, indent=2) + "\n"
+        )
 
     logger.info("Results saved to: %s", results_path)
     return results_path
@@ -645,22 +739,31 @@ def _configure_mcp(container_id: str, mode: str) -> None:
     if mode not in ("mcp_only", "hybrid"):
         return
 
+    sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
+
     logger.info("Configuring Sourcegraph MCP endpoint (mode=%s)", mode)
     # Create MCP config directory and write the server configuration
-    mcp_config = json.dumps({
-        "mcpServers": {
-            "sg": {
-                "type": "http",
-                "url": SOURCEGRAPH_MCP_ENDPOINT,
+    mcp_config = json.dumps(
+        {
+            "mcpServers": {
+                "sg": {
+                    "type": "http",
+                    "url": SOURCEGRAPH_MCP_ENDPOINT,
+                    "headers": {"Authorization": f"token {sg_token}"},
+                }
             }
         }
-    })
-    _docker_exec(container_id, [
-        "bash", "-c",
-        "mkdir -p /home/agent/.claude && "
-        f"echo '{mcp_config}' > /home/agent/.claude/settings.json && "
-        "chown -R agent:agent /home/agent/.claude"
-    ])
+    )
+    _docker_exec(
+        container_id,
+        [
+            "bash",
+            "-c",
+            "mkdir -p /home/agent/.claude && "
+            f"echo '{mcp_config}' > /home/agent/.claude/settings.json && "
+            "chown -R agent:agent /home/agent/.claude",
+        ],
+    )
     logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
 
 
@@ -704,7 +807,10 @@ def _extract_tool_usage(output_dir: Path) -> dict:
                     for item in tool_use:
                         if isinstance(item, dict) and item.get("type") == "tool_use":
                             tool_name = item.get("name", "")
-                            if tool_name.startswith("mcp__sg__") or "sourcegraph" in tool_name.lower():
+                            if (
+                                tool_name.startswith("mcp__sg__")
+                                or "sourcegraph" in tool_name.lower()
+                            ):
                                 usage["mcp_tool_calls"] += 1
 
         return usage
@@ -745,8 +851,11 @@ def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
         # Find JSONL conversation files, sorted newest-first
         find_result = subprocess.run(
             [
-                "docker", "exec", container_id,
-                "bash", "-c",
+                "docker",
+                "exec",
+                container_id,
+                "bash",
+                "-c",
                 "find /home/agent/.claude/projects -name '*.jsonl' -type f "
                 "2>/dev/null | head -20",
             ],
@@ -761,9 +870,7 @@ def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
 
         # Take the first (or newest) file
         trace_files = [
-            f.strip()
-            for f in find_result.stdout.strip().splitlines()
-            if f.strip()
+            f.strip() for f in find_result.stdout.strip().splitlines() if f.strip()
         ]
         if not trace_files:
             logger.info("No agent conversation trace found in container")
@@ -780,9 +887,7 @@ def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
         )
 
         if cp_result.returncode != 0:
-            logger.warning(
-                "Failed to copy agent trace: %s", cp_result.stderr.strip()
-            )
+            logger.warning("Failed to copy agent trace: %s", cp_result.stderr.strip())
             return False
 
         logger.info("Copied agent conversation trace to %s", dest)
@@ -805,11 +910,13 @@ def _check_disk_space(min_gb: float = 5.0) -> bool:
     check_path = "/var/lib/docker" if os.path.exists("/var/lib/docker") else "/"
     try:
         usage = shutil.disk_usage(check_path)
-        available_gb = usage.free / (1024 ** 3)
+        available_gb = usage.free / (1024**3)
         if available_gb < min_gb:
             logger.warning(
                 "Low disk space on %s: %.1f GB available (minimum %.1f GB required)",
-                check_path, available_gb, min_gb,
+                check_path,
+                available_gb,
+                min_gb,
             )
             return False
         logger.debug("Disk space OK on %s: %.1f GB available", check_path, available_gb)
@@ -856,8 +963,12 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         output_dir.mkdir(parents=True, exist_ok=True)
         result.output_dir = str(output_dir)
 
-        logger.info("Task: %s (suite=%s, type=%s)", task_id,
-                     task_info.get("suite"), task_info.get("task_type"))
+        logger.info(
+            "Task: %s (suite=%s, type=%s)",
+            task_id,
+            task_info.get("suite"),
+            task_info.get("task_type"),
+        )
 
         # --- Disk pre-flight ---
         if not _check_disk_space():
@@ -887,10 +998,12 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         # --- Phase 3: Setup ---
         t0 = time.monotonic()
         try:
-            container_id = _docker_create_container(image_tag, container_name, config.memory_mb)
+            container_id = _docker_create_container(
+                image_tag, container_name, config.memory_mb
+            )
             result.container_id = container_id
             _docker_start(container_id)
-            _setup_container(container_id, task_dir, task_data)
+            _setup_container(container_id, task_dir, task_data, mode=config.mode)
         except Exception as setup_exc:
             result.phase = "setup_failed"
             result.error = str(setup_exc)
@@ -916,7 +1029,9 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             result.timing = timings
             logger.info(
                 "Dry run complete. Container: %s, Image: %s, Mode: %s",
-                container_name, image_tag, config.mode,
+                container_name,
+                image_tag,
+                config.mode,
             )
             return result
 
@@ -925,8 +1040,9 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         env_extra: dict[str, str] = {}
         agent_command = config.agent_command
 
-        # Set Sourcegraph access token for MCP modes
+        # Set Sourcegraph access token and TLS bypass for MCP modes
         if config.mode in ("mcp_only", "hybrid"):
+            env_extra["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
             sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
             if sg_token:
                 env_extra["SOURCEGRAPH_ACCESS_TOKEN"] = sg_token
@@ -963,7 +1079,10 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         if agent_command:
             t0 = time.monotonic()
             agent_exit, agent_duration = _run_agent(
-                container_id, agent_command, config.timeout, output_dir,
+                container_id,
+                agent_command,
+                config.timeout,
+                output_dir,
                 env_extra=env_extra,
             )
             timings["agent"] = agent_duration
@@ -1130,7 +1249,8 @@ Examples:
         ),
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable debug logging",
     )

@@ -23,7 +23,6 @@ from dockerfile_generator import (
     generate_standard_dockerfile,
 )
 
-
 # ---------------------------------------------------------------------------
 # Minimal task data fixtures
 # ---------------------------------------------------------------------------
@@ -80,45 +79,39 @@ class TestSetupLinesNodeInstall:
         """Non-node base images should install Node.js via tarball from nodejs.org."""
         lines = _setup_lines("python:3.11-bookworm")
         text = "\n".join(lines)
-        assert "nodejs.org" in text, (
-            "Expected Node.js tarball download from nodejs.org"
-        )
+        assert "nodejs.org" in text, "Expected Node.js tarball download from nodejs.org"
         assert "tar" in text, "Expected tarball extraction with tar"
 
     def test_non_node_base_does_not_use_nodesource(self) -> None:
         """Must NOT use NodeSource apt repository."""
         lines = _setup_lines("python:3.11-bookworm")
         text = "\n".join(lines)
-        assert "nodesource" not in text.lower(), (
-            "Must not use NodeSource apt repo — use tarball instead"
-        )
-        assert "apt-get install -y nodejs" not in text, (
-            "Must not install Node.js via apt — use tarball instead"
-        )
+        assert (
+            "nodesource" not in text.lower()
+        ), "Must not use NodeSource apt repo — use tarball instead"
+        assert (
+            "apt-get install -y nodejs" not in text
+        ), "Must not install Node.js via apt — use tarball instead"
 
     def test_node_base_skips_node_install(self) -> None:
         """Node.js base images already have Node — should not install again."""
         lines = _setup_lines("node:20-bookworm")
         text = "\n".join(lines)
-        assert "nodejs.org" not in text, (
-            "Node base image should not re-install Node.js"
-        )
+        assert "nodejs.org" not in text, "Node base image should not re-install Node.js"
 
     def test_tarball_installs_to_usr_local(self) -> None:
         """Tarball should be extracted to /usr/local for PATH availability."""
         lines = _setup_lines("golang:1.21-bookworm")
         text = "\n".join(lines)
-        assert "/usr/local" in text, (
-            "Tarball should be extracted to /usr/local"
-        )
+        assert "/usr/local" in text, "Tarball should be extracted to /usr/local"
 
     def test_tarball_uses_strip_components(self) -> None:
         """tar command should use --strip-components=1 to flatten the archive."""
         lines = _setup_lines("ubuntu:22.04")
         text = "\n".join(lines)
-        assert "--strip-components" in text, (
-            "tar should use --strip-components to flatten the node-v* directory"
-        )
+        assert (
+            "--strip-components" in text
+        ), "tar should use --strip-components to flatten the node-v* directory"
 
 
 # ---------------------------------------------------------------------------
@@ -217,12 +210,16 @@ class TestUserBeforeClone:
         user_idx = _line_index(lines, r"^USER\s+agent")
         clone_indices = _all_line_indices(lines, r"git\s+clone")
 
-        assert user_idx is not None, "USER agent directive not found in standard Dockerfile"
-        assert len(clone_indices) >= 2, f"Expected at least 2 clone commands, found {len(clone_indices)}"
+        assert (
+            user_idx is not None
+        ), "USER agent directive not found in standard Dockerfile"
+        assert (
+            len(clone_indices) >= 2
+        ), f"Expected at least 2 clone commands, found {len(clone_indices)}"
         for ci in clone_indices:
-            assert user_idx < ci, (
-                f"USER agent (line {user_idx}) must appear before git clone (line {ci})"
-            )
+            assert (
+                user_idx < ci
+            ), f"USER agent (line {user_idx}) must appear before git clone (line {ci})"
 
     def test_hybrid_user_before_clone(self) -> None:
         content = generate_hybrid_dockerfile(TASK_DATA_MULTI_REPO)
@@ -231,12 +228,16 @@ class TestUserBeforeClone:
         user_idx = _line_index(lines, r"^USER\s+agent")
         clone_indices = _all_line_indices(lines, r"git\s+clone")
 
-        assert user_idx is not None, "USER agent directive not found in hybrid Dockerfile"
-        assert len(clone_indices) >= 2, f"Expected at least 2 clone commands, found {len(clone_indices)}"
+        assert (
+            user_idx is not None
+        ), "USER agent directive not found in hybrid Dockerfile"
+        assert (
+            len(clone_indices) >= 2
+        ), f"Expected at least 2 clone commands, found {len(clone_indices)}"
         for ci in clone_indices:
-            assert user_idx < ci, (
-                f"USER agent (line {user_idx}) must appear before git clone (line {ci})"
-            )
+            assert (
+                user_idx < ci
+            ), f"USER agent (line {user_idx}) must appear before git clone (line {ci})"
 
     def test_sg_only_has_user_agent(self) -> None:
         """SG-only has no clones, but should still set USER agent."""
@@ -244,7 +245,9 @@ class TestUserBeforeClone:
         lines = content.splitlines()
 
         user_idx = _line_index(lines, r"^USER\s+agent")
-        assert user_idx is not None, "USER agent directive not found in sg_only Dockerfile"
+        assert (
+            user_idx is not None
+        ), "USER agent directive not found in sg_only Dockerfile"
 
     def test_sha_rev_user_before_clone(self) -> None:
         """SHA-based revisions also get USER agent before clone."""
@@ -287,7 +290,9 @@ class TestRootForInstalls:
 
         assert apt_idx is not None, "apt-get install not found"
         assert user_idx is not None, "USER agent not found"
-        assert apt_idx < user_idx, "apt-get install must run before USER agent (as root)"
+        assert (
+            apt_idx < user_idx
+        ), "apt-get install must run before USER agent (as root)"
 
     def test_npm_install_before_user_switch(self) -> None:
         content = generate_standard_dockerfile(TASK_DATA_PYTHON)
@@ -314,6 +319,78 @@ class TestWorkspaceOwnership:
 
         assert workspace_idx is not None, "Workspace directory setup not found"
         assert user_idx is not None, "USER agent not found"
-        assert workspace_idx < user_idx, (
-            "Workspace must be created/owned before switching to agent user"
-        )
+        assert (
+            workspace_idx < user_idx
+        ), "Workspace must be created/owned before switching to agent user"
+
+
+# ---------------------------------------------------------------------------
+# sg_only mode marker tests
+# ---------------------------------------------------------------------------
+
+
+class TestSgOnlyModeMarker:
+    """Verify sg_only Dockerfiles contain /tmp/.sg_only_mode marker,
+    and standard/hybrid Dockerfiles do NOT."""
+
+    def test_sg_only_contains_marker(self) -> None:
+        """sg_only Dockerfile must create /tmp/.sg_only_mode marker file."""
+        content = generate_sg_only_dockerfile(TASK_DATA_PYTHON)
+        assert (
+            "/tmp/.sg_only_mode" in content
+        ), "sg_only Dockerfile must contain /tmp/.sg_only_mode marker"
+
+    def test_sg_only_marker_uses_touch(self) -> None:
+        """Marker should be created via 'RUN touch /tmp/.sg_only_mode'."""
+        content = generate_sg_only_dockerfile(TASK_DATA_PYTHON)
+        assert (
+            "RUN touch /tmp/.sg_only_mode" in content
+        ), "Marker must be created with 'RUN touch /tmp/.sg_only_mode'"
+
+    def test_sg_only_marker_before_user_agent(self) -> None:
+        """Marker must be created as root (before USER agent line)."""
+        content = generate_sg_only_dockerfile(TASK_DATA_PYTHON)
+        lines = content.splitlines()
+
+        marker_idx = _line_index(lines, r"touch\s+/tmp/\.sg_only_mode")
+        user_idx = _line_index(lines, r"^USER\s+agent")
+
+        assert marker_idx is not None, "sg_only_mode marker not found"
+        assert user_idx is not None, "USER agent not found"
+        assert (
+            marker_idx < user_idx
+        ), "Marker must be created before USER agent (as root for consistency)"
+
+    def test_sg_only_marker_has_comment(self) -> None:
+        """Marker line should have an explanatory comment."""
+        content = generate_sg_only_dockerfile(TASK_DATA_PYTHON)
+        lines = content.splitlines()
+
+        marker_idx = _line_index(lines, r"touch\s+/tmp/\.sg_only_mode")
+        assert marker_idx is not None, "sg_only_mode marker not found"
+
+        # Check for a comment on the line before the marker
+        assert marker_idx > 0, "Marker should not be the first line"
+        preceding_line = lines[marker_idx - 1]
+        assert preceding_line.startswith(
+            "#"
+        ), f"Expected a comment before the marker, got: {preceding_line!r}"
+
+    def test_standard_does_not_contain_marker(self) -> None:
+        """Standard Dockerfile must NOT contain sg_only_mode marker."""
+        content = generate_standard_dockerfile(TASK_DATA_PYTHON)
+        assert (
+            "/tmp/.sg_only_mode" not in content
+        ), "Standard Dockerfile must NOT contain sg_only_mode marker"
+
+    def test_hybrid_does_not_contain_marker(self) -> None:
+        """Hybrid Dockerfile must NOT contain sg_only_mode marker."""
+        content = generate_hybrid_dockerfile(TASK_DATA_PYTHON)
+        assert (
+            "/tmp/.sg_only_mode" not in content
+        ), "Hybrid Dockerfile must NOT contain sg_only_mode marker"
+
+    def test_sg_only_multi_repo_contains_marker(self) -> None:
+        """Marker should be present regardless of repo count."""
+        content = generate_sg_only_dockerfile(TASK_DATA_MULTI_REPO)
+        assert "RUN touch /tmp/.sg_only_mode" in content

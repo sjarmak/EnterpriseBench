@@ -31,10 +31,10 @@ from create_sg_mirrors import parse_toml, find_task_files, ORG
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 from validation import validate_repo_entry
 
-
 # ═══════════════════════════════════════════════════════════════
 #  MIRROR NAME GENERATION
 # ═══════════════════════════════════════════════════════════════
+
 
 def mirror_name_for_repo(url: str, rev: str) -> str:
     """Generate sg-evals mirror name for a repo entry."""
@@ -114,6 +114,7 @@ def _clone_commands(url: str, rev: str, path: str, source: str) -> list[str]:
 #  DOCKERFILE GENERATION
 # ═══════════════════════════════════════════════════════════════
 
+
 def _base_image_for_languages(languages: list[str]) -> str:
     """Select Docker base image based on task's primary language."""
     if "go" in languages:
@@ -147,24 +148,28 @@ def _setup_lines(base_image: str) -> list[str]:
     if not _has_node(base_image):
         # Install Node.js 20 via official tarball (faster and more reliable
         # than NodeSource apt repo, especially under concurrent container builds)
-        lines.extend([
-            "# Install Node.js 20 via official tarball",
-            "RUN curl -fsSL https://nodejs.org/dist/v20.18.3/node-v20.18.3-linux-x64.tar.xz | \\",
-            "    tar -xJ --strip-components=1 -C /usr/local",
+        lines.extend(
+            [
+                "# Install Node.js 20 via official tarball",
+                "RUN curl -fsSL https://nodejs.org/dist/v20.18.3/node-v20.18.3-linux-x64.tar.xz | \\",
+                "    tar -xJ --strip-components=1 -C /usr/local",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "# Pre-install Claude Code CLI (avoids per-container npm install at runtime)",
+            "RUN npm install -g @anthropic-ai/claude-code@latest",
             "",
-        ])
-    lines.extend([
-        "# Pre-install Claude Code CLI (avoids per-container npm install at runtime)",
-        "RUN npm install -g @anthropic-ai/claude-code@latest",
-        "",
-        "# Create non-root agent user and prepare workspace",
-        "RUN useradd -m -s /bin/bash agent && \\",
-        "    mkdir -p /workspace && chown agent:agent /workspace",
-        "",
-        "# Switch to agent user — all subsequent commands run as agent",
-        "USER agent",
-        "",
-    ])
+            "# Create non-root agent user and prepare workspace",
+            "RUN useradd -m -s /bin/bash agent && \\",
+            "    mkdir -p /workspace && chown agent:agent /workspace",
+            "",
+            "# Switch to agent user — all subsequent commands run as agent",
+            "USER agent",
+            "",
+        ]
+    )
     return lines
 
 
@@ -185,10 +190,12 @@ def generate_standard_dockerfile(task_data: dict, *, source: str = "mirror") -> 
         "",
     ]
     lines.extend(_setup_lines(base_image))
-    lines.extend([
-        "WORKDIR /workspace",
-        "",
-    ])
+    lines.extend(
+        [
+            "WORKDIR /workspace",
+            "",
+        ]
+    )
 
     for repo in repos:
         url = repo.get("url", "")
@@ -225,13 +232,28 @@ def generate_sg_only_dockerfile(task_data: dict) -> str:
         f"ENV {env_name}={env_value}",
         "",
     ]
-    lines.extend(_setup_lines(sg_base))
-    lines.extend([
-        "WORKDIR /workspace",
+    setup = _setup_lines(sg_base)
+
+    # Insert sg_only mode marker before USER agent so verifiers can detect
+    # that this sandbox was launched in Sourcegraph-only mode at runtime.
+    user_agent_idx = next(
+        i for i, ln in enumerate(setup) if ln.startswith("USER agent")
+    )
+    setup[user_agent_idx:user_agent_idx] = [
+        "# Marker file so verifiers can detect sg_only mode at runtime",
+        "RUN touch /tmp/.sg_only_mode",
         "",
-        "# No repos cloned -- agent must use Sourcegraph MCP for all code access",
-        "",
-    ])
+    ]
+
+    lines.extend(setup)
+    lines.extend(
+        [
+            "WORKDIR /workspace",
+            "",
+            "# No repos cloned -- agent must use Sourcegraph MCP for all code access",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -256,10 +278,12 @@ def generate_hybrid_dockerfile(task_data: dict, *, source: str = "mirror") -> st
         "",
     ]
     lines.extend(_setup_lines(base_image))
-    lines.extend([
-        "WORKDIR /workspace",
-        "",
-    ])
+    lines.extend(
+        [
+            "WORKDIR /workspace",
+            "",
+        ]
+    )
 
     for repo in repos:
         url = repo.get("url", "")
@@ -284,6 +308,7 @@ def generate_hybrid_dockerfile(task_data: dict, *, source: str = "mirror") -> st
 # ═══════════════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════════════
+
 
 def generate_for_task(
     task_file: Path,
@@ -337,21 +362,37 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate Dockerfile variants for EnterpriseBench tasks"
     )
-    parser.add_argument("path", type=Path,
-                        help="Path to a task.toml file or directory containing tasks")
-    parser.add_argument("--output-dir", "-o", type=Path, default=None,
-                        help="Output directory for Dockerfiles (default: alongside task.toml)")
-    parser.add_argument("--all", action="store_true",
-                        help="Process all task files in directory")
+    parser.add_argument(
+        "path", type=Path, help="Path to a task.toml file or directory containing tasks"
+    )
+    parser.add_argument(
+        "--output-dir",
+        "-o",
+        type=Path,
+        default=None,
+        help="Output directory for Dockerfiles (default: alongside task.toml)",
+    )
+    parser.add_argument(
+        "--all", action="store_true", help="Process all task files in directory"
+    )
     # --upstream: clone from original repo URLs instead of sg-evals mirrors.
     # Useful for local testing when mirrors haven't been created yet
     # (only 6 of ~120 required mirrors exist as of March 2026).
-    parser.add_argument("--upstream", dest="source", action="store_const",
-                        const="upstream", default="mirror",
-                        help="Clone from upstream repos instead of sg-evals mirrors")
-    parser.add_argument("--source", dest="source", choices=["mirror", "upstream"],
-                        default="mirror",
-                        help="Clone source: 'mirror' (default) or 'upstream'")
+    parser.add_argument(
+        "--upstream",
+        dest="source",
+        action="store_const",
+        const="upstream",
+        default="mirror",
+        help="Clone from upstream repos instead of sg-evals mirrors",
+    )
+    parser.add_argument(
+        "--source",
+        dest="source",
+        choices=["mirror", "upstream"],
+        default="mirror",
+        help="Clone source: 'mirror' (default) or 'upstream'",
+    )
     args = parser.parse_args()
 
     if not args.path.exists():
