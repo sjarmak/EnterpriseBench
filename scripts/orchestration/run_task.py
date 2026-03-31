@@ -139,7 +139,7 @@ def _load_oauth_token(account: int) -> str:
 
 
 DEFAULT_OAUTH_AGENT_COMMAND = (
-    "claude --dangerously-skip-permissions --max-turns 30 --output-format json -p"
+    "claude --dangerously-skip-permissions --max-turns 30 --output-format stream-json -p"
 )
 
 
@@ -362,35 +362,50 @@ def _setup_container(
 
 
 def _install_claude_cli(container_id: str) -> bool:
-    """Install Claude Code CLI and create non-root agent user. Returns True on success."""
-    logger.info("Installing Claude Code CLI...")
-    # Ensure Node.js is available (node:20 and python:3.11 images have it,
-    # others may need it installed first)
-    check_node = _docker_exec(container_id, ["which", "node"])
-    if check_node.returncode != 0:
-        logger.info("Node.js not found, installing via apt...")
-        _docker_exec(container_id, [
-            "bash", "-c",
-            "apt-get update -qq && apt-get install -y -qq nodejs npm >/dev/null 2>&1"
-        ])
-    result = _docker_exec(container_id, [
-        "bash", "-c",
-        "npm install -g @anthropic-ai/claude-code@latest 2>&1 | tail -3"
-    ])
-    if result.returncode != 0:
-        logger.error("Failed to install Claude Code CLI: %s", result.stderr)
-        return False
-    # Create non-root user for agent execution (Claude Code refuses
-    # --dangerously-skip-permissions as root)
-    _docker_exec(container_id, [
-        "bash", "-c",
-        "useradd -m -s /bin/bash agent 2>/dev/null; "
-        "chown -R agent:agent /workspace"
-    ])
-    # Verify
+    """Install Claude Code CLI and create non-root agent user. Returns True on success.
+
+    If the Docker image was built with the updated dockerfile_generator (which
+    pre-bakes Node.js, npm, Claude CLI, and the agent user), this function
+    detects that and skips redundant work.
+    """
+    # Check if Claude CLI is already baked into the image
     ver = _docker_exec(container_id, ["claude", "--version"])
     if ver.returncode == 0:
-        logger.info("Claude Code CLI installed: %s", ver.stdout.strip())
+        logger.info("Claude Code CLI already installed: %s", ver.stdout.strip())
+    else:
+        logger.info("Claude Code CLI not in image, installing...")
+        # Ensure Node.js is available
+        check_node = _docker_exec(container_id, ["which", "node"])
+        if check_node.returncode != 0:
+            logger.info("Node.js not found, installing via apt...")
+            _docker_exec(container_id, [
+                "bash", "-c",
+                "apt-get update -qq && apt-get install -y -qq nodejs npm >/dev/null 2>&1"
+            ], timeout=300)
+        result = _docker_exec(container_id, [
+            "bash", "-c",
+            "npm install -g @anthropic-ai/claude-code@latest 2>&1 | tail -3"
+        ], timeout=300)
+        if result.returncode != 0:
+            logger.error("Failed to install Claude Code CLI: %s", result.stderr)
+            return False
+
+    # Ensure non-root agent user exists and owns key output dirs.
+    # Images built with the updated dockerfile_generator already have the agent
+    # user owning /workspace (USER agent before git clone), so cloned repos are
+    # correctly owned. For older images we still create the user and fix up
+    # output dirs only (never chown -R on /workspace — too slow for large repos).
+    _docker_exec(container_id, [
+        "bash", "-c",
+        "id agent >/dev/null 2>&1 || useradd -m -s /bin/bash agent; "
+        "mkdir -p /workspace/agent_output /workspace/.task /workspace/.verifiers; "
+        "chown -R agent:agent /home/agent /workspace/agent_output /workspace/.task /workspace/.verifiers"
+    ])
+
+    # Final verification
+    ver = _docker_exec(container_id, ["claude", "--version"])
+    if ver.returncode == 0:
+        logger.info("Claude Code CLI ready: %s", ver.stdout.strip())
         return True
     logger.error("Claude Code CLI not found after install")
     return False

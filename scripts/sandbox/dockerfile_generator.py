@@ -133,6 +133,41 @@ def _base_image_for_languages(languages: list[str]) -> str:
     return "ubuntu:22.04"
 
 
+def _has_node(base_image: str) -> bool:
+    """Return True if the base image already includes Node.js."""
+    return base_image.startswith("node:")
+
+
+def _setup_lines(base_image: str) -> list[str]:
+    """Common setup: install system packages, Node.js 20 (if needed), and Claude Code CLI."""
+    lines = [
+        "RUN apt-get update && apt-get install -y git curl ca-certificates jq && rm -rf /var/lib/apt/lists/*",
+        "",
+    ]
+    if not _has_node(base_image):
+        # Install Node.js 20 via official tarball (faster and more reliable
+        # than NodeSource apt repo, especially under concurrent container builds)
+        lines.extend([
+            "# Install Node.js 20 via official tarball",
+            "RUN curl -fsSL https://nodejs.org/dist/v20.18.3/node-v20.18.3-linux-x64.tar.xz | \\",
+            "    tar -xJ --strip-components=1 -C /usr/local",
+            "",
+        ])
+    lines.extend([
+        "# Pre-install Claude Code CLI (avoids per-container npm install at runtime)",
+        "RUN npm install -g @anthropic-ai/claude-code@latest",
+        "",
+        "# Create non-root agent user and prepare workspace",
+        "RUN useradd -m -s /bin/bash agent && \\",
+        "    mkdir -p /workspace && chown agent:agent /workspace",
+        "",
+        "# Switch to agent user — all subsequent commands run as agent",
+        "USER agent",
+        "",
+    ])
+    return lines
+
+
 def generate_standard_dockerfile(task_data: dict, *, source: str = "mirror") -> str:
     """Generate standard Dockerfile: local clone from sg-evals mirrors (or upstream)."""
     repos = task_data.get("repos", [])
@@ -148,11 +183,12 @@ def generate_standard_dockerfile(task_data: dict, *, source: str = "mirror") -> 
         f"# Standard Dockerfile: local clone from {clone_label}",
         f"FROM {base_image}",
         "",
-        "RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*",
-        "",
+    ]
+    lines.extend(_setup_lines(base_image))
+    lines.extend([
         "WORKDIR /workspace",
         "",
-    ]
+    ])
 
     for repo in repos:
         url = repo.get("url", "")
@@ -180,20 +216,22 @@ def generate_sg_only_dockerfile(task_data: dict) -> str:
 
     env_name, env_value = sourcegraph_env_var(repos)
 
+    sg_base = "ubuntu:22.04"
     lines = [
         f"# EnterpriseBench task: {task_info.get('id', 'unknown')}",
         f"# SG-only Dockerfile: empty workspace, Sourcegraph MCP mandatory",
-        f"FROM ubuntu:22.04",
+        f"FROM {sg_base}",
         "",
         f"ENV {env_name}={env_value}",
         "",
-        "RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*",
-        "",
+    ]
+    lines.extend(_setup_lines(sg_base))
+    lines.extend([
         "WORKDIR /workspace",
         "",
         "# No repos cloned -- agent must use Sourcegraph MCP for all code access",
         "",
-    ]
+    ])
 
     return "\n".join(lines)
 
@@ -216,11 +254,12 @@ def generate_hybrid_dockerfile(task_data: dict, *, source: str = "mirror") -> st
         "",
         f"ENV {env_name}={env_value}",
         "",
-        "RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*",
-        "",
+    ]
+    lines.extend(_setup_lines(base_image))
+    lines.extend([
         "WORKDIR /workspace",
         "",
-    ]
+    ])
 
     for repo in repos:
         url = repo.get("url", "")

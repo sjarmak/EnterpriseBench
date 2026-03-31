@@ -153,6 +153,61 @@ def filter_tasks(
     return result
 
 
+def is_task_completed(
+    task_id: str,
+    *,
+    results_dir: Path | None = None,
+    mode: str = "baseline",
+) -> bool:
+    """Check whether a task already has a successful results.json.
+
+    Looks in two locations (in order):
+      1. ``results_dir/<task_id>/<mode>/results.json`` (multi-mode layout)
+      2. ``results_dir/<task_id>/results.json``        (single-mode layout)
+
+    Returns True only if the file exists, parses as JSON, and contains
+    ``"success": true``.
+    """
+    if results_dir is None:
+        results_dir = PROJECT_ROOT / "results" / "runs"
+
+    candidates = [
+        results_dir / task_id / mode / "results.json",
+        results_dir / task_id / "results.json",
+    ]
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text())
+            if data.get("success") is True:
+                return True
+        except (json.JSONDecodeError, OSError):
+            continue
+    return False
+
+
+def filter_completed_tasks(
+    tasks: list[TaskInfo],
+    *,
+    results_dir: Path | None = None,
+    mode: str = "baseline",
+) -> tuple[list[TaskInfo], list[TaskInfo]]:
+    """Partition *tasks* into (remaining, skipped) based on existing results.
+
+    A task is considered completed (and therefore skipped) when
+    ``is_task_completed`` returns True for its task_id.
+    """
+    remaining: list[TaskInfo] = []
+    skipped: list[TaskInfo] = []
+    for t in tasks:
+        if is_task_completed(t.task_id, results_dir=results_dir, mode=mode):
+            skipped.append(t)
+        else:
+            remaining.append(t)
+    return remaining, skipped
+
+
 # ---------------------------------------------------------------------------
 # Execution
 # ---------------------------------------------------------------------------
@@ -234,7 +289,11 @@ def run_task(
 # Summary
 # ---------------------------------------------------------------------------
 
-def write_summary(results: list[TaskResult], run_id: str) -> Path:
+def write_summary(
+    results: list[TaskResult],
+    run_id: str,
+    previously_completed: int = 0,
+) -> Path:
     """Write results/runs/<run_id>/summary.json and return the path."""
     out_dir = PROJECT_ROOT / "results" / "runs" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -247,6 +306,7 @@ def write_summary(results: list[TaskResult], run_id: str) -> Path:
         "completed": sum(1 for r in results if r.status == "completed"),
         "errors": sum(1 for r in results if r.status == "error"),
         "skipped": sum(1 for r in results if r.status == "skipped"),
+        "previously_completed": previously_completed,
         "tasks": [asdict(r) for r in results],
     }
     summary_path.write_text(json.dumps(payload, indent=2) + "\n")
@@ -287,6 +347,15 @@ def build_parser() -> argparse.ArgumentParser:
     filter_group.add_argument("--session-type", choices=["single", "chain", "event_replay", "resume"])
     filter_group.add_argument("--task-type")
     filter_group.add_argument("--limit", type=int, default=None, help="Max number of tasks to run")
+    filter_group.add_argument(
+        "--skip-completed",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip tasks whose results/runs/<task_id>/results.json "
+            "already contains success=true"
+        ),
+    )
 
     # Passthrough flags for runners
     runner_group = parser.add_argument_group("runner options (passed through)")
@@ -420,6 +489,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     logger.info("Matched %d task(s)", len(tasks))
+
+    # --skip-completed: remove tasks that already have successful results
+    previously_completed = 0
+    if args.skip_completed:
+        results_dir = PROJECT_ROOT / "results" / "runs"
+        # Determine the mode(s) to check against
+        check_mode = args.mode  # default; multi-mode handled per-mode below
+        tasks, skipped_tasks = filter_completed_tasks(
+            tasks, results_dir=results_dir, mode=check_mode,
+        )
+        previously_completed = len(skipped_tasks)
+        if previously_completed > 0:
+            for st in skipped_tasks:
+                logger.info("[skip-completed] %s", st.task_id)
+            logger.info(
+                "Skipped %d previously completed task(s), %d remaining",
+                previously_completed, len(tasks),
+            )
 
     if args.limit == 0:
         # --limit 0 means list only, run nothing
@@ -563,7 +650,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Summary
     print_summary_table(results)
     if not args.dry_run:
-        summary_path = write_summary(results, run_id)
+        summary_path = write_summary(results, run_id, previously_completed=previously_completed)
         logger.info("Summary written to %s", summary_path)
 
     return 0
