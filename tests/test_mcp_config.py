@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "inf
 
 from run_task import (
     SOURCEGRAPH_MCP_ENDPOINT,
+    _DEFAULT_MCP_URL,
     _configure_mcp,
     run_task,
     TaskRunConfig,
@@ -37,14 +38,30 @@ from run_task import (
 
 
 class TestMcpEndpointUrl:
-    def test_endpoint_uses_sourcegraph_dot_sourcegraph(self) -> None:
-        """Endpoint must point to sourcegraph.sourcegraph.com, not demo."""
-        assert "demo.sourcegraph.com" not in SOURCEGRAPH_MCP_ENDPOINT
-        assert "sourcegraph.sourcegraph.com" in SOURCEGRAPH_MCP_ENDPOINT
+    def test_endpoint_default_is_demo(self) -> None:
+        """Default endpoint must point to demo.sourcegraph.com (matches CSB token)."""
+        assert "demo.sourcegraph.com" in _DEFAULT_MCP_URL
 
     def test_endpoint_path_is_mcp_all(self) -> None:
         """Endpoint path must be /.api/mcp/all (not /mcp or /mcp/v1)."""
         assert SOURCEGRAPH_MCP_ENDPOINT.endswith("/.api/mcp/all")
+
+    def test_endpoint_overridable_via_env(self) -> None:
+        """SOURCEGRAPH_MCP_URL env var overrides the default endpoint."""
+        import importlib
+        import run_task
+
+        with patch.dict(
+            os.environ,
+            {"SOURCEGRAPH_MCP_URL": "https://custom.example.com/.api/mcp/all"},
+        ):
+            importlib.reload(run_task)
+            assert (
+                run_task.SOURCEGRAPH_MCP_ENDPOINT
+                == "https://custom.example.com/.api/mcp/all"
+            )
+        # Restore
+        importlib.reload(run_task)
 
 
 # ---------------------------------------------------------------------------

@@ -45,10 +45,10 @@ EB_VERIFY_LIB = REPO_ROOT / "lib" / "eb_verify"
 
 VALID_MODES = ("baseline", "mcp_only", "hybrid")
 
-SOURCEGRAPH_MCP_ENDPOINT = "https://sourcegraph.sourcegraph.com/.api/mcp/all"
+_DEFAULT_MCP_URL = "https://demo.sourcegraph.com/.api/mcp/all"
+SOURCEGRAPH_MCP_ENDPOINT = os.environ.get("SOURCEGRAPH_MCP_URL", _DEFAULT_MCP_URL)
 SOURCEGRAPH_MCP_ADD_CMD = (
-    "claude mcp add --transport http sg "
-    "https://sourcegraph.sourcegraph.com/.api/mcp/all"
+    f"claude mcp add --transport http sg {SOURCEGRAPH_MCP_ENDPOINT}"
 )
 
 
