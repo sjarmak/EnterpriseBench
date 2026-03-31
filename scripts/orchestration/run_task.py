@@ -46,7 +46,11 @@ EB_VERIFY_LIB = REPO_ROOT / "lib" / "eb_verify"
 VALID_MODES = ("baseline", "mcp_only", "hybrid")
 
 _DEFAULT_MCP_URL = "https://demo.sourcegraph.com/.api/mcp/all"
-SOURCEGRAPH_MCP_ENDPOINT = os.environ.get("SOURCEGRAPH_MCP_URL", _DEFAULT_MCP_URL)
+_raw_mcp_url = os.environ.get("SOURCEGRAPH_MCP_URL", _DEFAULT_MCP_URL)
+# Ensure /all suffix for full tool set (13 tools vs 8 on base endpoint)
+SOURCEGRAPH_MCP_ENDPOINT = (
+    _raw_mcp_url if _raw_mcp_url.endswith("/all") else f"{_raw_mcp_url.rstrip('/')}/all"
+)
 SOURCEGRAPH_MCP_ADD_CMD = (
     f"claude mcp add --transport http sg {SOURCEGRAPH_MCP_ENDPOINT}"
 )
@@ -142,7 +146,7 @@ def _load_oauth_token(account: int) -> str:
     return access_token
 
 
-DEFAULT_OAUTH_AGENT_COMMAND = "claude --dangerously-skip-permissions --max-turns 30 --output-format stream-json -p"
+DEFAULT_OAUTH_AGENT_COMMAND = "claude --dangerously-skip-permissions --max-turns 30 --verbose --output-format stream-json -p"
 
 
 def _parse_task(toml_path: Path) -> dict:
@@ -581,9 +585,20 @@ def _run_agent(
     except subprocess.TimeoutExpired as te:
         duration = time.monotonic() - start
         exit_code = 124
-        # Capture any partial output the agent produced before timeout
-        partial_stdout = te.stdout or "" if hasattr(te, "stdout") else ""
-        partial_stderr = te.stderr or "" if hasattr(te, "stderr") else ""
+        # Capture any partial output the agent produced before timeout.
+        # TimeoutExpired captures raw bytes even with text=True.
+        raw_out = te.stdout if hasattr(te, "stdout") and te.stdout else b""
+        raw_err = te.stderr if hasattr(te, "stderr") and te.stderr else b""
+        partial_stdout = (
+            raw_out.decode("utf-8", errors="replace")
+            if isinstance(raw_out, bytes)
+            else raw_out
+        )
+        partial_stderr = (
+            raw_err.decode("utf-8", errors="replace")
+            if isinstance(raw_err, bytes)
+            else raw_err
+        )
         stderr_content = f"{partial_stderr}\nTIMEOUT after {timeout}s\n"
         agent_dir = output_dir / "agent"
         agent_dir.mkdir(exist_ok=True)
@@ -742,11 +757,12 @@ def _configure_mcp(container_id: str, mode: str) -> None:
     sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
 
     logger.info("Configuring Sourcegraph MCP endpoint (mode=%s)", mode)
-    # Create MCP config directory and write the server configuration
+    # Write .mcp.json to /workspace — Claude Code discovers MCP servers from
+    # .mcp.json in the working directory (matches CSB's approach).
     mcp_config = json.dumps(
         {
             "mcpServers": {
-                "sg": {
+                "sourcegraph": {
                     "type": "http",
                     "url": SOURCEGRAPH_MCP_ENDPOINT,
                     "headers": {"Authorization": f"token {sg_token}"},
@@ -759,9 +775,8 @@ def _configure_mcp(container_id: str, mode: str) -> None:
         [
             "bash",
             "-c",
-            "mkdir -p /home/agent/.claude && "
-            f"echo '{mcp_config}' > /home/agent/.claude/settings.json && "
-            "chown -R agent:agent /home/agent/.claude",
+            f"echo '{mcp_config}' > /workspace/.mcp.json && "
+            "chown agent:agent /workspace/.mcp.json",
         ],
     )
     logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)

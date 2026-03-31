@@ -90,23 +90,21 @@ class TestMcpAuthHeaders:
         ):
             _configure_mcp("test-container", mode)
 
-        # Find the bash -c command that writes settings.json
+        # Find the bash -c command that writes .mcp.json
         for cmd in captured_cmds:
             if len(cmd) >= 3 and cmd[0] == "bash" and cmd[1] == "-c":
                 bash_script = cmd[2]
-                if "settings.json" in bash_script:
-                    # Extract the JSON from the echo command
-                    # The format is: echo '...' > /home/agent/.claude/settings.json
+                if ".mcp.json" in bash_script:
                     import re
 
                     match = re.search(r"echo '(\{.*?\})' >", bash_script, re.DOTALL)
                     if match:
                         return json.loads(match.group(1))
-        pytest.fail("No settings.json write command found in docker exec calls")
+        pytest.fail("No .mcp.json write command found in docker exec calls")
 
     def test_mcp_config_includes_authorization_header(self) -> None:
         config = self._capture_mcp_config("mcp_only")
-        sg_config = config.get("mcpServers", {}).get("sg", {})
+        sg_config = config.get("mcpServers", {}).get("sourcegraph", {})
         headers = sg_config.get("headers", {})
         assert (
             "Authorization" in headers
@@ -114,24 +112,24 @@ class TestMcpAuthHeaders:
 
     def test_mcp_config_auth_header_format(self) -> None:
         config = self._capture_mcp_config("mcp_only")
-        auth = config["mcpServers"]["sg"]["headers"]["Authorization"]
+        auth = config["mcpServers"]["sourcegraph"]["headers"]["Authorization"]
         assert auth.startswith(
             "token "
         ), "Authorization header must start with 'token '"
 
     def test_mcp_config_uses_correct_endpoint(self) -> None:
         config = self._capture_mcp_config("mcp_only")
-        url = config["mcpServers"]["sg"]["url"]
+        url = config["mcpServers"]["sourcegraph"]["url"]
         assert url == SOURCEGRAPH_MCP_ENDPOINT
 
     def test_mcp_config_type_is_http(self) -> None:
         config = self._capture_mcp_config("mcp_only")
-        assert config["mcpServers"]["sg"]["type"] == "http"
+        assert config["mcpServers"]["sourcegraph"]["type"] == "http"
 
     def test_hybrid_mode_also_configures_mcp(self) -> None:
         config = self._capture_mcp_config("hybrid")
-        assert "sg" in config.get("mcpServers", {})
-        assert "Authorization" in config["mcpServers"]["sg"].get("headers", {})
+        assert "sourcegraph" in config.get("mcpServers", {})
+        assert "Authorization" in config["mcpServers"]["sourcegraph"].get("headers", {})
 
 
 # ---------------------------------------------------------------------------
