@@ -35,10 +35,7 @@ MCP_ONLY_HEADER = (
     "You MUST use Sourcegraph MCP tools for all code access.**"
 )
 
-HYBRID_HEADER = (
-    "**Both local files and Sourcegraph MCP tools are available. "
-    "Use MCP for cross-repo search and local files for direct reading/editing.**"
-)
+HYBRID_HEADER = "# REQUIRED: Sourcegraph MCP Tools"
 
 
 @pytest.fixture()

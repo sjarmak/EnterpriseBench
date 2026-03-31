@@ -328,8 +328,26 @@ def _build_instruction_text(
             )
         else:  # hybrid
             preamble_parts.append(
-                "**Both local files and Sourcegraph MCP tools are available. "
-                "Use MCP for cross-repo search and local files for direct reading/editing.**"
+                "# REQUIRED: Sourcegraph MCP Tools\n\n"
+                "You have access to Sourcegraph MCP tools for code intelligence. "
+                "**You MUST use these tools as your primary method for searching and understanding code.** "
+                "Local files are available for reading and editing, but use Sourcegraph for:\n\n"
+                "- **All code search** — use `mcp__sourcegraph__keyword_search` instead of grep/ripgrep\n"
+                "- **Semantic search** — use `mcp__sourcegraph__nls_search` for concept-based queries\n"
+                "- **Cross-repo navigation** — use `mcp__sourcegraph__find_references` and `mcp__sourcegraph__go_to_definition`\n"
+                "- **Reading remote files** — use `mcp__sourcegraph__read_file` for files in other repos\n"
+                "- **Commit history** — use `mcp__sourcegraph__commit_search` and `mcp__sourcegraph__diff_search`\n\n"
+                "## Required Workflow\n\n"
+                "1. **Search with MCP first** before using grep or reading files locally\n"
+                "2. Use MCP to understand the broader codebase context\n"
+                "3. Edit local files based on what you learn from MCP search results\n\n"
+                "## Scoping Queries\n\n"
+                "```\n"
+                "repo:^github.com/ORG/REPO$    # Exact repo\n"
+                "file:src/api/                  # Directory filter\n"
+                "file:.*\\.go$                   # Language filter\n"
+                "```\n\n"
+                "Start narrow, expand only if results are empty."
             )
 
         # Append instruction_mcp.md content if it exists
@@ -833,25 +851,11 @@ def _extract_tool_usage(output_dir: Path) -> dict:
         usage["cost_usd"] = model_usage.get("costUSD", 0.0)
         usage["num_turns"] = data.get("numTurns", 0)
 
-        # Count MCP-specific tool calls from the conversation
-        for msg in data.get("messages", []):
-            if isinstance(msg, dict):
-                tool_use = msg.get("tool_use", msg.get("content", []))
-                if isinstance(tool_use, list):
-                    for item in tool_use:
-                        if isinstance(item, dict) and item.get("type") == "tool_use":
-                            tool_name = item.get("name", "")
-                            if (
-                                tool_name.startswith("mcp__sg__")
-                                or "sourcegraph" in tool_name.lower()
-                            ):
-                                usage["mcp_tool_calls"] += 1
-
         return usage
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # Fallback: scan for JSON fragments with modelUsage
+    # Fallback: scan stream-json lines for modelUsage and MCP tool calls
     for line in content.splitlines():
         line = line.strip()
         if not line.startswith("{"):
@@ -867,6 +871,9 @@ def _extract_tool_usage(output_dir: Path) -> dict:
                 usage["num_turns"] = max(usage["num_turns"], obj["numTurns"])
         except (json.JSONDecodeError, ValueError):
             continue
+
+    # Count MCP tool calls by scanning for mcp__sourcegraph in the raw log
+    usage["mcp_tool_calls"] = content.count("mcp__sourcegraph__")
 
     return usage
 
@@ -1129,6 +1136,20 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
 
             # Extract tool-usage metadata from agent output
             result.tool_usage = _extract_tool_usage(output_dir)
+
+            # Flag hybrid runs where MCP wasn't used — these don't count
+            # as valid MCP comparison data
+            mcp_calls = result.tool_usage.get("mcp_tool_calls", 0)
+            if config.mode in ("mcp_only", "hybrid") and mcp_calls == 0:
+                logger.warning(
+                    "MCP mode=%s but agent made 0 MCP tool calls — "
+                    "run is not a valid MCP comparison",
+                    config.mode,
+                )
+                result.tool_usage["mcp_used"] = False
+            elif config.mode in ("mcp_only", "hybrid"):
+                result.tool_usage["mcp_used"] = True
+                logger.info("Agent made %d MCP tool calls", mcp_calls)
 
             # Copy full conversation trace from container
             _copy_agent_trace(container_id, output_dir)
