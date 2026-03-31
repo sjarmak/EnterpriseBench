@@ -1,0 +1,106 @@
+# Phase 4 Multi-Mode Runs — sg_only and hybrid mode for MCP comparison
+# All 66 scored baseline tasks need two additional runs each:
+#   - sg_only:  agent uses ONLY Sourcegraph MCP for code search (no local tools)
+#   - hybrid:   agent uses Sourcegraph MCP + local tools (grep, find, etc.)
+#
+# Purpose: measure whether Sourcegraph MCP improves context retrieval quality
+# over baseline (local tools only). The three-way comparison (baseline vs
+# sg_only vs hybrid) is the core MCP signal analysis for EnterpriseBench.
+#
+# Total runs needed: 66 tasks x 2 modes = 132 additional runs
+
+# incident_response (6)
+benchmarks/incident_response/ansible-abc-imports-fix-001/task.toml
+benchmarks/incident_response/ansible-galaxy-tar-regression-prove-001/task.toml
+benchmarks/incident_response/incident-investigation-001/task.toml
+benchmarks/incident_response/incident-investigation-002/task.toml
+benchmarks/incident_response/incident-investigation-003/task.toml
+benchmarks/incident_response/incident-investigation-004/task.toml
+
+# dependency_management — api_contract (5)
+benchmarks/dependency_management/api-contract-001/task.toml
+benchmarks/dependency_management/api-contract-002/task.toml
+benchmarks/dependency_management/api-contract-005/task.toml
+benchmarks/dependency_management/api-contract-006/task.toml
+benchmarks/dependency_management/api-contract-007/task.toml
+
+# dependency_management — dep_traversal (5)
+benchmarks/dependency_management/dep-traversal-001/task.toml
+benchmarks/dependency_management/dep-traversal-003/task.toml
+benchmarks/dependency_management/dep-traversal-005/task.toml
+benchmarks/dependency_management/dep-traversal-010/task.toml
+benchmarks/dependency_management/dep-traversal-012/task.toml
+
+# customer_escalation — error_provenance (6)
+benchmarks/customer_escalation/err-provenance-01/task.toml
+benchmarks/customer_escalation/err-provenance-02/task.toml
+benchmarks/customer_escalation/err-provenance-03/task.toml
+benchmarks/customer_escalation/err-provenance-04/task.toml
+benchmarks/customer_escalation/err-provenance-05/task.toml
+benchmarks/customer_escalation/err-provenance-010/task.toml
+
+# customer_escalation — support_code_mapping (6)
+benchmarks/customer_escalation/support-mapping-001/task.toml
+benchmarks/customer_escalation/support-mapping-002/task.toml
+benchmarks/customer_escalation/support-mapping-003/task.toml
+benchmarks/customer_escalation/support-mapping-004/task.toml
+benchmarks/customer_escalation/support-mapping-005/task.toml
+benchmarks/customer_escalation/support-mapping-006/task.toml
+
+# customer_escalation — calibration (7)
+benchmarks/customer_escalation/calibration-001/task.toml
+benchmarks/customer_escalation/calibration-002/task.toml
+benchmarks/customer_escalation/calibration-003/task.toml
+benchmarks/customer_escalation/calibration-004/task.toml
+benchmarks/customer_escalation/calibration-005/task.toml
+benchmarks/customer_escalation/calibration-006/task.toml
+benchmarks/customer_escalation/calibration-007/task.toml
+benchmarks/customer_escalation/calibration-008/task.toml
+
+# feature_delivery — monorepo_boundary (3)
+benchmarks/feature_delivery/monorepo-boundary-005/task.toml
+benchmarks/feature_delivery/monorepo-boundary-008/task.toml
+benchmarks/feature_delivery/monorepo-boundary-009/task.toml
+
+# feature_delivery — db_schema_evolution (5)
+benchmarks/feature_delivery/schema-evolution-001/task.toml
+benchmarks/feature_delivery/schema-evolution-003/task.toml
+benchmarks/feature_delivery/schema-evolution-005/task.toml
+benchmarks/feature_delivery/schema-evolution-007/task.toml
+benchmarks/feature_delivery/schema-evolution-010/task.toml
+
+# feature_delivery — other (1)
+benchmarks/feature_delivery/camel-routing-arch-001/task.toml
+
+# platform_engineering — config_drift (4)
+benchmarks/platform_engineering/config-drift-001/task.toml
+benchmarks/platform_engineering/config-drift-002/task.toml
+benchmarks/platform_engineering/config-drift-003/task.toml
+benchmarks/platform_engineering/config-drift-004/task.toml
+
+# platform_engineering — calibration (2)
+benchmarks/platform_engineering/calibration-001/task.toml
+benchmarks/platform_engineering/calibration-002/task.toml
+
+# security_operations (5)
+benchmarks/security_operations/ccx-compliance-052/task.toml
+benchmarks/security_operations/ccx-compliance-053/task.toml
+benchmarks/security_operations/ceph-rgw-auth-secure-001/task.toml
+benchmarks/security_operations/rbac-audit-001/task.toml
+benchmarks/security_operations/rbac-audit-002/task.toml
+benchmarks/security_operations/rbac-audit-003/task.toml
+
+# technical_debt — dead_code_necropsy (3)
+benchmarks/technical_debt/dead-code-001/task.toml
+benchmarks/technical_debt/dead-code-002/task.toml
+benchmarks/technical_debt/dead-code-004/task.toml
+
+# technical_debt — refactor_orchestration (4)
+benchmarks/technical_debt/refactor-orchestration-001/task.toml
+benchmarks/technical_debt/refactor-orchestration-003/task.toml
+benchmarks/technical_debt/refactor-orchestration-005/task.toml
+benchmarks/technical_debt/refactor-orchestration-007/task.toml
+
+# technical_debt — other (2)
+benchmarks/technical_debt/beam-pipeline-builder-refac-001/task.toml
+benchmarks/technical_debt/calibration-002/task.toml

@@ -90,6 +90,25 @@ def _read_log_tail(task_dir: Path, filename: str) -> str:
         return ""
 
 
+def _agent_produced_output(task_dir: Path) -> bool:
+    """Check if the agent produced meaningful output (result + cost > 0).
+
+    Parses agent_stdout.log looking for a JSON object with a non-empty
+    ``"result"`` field and ``"total_cost_usd"`` > 0.  Returns True when
+    both conditions are met.
+    """
+    log_text = _read_log_tail(task_dir, "agent_stdout.log")
+    if not log_text.strip():
+        return False
+    try:
+        log_data = json.loads(log_text)
+    except (json.JSONDecodeError, ValueError):
+        return False
+    result_field = log_data.get("result", "")
+    cost = log_data.get("total_cost_usd", 0)
+    return bool(result_field) and isinstance(cost, (int, float)) and cost > 0
+
+
 def _gather_error_text(data: dict[str, Any], task_dir: Path) -> str:
     """Collect all error text sources into a single string for fingerprinting."""
     parts: list[str] = []
@@ -153,25 +172,34 @@ def classify_task(task_dir: Path) -> Optional[dict[str, Any]]:
     error_text = _gather_error_text(data, task_dir)
 
     # Try fingerprint matching
-    fp: Optional[Fingerprint] = match_fingerprint(error_text) if error_text.strip() else None
+    fp: Optional[Fingerprint] = (
+        match_fingerprint(error_text) if error_text.strip() else None
+    )
     fingerprint_id = fp.id if fp else None
     fingerprint_severity = fp.severity if fp else None
+
+    # Check whether the agent actually produced meaningful output
+    has_agent_output = _agent_produced_output(task_dir)
 
     # Classification logic:
     # 1. If score > 0 => pass
     if task_score is not None and task_score > 0:
         category = TriageCategory.PASS
-    # 2. If fingerprint matched => use severity mapping
+    # 2. If agent produced output (result + cost > 0) but score = 0 => agent quality
+    #    The agent ran and answered; the answer was simply wrong.
+    elif has_agent_output:
+        category = TriageCategory.D_AGENT
+    # 3. If fingerprint matched => use severity mapping
     elif fp is not None:
         category = _SEVERITY_TO_CATEGORY.get(
             fingerprint_severity, TriageCategory.D_AGENT  # type: ignore[arg-type]
         )
-    # 3. Phase-based heuristics for unfingerprinted failures
+    # 4. Phase-based heuristics for unfingerprinted failures
     elif phase in ("build",) and not success:
         category = TriageCategory.B_SETUP
     elif phase in ("scoring",) and not success:
         category = TriageCategory.C_VERIFIER
-    # 4. Completed with score=0 and no fingerprint => agent quality
+    # 5. Completed with score=0 and no fingerprint => agent quality
     else:
         category = TriageCategory.D_AGENT
 
@@ -231,9 +259,7 @@ def scan_results_dir(results_dir: Path) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def build_report(
-    tasks: list[dict[str, Any]], results_dir: str
-) -> dict[str, Any]:
+def build_report(tasks: list[dict[str, Any]], results_dir: str) -> dict[str, Any]:
     """Build a structured triage report from classified tasks.
 
     Returns:
@@ -265,7 +291,11 @@ def build_report(
         "per_task": [
             {
                 **task,
-                "category": task["category"].value if isinstance(task["category"], TriageCategory) else task["category"],
+                "category": (
+                    task["category"].value
+                    if isinstance(task["category"], TriageCategory)
+                    else task["category"]
+                ),
             }
             for task in tasks
         ],
@@ -302,7 +332,9 @@ def _format_table(report: dict[str, Any]) -> str:
         score_str = f"{score:.2f}" if score is not None else "N/A"
         fp_id = task.get("fingerprint_id", "") or ""
         phase = task.get("phase", "") or ""
-        lines.append(f"{task['task_id']:<45s} {cat:<12s} {score_str:>6s} {phase:<10s} {fp_id}")
+        lines.append(
+            f"{task['task_id']:<45s} {cat:<12s} {score_str:>6s} {phase:<10s} {fp_id}"
+        )
 
     return "\n".join(lines)
 

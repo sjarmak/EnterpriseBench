@@ -1,0 +1,19 @@
+# Phase 4 Rerun — invalidated tasks (empty output / permission denied / timeout)
+# These tasks produced no usable agent output in baseline mode and need rerun.
+# Moved from results/runs/ to results/runs/_invalidated/ for reference.
+
+# monorepo_boundary — permission denied, empty log
+benchmarks/feature_delivery/monorepo-boundary-002/task.toml
+benchmarks/feature_delivery/monorepo-boundary-001/task.toml
+
+# dead_code_necropsy — timeout, no output
+benchmarks/technical_debt/calibration-001/task.toml
+
+# archived task — timeout, no output
+benchmarks/_archived/bustub-hyperloglog-impl-001/task.toml
+
+# ─────────────────────────────────────────────────────────────────────
+# NOTE: ALL 66 scored tasks also need sg_only and hybrid mode runs
+# for MCP comparison analysis. See configs/phase4_multimode.txt for
+# the complete task list and run mode specifications.
+# ─────────────────────────────────────────────────────────────────────
