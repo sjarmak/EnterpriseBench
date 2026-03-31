@@ -384,9 +384,6 @@ def _setup_container(
             tmp_path = f.name
         try:
             _docker_cp(tmp_path, f"{container_id}:/workspace/instruction.md")
-            _docker_exec(
-                container_id, ["chown", "agent:agent", "/workspace/instruction.md"]
-            )
         finally:
             os.unlink(tmp_path)
         logger.info(
@@ -436,6 +433,25 @@ def _setup_container(
     if gt_file.exists():
         _docker_cp(str(gt_file), f"{container_id}:/workspace/.task/ground_truth.json")
         logger.info("Copied ground_truth.json into container")
+
+    # Fix ownership of all copied files — docker cp preserves host UID which
+    # may not match the agent user inside the container (e.g. node:1000 vs agent:1001)
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "-u",
+            "root",
+            container_id,
+            "chown",
+            "-R",
+            "agent:agent",
+            "/workspace",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
 
 
 def _install_claude_cli(container_id: str) -> bool:
