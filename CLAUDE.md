@@ -3,9 +3,11 @@
 Evolution of CodeScaleBench (CSB, 275 tasks, unpublished) into a benchmark measuring **codebase understanding and context gathering** — how well agents find and comprehend the right code across large, distributed codebases. Sourcegraph MCP is a first-class showcase, but tool access is a controlled independent variable (baseline / MCP-only / hybrid).
 
 ## Project Status
+
 Phase 5 complete. 100 benchmark tasks across 10 task types, 779+ tests passing, full verification pipeline operational.
 
 ## Key Files
+
 - `PRD.md` — product requirements document
 - `docs/CONVERGENCE_REPORT.md` — converged architecture from debate synthesis (detailed design decisions)
 - `docs/ARCHITECTURE.md` — system architecture and verification flow
@@ -22,13 +24,16 @@ Phase 5 complete. 100 benchmark tasks across 10 task types, 779+ tests passing, 
 - `configs/` — run configurations
 
 ## CSB Foundation
+
 - 275 existing tasks (220 Org + 55 SDLC) carry forward — fix, extend, don't rebuild
 - 178 sg-evals mirrors from CSB, extended for multi-repo tasks
 - Primary measurement: context retrieval quality (not code generation)
 - Layered ground truth (deterministic + LLM curator + solve-verification) replaces single-source
 
 ## Task Suites (100 tasks total)
+
 Tasks are organized by enterprise workflow cluster (not artificial SDLC/Org splits):
+
 - `dependency_management` (21) — dep_traversal, api_contract tasks
 - `incident_response` (7) — incident_investigation tasks
 - `platform_engineering` (4) — config_drift tasks
@@ -38,9 +43,11 @@ Tasks are organized by enterprise workflow cluster (not artificial SDLC/Org spli
 - `technical_debt` (14) — refactor_orchestration, dead_code_necropsy tasks
 
 ## Task Types (10)
+
 api_contract, config_drift, db_schema_evolution, dead_code_necropsy, dependency_graph, error_provenance, incident_investigation, monorepo_boundary, refactor_orchestration, support_code_mapping
 
 ## Task Mix Gradient
+
 - 15% calibration (single-repo, MCP bias check)
 - 25% large single-repo
 - 30% dual-repo
@@ -48,18 +55,21 @@ api_contract, config_drift, db_schema_evolution, dead_code_necropsy, dependency_
 - 10% monorepo cross-package
 
 ## Multi-Repo Design
+
 - Tasks use 1-5 real OSS repos connected by actual dependency chains
 - Four atomic patterns: propagate, investigate, enforce, orchestrate
 - Repos cloned into `/workspace/{repo-name}/` in sandbox
 - Cross-repo integration tests via unified `test.sh`
 
 ## Session Types
+
 - `single` — standard one-shot task
 - `chain` — multi-session with git-branch state between sessions
 - `event_replay` — agent responds to timestamped event stream
 - `resume` — agent picks up partially completed work
 
 ## Verification
+
 - Single `eb_verify` library with plugin architecture — no per-task verifier copies, ever
 - 9 verifier plugins: answer, code_patch, config_validator, incident_report, runbook, security_assessment, reproduction_script, topological_order, call_graph
 - Checkpoint-based partial scoring (2-5 checkpoints per task)
@@ -68,12 +78,15 @@ api_contract, config_drift, db_schema_evolution, dead_code_necropsy, dependency_
 - 779+ tests across 19 test modules
 
 ## Skills
+
 - `/diverge` — multi-perspective research with independent agents
 - `/diverge-prototype` — independent prototyping in isolated worktrees
 - `/converge` — structured debate using Agent Teams
 
 ## Conventions
+
 - All work on `main`
 - Run prototypes before committing to architectural decisions
+- **Always run benchmark tasks in parallel** — never sequentially. Use `&` + `wait` with different accounts (1-5). Mode-suffixed image tags (`eb-task-mcp_only`) prevent Docker build collisions. CSB uses `PairScheduler` for this; EB's `run_task.py` is single-task, so the caller must parallelize.
 - Real OSS repos only — no synthetic/toy repositories
 - Every task must be a realistic enterprise use case
