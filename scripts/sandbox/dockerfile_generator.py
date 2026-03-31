@@ -142,7 +142,7 @@ def _has_node(base_image: str) -> bool:
 def _setup_lines(base_image: str) -> list[str]:
     """Common setup: install system packages, Node.js 20 (if needed), and Claude Code CLI."""
     lines = [
-        "RUN apt-get update && apt-get install -y git curl ca-certificates jq && rm -rf /var/lib/apt/lists/*",
+        "RUN apt-get update && apt-get install -y git curl ca-certificates jq xz-utils && rm -rf /var/lib/apt/lists/*",
         "",
     ]
     if not _has_node(base_image):

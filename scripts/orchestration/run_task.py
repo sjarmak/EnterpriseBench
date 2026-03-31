@@ -384,6 +384,9 @@ def _setup_container(
             tmp_path = f.name
         try:
             _docker_cp(tmp_path, f"{container_id}:/workspace/instruction.md")
+            _docker_exec(
+                container_id, ["chown", "agent:agent", "/workspace/instruction.md"]
+            )
         finally:
             os.unlink(tmp_path)
         logger.info(
@@ -965,8 +968,10 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         repos = task_data.get("repos", [])
 
         result.task_id = task_id
-        image_tag = f"eb-{task_id}"
-        container_name = f"eb-run-{task_id}-{int(time.time())}"
+        # Include mode in image tag to prevent concurrent build collisions
+        mode_suffix = f"-{config.mode}" if config.mode != "baseline" else ""
+        image_tag = f"eb-{task_id}{mode_suffix}"
+        container_name = f"eb-run-{task_id}{mode_suffix}-{int(time.time())}"
         result.image_tag = image_tag
         timings["parse"] = time.monotonic() - t0
 
