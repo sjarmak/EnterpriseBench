@@ -841,8 +841,9 @@ def _configure_mcp(container_id: str, mode: str) -> None:
         timeout=10,
     )
 
-    # Write .mcp.json to /workspace — Claude Code discovers MCP servers from
-    # .mcp.json in the working directory (matches CSB's approach).
+    # Write .mcp.json to /workspace AND register via `claude mcp add` for reliability.
+    # .mcp.json alone sometimes shows needs-auth due to race conditions in Claude
+    # Code's MCP discovery. Belt-and-suspenders: both methods.
     mcp_config = json.dumps(
         {
             "mcpServers": {
@@ -863,6 +864,38 @@ def _configure_mcp(container_id: str, mode: str) -> None:
             "chown agent:agent /workspace/.mcp.json",
         ],
     )
+    # Also register via CLI for reliability (writes to ~/.claude/settings.json)
+    add_result = subprocess.run(
+        [
+            "docker",
+            "exec",
+            "-u",
+            "agent",
+            "-e",
+            "HOME=/home/agent",
+            "-e",
+            "NODE_TLS_REJECT_UNAUTHORIZED=0",
+            "-w",
+            "/workspace",
+            container_id,
+            "claude",
+            "mcp",
+            "add",
+            "--transport",
+            "http",
+            "sourcegraph",
+            SOURCEGRAPH_MCP_ENDPOINT,
+            "-H",
+            f"Authorization: token {sg_token}",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if add_result.returncode == 0:
+        logger.info("MCP server registered via claude mcp add")
+    else:
+        logger.warning("claude mcp add failed: %s", add_result.stderr.strip())
     logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
 
 
