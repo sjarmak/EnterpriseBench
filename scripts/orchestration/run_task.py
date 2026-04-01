@@ -27,6 +27,20 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# Auto-load .env.local for Sourcegraph credentials if not already in env
+_env_local = REPO_ROOT / ".env.local"
+if _env_local.is_file() and not os.environ.get("SOURCEGRAPH_ACCESS_TOKEN"):
+    for _line in _env_local.read_text().splitlines():
+        _line = _line.strip()
+        if _line.startswith("#") or not _line or "=" not in _line:
+            continue
+        # Handle 'export KEY=VALUE' and 'KEY=VALUE'
+        if _line.startswith("export "):
+            _line = _line[7:]
+        _key, _, _val = _line.partition("=")
+        _val = _val.strip().strip("\"'")
+        os.environ.setdefault(_key.strip(), _val)
+
 # Reuse the TOML parser from create_sg_mirrors
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "infra"))
 from create_sg_mirrors import parse_toml
@@ -926,8 +940,16 @@ def _configure_mcp(container_id: str, mode: str) -> None:
             container_id,
             ["chown", "agent:agent", "/home/agent/.claude/.mcp.json"],
         )
+
+        # Also write to /home/agent/.mcp.json for --mcp-config flag
+        _docker_cp(tmp_project, f"{container_id}:/home/agent/.mcp.json")
+        _docker_exec(
+            container_id,
+            ["chown", "agent:agent", "/home/agent/.mcp.json"],
+        )
         logger.info(
-            "MCP config written to /workspace/.mcp.json and /home/agent/.claude/.mcp.json"
+            "MCP config written to /workspace/.mcp.json, "
+            "/home/agent/.claude/.mcp.json, and /home/agent/.mcp.json"
         )
     finally:
         os.unlink(tmp_project)
@@ -981,11 +1003,40 @@ def _configure_mcp(container_id: str, mode: str) -> None:
     logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
 
 
+def _sum_model_usage(model_usage: dict) -> tuple[int, int, float]:
+    """Sum token counts and cost across all models in a modelUsage dict.
+
+    modelUsage can be either:
+      - flat: {"inputTokens": N, "outputTokens": N, "costUSD": N}
+      - per-model: {"claude-sonnet-4-6": {"inputTokens": N, ...}, ...}
+
+    Returns (total_input, total_output, total_cost).
+    """
+    # Flat format: has inputTokens at top level
+    if "inputTokens" in model_usage:
+        return (
+            model_usage.get("inputTokens", 0),
+            model_usage.get("outputTokens", 0),
+            model_usage.get("costUSD", 0.0),
+        )
+    # Per-model format: sum across all model entries
+    total_input = 0
+    total_output = 0
+    total_cost = 0.0
+    for val in model_usage.values():
+        if isinstance(val, dict):
+            total_input += val.get("inputTokens", 0)
+            total_output += val.get("outputTokens", 0)
+            total_cost += val.get("costUSD", 0.0)
+    return total_input, total_output, total_cost
+
+
 def _extract_tool_usage(output_dir: Path) -> dict:
     """Parse the agent's stdout log for tool-usage metadata.
 
     Claude Code JSON output includes modelUsage data with token counts,
-    cost, and turn information. Returns a dict suitable for results.json.
+    cost, and turn information. modelUsage may be flat (single model)
+    or keyed by model name (multi-model). Returns a dict for results.json.
     """
     usage: dict = {
         "total_input_tokens": 0,
@@ -1007,17 +1058,16 @@ def _extract_tool_usage(output_dir: Path) -> dict:
     # Try to parse the entire output as JSON first.
     try:
         data = json.loads(content)
-        model_usage = data.get("modelUsage", {})
-        usage["total_input_tokens"] = model_usage.get("inputTokens", 0)
-        usage["total_output_tokens"] = model_usage.get("outputTokens", 0)
-        usage["cost_usd"] = model_usage.get("costUSD", 0.0)
+        inp, out, cost = _sum_model_usage(data.get("modelUsage", {}))
+        usage["total_input_tokens"] = inp
+        usage["total_output_tokens"] = out
+        usage["cost_usd"] = cost or data.get("total_cost_usd", 0.0)
         usage["num_turns"] = data.get("numTurns", 0)
-
         return usage
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # Fallback: scan stream-json lines for modelUsage and MCP tool calls
+    # Fallback: scan stream-json lines for the result message and modelUsage
     for line in content.splitlines():
         line = line.strip()
         if not line.startswith("{"):
@@ -1025,12 +1075,14 @@ def _extract_tool_usage(output_dir: Path) -> dict:
         try:
             obj = json.loads(line)
             if "modelUsage" in obj:
-                mu = obj["modelUsage"]
-                usage["total_input_tokens"] += mu.get("inputTokens", 0)
-                usage["total_output_tokens"] += mu.get("outputTokens", 0)
-                usage["cost_usd"] += mu.get("costUSD", 0.0)
+                inp, out, cost = _sum_model_usage(obj["modelUsage"])
+                usage["total_input_tokens"] = inp
+                usage["total_output_tokens"] = out
+                usage["cost_usd"] = cost or obj.get("total_cost_usd", 0.0)
             if "numTurns" in obj:
                 usage["num_turns"] = max(usage["num_turns"], obj["numTurns"])
+            if "num_turns" in obj:
+                usage["num_turns"] = max(usage["num_turns"], obj["num_turns"])
         except (json.JSONDecodeError, ValueError):
             continue
 
@@ -1272,6 +1324,13 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # Use default OAuth agent command if none was explicitly provided
             if not agent_command:
                 agent_command = DEFAULT_OAUTH_AGENT_COMMAND
+            # For MCP modes, add --mcp-config flag for explicit config loading
+            # (auto-discovery from project dir is less reliable)
+            if (
+                config.mode in ("mcp_only", "hybrid")
+                and "--mcp-config" not in agent_command
+            ):
+                agent_command = agent_command + " --mcp-config /home/agent/.mcp.json"
             # Install Claude Code CLI inside the container
             if not _install_claude_cli(container_id):
                 result.phase = "setup_failed"
