@@ -5,9 +5,9 @@
   "error": "",
   "image_tag": "eb-cal-err-flask-blueprint-001",
   "scores": {
-    "task_score": 2.5,
-    "all_passed": true,
-    "checkpoints_passed": 3,
+    "task_score": 2.0,
+    "all_passed": false,
+    "checkpoints_passed": 2,
     "checkpoints_total": 3,
     "repos": [
       "flask"
@@ -18,15 +18,15 @@
         "weight": 1.0,
         "score": 1.0,
         "passed": true,
-        "duration_ms": 74,
+        "duration_ms": 78,
         "exit_code": 0
       },
       {
         "name": "error_source",
         "weight": 1.0,
-        "score": 0.5,
-        "passed": true,
-        "duration_ms": 15,
+        "score": 0.0,
+        "passed": false,
+        "duration_ms": 14,
         "exit_code": 0
       },
       {
@@ -34,17 +34,17 @@
         "weight": 1.0,
         "score": 1.0,
         "passed": true,
-        "duration_ms": 14,
+        "duration_ms": 16,
         "exit_code": 0
       }
     ]
   },
   "timing": {
-    "parse": 0.0003374179941602051,
-    "build": 0.23157885498949327,
-    "setup": 0.31872976099839434,
-    "agent": 126.50525360999745,
-    "scoring": 0.1558946410077624
+    "parse": 0.0006210659921634942,
+    "build": 0.6661579800129402,
+    "setup": 0.41587616002652794,
+    "agent": 196.1292536779947,
+    "scoring": 0.15768048900645226
   },
   "config": {
     "source": "mirror",

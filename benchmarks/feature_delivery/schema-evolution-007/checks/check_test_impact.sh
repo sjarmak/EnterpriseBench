@@ -3,6 +3,9 @@ set -euo pipefail
 
 REPORT="${WORKSPACE:-/workspace}/discourse/SCHEMA_IMPACT.md"
 if [[ ! -f "$REPORT" ]]; then
+  REPORT="${WORKSPACE:-/workspace}/agent_output/answer.json"
+fi
+if [[ ! -f "$REPORT" ]]; then
   printf '{"score": 0.0, "passed": false, "reason": "SCHEMA_IMPACT.md not found"}\n'
   exit 0
 fi

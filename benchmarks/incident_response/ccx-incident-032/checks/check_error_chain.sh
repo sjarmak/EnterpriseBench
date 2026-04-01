@@ -2,7 +2,11 @@
 # check_error_chain.sh — verify agent traced the error propagation chain
 set -euo pipefail
 
-export ANSWER_FILE="${WORKSPACE:-/workspace}/answer.json"
+ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
+if [[ ! -f "$ANSWER_FILE" ]]; then
+    ANSWER_FILE="${WORKSPACE:-/workspace}/answer.json"
+fi
+export ANSWER_FILE
 export GT_FILE="$TASK_DIR/ground_truth.json"
 
 if [[ ! -f "$ANSWER_FILE" ]]; then

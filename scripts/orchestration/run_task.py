@@ -151,7 +151,7 @@ def _load_oauth_token(account: int) -> str:
     return access_token
 
 
-DEFAULT_OAUTH_AGENT_COMMAND = "claude --dangerously-skip-permissions --max-turns 30 --verbose --output-format stream-json -p"
+DEFAULT_OAUTH_AGENT_COMMAND = "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json -p"
 
 
 def _parse_task(toml_path: Path) -> dict:

@@ -2,7 +2,11 @@
 # check_symbols.sh — verify agent identified key structs/functions
 set -euo pipefail
 
-export ANSWER_FILE="${WORKSPACE:-/workspace}/answer.json"
+ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
+if [[ ! -f "$ANSWER_FILE" ]]; then
+    ANSWER_FILE="${WORKSPACE:-/workspace}/answer.json"
+fi
+export ANSWER_FILE
 
 if [[ ! -f "$ANSWER_FILE" ]]; then
     echo '{"score": 0.0, "passed": false, "detail": "No answer.json found"}'
