@@ -35,7 +35,7 @@ MCP_ONLY_HEADER = (
     "You MUST use Sourcegraph MCP tools for all code access.**"
 )
 
-HYBRID_HEADER = "# REQUIRED: Sourcegraph MCP Tools"
+HYBRID_HEADER = "# Sourcegraph MCP Tools Available"
 
 
 @pytest.fixture()
