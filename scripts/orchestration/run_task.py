@@ -300,9 +300,57 @@ def _docker_stop_rm(container_id: str) -> None:
     )
 
 
+def _build_sg_repo_scope(repos: list[dict]) -> str:
+    """Build Sourcegraph repo scoping section from task repos.
+
+    Maps each task repo (e.g. github.com/grpc/grpc-go@v1.4.0) to its
+    sg-evals mirror name (e.g. sg-evals/grpc-go--v1.4.0) for accurate
+    MCP search scoping.
+    """
+    if not repos:
+        return ""
+
+    lines = ["## Sourcegraph Repository Scoping\n"]
+    lines.append(
+        "These repos are indexed on Sourcegraph under `sg-evals/` mirrors. "
+        "**Always scope your MCP searches to these repos:**\n"
+    )
+
+    for repo in repos:
+        url = repo.get("url", "")
+        rev = repo.get("rev", "")
+        path = repo.get("path", "")
+        if not url:
+            continue
+
+        # Extract org/repo from URL
+        org_repo = (
+            url.replace("https://github.com/", "")
+            .replace("http://github.com/", "")
+            .rstrip("/")
+        )
+        if org_repo.endswith(".git"):
+            org_repo = org_repo[:-4]
+        repo_name = org_repo.split("/")[-1]
+
+        # Build sg-evals mirror name (matches create_sg_mirrors.py logic)
+        is_tag = not all(c in "0123456789abcdef" for c in rev.lower())
+        ref_suffix = rev if is_tag else rev[:8]
+        ref_suffix = ref_suffix.replace("/", "_")
+        sg_mirror = f"sg-evals/{repo_name}--{ref_suffix}"
+
+        lines.append(f"- **{path or repo_name}** (local: `/workspace/{path}/`)")
+        lines.append(f"  - MCP filter: `repo:^github.com/{sg_mirror}$`")
+        lines.append(f"  - Upstream: `{org_repo}@{rev}`")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _build_instruction_text(
     task_dir: Path,
     mode: str,
+    repos: list[dict] | None = None,
 ) -> str | None:
     """Build the full instruction text with optional MCP preamble and output appendix.
 
@@ -349,17 +397,16 @@ def _build_instruction_text(
                 "2. **Read locally** — use Read/cat for files in /workspace\n"
                 "3. **Navigate with MCP** — trace references and definitions across repo boundaries\n"
                 "4. **Edit locally** — modify /workspace files based on what you learned\n\n"
-                "## Scoping MCP Queries\n\n"
-                "```\n"
-                "repo:^github.com/ORG/REPO$    # Exact repo (preferred)\n"
-                "file:.*\\.go$                   # Language filter\n"
-                "```\n\n"
-                "Start narrow. Expand only if results are empty.\n\n"
                 "## Efficiency\n\n"
                 "- Use MCP for **discovery**, local tools for **reading**\n"
                 "- Don't re-search for patterns you already found\n"
                 "- Prefer `keyword_search` over `nls_search` when you have exact terms"
             )
+
+            # Add dynamic repo scoping from task metadata
+            repo_scope = _build_sg_repo_scope(repos or [])
+            if repo_scope:
+                preamble_parts.append(repo_scope)
 
         # Append instruction_mcp.md content if it exists
         instruction_mcp = task_dir / "instruction_mcp.md"
@@ -404,7 +451,7 @@ def _setup_container(
     - eb_verify library -> /workspace/.eb_verify/ (if needed by check scripts)
     """
     # Copy instruction.md with output format appendix and optional MCP preamble
-    combined = _build_instruction_text(task_dir, mode)
+    combined = _build_instruction_text(task_dir, mode, repos=task_data.get("repos", []))
     if combined is not None:
         import tempfile
 

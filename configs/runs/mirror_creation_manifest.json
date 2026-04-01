@@ -1,7 +1,7 @@
 {
   "_description": "Mirrors needed for reproducible Sourcegraph indexing (EnterpriseBench)",
-  "_generated": "2026-03-29",
-  "_status": "131 mirrors from 117 task files",
+  "_generated": "2026-03-31",
+  "_status": "132 mirrors from 119 task files",
   "mirrors": [
     {
       "upstream": "github.com/NodeBB/NodeBB",
@@ -193,6 +193,15 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "dep-traversal-003"
+      ]
+    },
+    {
+      "upstream": "github.com/pallets/click",
+      "commit": "8.1.7",
+      "mirror": "sg-evals/click--8.1.7",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "event-replay-click-ci-001"
       ]
     },
     {
@@ -439,6 +448,7 @@
         "cal-err-flask-blueprint-001",
         "cal-err-flask-endpoint-004",
         "cal-sup-flask-errhandler-006",
+        "chain-err-flask-import-001",
         "cal-drift-flask-config-001",
         "cal-dead-flask-legacy-002"
       ]

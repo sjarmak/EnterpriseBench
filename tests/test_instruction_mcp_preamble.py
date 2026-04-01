@@ -215,7 +215,7 @@ class TestSetupContainerPassesMode:
             from run_task import _setup_container
 
             _setup_container("fake-container", task_dir, {}, mode="hybrid")
-            mock_build.assert_called_once_with(task_dir, "hybrid")
+            mock_build.assert_called_once_with(task_dir, "hybrid", repos=[])
 
     def test_setup_container_defaults_to_baseline(self, task_dir: Path) -> None:
         with patch(
@@ -224,4 +224,4 @@ class TestSetupContainerPassesMode:
             from run_task import _setup_container
 
             _setup_container("fake-container", task_dir, {})
-            mock_build.assert_called_once_with(task_dir, "baseline")
+            mock_build.assert_called_once_with(task_dir, "baseline", repos=[])
