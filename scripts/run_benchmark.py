@@ -62,6 +62,7 @@ RUNNERS: dict[str, Path] = {
 # Data
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class TaskInfo:
     """Lightweight metadata parsed from a task.toml for filtering/routing."""
@@ -127,6 +128,7 @@ class TokenBudget:
 # ---------------------------------------------------------------------------
 # Discovery & Filtering
 # ---------------------------------------------------------------------------
+
 
 def discover_tasks(path: Path) -> list[TaskInfo]:
     """Find all task.toml files under *path* and parse their metadata."""
@@ -249,6 +251,7 @@ def filter_completed_tasks(
 # Cost Extraction
 # ---------------------------------------------------------------------------
 
+
 def extract_task_cost(
     task_id: str,
     *,
@@ -285,6 +288,7 @@ def extract_task_cost(
 # Execution
 # ---------------------------------------------------------------------------
 
+
 def run_task(
     task: TaskInfo,
     *,
@@ -296,13 +300,17 @@ def run_task(
     result = TaskResult(task_id=task.task_id, difficulty=task.difficulty, mode=mode)
 
     if task.session_type == "resume":
-        logger.info("[skip] %s — session_type 'resume' not yet implemented", task.task_id)
+        logger.info(
+            "[skip] %s — session_type 'resume' not yet implemented", task.task_id
+        )
         result.status = "skipped"
         return result
 
     runner = RUNNERS.get(task.session_type)
     if runner is None:
-        logger.error("[skip] %s — unknown session_type '%s'", task.task_id, task.session_type)
+        logger.error(
+            "[skip] %s — unknown session_type '%s'", task.task_id, task.session_type
+        )
         result.status = "skipped"
         return result
 
@@ -322,7 +330,8 @@ def run_task(
         if proc.returncode != 0:
             logger.warning(
                 "[error] %s exited %d\nstdout: %s\nstderr: %s",
-                task.task_id, proc.returncode,
+                task.task_id,
+                proc.returncode,
                 proc.stdout[-500:] if proc.stdout else "",
                 proc.stderr[-500:] if proc.stderr else "",
             )
@@ -338,8 +347,9 @@ def run_task(
             if results_file.exists():
                 try:
                     rdata = json.loads(results_file.read_text())
-                    result.score = rdata.get("scores", {}).get("task_score",
-                                  rdata.get("score"))
+                    result.score = rdata.get("scores", {}).get(
+                        "task_score", rdata.get("score")
+                    )
                     break
                 except (json.JSONDecodeError, OSError):
                     pass
@@ -359,8 +369,33 @@ def run_task(
 
 
 # ---------------------------------------------------------------------------
+# Parallel worker (module-level for pickling)
+# ---------------------------------------------------------------------------
+
+
+def _run_task_with_account(
+    task: TaskInfo,
+    account_id: int | None,
+    mode: str,
+    cli_args: argparse.Namespace,
+    multi_mode: bool,
+) -> TaskResult:
+    """Run a single task with account assignment. Module-level for ProcessPoolExecutor."""
+    pt = collect_passthrough_args(
+        cli_args,
+        account_override=account_id,
+        mode_override=mode,
+    )
+    if multi_mode:
+        mode_output = PROJECT_ROOT / "results" / "runs" / task.task_id / mode
+        pt.extend(["--output-dir", str(mode_output)])
+    return run_task(task, passthrough_args=pt, mode=mode)
+
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
+
 
 def write_summary(
     results: list[TaskResult],
@@ -399,12 +434,15 @@ def print_summary_table(results: list[TaskResult]) -> None:
     for r in results:
         score_str = f"{r.score:.2f}" if r.score is not None else "—"
         dur_str = f"{r.duration_seconds:.1f}s" if r.duration_seconds > 0 else "—"
-        print(f"{r.task_id:<45} {r.mode:<12} {r.difficulty:<10} {score_str:>6} {dur_str:>10} {r.status:<10}")
+        print(
+            f"{r.task_id:<45} {r.mode:<12} {r.difficulty:<10} {score_str:>6} {dur_str:>10} {r.status:<10}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -420,11 +458,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Filter flags
     filter_group = parser.add_argument_group("filters")
-    filter_group.add_argument("--all", action="store_true", help="Run all tasks under path")
+    filter_group.add_argument(
+        "--all", action="store_true", help="Run all tasks under path"
+    )
     filter_group.add_argument("--difficulty", choices=["medium", "hard", "expert"])
-    filter_group.add_argument("--session-type", choices=["single", "chain", "event_replay", "resume"])
+    filter_group.add_argument(
+        "--session-type", choices=["single", "chain", "event_replay", "resume"]
+    )
     filter_group.add_argument("--task-type")
-    filter_group.add_argument("--limit", type=int, default=None, help="Max number of tasks to run")
+    filter_group.add_argument(
+        "--limit", type=int, default=None, help="Max number of tasks to run"
+    )
     filter_group.add_argument(
         "--skip-completed",
         action="store_true",
@@ -450,7 +494,9 @@ def build_parser() -> argparse.ArgumentParser:
             "across accounts when multiple are given."
         ),
     )
-    runner_group.add_argument("--dry-run", action="store_true", help="List tasks without running")
+    runner_group.add_argument(
+        "--dry-run", action="store_true", help="List tasks without running"
+    )
     runner_group.add_argument(
         "--mode",
         choices=list(VALID_MODES),
@@ -470,7 +516,8 @@ def build_parser() -> argparse.ArgumentParser:
     # Parallelism
     parallel_group = parser.add_argument_group("parallelism")
     parallel_group.add_argument(
-        "--parallel", "-j",
+        "--parallel",
+        "-j",
         type=int,
         default=1,
         metavar="N",
@@ -591,7 +638,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Determine the mode(s) to check against
         check_mode = args.mode  # default; multi-mode handled per-mode below
         tasks, skipped_tasks = filter_completed_tasks(
-            tasks, results_dir=results_dir, mode=check_mode,
+            tasks,
+            results_dir=results_dir,
+            mode=check_mode,
         )
         previously_completed = len(skipped_tasks)
         if previously_completed > 0:
@@ -599,7 +648,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 logger.info("[skip-completed] %s", st.task_id)
             logger.info(
                 "Skipped %d previously completed task(s), %d remaining",
-                previously_completed, len(tasks),
+                previously_completed,
+                len(tasks),
             )
 
     if args.limit == 0:
@@ -612,7 +662,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 task_type=args.task_type,
             )
             if filtered:
-                print(f"  {t.task_id:<45} {t.difficulty:<10} {t.session_type:<15} {t.task_type}")
+                print(
+                    f"  {t.task_id:<45} {t.difficulty:<10} {t.session_type:<15} {t.task_type}"
+                )
         return 0
 
     if not tasks:
@@ -655,7 +707,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if budget.budget_usd is not None:
         logger.info(
             "Budget watchdog: $%.2f limit, warn at %d%%",
-            budget.budget_usd, budget.warn_pct,
+            budget.budget_usd,
+            budget.warn_pct,
         )
 
     results_dir = PROJECT_ROOT / "results" / "runs"
@@ -682,7 +735,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     logger.warning(
                         "[budget] STOPPED — cumulative cost $%.2f exceeds "
                         "budget $%.2f. Remaining tasks skipped.",
-                        cumulative_cost_usd, budget.budget_usd,
+                        cumulative_cost_usd,
+                        budget.budget_usd,
                     )
                     budget_exceeded = True
                     break
@@ -696,8 +750,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 # For multi-mode runs, use mode-specific output directory
                 if len(modes) > 1:
                     mode_output = (
-                        PROJECT_ROOT / "results" / "runs"
-                        / task.task_id / current_mode
+                        PROJECT_ROOT / "results" / "runs" / task.task_id / current_mode
                     )
                     passthrough.extend(["--output-dir", str(mode_output)])
                 result = run_task(
@@ -730,26 +783,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             # Parallel execution with round-robin account distribution
             logger.info(
                 "Parallel mode: %d workers, %d account(s)",
-                workers, len(accounts) or 1,
+                workers,
+                len(accounts) or 1,
             )
 
-            def _run_with_account(
-                task: TaskInfo,
-                account_id: int | None,
-                mode: str = current_mode,
-            ) -> TaskResult:
-                pt = collect_passthrough_args(
-                    args,
-                    account_override=account_id,
-                    mode_override=mode,
-                )
-                if len(modes) > 1:
-                    mode_output = (
-                        PROJECT_ROOT / "results" / "runs"
-                        / task.task_id / mode
-                    )
-                    pt.extend(["--output-dir", str(mode_output)])
-                return run_task(task, passthrough_args=pt, mode=mode)
+            multi_mode = len(modes) > 1
 
             # Build (task, account) pairs via round-robin
             task_assignments: list[tuple[TaskInfo, int | None]] = []
@@ -762,7 +800,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             result_map: dict[str, TaskResult] = {}
             with ProcessPoolExecutor(max_workers=workers) as pool:
                 future_to_task = {
-                    pool.submit(_run_with_account, task, acct): task
+                    pool.submit(
+                        _run_task_with_account,
+                        task,
+                        acct,
+                        current_mode,
+                        args,
+                        multi_mode,
+                    ): task
                     for task, acct in task_assignments
                 }
                 for future in as_completed(future_to_task):
@@ -815,18 +860,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                         logger.warning(
                             "[budget] STOPPED — cumulative cost $%.2f exceeds "
                             "budget $%.2f. In-flight tasks will finish.",
-                            cumulative_cost_usd, budget.budget_usd,
+                            cumulative_cost_usd,
+                            budget.budget_usd,
                         )
                         budget_exceeded = True
 
             # Preserve original task order in results
-            results.extend(result_map[t.task_id] for t in tasks if t.task_id in result_map)
+            results.extend(
+                result_map[t.task_id] for t in tasks if t.task_id in result_map
+            )
 
     # Summary
     print_summary_table(results)
     if not args.dry_run:
         summary_path = write_summary(
-            results, run_id,
+            results,
+            run_id,
             previously_completed=previously_completed,
             cumulative_cost_usd=cumulative_cost_usd,
             budget_usd=budget.budget_usd,
@@ -836,7 +885,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if budget_exceeded:
         logger.warning(
             "[budget] Run terminated early. Cumulative cost: $%.2f / $%.2f",
-            cumulative_cost_usd, budget.budget_usd,
+            cumulative_cost_usd,
+            budget.budget_usd,
         )
         return 3
 
