@@ -841,7 +841,9 @@ def _verify_mcp_endpoint(container_id: str, sg_token: str) -> bool:
             timeout=15,
         )
         http_code = result.stdout.strip()
-        if http_code == "200" or result.returncode == 0:
+        # 200 = OK, 405 = Method Not Allowed (GET on POST-only MCP endpoint —
+        # means reachable and auth accepted, just wrong HTTP method)
+        if http_code in ("200", "405") or result.returncode == 0:
             logger.info(
                 "MCP endpoint HTTP check OK (attempt %d, code=%s)",
                 attempt,
