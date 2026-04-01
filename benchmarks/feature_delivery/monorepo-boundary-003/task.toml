@@ -1,6 +1,10 @@
 # Monorepo Boundary: Babel Decorator Metadata + TS Tuple Labels
 
 difficulty_stratum = "monorepo_cross_package"
+mcp_suite = "eb_v1"
+repo_set_id = "babel-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "monorepo-boundary-babel-metadata-003"

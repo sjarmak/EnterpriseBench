@@ -1,6 +1,10 @@
 # DB Schema Evolution: Sync Reviewable Claimed Status (Discourse)
 
 difficulty_stratum = "large_single"
+mcp_suite = "eb_v1"
+repo_set_id = "discourse-platform"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "schema-evolution-005"

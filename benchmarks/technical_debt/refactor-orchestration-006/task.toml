@@ -1,6 +1,10 @@
 # Refactor Orchestration: Go 1.26 + distroless image update cascade in Kubernetes
 
 difficulty_stratum = "monorepo_cross_package"
+mcp_suite = "eb_v1"
+repo_set_id = "kubernetes-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "refactor-orch-006"

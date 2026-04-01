@@ -34,6 +34,12 @@ from create_sg_mirrors import parse_toml
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 from validation import validate_repo_entry
 
+# Sourcegraph MCP preamble builder
+sys.path.insert(0, str(REPO_ROOT))
+from agents.harnesses.claude.mcp.sourcegraph import (
+    build_system_prompt as _build_mcp_preamble,
+)
+
 logger = logging.getLogger(__name__)
 
 # Paths to sandbox scripts (relative to repo root)
@@ -51,9 +57,8 @@ _raw_mcp_url = os.environ.get("SOURCEGRAPH_MCP_URL", _DEFAULT_MCP_URL)
 SOURCEGRAPH_MCP_ENDPOINT = (
     _raw_mcp_url if _raw_mcp_url.endswith("/all") else f"{_raw_mcp_url.rstrip('/')}/all"
 )
-SOURCEGRAPH_MCP_ADD_CMD = (
-    f"claude mcp add --transport http sg {SOURCEGRAPH_MCP_ENDPOINT}"
-)
+# Note: MCP is configured via .mcp.json files, not `claude mcp add`
+# (the CLI command had race conditions causing intermittent needs-auth)
 
 
 @dataclass(frozen=True)
@@ -300,53 +305,6 @@ def _docker_stop_rm(container_id: str) -> None:
     )
 
 
-def _build_sg_repo_scope(repos: list[dict]) -> str:
-    """Build Sourcegraph repo scoping section from task repos.
-
-    Maps each task repo (e.g. github.com/grpc/grpc-go@v1.4.0) to its
-    sg-evals mirror name (e.g. sg-evals/grpc-go--v1.4.0) for accurate
-    MCP search scoping.
-    """
-    if not repos:
-        return ""
-
-    lines = ["## Sourcegraph Repository Scoping\n"]
-    lines.append(
-        "These repos are indexed on Sourcegraph under `sg-evals/` mirrors. "
-        "**Always scope your MCP searches to these repos:**\n"
-    )
-
-    for repo in repos:
-        url = repo.get("url", "")
-        rev = repo.get("rev", "")
-        path = repo.get("path", "")
-        if not url:
-            continue
-
-        # Extract org/repo from URL
-        org_repo = (
-            url.replace("https://github.com/", "")
-            .replace("http://github.com/", "")
-            .rstrip("/")
-        )
-        if org_repo.endswith(".git"):
-            org_repo = org_repo[:-4]
-        repo_name = org_repo.split("/")[-1]
-
-        # Build sg-evals mirror name (matches create_sg_mirrors.py logic)
-        is_tag = not all(c in "0123456789abcdef" for c in rev.lower())
-        ref_suffix = rev if is_tag else rev[:8]
-        ref_suffix = ref_suffix.replace("/", "_")
-        sg_mirror = f"sg-evals/{repo_name}--{ref_suffix}"
-
-        lines.append(f"- **{path or repo_name}** (local: `/workspace/{path}/`)")
-        lines.append(f"  - MCP filter: `repo:^github.com/{sg_mirror}$`")
-        lines.append(f"  - Upstream: `{org_repo}@{rev}`")
-
-    lines.append("")
-    return "\n".join(lines)
-
-
 def _build_instruction_text(
     task_dir: Path,
     mode: str,
@@ -354,8 +312,9 @@ def _build_instruction_text(
 ) -> str | None:
     """Build the full instruction text with optional MCP preamble and output appendix.
 
-    For mcp_only/hybrid modes, prepends instruction_mcp.md (if present) and a
-    mode-specific header line. For baseline mode, uses instruction.md as-is.
+    For mcp_only/hybrid modes, prepends the Sourcegraph MCP preamble (from
+    agents.harnesses.claude.mcp.sourcegraph) and any task-specific
+    instruction_mcp.md. For baseline mode, uses instruction.md as-is.
 
     Returns the combined text, or None if instruction.md does not exist.
     """
@@ -368,45 +327,10 @@ def _build_instruction_text(
     # Build MCP preamble for non-baseline modes
     preamble_parts: list[str] = []
     if mode in ("mcp_only", "hybrid"):
-        # Mode-specific header
-        if mode == "mcp_only":
-            preamble_parts.append(
-                "**IMPORTANT: Local source files are not present in /workspace. "
-                "You MUST use Sourcegraph MCP tools for all code access.**"
-            )
-        else:  # hybrid
-            preamble_parts.append(
-                "# Sourcegraph MCP Tools Available\n\n"
-                "You have Sourcegraph MCP tools for **cross-repo code intelligence**. "
-                "Use them for discovery and navigation — but read and edit local files directly.\n\n"
-                "## When to Use MCP vs Local Tools\n\n"
-                "| Task | Use MCP | Use Local |\n"
-                "|------|---------|----------|\n"
-                "| Find symbols across repos | `keyword_search` | — |\n"
-                "| Semantic/concept search | `nls_search` | — |\n"
-                "| Trace callers/references | `find_references` | — |\n"
-                "| Jump to definition | `go_to_definition` | — |\n"
-                "| Search commit history | `commit_search` | — |\n"
-                "| Read a file in /workspace | — | `Read` / `cat` |\n"
-                "| Search within local files | — | `Grep` / `grep` |\n"
-                "| Read a file NOT in /workspace | `read_file` | — |\n\n"
-                "**Key rule: never use `mcp__sourcegraph__read_file` for files that exist locally in /workspace.** "
-                "Local reads are instant; MCP reads add network latency and waste turns.\n\n"
-                "## Workflow\n\n"
-                "1. **Discover with MCP** — find relevant files, symbols, and cross-repo dependencies\n"
-                "2. **Read locally** — use Read/cat for files in /workspace\n"
-                "3. **Navigate with MCP** — trace references and definitions across repo boundaries\n"
-                "4. **Edit locally** — modify /workspace files based on what you learned\n\n"
-                "## Efficiency\n\n"
-                "- Use MCP for **discovery**, local tools for **reading**\n"
-                "- Don't re-search for patterns you already found\n"
-                "- Prefer `keyword_search` over `nls_search` when you have exact terms"
-            )
-
-            # Add dynamic repo scoping from task metadata
-            repo_scope = _build_sg_repo_scope(repos or [])
-            if repo_scope:
-                preamble_parts.append(repo_scope)
+        # Mode-specific preamble from the sourcegraph module
+        mcp_preamble = _build_mcp_preamble(mode=mode, repos=repos)
+        if mcp_preamble:
+            preamble_parts.append(mcp_preamble)
 
         # Append instruction_mcp.md content if it exists
         instruction_mcp = task_dir / "instruction_mcp.md"
@@ -869,13 +793,75 @@ def _mcp_exec(
     )
 
 
+def _verify_mcp_endpoint(container_id: str, sg_token: str) -> bool:
+    """Verify the MCP endpoint is reachable and auth works via direct HTTP.
+
+    Uses curl inside the container to hit the endpoint directly, bypassing
+    Claude Code's MCP client entirely. This confirms that:
+    - The endpoint is reachable from the container
+    - The auth token is accepted
+    - TLS settings are correct
+
+    Returns True if the endpoint responds with HTTP 200.
+    """
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        result = _docker_exec(
+            container_id,
+            [
+                "curl",
+                "-sf",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "-H",
+                f"Authorization: token {sg_token}",
+                "-H",
+                "Content-Type: application/json",
+                "--max-time",
+                "10",
+                "-k",  # skip TLS verification (matches NODE_TLS_REJECT_UNAUTHORIZED=0)
+                SOURCEGRAPH_MCP_ENDPOINT,
+            ],
+            timeout=15,
+        )
+        http_code = result.stdout.strip()
+        if http_code == "200" or result.returncode == 0:
+            logger.info(
+                "MCP endpoint HTTP check OK (attempt %d, code=%s)",
+                attempt,
+                http_code,
+            )
+            return True
+        backoff = min(2**attempt, 10)
+        logger.warning(
+            "MCP endpoint HTTP check attempt %d/%d failed "
+            "(code=%s, rc=%d, err=%s) — retrying in %ds",
+            attempt,
+            max_retries,
+            http_code,
+            result.returncode,
+            result.stderr.strip()[:120],
+            backoff,
+        )
+        time.sleep(backoff)
+    logger.error("MCP endpoint HTTP check FAILED after %d attempts", max_retries)
+    return False
+
+
 def _configure_mcp(container_id: str, mode: str) -> None:
     """Configure Sourcegraph MCP endpoint with pre-flight verification.
 
-    Steps:
-    1. Write .mcp.json to /workspace
-    2. Register via `claude mcp add`
-    3. Verify connection via `claude mcp list` (retry up to 3 times)
+    Strategy for 100% reliability:
+    1. Verify the endpoint is reachable via direct HTTP (curl)
+    2. Write .mcp.json to /workspace (project-level, Claude Code auto-discovers)
+    3. Write equivalent config to ~/.claude/settings.json (user-level fallback)
+    4. Verify via `claude mcp list` with retries
+
+    Uses ONLY config files (no `claude mcp add` which has race conditions).
+    Both project-level and user-level configs are written so Claude Code finds
+    auth headers regardless of which config path it resolves first.
     """
     if mode not in ("mcp_only", "hybrid"):
         return
@@ -886,8 +872,16 @@ def _configure_mcp(container_id: str, mode: str) -> None:
 
     logger.info("Configuring Sourcegraph MCP endpoint (mode=%s)", mode)
 
-    # Step 1: Write .mcp.json to /workspace (Claude Code auto-discovers this)
-    mcp_config = json.dumps(
+    # Step 1: Verify endpoint is reachable and auth works via HTTP
+    if sg_token:
+        if not _verify_mcp_endpoint(container_id, sg_token):
+            logger.error(
+                "MCP endpoint unreachable or auth rejected — "
+                "agent will run but MCP may not work"
+            )
+
+    # Step 2: Write MCP config files (using docker cp to avoid shell escaping)
+    mcp_config_json = json.dumps(
         {
             "mcpServers": {
                 "sourcegraph": {
@@ -898,80 +892,89 @@ def _configure_mcp(container_id: str, mode: str) -> None:
             }
         }
     )
-    _docker_exec(
-        container_id,
-        [
-            "bash",
-            "-c",
-            f"echo '{mcp_config}' > /workspace/.mcp.json && "
-            "chown agent:agent /workspace/.mcp.json",
-        ],
-    )
 
-    # Step 2: Register via claude mcp add (writes to ~/.claude/settings.json)
-    add_result = _mcp_exec(
-        container_id,
-        [
-            "claude",
-            "mcp",
-            "add",
-            "--transport",
-            "http",
-            "sourcegraph",
-            SOURCEGRAPH_MCP_ENDPOINT,
-            "-H",
-            f"Authorization: token {sg_token}",
-        ],
-    )
-    if add_result.returncode == 0:
-        logger.info("MCP server registered via claude mcp add")
-    else:
-        logger.warning("claude mcp add failed: %s", add_result.stderr.strip())
+    # Write config via docker cp to both project-level and user-level paths.
+    # Same format works for both; writing to two locations ensures Claude Code
+    # finds auth headers regardless of which config path it resolves first.
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".mcp.json", delete=False) as fh:
+        fh.write(mcp_config_json)
+        tmp_project = fh.name
 
-    # Step 3: Pre-flight — verify MCP connection with retries
-    max_retries = 3
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".mcp.json", delete=False) as fh:
+        fh.write(mcp_config_json)
+        tmp_user = fh.name
+
+    try:
+        # Project-level config: /workspace/.mcp.json
+        _docker_cp(tmp_project, f"{container_id}:/workspace/.mcp.json")
+        _docker_exec(
+            container_id,
+            ["chown", "agent:agent", "/workspace/.mcp.json"],
+        )
+
+        # User-level config: /home/agent/.claude/.mcp.json
+        _docker_exec(
+            container_id,
+            [
+                "bash",
+                "-c",
+                "mkdir -p /home/agent/.claude && chown agent:agent /home/agent/.claude",
+            ],
+        )
+        _docker_cp(tmp_user, f"{container_id}:/home/agent/.claude/.mcp.json")
+        _docker_exec(
+            container_id,
+            ["chown", "agent:agent", "/home/agent/.claude/.mcp.json"],
+        )
+        logger.info(
+            "MCP config written to /workspace/.mcp.json and /home/agent/.claude/.mcp.json"
+        )
+    finally:
+        os.unlink(tmp_project)
+        os.unlink(tmp_user)
+
+    # Step 3: Verify Claude Code sees the MCP server with retries
+    max_retries = 5
     for attempt in range(1, max_retries + 1):
         check = _mcp_exec(container_id, ["claude", "mcp", "list"])
-        if "Connected" in check.stdout:
-            logger.info(
-                "MCP pre-flight OK (attempt %d): sourcegraph connected", attempt
+        stdout = check.stdout.strip()
+        if "sourcegraph" in stdout.lower():
+            if "Connected" in stdout:
+                logger.info(
+                    "MCP pre-flight OK (attempt %d): sourcegraph connected",
+                    attempt,
+                )
+                break
+            if "needs-auth" in stdout:
+                # Server is registered but auth failed — likely a timing issue
+                # with the HTTP transport. Wait and retry.
+                logger.warning(
+                    "MCP pre-flight attempt %d/%d: server registered but "
+                    "needs-auth (will retry)",
+                    attempt,
+                    max_retries,
+                )
+            else:
+                logger.warning(
+                    "MCP pre-flight attempt %d/%d: %s",
+                    attempt,
+                    max_retries,
+                    stdout.replace("\n", " ")[:200],
+                )
+        else:
+            logger.warning(
+                "MCP pre-flight attempt %d/%d: sourcegraph not found in: %s",
+                attempt,
+                max_retries,
+                stdout.replace("\n", " ")[:200],
             )
-            break
-        logger.warning(
-            "MCP pre-flight attempt %d/%d: %s",
-            attempt,
-            max_retries,
-            check.stdout.strip().replace("\n", " "),
-        )
         if attempt < max_retries:
-            # Re-register and retry
-            _mcp_exec(
-                container_id,
-                [
-                    "claude",
-                    "mcp",
-                    "remove",
-                    "sourcegraph",
-                ],
-            )
-            _mcp_exec(
-                container_id,
-                [
-                    "claude",
-                    "mcp",
-                    "add",
-                    "--transport",
-                    "http",
-                    "sourcegraph",
-                    SOURCEGRAPH_MCP_ENDPOINT,
-                    "-H",
-                    f"Authorization: token {sg_token}",
-                ],
-            )
-            time.sleep(2)
+            backoff = min(2**attempt, 8)
+            time.sleep(backoff)
     else:
         logger.error(
-            "MCP pre-flight FAILED after %d attempts — agent will run without MCP",
+            "MCP pre-flight FAILED after %d attempts — "
+            "agent will run but MCP may show needs-auth",
             max_retries,
         )
 

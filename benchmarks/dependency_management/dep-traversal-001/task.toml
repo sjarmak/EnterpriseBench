@@ -1,6 +1,10 @@
 # Dependency Graph Traversal: lodash command injection blast radius
 
 difficulty_stratum = "multi_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "js-toolchain-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "dep-traversal-001"

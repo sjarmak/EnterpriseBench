@@ -1,6 +1,10 @@
 # Refactor Orchestration: Babel 8 plugin-transform removal cascade
 
 difficulty_stratum = "monorepo_cross_package"
+mcp_suite = "eb_v1"
+repo_set_id = "babel-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "refactor-orch-005"

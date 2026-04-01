@@ -1,6 +1,10 @@
 # Dependency Graph Traversal: google.golang.org/protobuf JSON unmarshal infinite loop
 
 difficulty_stratum = "multi_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "envoy-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "dep-traversal-006"

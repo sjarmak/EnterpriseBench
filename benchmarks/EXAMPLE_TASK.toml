@@ -3,6 +3,10 @@
 
 # Top-level fields (must precede all section headers in TOML)
 difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "kubernetes-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "dep-mgmt-grpc-proto-bump-001"

@@ -1,6 +1,10 @@
 # API Contract Boundary: gRPC-Go balancer.ClientConn embedding requirement
 
 difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "kubernetes-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "api-contract-grpc-clientconn-004"

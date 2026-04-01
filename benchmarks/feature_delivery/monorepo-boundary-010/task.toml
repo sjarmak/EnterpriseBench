@@ -1,6 +1,10 @@
 # Monorepo Boundary: Rust Compiler Static Initializers in Metadata
 
 difficulty_stratum = "monorepo_cross_package"
+mcp_suite = "eb_v1"
+repo_set_id = "rust-compiler-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "monorepo-boundary-rustc-statics-010"

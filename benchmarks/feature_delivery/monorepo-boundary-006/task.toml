@@ -1,6 +1,10 @@
 # Monorepo Boundary: pnpm Lifecycle Scripts Allow-List
 
 difficulty_stratum = "monorepo_cross_package"
+mcp_suite = "eb_v1"
+repo_set_id = "pnpm-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "monorepo-boundary-pnpm-lifecycle-006"

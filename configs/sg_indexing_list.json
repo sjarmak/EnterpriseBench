@@ -1,0 +1,1528 @@
+{
+  "_description": "Centralized repo index for EnterpriseBench. Consolidates configs/sg_mirrors/ into a single index. Each entry maps an sg-evals mirror name to its source GitHub repo, pinned commit, and metadata.",
+  "_generated": "2026-04-01",
+  "_total_unique_repos": 131,
+  "_total_mirror_files": 117,
+  "suites": {
+    "dependency_management": {
+      "_status": "pending_verification",
+      "_indexed_count": 0,
+      "_repo_count": 33,
+      "_task_count": 13
+    },
+    "feature_delivery": {
+      "_status": "pending_verification",
+      "_indexed_count": 0,
+      "_repo_count": 12,
+      "_task_count": 12
+    },
+    "incident_response": {
+      "_status": "pending_verification",
+      "_indexed_count": 0,
+      "_repo_count": 2,
+      "_task_count": 3
+    },
+    "security_operations": {
+      "_status": "pending_verification",
+      "_indexed_count": 0,
+      "_repo_count": 7,
+      "_task_count": 7
+    },
+    "technical_debt": {
+      "_status": "pending_verification",
+      "_indexed_count": 0,
+      "_repo_count": 6,
+      "_task_count": 6
+    }
+  },
+  "repos": [
+    {
+      "sg_name": "sg-evals/FasterXML/jackson-databind--jackson-databind-2.13.2",
+      "github_repo": "FasterXML/jackson-databind",
+      "commit": "jackson-databind-2.13.2",
+      "_language": "Java",
+      "_loc_estimate": 120000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/LibreOffice/core--61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e",
+      "github_repo": "LibreOffice/core",
+      "commit": "61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e",
+      "_language": "C++",
+      "_loc_estimate": 9500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/NodeBB/NodeBB--8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7",
+      "github_repo": "NodeBB/NodeBB",
+      "commit": "8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7",
+      "_language": "JavaScript",
+      "_loc_estimate": 150000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/angular/angular--891318e8",
+      "github_repo": "angular/angular",
+      "commit": "891318e805da3cdfb9839bf6cb3412c15c146253",
+      "_language": "TypeScript",
+      "_loc_estimate": 700000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "technical_debt"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/ansible/ansible--v2.16.0",
+      "github_repo": "ansible/ansible",
+      "commit": "v2.16.0",
+      "_language": "Python",
+      "_loc_estimate": 600000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 2,
+      "_suites": [
+        "incident_response"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/apache/beam--v2.55.0",
+      "github_repo": "apache/beam",
+      "commit": "v2.55.0",
+      "_language": "Java/Python",
+      "_loc_estimate": 1200000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "technical_debt"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/apache/camel--camel-4.4.0",
+      "github_repo": "apache/camel",
+      "commit": "camel-4.4.0",
+      "_language": "Java",
+      "_loc_estimate": 2000000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/apache/druid--druid-26.0.0",
+      "github_repo": "apache/druid",
+      "commit": "druid-26.0.0",
+      "_language": "Java",
+      "_loc_estimate": 600000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/apache/kafka--0753c489",
+      "github_repo": "apache/kafka",
+      "commit": "0753c489",
+      "_language": "Java/Scala",
+      "_loc_estimate": 800000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "security_operations"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/apache/kafka--3.1.0",
+      "github_repo": "apache/kafka",
+      "commit": "3.1.0",
+      "_language": "Java/Scala",
+      "_loc_estimate": 800000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/apache/kafka--3.7.0",
+      "github_repo": "apache/kafka",
+      "commit": "3.7.0",
+      "_language": "Java/Scala",
+      "_loc_estimate": 800000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/apache/logging-log4j2--rel/2.14.1",
+      "github_repo": "apache/logging-log4j2",
+      "commit": "rel/2.14.1",
+      "_language": "Java",
+      "_loc_estimate": 250000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/argoproj/argo-cd--v2.14.0-rc3",
+      "github_repo": "argoproj/argo-cd",
+      "commit": "v2.14.0-rc3",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/aws/aws-cli--2.11.0",
+      "github_repo": "aws/aws-cli",
+      "commit": "2.11.0",
+      "_language": "Python",
+      "_loc_estimate": 400000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/axios/axios--v0.21.1",
+      "github_repo": "axios/axios",
+      "commit": "v0.21.1",
+      "_language": "JavaScript",
+      "_loc_estimate": 15000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/babel/babel--v7.22.20",
+      "github_repo": "babel/babel",
+      "commit": "v7.22.20",
+      "_language": "JavaScript",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/babel/babel--v7.23.5",
+      "github_repo": "babel/babel",
+      "commit": "v7.23.5",
+      "_language": "JavaScript",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 2
+    },
+    {
+      "sg_name": "sg-evals/babel/babel--v7.23.9",
+      "github_repo": "babel/babel",
+      "commit": "v7.23.9",
+      "_language": "JavaScript",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/babel/babel--v7.25.0",
+      "github_repo": "babel/babel",
+      "commit": "v7.25.0",
+      "_language": "JavaScript",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/bitnami/charts--33114~1",
+      "github_repo": "bitnami/charts",
+      "commit": "33114~1",
+      "_language": "YAML/Helm",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/bitnami/charts--36231~1",
+      "github_repo": "bitnami/charts",
+      "commit": "36231~1",
+      "_language": "YAML/Helm",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/bitnami/charts--53aca51120f86086e6780dc0453b93fbf49766b4",
+      "github_repo": "bitnami/charts",
+      "commit": "53aca51120f86086e6780dc0453b93fbf49766b4",
+      "_language": "YAML/Helm",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/boto/boto3--1.26.0",
+      "github_repo": "boto/boto3",
+      "commit": "1.26.0",
+      "_language": "Python",
+      "_loc_estimate": 100000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 2,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/ceph/ceph--v19.2.0",
+      "github_repo": "ceph/ceph",
+      "commit": "v19.2.0",
+      "_language": "C++",
+      "_loc_estimate": 2500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "security_operations"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/curl/curl--curl-7_82_0",
+      "github_repo": "curl/curl",
+      "commit": "curl-7_82_0",
+      "_language": "C",
+      "_loc_estimate": 250000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/discourse/discourse--168de525",
+      "github_repo": "discourse/discourse",
+      "commit": "168de52538632ae18b95c0757ab2ae5e21ff240c",
+      "_language": "Ruby",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/discourse/discourse--290b435a",
+      "github_repo": "discourse/discourse",
+      "commit": "290b435a727ed1d95aef554d60d8572eba7e818a",
+      "_language": "Ruby",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/discourse/discourse--5d603ece",
+      "github_repo": "discourse/discourse",
+      "commit": "5d603ece49a296da47197bc91ea8e1d178d5772c",
+      "_language": "Ruby",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/discourse/discourse--e7c3abb9",
+      "github_repo": "discourse/discourse",
+      "commit": "e7c3abb94b1db0ff811f991b873dcca9d589cd3a",
+      "_language": "Ruby",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/dotnet/aspnetcore--v9.0.0",
+      "github_repo": "dotnet/aspnetcore",
+      "commit": "v9.0.0",
+      "_language": "C#",
+      "_loc_estimate": 1500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/dropwizard/dropwizard--v2.1.0",
+      "github_repo": "dropwizard/dropwizard",
+      "commit": "v2.1.0",
+      "_language": "Java",
+      "_loc_estimate": 120000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/element-hq/element-web--526645c79160ab1ad4b4c3845de27d51263a405e",
+      "github_repo": "element-hq/element-web",
+      "commit": "526645c79160ab1ad4b4c3845de27d51263a405e",
+      "_language": "TypeScript",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/element-hq/element-web--8ebdcab7d92f90422776c4390363338dcfd98ba5",
+      "github_repo": "element-hq/element-web",
+      "commit": "8ebdcab7d92f90422776c4390363338dcfd98ba5",
+      "_language": "TypeScript",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/envoyproxy/envoy--v1.18.0",
+      "github_repo": "envoyproxy/envoy",
+      "commit": "v1.18.0",
+      "_language": "C++",
+      "_loc_estimate": 800000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/envoyproxy/envoy--v1.31.2",
+      "github_repo": "envoyproxy/envoy",
+      "commit": "v1.31.2",
+      "_language": "C++",
+      "_loc_estimate": 800000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 3,
+      "_suites": [
+        "incident_response",
+        "security_operations"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/envoyproxy/go-control-plane--v0.12.0",
+      "github_repo": "envoyproxy/go-control-plane",
+      "commit": "v0.12.0",
+      "_language": "Go",
+      "_loc_estimate": 80000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/envoyproxy/go-control-plane--v0.13.2",
+      "github_repo": "envoyproxy/go-control-plane",
+      "commit": "v0.13.2",
+      "_language": "Go",
+      "_loc_estimate": 80000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/envoyproxy/go-control-plane--v0.9.8",
+      "github_repo": "envoyproxy/go-control-plane",
+      "commit": "v0.9.8",
+      "_language": "Go",
+      "_loc_estimate": 80000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/eslint/eslint--v10.0.0",
+      "github_repo": "eslint/eslint",
+      "commit": "v10.0.0",
+      "_language": "JavaScript",
+      "_loc_estimate": 120000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/etcd-io/etcd--v3.3.0",
+      "github_repo": "etcd-io/etcd",
+      "commit": "v3.3.0",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/etcd-io/etcd--v3.3.10",
+      "github_repo": "etcd-io/etcd",
+      "commit": "v3.3.10",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/etcd-io/etcd--v3.4.3",
+      "github_repo": "etcd-io/etcd",
+      "commit": "v3.4.3",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/etcd-io/etcd--v3.4.7",
+      "github_repo": "etcd-io/etcd",
+      "commit": "v3.4.7",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/etcd-io/etcd--v3.5.10",
+      "github_repo": "etcd-io/etcd",
+      "commit": "v3.5.10",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 2
+    },
+    {
+      "sg_name": "sg-evals/etcd-io/etcd--v3.5.12",
+      "github_repo": "etcd-io/etcd",
+      "commit": "v3.5.12",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/etcd-io/etcd--v3.5.17",
+      "github_repo": "etcd-io/etcd",
+      "commit": "v3.5.17",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 4
+    },
+    {
+      "sg_name": "sg-evals/etcd-io/etcd--v3.5.9",
+      "github_repo": "etcd-io/etcd",
+      "commit": "v3.5.9",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/etcd-io/etcd--v3.6.0",
+      "github_repo": "etcd-io/etcd",
+      "commit": "v3.6.0",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/facebook/react--56408a5b",
+      "github_repo": "facebook/react",
+      "commit": "56408a5b12fa4099e9dbbeca7f6bc59e1307e507",
+      "_language": "JavaScript",
+      "_loc_estimate": 250000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "technical_debt"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/facebook/react--9fba65ef",
+      "github_repo": "facebook/react",
+      "commit": "9fba65efa50fe5f38e5664729d4aa6f85cf7be92",
+      "_language": "JavaScript",
+      "_loc_estimate": 250000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "technical_debt"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/facebook/react--ab18f33d",
+      "github_repo": "facebook/react",
+      "commit": "ab18f33d46171ed1963ae1ac955c5110bb1eb199",
+      "_language": "JavaScript",
+      "_loc_estimate": 250000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "technical_debt"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/gcc-mirror/gcc--releases_gcc-14.2.0",
+      "github_repo": "gcc-mirror/gcc",
+      "commit": "releases/gcc-14.2.0",
+      "_language": "C/C++",
+      "_loc_estimate": 12000000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/getsentry/sentry--fad1fc61",
+      "github_repo": "getsentry/sentry",
+      "commit": "fad1fc61366a8162823603a9e86eafd96faa9c00",
+      "_language": "Python",
+      "_loc_estimate": 500000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/gin-gonic/gin--v1.9.1",
+      "github_repo": "gin-gonic/gin",
+      "commit": "v1.9.1",
+      "_language": "Go",
+      "_loc_estimate": 20000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/git/git--v2.35.0",
+      "github_repo": "git/git",
+      "commit": "v2.35.0",
+      "_language": "C",
+      "_loc_estimate": 400000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/go-chi/chi--v5.0.8",
+      "github_repo": "go-chi/chi",
+      "commit": "v5.0.8",
+      "_language": "Go",
+      "_loc_estimate": 5000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/goharbor/harbor--v2.12.0",
+      "github_repo": "goharbor/harbor",
+      "commit": "v2.12.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "security_operations"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/gohugoio/hugo--v0.111.0",
+      "github_repo": "gohugoio/hugo",
+      "commit": "v0.111.0",
+      "_language": "Go",
+      "_loc_estimate": 150000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/grafana/grafana--v10.1.0",
+      "github_repo": "grafana/grafana",
+      "commit": "v10.1.0",
+      "_language": "Go/TypeScript",
+      "_loc_estimate": 1800000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grafana/grafana--v10.2.0",
+      "github_repo": "grafana/grafana",
+      "commit": "v10.2.0",
+      "_language": "Go/TypeScript",
+      "_loc_estimate": 1800000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 3
+    },
+    {
+      "sg_name": "sg-evals/grafana/grafana--v9.5.0",
+      "github_repo": "grafana/grafana",
+      "commit": "v9.5.0",
+      "_language": "Go/TypeScript",
+      "_loc_estimate": 1800000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/grpc-ecosystem/go-grpc-middleware--v1.4.0",
+      "github_repo": "grpc-ecosystem/go-grpc-middleware",
+      "commit": "v1.4.0",
+      "_language": "Go",
+      "_loc_estimate": 15000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.14.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.14.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.27.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.27.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 2
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.4.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.4.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.46.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.46.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.58.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.58.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.60.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.60.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 3
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.62.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.62.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 2,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.68.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.68.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.70.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.70.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.71.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.71.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.72.1",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.72.1",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-go--v1.79.0",
+      "github_repo": "grpc/grpc-go",
+      "commit": "v1.79.0",
+      "_language": "Go",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/grpc/grpc-node--v1.8.0",
+      "github_repo": "grpc/grpc-node",
+      "commit": "v1.8.0",
+      "_language": "TypeScript",
+      "_loc_estimate": 100000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/hashicorp/consul--v1.16.0",
+      "github_repo": "hashicorp/consul",
+      "commit": "v1.16.0",
+      "_language": "Go",
+      "_loc_estimate": 500000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/hashicorp/terraform--v1.10.0",
+      "github_repo": "hashicorp/terraform",
+      "commit": "v1.10.0",
+      "_language": "Go",
+      "_loc_estimate": 500000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 2
+    },
+    {
+      "sg_name": "sg-evals/hashicorp/terraform--v1.6.0",
+      "github_repo": "hashicorp/terraform",
+      "commit": "v1.6.0",
+      "_language": "Go",
+      "_loc_estimate": 500000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/hashicorp/vault--v1.14.0",
+      "github_repo": "hashicorp/vault",
+      "commit": "v1.14.0",
+      "_language": "Go",
+      "_loc_estimate": 600000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/istio/istio--1.20.0",
+      "github_repo": "istio/istio",
+      "commit": "1.20.0",
+      "_language": "Go",
+      "_loc_estimate": 500000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/istio/istio--1.24.0",
+      "github_repo": "istio/istio",
+      "commit": "1.24.0",
+      "_language": "Go",
+      "_loc_estimate": 500000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/istio/istio--1.6.0",
+      "github_repo": "istio/istio",
+      "commit": "1.6.0",
+      "_language": "Go",
+      "_loc_estimate": 500000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/jestjs/jest--v29.0.0",
+      "github_repo": "jestjs/jest",
+      "commit": "v29.0.0",
+      "_language": "JavaScript",
+      "_loc_estimate": 150000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/keycloak/keycloak--05ff44b8a0ea57ba9c68c4b416f8b90f5116bb83~1",
+      "github_repo": "keycloak/keycloak",
+      "commit": "05ff44b8a0ea57ba9c68c4b416f8b90f5116bb83~1",
+      "_language": "Java",
+      "_loc_estimate": 700000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "security_operations"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/keycloak/keycloak--bfcb150e312362fa6fd9c6ac080bf58989949d93~1",
+      "github_repo": "keycloak/keycloak",
+      "commit": "bfcb150e312362fa6fd9c6ac080bf58989949d93~1",
+      "_language": "Java",
+      "_loc_estimate": 700000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "security_operations"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/kubernetes-client/javascript--0.18.0",
+      "github_repo": "kubernetes-client/javascript",
+      "commit": "0.18.0",
+      "_language": "TypeScript",
+      "_loc_estimate": 80000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.13.0",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.13.0",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.24.0",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.24.0",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.28.0",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.28.0",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 2,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.32.0",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.32.0",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 4
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.33.0",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.33.0",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 3
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.33.0-alpha.1",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.33.0-alpha.1",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 2
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.33.0-alpha.2",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.33.0-alpha.2",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 2
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.34.0",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.34.0",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.7.3",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.7.3",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/kubernetes/kubernetes--v1.9.1",
+      "github_repo": "kubernetes/kubernetes",
+      "commit": "v1.9.1",
+      "_language": "Go",
+      "_loc_estimate": 3500000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/llvm/llvm-project--llvmorg-18.1.0",
+      "github_repo": "llvm/llvm-project",
+      "commit": "llvmorg-18.1.0",
+      "_language": "C++",
+      "_loc_estimate": 8000000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/lodash/lodash--4.17.20",
+      "github_repo": "lodash/lodash",
+      "commit": "4.17.20",
+      "_language": "JavaScript",
+      "_loc_estimate": 30000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/mattermost/mattermost--1349899f",
+      "github_repo": "mattermost/mattermost",
+      "commit": "1349899f42212aab066a8d1a6caed08b7d3d2b53",
+      "_language": "Go",
+      "_loc_estimate": 500000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/microsoft/TypeScript--f7833b2a",
+      "github_repo": "microsoft/TypeScript",
+      "commit": "f7833b2a72309dd695b45cf2cf2187e2f2f264df",
+      "_language": "TypeScript",
+      "_loc_estimate": 400000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "technical_debt"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/moby/moby--v28.0.0",
+      "github_repo": "moby/moby",
+      "commit": "v28.0.0",
+      "_language": "Go",
+      "_loc_estimate": 500000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/mozilla/gecko-dev--1a843e2167f97a3789f9d8a7a9772586f0e1c16f",
+      "github_repo": "mozilla/gecko-dev",
+      "commit": "1a843e2167f97a3789f9d8a7a9772586f0e1c16f",
+      "_language": "C++/Rust",
+      "_loc_estimate": 15000000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/pallets/click--8.2.1",
+      "github_repo": "pallets/click",
+      "commit": "8.2.1",
+      "_language": "Python",
+      "_loc_estimate": 25000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 5
+    },
+    {
+      "sg_name": "sg-evals/pallets/flask--3.1.0",
+      "github_repo": "pallets/flask",
+      "commit": "3.1.0",
+      "_language": "Python",
+      "_loc_estimate": 15000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 5
+    },
+    {
+      "sg_name": "sg-evals/pnpm/pnpm--v8.15.9",
+      "github_repo": "pnpm/pnpm",
+      "commit": "v8.15.9",
+      "_language": "TypeScript",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/pnpm/pnpm--v9.15.0",
+      "github_repo": "pnpm/pnpm",
+      "commit": "v9.15.0",
+      "_language": "TypeScript",
+      "_loc_estimate": 200000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 2
+    },
+    {
+      "sg_name": "sg-evals/projectcalico/calico--1ea2a4ea3e0407c97d387cc8dbe5f80db7e2e430~1",
+      "github_repo": "projectcalico/calico",
+      "commit": "1ea2a4ea3e0407c97d387cc8dbe5f80db7e2e430~1",
+      "_language": "Go",
+      "_loc_estimate": 300000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "security_operations"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/prometheus/prometheus--v2.45.0",
+      "github_repo": "prometheus/prometheus",
+      "commit": "v2.45.0",
+      "_language": "Go",
+      "_loc_estimate": 250000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/prometheus/prometheus--v2.46.0",
+      "github_repo": "prometheus/prometheus",
+      "commit": "v2.46.0",
+      "_language": "Go",
+      "_loc_estimate": 250000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/prometheus/prometheus--v2.48.0",
+      "github_repo": "prometheus/prometheus",
+      "commit": "v2.48.0",
+      "_language": "Go",
+      "_loc_estimate": 250000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/protocolbuffers/protobuf-go--v1.32.0",
+      "github_repo": "protocolbuffers/protobuf-go",
+      "commit": "v1.32.0",
+      "_language": "Go",
+      "_loc_estimate": 100000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/psf/requests--v2.28.0",
+      "github_repo": "psf/requests",
+      "commit": "v2.28.0",
+      "_language": "Python",
+      "_loc_estimate": 15000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 2,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/psf/requests--v2.28.2",
+      "github_repo": "psf/requests",
+      "commit": "v2.28.2",
+      "_language": "Python",
+      "_loc_estimate": 15000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/psf/requests--v2.32.3",
+      "github_repo": "psf/requests",
+      "commit": "v2.32.3",
+      "_language": "Python",
+      "_loc_estimate": 15000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 2
+    },
+    {
+      "sg_name": "sg-evals/qutebrowser/qutebrowser--v3.0.0",
+      "github_repo": "qutebrowser/qutebrowser",
+      "commit": "v3.0.0",
+      "_language": "Python",
+      "_loc_estimate": 100000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/rust-lang/rust--1.76.0",
+      "github_repo": "rust-lang/rust",
+      "commit": "1.76.0",
+      "_language": "Rust",
+      "_loc_estimate": 5000000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/rust-lang/rust--1.83.0",
+      "github_repo": "rust-lang/rust",
+      "commit": "1.83.0",
+      "_language": "Rust",
+      "_loc_estimate": 5000000,
+      "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/spf13/cobra--v1.10.2",
+      "github_repo": "spf13/cobra",
+      "commit": "v1.10.2",
+      "_language": "Go",
+      "_loc_estimate": 10000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/spring-projects/spring-boot--v2.6.1",
+      "github_repo": "spring-projects/spring-boot",
+      "commit": "v2.6.1",
+      "_language": "Java",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/spring-projects/spring-boot--v2.7.0",
+      "github_repo": "spring-projects/spring-boot",
+      "commit": "v2.7.0",
+      "_language": "Java",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/stripe/stripe-go--v76.0.0",
+      "github_repo": "stripe/stripe-go",
+      "commit": "v76.0.0",
+      "_language": "Go",
+      "_loc_estimate": 80000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/typescript-eslint/typescript-eslint--v8.20.0",
+      "github_repo": "typescript-eslint/typescript-eslint",
+      "commit": "v8.20.0",
+      "_language": "TypeScript",
+      "_loc_estimate": 150000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/unknown/repo--HEAD",
+      "github_repo": "unknown/repo",
+      "commit": "HEAD",
+      "_language": "Unknown",
+      "_loc_estimate": 10000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/urllib3/urllib3--1.26.16",
+      "github_repo": "urllib3/urllib3",
+      "commit": "1.26.16",
+      "_language": "Python",
+      "_loc_estimate": 20000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/urllib3/urllib3--2.0.0",
+      "github_repo": "urllib3/urllib3",
+      "commit": "2.0.0",
+      "_language": "Python",
+      "_loc_estimate": 20000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/vercel/next.js--v13.5.6",
+      "github_repo": "vercel/next.js",
+      "commit": "v13.5.6",
+      "_language": "TypeScript",
+      "_loc_estimate": 400000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/webpack/webpack--v5.64.0",
+      "github_repo": "webpack/webpack",
+      "commit": "v5.64.0",
+      "_language": "JavaScript",
+      "_loc_estimate": 150000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "dependency_management"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/zulip/zulip--38053e9c",
+      "github_repo": "zulip/zulip",
+      "commit": "38053e9c7cc59b5e3f7c26af49fc1bb57acf0b86",
+      "_language": "Python",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/zulip/zulip--912c1b59",
+      "github_repo": "zulip/zulip",
+      "commit": "912c1b598458f89afa6814b3a19b95d4648e2371",
+      "_language": "Python",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/zulip/zulip--f2a5dc94",
+      "github_repo": "zulip/zulip",
+      "commit": "f2a5dc949a7c0ec776b3729b2c92703292404127",
+      "_language": "Python",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    },
+    {
+      "sg_name": "sg-evals/zulip/zulip--faa06497",
+      "github_repo": "zulip/zulip",
+      "commit": "faa06497ed09f65dc0c7ba510dc56ebd41fbe037",
+      "_language": "Python",
+      "_loc_estimate": 350000,
+      "_tier": "B",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "feature_delivery"
+      ]
+    }
+  ]
+}

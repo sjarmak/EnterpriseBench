@@ -2,6 +2,10 @@
 # Origin suite: csb_org_compliance
 
 difficulty_stratum = "large_single"
+mcp_suite = "eb_v1"
+repo_set_id = "envoy-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "ccx-compliance-052"

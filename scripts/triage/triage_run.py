@@ -344,6 +344,58 @@ def _format_table(report: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def filter_tasks(
+    tasks: list[dict[str, Any]],
+    *,
+    suite: str | None = None,
+    task_type: str | None = None,
+    category: str | None = None,
+) -> list[dict[str, Any]]:
+    """Filter classified tasks by suite, task_type, or category.
+
+    Args:
+        tasks: List of classification dicts from classify_task.
+        suite: Filter to tasks in this suite (substring match).
+        task_type: Filter to tasks of this type (substring match).
+        category: Filter to this triage category (exact match on value).
+
+    Returns:
+        Filtered list of task dicts.
+    """
+    filtered = list(tasks)
+
+    if suite:
+        suite_lower = suite.lower()
+        filtered = [
+            t
+            for t in filtered
+            if suite_lower in (t.get("metadata", {}).get("suite", "") or "").lower()
+        ]
+
+    if task_type:
+        type_lower = task_type.lower()
+        filtered = [
+            t
+            for t in filtered
+            if type_lower in (t.get("metadata", {}).get("task_type", "") or "").lower()
+        ]
+
+    if category:
+        cat_lower = category.lower()
+        filtered = [
+            t
+            for t in filtered
+            if (
+                t["category"].value
+                if isinstance(t["category"], TriageCategory)
+                else t["category"]
+            ).lower()
+            == cat_lower
+        ]
+
+    return filtered
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -365,6 +417,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="json",
         help="Output format (default: json)",
     )
+    parser.add_argument(
+        "--suite",
+        default=None,
+        help="Filter to tasks in this suite (substring match)",
+    )
+    parser.add_argument(
+        "--task-type",
+        default=None,
+        help="Filter to tasks of this type (substring match)",
+    )
+    parser.add_argument(
+        "--category",
+        default=None,
+        choices=["pass", "A_infra", "B_setup", "C_verifier", "D_agent", "E_timeout"],
+        help="Filter to this triage category",
+    )
     return parser.parse_args(argv)
 
 
@@ -378,6 +446,9 @@ def main() -> None:
         sys.exit(1)
 
     tasks = scan_results_dir(results_dir)
+    tasks = filter_tasks(
+        tasks, suite=args.suite, task_type=args.task_type, category=args.category
+    )
     report = build_report(tasks, str(results_dir))
 
     if args.format == "table":

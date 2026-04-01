@@ -379,6 +379,35 @@
           "description": "CSB files merged into this task (e.g., task.toml, ground_truth_meta.json)"
         }
       }
+    },
+    "mcp_suite": {
+      "type": "string",
+      "enum": ["eb_v1"],
+      "description": "Benchmark suite identifier for grouping tasks into versioned evaluation sets"
+    },
+    "repo_set_id": {
+      "type": "string",
+      "description": "Semantic repo grouping identifier (e.g., kubernetes-ecosystem, grpc-ecosystem). Tasks sharing the same repos or closely related repos share a repo_set_id.",
+      "pattern": "^[a-z][a-z0-9-]+$"
+    },
+    "org_scale": {
+      "type": "boolean",
+      "description": "Whether this task requires enterprise-scale codebase complexity (large repos, deep dependency chains, multi-repo interactions). Calibration tasks and small single-repo tasks are false."
+    },
+    "verification_modes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "deterministic",
+          "llm_curator",
+          "solve_verified",
+          "structural_match"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Verification strategies used for this task's checkpoints (deterministic = exact match/script, llm_curator = LLM-judged, solve_verified = solve-then-compare, structural_match = structural/pattern validation)"
     }
   }
 }

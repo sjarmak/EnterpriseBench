@@ -20,6 +20,7 @@ sys.path.insert(0, str(_PROJECT_ROOT / "scripts"))
 
 from triage.triage_run import (
     classify_task,
+    filter_tasks,
     scan_results_dir,
     build_report,
     TriageCategory,
@@ -723,3 +724,100 @@ class TestAgentOutputOverridesFingerprint:
 
         result = classify_task(task_dir)
         assert result["category"] == TriageCategory.D_AGENT
+
+
+# ---------------------------------------------------------------------------
+# Test: filter_tasks
+# ---------------------------------------------------------------------------
+
+
+class TestFilterTasks:
+    """Tests for the filter_tasks function."""
+
+    @pytest.fixture()
+    def sample_tasks(self) -> list[dict[str, Any]]:
+        """Build a set of classified task dicts for filtering tests."""
+        return [
+            {
+                "task_id": "pass-suite-a",
+                "category": TriageCategory.PASS,
+                "score": 2.0,
+                "metadata": {
+                    "suite": "customer_escalation",
+                    "task_type": "error_provenance",
+                },
+            },
+            {
+                "task_id": "fail-suite-a",
+                "category": TriageCategory.D_AGENT,
+                "score": 0.0,
+                "metadata": {
+                    "suite": "customer_escalation",
+                    "task_type": "support_code_mapping",
+                },
+            },
+            {
+                "task_id": "pass-suite-b",
+                "category": TriageCategory.PASS,
+                "score": 3.0,
+                "metadata": {
+                    "suite": "dependency_management",
+                    "task_type": "dep_traversal",
+                },
+            },
+            {
+                "task_id": "infra-suite-b",
+                "category": TriageCategory.A_INFRA,
+                "score": 0.0,
+                "metadata": {
+                    "suite": "dependency_management",
+                    "task_type": "api_contract",
+                },
+            },
+        ]
+
+    def test_no_filter(self, sample_tasks: list[dict[str, Any]]) -> None:
+        result = filter_tasks(sample_tasks)
+        assert len(result) == 4
+
+    def test_filter_by_suite(self, sample_tasks: list[dict[str, Any]]) -> None:
+        result = filter_tasks(sample_tasks, suite="customer")
+        assert len(result) == 2
+        assert all("customer" in t["metadata"]["suite"] for t in result)
+
+    def test_filter_by_task_type(self, sample_tasks: list[dict[str, Any]]) -> None:
+        result = filter_tasks(sample_tasks, task_type="error_provenance")
+        assert len(result) == 1
+        assert result[0]["task_id"] == "pass-suite-a"
+
+    def test_filter_by_category(self, sample_tasks: list[dict[str, Any]]) -> None:
+        result = filter_tasks(sample_tasks, category="D_agent")
+        assert len(result) == 1
+        assert result[0]["task_id"] == "fail-suite-a"
+
+    def test_filter_combined(self, sample_tasks: list[dict[str, Any]]) -> None:
+        result = filter_tasks(sample_tasks, suite="dependency", category="pass")
+        assert len(result) == 1
+        assert result[0]["task_id"] == "pass-suite-b"
+
+    def test_filter_no_match(self, sample_tasks: list[dict[str, Any]]) -> None:
+        result = filter_tasks(sample_tasks, suite="nonexistent")
+        assert len(result) == 0
+
+    def test_filter_with_string_category(self) -> None:
+        """Filter works with string categories (post-serialization)."""
+        tasks = [
+            {
+                "task_id": "t1",
+                "category": "pass",
+                "metadata": {"suite": "s1", "task_type": "t1"},
+            },
+            {
+                "task_id": "t2",
+                "category": "D_agent",
+                "metadata": {"suite": "s1", "task_type": "t1"},
+            },
+        ]
+        result = filter_tasks(tasks, category="pass")
+        assert len(result) == 1
+        assert result[0]["task_id"] == "t1"

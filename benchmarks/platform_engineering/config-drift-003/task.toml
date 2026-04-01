@@ -1,6 +1,10 @@
 # Config Drift: Redis password generation drift across Helm template includes
 
 difficulty_stratum = "large_single"
+mcp_suite = "eb_v1"
+repo_set_id = "helm-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "config-drift-redis-password-003"

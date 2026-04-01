@@ -1,6 +1,10 @@
 # Dependency Graph Traversal: urllib3 Cookie header leak — 3-hop transitive chain
 
 difficulty_stratum = "multi_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "python-http-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "dep-traversal-009"

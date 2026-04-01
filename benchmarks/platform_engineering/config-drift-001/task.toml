@@ -1,6 +1,10 @@
 # Config Drift: Consul serfLAN/serfWAN port mismatch in headless service
 
 difficulty_stratum = "large_single"
+mcp_suite = "eb_v1"
+repo_set_id = "helm-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "config-drift-consul-serf-port-001"

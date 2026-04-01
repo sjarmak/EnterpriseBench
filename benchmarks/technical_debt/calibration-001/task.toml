@@ -1,4 +1,8 @@
 difficulty_stratum = "calibration"
+mcp_suite = "eb_v1"
+repo_set_id = "python-web-ecosystem"
+org_scale = false
+verification_modes = ["deterministic"]
 
 [task]
 id = "cal-dead-click-legacy-001"

@@ -2,10 +2,12 @@
 
 Verifies:
   - Correct Sourcegraph endpoint URL
-  - Authorization headers present in MCP settings
+  - Authorization headers present in MCP config files
   - NODE_TLS_REJECT_UNAUTHORIZED=0 set for MCP modes
   - SOURCEGRAPH_ACCESS_TOKEN passed for MCP modes
   - No MCP env vars set for baseline mode
+  - HTTP-level endpoint verification
+  - Config written to both project and user level
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from run_task import (
     SOURCEGRAPH_MCP_ENDPOINT,
     _DEFAULT_MCP_URL,
     _configure_mcp,
+    _verify_mcp_endpoint,
     run_task,
     TaskRunConfig,
 )
@@ -70,11 +73,17 @@ class TestMcpEndpointUrl:
 
 
 class TestMcpAuthHeaders:
-    """Verify that _configure_mcp writes settings.json with Authorization header."""
+    """Verify that _configure_mcp writes .mcp.json with Authorization header."""
 
     def _capture_mcp_config(self, mode: str = "mcp_only") -> dict:
-        """Call _configure_mcp with a mock docker exec and return the parsed config."""
-        captured_cmds: list[list[str]] = []
+        """Call _configure_mcp with mocks and return the parsed project-level config.
+
+        The new implementation uses docker cp to write config files. We capture
+        the content written to the temp file that gets docker-cp'd into the
+        container at /workspace/.mcp.json.
+        """
+        # Read file contents at docker cp time (before finally block deletes temps)
+        captured_configs: list[tuple[str, str]] = []  # (dest, content)
 
         def mock_docker_exec(
             container_id: str,
@@ -82,33 +91,42 @@ class TestMcpAuthHeaders:
             timeout: int = 120,
             workdir: str = "/workspace",
         ):
-            captured_cmds.append(cmd)
             return MagicMock(returncode=0, stdout="", stderr="")
 
-        with patch("run_task._docker_exec", side_effect=mock_docker_exec), patch.dict(
-            os.environ, {"SOURCEGRAPH_ACCESS_TOKEN": "sgp_test_token_123"}
+        def mock_docker_cp(src: str, dest: str):
+            with open(src) as f:
+                captured_configs.append((dest, f.read()))
+
+        def mock_verify_endpoint(container_id: str, sg_token: str):
+            return True
+
+        def mock_mcp_exec(container_id: str, cmd: list, timeout: int = 30):
+            return MagicMock(
+                returncode=0,
+                stdout="sourcegraph  Connected",
+                stderr="",
+            )
+
+        with (
+            patch("run_task._docker_exec", side_effect=mock_docker_exec),
+            patch("run_task._docker_cp", side_effect=mock_docker_cp),
+            patch("run_task._verify_mcp_endpoint", side_effect=mock_verify_endpoint),
+            patch("run_task._mcp_exec", side_effect=mock_mcp_exec),
+            patch.dict(os.environ, {"SOURCEGRAPH_ACCESS_TOKEN": "sgp_test_token_123"}),
         ):
             _configure_mcp("test-container", mode)
 
-        # Find the bash -c command that writes .mcp.json
-        for cmd in captured_cmds:
-            if len(cmd) >= 3 and cmd[0] == "bash" and cmd[1] == "-c":
-                bash_script = cmd[2]
-                if ".mcp.json" in bash_script:
-                    import re
-
-                    match = re.search(r"echo '(\{.*?\})' >", bash_script, re.DOTALL)
-                    if match:
-                        return json.loads(match.group(1))
-        pytest.fail("No .mcp.json write command found in docker exec calls")
+        # Find the docker cp call for /workspace/.mcp.json
+        for dest, content in captured_configs:
+            if "/workspace/.mcp.json" in dest:
+                return json.loads(content)
+        pytest.fail("No docker cp to /workspace/.mcp.json found")
 
     def test_mcp_config_includes_authorization_header(self) -> None:
         config = self._capture_mcp_config("mcp_only")
         sg_config = config.get("mcpServers", {}).get("sourcegraph", {})
         headers = sg_config.get("headers", {})
-        assert (
-            "Authorization" in headers
-        ), "settings.json must include Authorization header"
+        assert "Authorization" in headers, ".mcp.json must include Authorization header"
 
     def test_mcp_config_auth_header_format(self) -> None:
         config = self._capture_mcp_config("mcp_only")
@@ -242,3 +260,95 @@ class TestMcpSkipsBaseline:
         with patch("run_task._docker_exec", mock_exec):
             _configure_mcp("test-container", "baseline")
         mock_exec.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# HTTP-level endpoint verification
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyMcpEndpoint:
+    """Verify the direct HTTP endpoint check for reliable MCP auth."""
+
+    def test_returns_true_on_success(self) -> None:
+        """Successful curl (rc=0) should return True."""
+        mock_result = MagicMock(returncode=0, stdout="200", stderr="")
+
+        with patch("run_task._docker_exec", return_value=mock_result):
+            assert _verify_mcp_endpoint("test-container", "sgp_token") is True
+
+    def test_retries_on_failure(self) -> None:
+        """Should retry up to 5 times on failure."""
+        fail = MagicMock(returncode=1, stdout="000", stderr="Connection refused")
+        success = MagicMock(returncode=0, stdout="200", stderr="")
+
+        with patch("run_task._docker_exec", side_effect=[fail, fail, success]):
+            with patch("run_task.time.sleep"):  # skip actual sleep
+                assert _verify_mcp_endpoint("test-container", "sgp_token") is True
+
+    def test_returns_false_after_max_retries(self) -> None:
+        """Should return False after exhausting retries."""
+        fail = MagicMock(returncode=1, stdout="401", stderr="Unauthorized")
+
+        with patch("run_task._docker_exec", return_value=fail):
+            with patch("run_task.time.sleep"):
+                assert _verify_mcp_endpoint("test-container", "sgp_token") is False
+
+    def test_uses_curl_with_auth_header(self) -> None:
+        """Curl command should include Authorization header."""
+        captured_cmds: list[list[str]] = []
+
+        def capture_exec(container_id, cmd, timeout=120, workdir="/workspace"):
+            captured_cmds.append(cmd)
+            return MagicMock(returncode=0, stdout="200", stderr="")
+
+        with patch("run_task._docker_exec", side_effect=capture_exec):
+            _verify_mcp_endpoint("test-container", "sgp_my_token")
+
+        assert len(captured_cmds) >= 1
+        curl_cmd = captured_cmds[0]
+        assert "curl" in curl_cmd
+        assert "Authorization: token sgp_my_token" in " ".join(curl_cmd)
+        assert "-k" in curl_cmd  # TLS skip flag
+
+
+# ---------------------------------------------------------------------------
+# Dual config file writing
+# ---------------------------------------------------------------------------
+
+
+class TestMcpDualConfig:
+    """Verify config is written to both project and user level."""
+
+    def test_writes_to_both_project_and_user_dirs(self) -> None:
+        """_configure_mcp should docker cp to both /workspace and /home/agent/.claude."""
+        cp_dests: list[str] = []
+
+        def mock_docker_cp(src: str, dest: str):
+            cp_dests.append(dest)
+
+        def mock_docker_exec(container_id, cmd, timeout=120, workdir="/workspace"):
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        def mock_mcp_exec(container_id, cmd, timeout=30):
+            return MagicMock(
+                returncode=0,
+                stdout="sourcegraph  Connected",
+                stderr="",
+            )
+
+        with (
+            patch("run_task._docker_exec", side_effect=mock_docker_exec),
+            patch("run_task._docker_cp", side_effect=mock_docker_cp),
+            patch("run_task._verify_mcp_endpoint", return_value=True),
+            patch("run_task._mcp_exec", side_effect=mock_mcp_exec),
+            patch.dict(os.environ, {"SOURCEGRAPH_ACCESS_TOKEN": "sgp_test"}),
+        ):
+            _configure_mcp("test-container", "mcp_only")
+
+        workspace_writes = [d for d in cp_dests if "/workspace/" in d]
+        user_writes = [d for d in cp_dests if "/home/agent/.claude/" in d]
+        assert (
+            len(workspace_writes) == 1
+        ), f"Expected 1 workspace write, got {workspace_writes}"
+        assert len(user_writes) == 1, f"Expected 1 user-level write, got {user_writes}"

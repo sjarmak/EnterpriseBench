@@ -1,6 +1,10 @@
 # Incident Investigation: Grafana Prometheus Response Parsing Silent Failure
 
 difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "observability-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "incident-inv-prom-parse-003"

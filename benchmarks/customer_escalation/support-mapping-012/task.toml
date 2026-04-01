@@ -1,4 +1,8 @@
 difficulty_stratum = "large_single"
+mcp_suite = "eb_v1"
+repo_set_id = "java-enterprise-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
 
 [task]
 id = "support-map-kafka-bufpool-012"
