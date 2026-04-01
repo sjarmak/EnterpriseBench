@@ -165,8 +165,9 @@ def _check_one_item(
     for rdir in results_dirs:
         # Multi-mode layout: results/runs/<task_id>/<mode>/results.json
         candidates.append(rdir / task_id / mode / "results.json")
-        # Single-mode layout: results/runs/<task_id>/results.json
-        candidates.append(rdir / task_id / "results.json")
+        # Single-mode layout: results/runs/<task_id>/results.json (baseline only)
+        if mode == "baseline":
+            candidates.append(rdir / task_id / "results.json")
         # MCP batch layout: results/mcp_batch*/<task_id>_<mode>/results.json
         candidates.append(rdir / f"{task_id}_{mode}" / "results.json")
 
