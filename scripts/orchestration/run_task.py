@@ -821,6 +821,26 @@ def _configure_mcp(container_id: str, mode: str) -> None:
     sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
 
     logger.info("Configuring Sourcegraph MCP endpoint (mode=%s)", mode)
+
+    # Set NODE_TLS_REJECT_UNAUTHORIZED=0 system-wide so Claude Code picks it up
+    # during MCP server discovery (not just during agent execution via env_extra).
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "-u",
+            "root",
+            container_id,
+            "bash",
+            "-c",
+            'echo "NODE_TLS_REJECT_UNAUTHORIZED=0" >> /etc/environment && '
+            'echo "export NODE_TLS_REJECT_UNAUTHORIZED=0" >> /home/agent/.profile',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
     # Write .mcp.json to /workspace — Claude Code discovers MCP servers from
     # .mcp.json in the working directory (matches CSB's approach).
     mcp_config = json.dumps(
