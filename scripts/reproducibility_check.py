@@ -220,12 +220,7 @@ def collect_scores(
         if not results_dir.is_dir():
             logger.warning("Results directory does not exist: %s", results_dir)
             continue
-        for subdir in sorted(results_dir.iterdir()):
-            if not subdir.is_dir():
-                continue
-            results_file = subdir / "results.json"
-            if not results_file.exists():
-                continue
+        for results_file in sorted(results_dir.rglob("results.json")):
             try:
                 with open(results_file) as f:
                     data = json.load(f)
@@ -236,7 +231,7 @@ def collect_scores(
             # Extract task_id from JSON (preferred) or dirname
             tid = data.get("task_id", "")
             if not tid:
-                tid = _extract_task_id_from_dir(subdir.name)
+                tid = _extract_task_id_from_dir(results_file.parent.name)
 
             if tid not in task_id_set:
                 continue

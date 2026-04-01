@@ -1215,10 +1215,12 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         timings["parse"] = time.monotonic() - t0
 
         # Resolve output directory
+        # Layout: results/runs/<task_id>/<mode>/  (mode-partitioned)
+        # This prevents MCP runs from overwriting baseline results.
         if config.output_dir is not None:
             output_dir = config.output_dir
         else:
-            output_dir = REPO_ROOT / "results" / "runs" / task_id
+            output_dir = REPO_ROOT / "results" / "runs" / task_id / config.mode
         output_dir.mkdir(parents=True, exist_ok=True)
         result.output_dir = str(output_dir)
 
@@ -1482,7 +1484,7 @@ Examples:
         "--output-dir",
         type=Path,
         default=None,
-        help="Where to save results (default: results/runs/<task-id>/)",
+        help="Where to save results (default: results/runs/<task-id>/<mode>/)",
     )
     parser.add_argument(
         "--dry-run",

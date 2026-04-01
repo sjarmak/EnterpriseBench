@@ -91,7 +91,11 @@ def infer_mode(result_path: Path, data: dict[str, Any]) -> str:
         if "mcp" in parent:
             return "mcp_only"
 
-    # Default for results/runs/
+    # Multi-mode layout: results/runs/<task_id>/<mode>/results.json
+    if parent in ("baseline", "mcp_only", "hybrid"):
+        return parent
+
+    # Default for results/runs/ (legacy single-mode layout)
     if "runs" in result_path.parts:
         return "baseline"
 

@@ -188,13 +188,20 @@ def _get_task_meta(task_id: str, benchmarks_root: Path) -> dict[str, str]:
 def _parse_dir_identity(dir_path: Path) -> tuple[str, str]:
     """Infer (task_id, mode) from a results directory path.
 
-    - results/runs/<task_id>/           -> mode = "baseline"
-    - results/mcp_batch*/<id>_<mode>/   -> parse mode from suffix
+    - results/runs/<task_id>/<mode>/     -> multi-mode layout (new)
+    - results/runs/<task_id>/            -> mode = "baseline" (legacy)
+    - results/mcp_batch*/<id>_<mode>/    -> parse mode from suffix
     """
 
     name = dir_path.name
     parent_name = dir_path.parent.name
+    grandparent_name = dir_path.parent.parent.name if dir_path.parent.parent else ""
 
+    # Multi-mode layout: results/runs/<task_id>/<mode>/
+    if name in ("baseline", "mcp_only", "hybrid") and grandparent_name == "runs":
+        return parent_name, name
+
+    # Legacy single-mode: results/runs/<task_id>/
     if parent_name == "runs":
         return name, "baseline"
 
