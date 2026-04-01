@@ -813,37 +813,49 @@ def _save_results(
     return results_path
 
 
-def _configure_mcp(container_id: str, mode: str) -> None:
-    """Configure Sourcegraph MCP endpoint inside the container for mcp_only/hybrid modes."""
-    if mode not in ("mcp_only", "hybrid"):
-        return
-
-    sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
-
-    logger.info("Configuring Sourcegraph MCP endpoint (mode=%s)", mode)
-
-    # Set NODE_TLS_REJECT_UNAUTHORIZED=0 system-wide so Claude Code picks it up
-    # during MCP server discovery (not just during agent execution via env_extra).
-    subprocess.run(
+def _mcp_exec(
+    container_id: str, cmd: list[str], timeout: int = 30
+) -> subprocess.CompletedProcess:
+    """Run a command as agent with MCP-required env vars."""
+    return subprocess.run(
         [
             "docker",
             "exec",
             "-u",
-            "root",
+            "agent",
+            "-e",
+            "HOME=/home/agent",
+            "-e",
+            "NODE_TLS_REJECT_UNAUTHORIZED=0",
+            "-w",
+            "/workspace",
             container_id,
-            "bash",
-            "-c",
-            'echo "NODE_TLS_REJECT_UNAUTHORIZED=0" >> /etc/environment && '
-            'echo "export NODE_TLS_REJECT_UNAUTHORIZED=0" >> /home/agent/.profile',
-        ],
+        ]
+        + cmd,
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=timeout,
     )
 
-    # Write .mcp.json to /workspace AND register via `claude mcp add` for reliability.
-    # .mcp.json alone sometimes shows needs-auth due to race conditions in Claude
-    # Code's MCP discovery. Belt-and-suspenders: both methods.
+
+def _configure_mcp(container_id: str, mode: str) -> None:
+    """Configure Sourcegraph MCP endpoint with pre-flight verification.
+
+    Steps:
+    1. Write .mcp.json to /workspace
+    2. Register via `claude mcp add`
+    3. Verify connection via `claude mcp list` (retry up to 3 times)
+    """
+    if mode not in ("mcp_only", "hybrid"):
+        return
+
+    sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
+    if not sg_token:
+        logger.warning("SOURCEGRAPH_ACCESS_TOKEN not set; MCP will not authenticate")
+
+    logger.info("Configuring Sourcegraph MCP endpoint (mode=%s)", mode)
+
+    # Step 1: Write .mcp.json to /workspace (Claude Code auto-discovers this)
     mcp_config = json.dumps(
         {
             "mcpServers": {
@@ -864,20 +876,11 @@ def _configure_mcp(container_id: str, mode: str) -> None:
             "chown agent:agent /workspace/.mcp.json",
         ],
     )
-    # Also register via CLI for reliability (writes to ~/.claude/settings.json)
-    add_result = subprocess.run(
+
+    # Step 2: Register via claude mcp add (writes to ~/.claude/settings.json)
+    add_result = _mcp_exec(
+        container_id,
         [
-            "docker",
-            "exec",
-            "-u",
-            "agent",
-            "-e",
-            "HOME=/home/agent",
-            "-e",
-            "NODE_TLS_REJECT_UNAUTHORIZED=0",
-            "-w",
-            "/workspace",
-            container_id,
             "claude",
             "mcp",
             "add",
@@ -888,14 +891,59 @@ def _configure_mcp(container_id: str, mode: str) -> None:
             "-H",
             f"Authorization: token {sg_token}",
         ],
-        capture_output=True,
-        text=True,
-        timeout=30,
     )
     if add_result.returncode == 0:
         logger.info("MCP server registered via claude mcp add")
     else:
         logger.warning("claude mcp add failed: %s", add_result.stderr.strip())
+
+    # Step 3: Pre-flight — verify MCP connection with retries
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        check = _mcp_exec(container_id, ["claude", "mcp", "list"])
+        if "Connected" in check.stdout:
+            logger.info(
+                "MCP pre-flight OK (attempt %d): sourcegraph connected", attempt
+            )
+            break
+        logger.warning(
+            "MCP pre-flight attempt %d/%d: %s",
+            attempt,
+            max_retries,
+            check.stdout.strip().replace("\n", " "),
+        )
+        if attempt < max_retries:
+            # Re-register and retry
+            _mcp_exec(
+                container_id,
+                [
+                    "claude",
+                    "mcp",
+                    "remove",
+                    "sourcegraph",
+                ],
+            )
+            _mcp_exec(
+                container_id,
+                [
+                    "claude",
+                    "mcp",
+                    "add",
+                    "--transport",
+                    "http",
+                    "sourcegraph",
+                    SOURCEGRAPH_MCP_ENDPOINT,
+                    "-H",
+                    f"Authorization: token {sg_token}",
+                ],
+            )
+            time.sleep(2)
+    else:
+        logger.error(
+            "MCP pre-flight FAILED after %d attempts — agent will run without MCP",
+            max_retries,
+        )
+
     logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
 
 
