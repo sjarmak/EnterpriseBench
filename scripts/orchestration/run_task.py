@@ -358,8 +358,7 @@ def _build_instruction_text(
                 "## Efficiency\n\n"
                 "- Use MCP for **discovery**, local tools for **reading**\n"
                 "- Don't re-search for patterns you already found\n"
-                "- Prefer `keyword_search` over `nls_search` when you have exact terms\n"
-                "- Limit MCP calls to ~10-20 per task — more means you're over-searching"
+                "- Prefer `keyword_search` over `nls_search` when you have exact terms"
             )
 
         # Append instruction_mcp.md content if it exists
