@@ -1,0 +1,1193 @@
+{
+  "total_scored": 61,
+  "total_checked": 61,
+  "total_pass": 58,
+  "total_fail": 0,
+  "total_skip": 0,
+  "total_gap": 3,
+  "pass_rate": 1.0,
+  "by_suite": {
+    "incident_response": {
+      "PASS": 6,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 6
+    },
+    "dependency_management": {
+      "PASS": 9,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 9
+    },
+    "technical_debt": {
+      "PASS": 4,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 3,
+      "total": 7
+    },
+    "platform_engineering": {
+      "PASS": 6,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 6
+    },
+    "customer_escalation": {
+      "PASS": 19,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 19
+    },
+    "feature_delivery": {
+      "PASS": 8,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 8
+    },
+    "security_operations": {
+      "PASS": 6,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 6
+    }
+  },
+  "by_task_type": {
+    "refactor_orchestration": {
+      "PASS": 5,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 5
+    },
+    "error_provenance": {
+      "PASS": 11,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 11
+    },
+    "api_contract": {
+      "PASS": 6,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 6
+    },
+    "dead_code_necropsy": {
+      "PASS": 0,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 3,
+      "total": 3
+    },
+    "config_drift": {
+      "PASS": 9,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 9
+    },
+    "support_code_mapping": {
+      "PASS": 9,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 9
+    },
+    "dependency_graph": {
+      "PASS": 4,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 4
+    },
+    "incident_investigation": {
+      "PASS": 7,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 7
+    },
+    "monorepo_boundary": {
+      "PASS": 2,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 2
+    },
+    "db_schema_evolution": {
+      "PASS": 5,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 5
+    }
+  },
+  "by_parser": {
+    "python_ast": {
+      "PASS": 14,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 1,
+      "total": 15
+    },
+    "go_ast": {
+      "PASS": 26,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 26
+    },
+    "manifests": {
+      "PASS": 11,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 2,
+      "total": 13
+    },
+    "structural": {
+      "PASS": 7,
+      "FAIL": 0,
+      "SKIP": 0,
+      "GAP": 0,
+      "total": 7
+    }
+  },
+  "ground_truth_gaps": [
+    {
+      "task_id": "api-contract-gocp-module-007",
+      "gap": "Path lacks extension: go-control-plane/Makefile"
+    },
+    {
+      "task_id": "error-trace-grafana-jaeger-panic-001",
+      "gap": "grafana/public/app/plugins/datasource/jaeger/datasource.ts (.ts) inconsistent with task languages ['go']"
+    },
+    {
+      "task_id": "error-trace-grafana-jaeger-panic-001",
+      "gap": "grafana/public/app/plugins/datasource/jaeger/datasource.test.ts (.ts) inconsistent with task languages ['go']"
+    },
+    {
+      "task_id": "error-trace-grafana-jaeger-panic-001",
+      "gap": "grafana/public/app/plugins/datasource/jaeger/graphTransform.ts (.ts) inconsistent with task languages ['go']"
+    },
+    {
+      "task_id": "monorepo-boundary-nextjs-og-008",
+      "gap": "next.js/packages/next/taskfile.js (.js) inconsistent with task languages ['typescript', 'rust']"
+    },
+    {
+      "task_id": "support-map-firefox-css-crash-006",
+      "gap": "gecko-dev/layout/style/ServoCSSPropList.mako.py (.py) inconsistent with task languages ['cpp', 'rust']"
+    }
+  ],
+  "results": [
+    {
+      "task_id": "ansible-abc-imports-fix-001",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 2 ground truth claims structurally valid",
+      "gt_file_count": 2,
+      "gt_verified_count": 2,
+      "gt_gaps": [],
+      "bash_score": 1.5,
+      "bash_passed": false,
+      "suite": "incident_response",
+      "task_type": "refactor_orchestration",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "ansible-galaxy-tar-regression-prove-001",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 2 ground truth claims structurally valid",
+      "gt_file_count": 2,
+      "gt_verified_count": 2,
+      "gt_gaps": [],
+      "bash_score": 3.0,
+      "bash_passed": true,
+      "suite": "incident_response",
+      "task_type": "error_provenance",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "api-contract-envoy-xds-v2-006",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 7 ground truth claims structurally valid",
+      "gt_file_count": 7,
+      "gt_verified_count": 7,
+      "gt_gaps": [],
+      "bash_score": 3.17,
+      "bash_passed": false,
+      "suite": "dependency_management",
+      "task_type": "api_contract",
+      "languages": [
+        "go",
+        "c++",
+        "protobuf"
+      ]
+    },
+    {
+      "task_id": "api-contract-gocp-module-007",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "4/5 claims verified, 1 gaps",
+      "gt_file_count": 5,
+      "gt_verified_count": 4,
+      "gt_gaps": [
+        "Path lacks extension: go-control-plane/Makefile"
+      ],
+      "bash_score": 4.0,
+      "bash_passed": true,
+      "suite": "dependency_management",
+      "task_type": "api_contract",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "api-contract-grpc-balancer-002",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 7 ground truth claims structurally valid",
+      "gt_file_count": 7,
+      "gt_verified_count": 7,
+      "gt_gaps": [],
+      "bash_score": 4.0,
+      "bash_passed": true,
+      "suite": "dependency_management",
+      "task_type": "api_contract",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "api-contract-grpc-metadata-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 6 ground truth claims structurally valid",
+      "gt_file_count": 6,
+      "gt_verified_count": 6,
+      "gt_gaps": [],
+      "bash_score": 0.0,
+      "bash_passed": false,
+      "suite": "dependency_management",
+      "task_type": "api_contract",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "api-contract-protobuf-v2-005",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 3.25,
+      "bash_passed": false,
+      "suite": "dependency_management",
+      "task_type": "api_contract",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "beam-pipeline-builder-refac-001",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 2 ground truth claims structurally valid",
+      "gt_file_count": 2,
+      "gt_verified_count": 2,
+      "gt_gaps": [],
+      "bash_score": 1.33,
+      "bash_passed": false,
+      "suite": "technical_debt",
+      "task_type": "refactor_orchestration",
+      "languages": [
+        "java"
+      ]
+    },
+    {
+      "task_id": "cal-dead-flask-legacy-002",
+      "status": "GAP",
+      "parser_type": "python_ast",
+      "reason": "No ground truth files defined",
+      "gt_file_count": 0,
+      "gt_verified_count": 0,
+      "gt_gaps": [],
+      "bash_score": 1.0,
+      "bash_passed": false,
+      "suite": "technical_debt",
+      "task_type": "dead_code_necropsy",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-drift-click-envvar-002",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 1.0,
+      "bash_passed": false,
+      "suite": "platform_engineering",
+      "task_type": "config_drift",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-drift-flask-config-001",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 2.0,
+      "bash_passed": false,
+      "suite": "platform_engineering",
+      "task_type": "config_drift",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-err-click-flagval-002",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 2.95,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-err-flask-blueprint-001",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 2.0,
+      "bash_passed": false,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-err-flask-endpoint-004",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 2.67,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-err-requests-proxy-003",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 4 ground truth claims structurally valid",
+      "gt_file_count": 4,
+      "gt_verified_count": 4,
+      "gt_gaps": [],
+      "bash_score": 1.71,
+      "bash_passed": false,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-sup-click-clirunner-008",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 1.85,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "support_code_mapping",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-sup-click-sentinel-005",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 2.15,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "support_code_mapping",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-sup-flask-errhandler-006",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 2.25,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "support_code_mapping",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "cal-sup-requests-cabundle-007",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 2.15,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "support_code_mapping",
+      "languages": [
+        "python"
+      ]
+    },
+    {
+      "task_id": "camel-routing-arch-001",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 3.0,
+      "bash_passed": true,
+      "suite": "feature_delivery",
+      "task_type": "api_contract",
+      "languages": [
+        "java"
+      ]
+    },
+    {
+      "task_id": "ccx-compliance-052",
+      "status": "PASS",
+      "parser_type": "structural",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 0.0,
+      "bash_passed": false,
+      "suite": "security_operations",
+      "task_type": "config_drift",
+      "languages": [
+        "cpp"
+      ]
+    },
+    {
+      "task_id": "ccx-compliance-053",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 0.0,
+      "bash_passed": false,
+      "suite": "security_operations",
+      "task_type": "config_drift",
+      "languages": [
+        "java"
+      ]
+    },
+    {
+      "task_id": "ceph-rgw-auth-secure-001",
+      "status": "PASS",
+      "parser_type": "structural",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 2.5,
+      "bash_passed": true,
+      "suite": "security_operations",
+      "task_type": "config_drift",
+      "languages": [
+        "cpp"
+      ]
+    },
+    {
+      "task_id": "config-drift-argocd-redis-ha-004",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 2.25,
+      "bash_passed": false,
+      "suite": "platform_engineering",
+      "task_type": "config_drift",
+      "languages": [
+        "yaml",
+        "go-template",
+        "go"
+      ]
+    },
+    {
+      "task_id": "config-drift-consul-serf-port-001",
+      "status": "PASS",
+      "parser_type": "structural",
+      "reason": "All 4 ground truth claims structurally valid",
+      "gt_file_count": 4,
+      "gt_verified_count": 4,
+      "gt_gaps": [],
+      "bash_score": 3.0,
+      "bash_passed": true,
+      "suite": "platform_engineering",
+      "task_type": "config_drift",
+      "languages": [
+        "yaml",
+        "go-template"
+      ]
+    },
+    {
+      "task_id": "config-drift-redis-password-003",
+      "status": "PASS",
+      "parser_type": "structural",
+      "reason": "All 6 ground truth claims structurally valid",
+      "gt_file_count": 6,
+      "gt_verified_count": 6,
+      "gt_gaps": [],
+      "bash_score": 2.5,
+      "bash_passed": true,
+      "suite": "platform_engineering",
+      "task_type": "config_drift",
+      "languages": [
+        "yaml",
+        "go-template"
+      ]
+    },
+    {
+      "task_id": "config-drift-scdf-rabbitmq-002",
+      "status": "PASS",
+      "parser_type": "structural",
+      "reason": "All 6 ground truth claims structurally valid",
+      "gt_file_count": 6,
+      "gt_verified_count": 6,
+      "gt_gaps": [],
+      "bash_score": 3.0,
+      "bash_passed": true,
+      "suite": "platform_engineering",
+      "task_type": "config_drift",
+      "languages": [
+        "yaml",
+        "go-template"
+      ]
+    },
+    {
+      "task_id": "dead-code-001",
+      "status": "GAP",
+      "parser_type": "manifests",
+      "reason": "No ground truth files defined",
+      "gt_file_count": 0,
+      "gt_verified_count": 0,
+      "gt_gaps": [],
+      "bash_score": 0.0,
+      "bash_passed": false,
+      "suite": "technical_debt",
+      "task_type": "dead_code_necropsy",
+      "languages": [
+        "javascript"
+      ]
+    },
+    {
+      "task_id": "dead-code-002",
+      "status": "GAP",
+      "parser_type": "manifests",
+      "reason": "No ground truth files defined",
+      "gt_file_count": 0,
+      "gt_verified_count": 0,
+      "gt_gaps": [],
+      "bash_score": 2.1409,
+      "bash_passed": false,
+      "suite": "technical_debt",
+      "task_type": "dead_code_necropsy",
+      "languages": [
+        "javascript"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-001",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 3.67,
+      "bash_passed": true,
+      "suite": "dependency_management",
+      "task_type": "dependency_graph",
+      "languages": [
+        "javascript"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-003",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 4 ground truth claims structurally valid",
+      "gt_file_count": 4,
+      "gt_verified_count": 4,
+      "gt_gaps": [],
+      "bash_score": 4.0,
+      "bash_passed": true,
+      "suite": "dependency_management",
+      "task_type": "dependency_graph",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-005",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 4.0,
+      "bash_passed": true,
+      "suite": "dependency_management",
+      "task_type": "dependency_graph",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-010",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 4.0,
+      "bash_passed": true,
+      "suite": "dependency_management",
+      "task_type": "dependency_graph",
+      "languages": [
+        "java"
+      ]
+    },
+    {
+      "task_id": "error-trace-grafana-jaeger-panic-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [
+        "grafana/public/app/plugins/datasource/jaeger/datasource.ts (.ts) inconsistent with task languages ['go']",
+        "grafana/public/app/plugins/datasource/jaeger/datasource.test.ts (.ts) inconsistent with task languages ['go']",
+        "grafana/public/app/plugins/datasource/jaeger/graphTransform.ts (.ts) inconsistent with task languages ['go']"
+      ],
+      "bash_score": 3.0,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "error-trace-k8s-job-starttime-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 2.5,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "error-trace-k8s-nftables-sync-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 4 ground truth claims structurally valid",
+      "gt_file_count": 4,
+      "gt_verified_count": 4,
+      "gt_gaps": [],
+      "bash_score": 2.88,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "error-trace-k8s-poststarthook-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 0.0,
+      "bash_passed": false,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "error-trace-k8s-sessionaffinity-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 2 ground truth claims structurally valid",
+      "gt_file_count": 2,
+      "gt_verified_count": 2,
+      "gt_gaps": [],
+      "bash_score": 2.5,
+      "bash_passed": true,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "error-trace-k8s-sidecar-restart-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 0.0,
+      "bash_passed": false,
+      "suite": "customer_escalation",
+      "task_type": "error_provenance",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "incident-inv-docker-shutdown-004",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 4 ground truth claims structurally valid",
+      "gt_file_count": 4,
+      "gt_verified_count": 4,
+      "gt_gaps": [],
+      "bash_score": 3.5,
+      "bash_passed": true,
+      "suite": "incident_response",
+      "task_type": "incident_investigation",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "incident-inv-prom-parse-003",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 4 ground truth claims structurally valid",
+      "gt_file_count": 4,
+      "gt_verified_count": 4,
+      "gt_gaps": [],
+      "bash_score": 4.0,
+      "bash_passed": true,
+      "suite": "incident_response",
+      "task_type": "incident_investigation",
+      "languages": [
+        "go",
+        "typescript"
+      ]
+    },
+    {
+      "task_id": "incident-inv-watch-cache-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 4 ground truth claims structurally valid",
+      "gt_file_count": 4,
+      "gt_verified_count": 4,
+      "gt_gaps": [],
+      "bash_score": 3.5,
+      "bash_passed": true,
+      "suite": "incident_response",
+      "task_type": "incident_investigation",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "incident-inv-watch-delete-002",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 4 ground truth claims structurally valid",
+      "gt_file_count": 4,
+      "gt_verified_count": 4,
+      "gt_gaps": [],
+      "bash_score": 4.0,
+      "bash_passed": true,
+      "suite": "incident_response",
+      "task_type": "incident_investigation",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "monorepo-boundary-nextjs-og-008",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [
+        "next.js/packages/next/taskfile.js (.js) inconsistent with task languages ['typescript', 'rust']"
+      ],
+      "bash_score": 3.0,
+      "bash_passed": true,
+      "suite": "feature_delivery",
+      "task_type": "monorepo_boundary",
+      "languages": [
+        "typescript",
+        "rust"
+      ]
+    },
+    {
+      "task_id": "monorepo-boundary-pnpm-lockfile-005",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 6 ground truth claims structurally valid",
+      "gt_file_count": 6,
+      "gt_verified_count": 6,
+      "gt_gaps": [],
+      "bash_score": 3.0,
+      "bash_passed": true,
+      "suite": "feature_delivery",
+      "task_type": "monorepo_boundary",
+      "languages": [
+        "typescript"
+      ]
+    },
+    {
+      "task_id": "rbac-audit-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 3.75,
+      "bash_passed": true,
+      "suite": "security_operations",
+      "task_type": "incident_investigation",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "rbac-audit-002",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 4.0,
+      "bash_passed": true,
+      "suite": "security_operations",
+      "task_type": "incident_investigation",
+      "languages": [
+        "java"
+      ]
+    },
+    {
+      "task_id": "rbac-audit-003",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 4.0,
+      "bash_passed": true,
+      "suite": "security_operations",
+      "task_type": "incident_investigation",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "refactor-orch-001",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 2 ground truth claims structurally valid",
+      "gt_file_count": 2,
+      "gt_verified_count": 2,
+      "gt_gaps": [],
+      "bash_score": 1.8,
+      "bash_passed": false,
+      "suite": "technical_debt",
+      "task_type": "refactor_orchestration",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "refactor-orch-003",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 3 ground truth claims structurally valid",
+      "gt_file_count": 3,
+      "gt_verified_count": 3,
+      "gt_gaps": [],
+      "bash_score": 1.8,
+      "bash_passed": false,
+      "suite": "technical_debt",
+      "task_type": "refactor_orchestration",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "refactor-orch-005",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 2 ground truth claims structurally valid",
+      "gt_file_count": 2,
+      "gt_verified_count": 2,
+      "gt_gaps": [],
+      "bash_score": 1.2,
+      "bash_passed": false,
+      "suite": "technical_debt",
+      "task_type": "refactor_orchestration",
+      "languages": [
+        "javascript",
+        "typescript"
+      ]
+    },
+    {
+      "task_id": "schema-evolution-001",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 19 ground truth claims structurally valid",
+      "gt_file_count": 19,
+      "gt_verified_count": 19,
+      "gt_gaps": [],
+      "bash_score": 3.58,
+      "bash_passed": true,
+      "suite": "feature_delivery",
+      "task_type": "db_schema_evolution",
+      "languages": [
+        "python",
+        "javascript"
+      ]
+    },
+    {
+      "task_id": "schema-evolution-003",
+      "status": "PASS",
+      "parser_type": "python_ast",
+      "reason": "All 26 ground truth claims structurally valid",
+      "gt_file_count": 26,
+      "gt_verified_count": 26,
+      "gt_gaps": [],
+      "bash_score": 3.63,
+      "bash_passed": true,
+      "suite": "feature_delivery",
+      "task_type": "db_schema_evolution",
+      "languages": [
+        "python",
+        "javascript",
+        "typescript"
+      ]
+    },
+    {
+      "task_id": "schema-evolution-005",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 22 ground truth claims structurally valid",
+      "gt_file_count": 22,
+      "gt_verified_count": 22,
+      "gt_gaps": [],
+      "bash_score": 3.43,
+      "bash_passed": true,
+      "suite": "feature_delivery",
+      "task_type": "db_schema_evolution",
+      "languages": [
+        "ruby",
+        "javascript"
+      ]
+    },
+    {
+      "task_id": "schema-evolution-007",
+      "status": "PASS",
+      "parser_type": "manifests",
+      "reason": "All 11 ground truth claims structurally valid",
+      "gt_file_count": 11,
+      "gt_verified_count": 11,
+      "gt_gaps": [],
+      "bash_score": 0.0,
+      "bash_passed": false,
+      "suite": "feature_delivery",
+      "task_type": "db_schema_evolution",
+      "languages": [
+        "ruby"
+      ]
+    },
+    {
+      "task_id": "schema-evolution-010",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 10 ground truth claims structurally valid",
+      "gt_file_count": 10,
+      "gt_verified_count": 10,
+      "gt_gaps": [],
+      "bash_score": 3.0,
+      "bash_passed": false,
+      "suite": "feature_delivery",
+      "task_type": "db_schema_evolution",
+      "languages": [
+        "go",
+        "sql"
+      ]
+    },
+    {
+      "task_id": "support-map-envoy-connpool-001",
+      "status": "PASS",
+      "parser_type": "structural",
+      "reason": "All 7 ground truth claims structurally valid",
+      "gt_file_count": 7,
+      "gt_verified_count": 7,
+      "gt_gaps": [],
+      "bash_score": 1.92,
+      "bash_passed": false,
+      "suite": "customer_escalation",
+      "task_type": "support_code_mapping",
+      "languages": [
+        "cpp"
+      ]
+    },
+    {
+      "task_id": "support-map-firefox-css-crash-006",
+      "status": "PASS",
+      "parser_type": "structural",
+      "reason": "All 6 ground truth claims structurally valid",
+      "gt_file_count": 6,
+      "gt_verified_count": 6,
+      "gt_gaps": [
+        "gecko-dev/layout/style/ServoCSSPropList.mako.py (.py) inconsistent with task languages ['cpp', 'rust']"
+      ],
+      "bash_score": 1.5,
+      "bash_passed": false,
+      "suite": "customer_escalation",
+      "task_type": "support_code_mapping",
+      "languages": [
+        "cpp",
+        "rust"
+      ]
+    },
+    {
+      "task_id": "support-map-grafana-alerts-004",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 5 ground truth claims structurally valid",
+      "gt_file_count": 5,
+      "gt_verified_count": 5,
+      "gt_gaps": [],
+      "bash_score": 1.9,
+      "bash_passed": false,
+      "suite": "customer_escalation",
+      "task_type": "support_code_mapping",
+      "languages": [
+        "go"
+      ]
+    },
+    {
+      "task_id": "support-map-grafana-import-003",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 6 ground truth claims structurally valid",
+      "gt_file_count": 6,
+      "gt_verified_count": 6,
+      "gt_gaps": [],
+      "bash_score": 1.5,
+      "bash_passed": false,
+      "suite": "customer_escalation",
+      "task_type": "support_code_mapping",
+      "languages": [
+        "go",
+        "typescript"
+      ]
+    },
+    {
+      "task_id": "support-map-k8s-eviction-005",
+      "status": "PASS",
+      "parser_type": "go_ast",
+      "reason": "All 6 ground truth claims structurally valid",
+      "gt_file_count": 6,
+      "gt_verified_count": 6,
+      "gt_gaps": [],
+      "bash_score": 1.57,
+      "bash_passed": false,
+      "suite": "customer_escalation",
+      "task_type": "support_code_mapping",
+      "languages": [
+        "go"
+      ]
+    }
+  ]
+}
