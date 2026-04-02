@@ -448,23 +448,23 @@ def _setup_container(
         _docker_cp(str(gt_file), f"{container_id}:/workspace/.task/ground_truth.json")
         logger.info("Copied ground_truth.json into container")
 
-    # Fix ownership of all copied files — docker cp preserves host UID which
-    # may not match the agent user inside the container (e.g. node:1000 vs agent:1001)
-    subprocess.run(
+    # Fix ownership of copied files only — docker cp preserves host UID which
+    # may not match the agent user inside the container.
+    # Never chown -R /workspace (too slow for large repos like K8s, Terraform).
+    _docker_exec(
+        container_id,
         [
-            "docker",
-            "exec",
-            "-u",
-            "root",
-            container_id,
-            "chown",
-            "-R",
-            "agent:agent",
-            "/workspace",
+            "bash",
+            "-c",
+            "chown -R agent:agent "
+            "/workspace/instruction.md "
+            "/workspace/.verifiers "
+            "/workspace/.task "
+            "/workspace/.eb_verify "
+            "/workspace/test.sh "
+            "/workspace/.mcp.json "
+            "2>/dev/null; true",
         ],
-        capture_output=True,
-        text=True,
-        timeout=30,
     )
 
 
