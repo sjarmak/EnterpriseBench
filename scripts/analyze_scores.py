@@ -546,7 +546,7 @@ def main(argv: list[str] | None = None) -> None:
     report = analyze(args.results_dirs, args.benchmarks_root)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2) + "\n")
+    args.output.write_text(json.dumps(report, indent=2, default=str) + "\n")
     logger.info("Wrote %s", args.output)
 
     # Print summary to stdout
