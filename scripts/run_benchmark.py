@@ -202,7 +202,7 @@ def is_task_completed(
 
     Looks in two locations (in order):
       1. ``results_dir/<task_id>/<mode>/results.json`` (multi-mode layout)
-      2. ``results_dir/<task_id>/results.json``        (single-mode layout)
+      2. ``results_dir/<task_id>/results.json``        (single-mode layout, baseline only)
 
     Returns True only if the file exists, parses as JSON, and contains
     ``"success": true``.
@@ -212,8 +212,10 @@ def is_task_completed(
 
     candidates = [
         results_dir / task_id / mode / "results.json",
-        results_dir / task_id / "results.json",
     ]
+    # Legacy single-mode layout only matches baseline
+    if mode == "baseline":
+        candidates.append(results_dir / task_id / "results.json")
     for path in candidates:
         if not path.exists():
             continue
@@ -260,7 +262,7 @@ def extract_task_cost(
 ) -> float:
     """Read cost_usd from a task's results.json tool_usage section.
 
-    Checks mode-specific and top-level results locations.
+    Checks mode-specific and legacy results locations.
     Returns 0.0 if the file is missing or has no cost data.
     """
     if results_dir is None:
@@ -268,8 +270,9 @@ def extract_task_cost(
 
     candidates = [
         results_dir / task_id / mode / "results.json",
-        results_dir / task_id / "results.json",
     ]
+    if mode == "baseline":
+        candidates.append(results_dir / task_id / "results.json")
     for path in candidates:
         if not path.exists():
             continue
