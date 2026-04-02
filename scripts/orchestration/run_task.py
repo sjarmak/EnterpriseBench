@@ -451,9 +451,14 @@ def _setup_container(
     # Fix ownership of copied files only — docker cp preserves host UID which
     # may not match the agent user inside the container.
     # Never chown -R /workspace (too slow for large repos like K8s, Terraform).
-    _docker_exec(
-        container_id,
+    # Must run as root since the container default user may be non-root.
+    subprocess.run(
         [
+            "docker",
+            "exec",
+            "-u",
+            "root",
+            container_id,
             "bash",
             "-c",
             "chown -R agent:agent "
@@ -462,9 +467,13 @@ def _setup_container(
             "/workspace/.task "
             "/workspace/.eb_verify "
             "/workspace/test.sh "
+            "/workspace/agent_output "
             "/workspace/.mcp.json "
             "2>/dev/null; true",
         ],
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
 
 
