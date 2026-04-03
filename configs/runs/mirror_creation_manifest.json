@@ -36,7 +36,6 @@
       "mirror": "sg-evals/ansible--v2.16.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
-        "ansible-abc-imports-fix-001",
         "ansible-galaxy-tar-regression-prove-001"
       ]
     },
@@ -47,15 +46,6 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "config-drift-argocd-redis-ha-004"
-      ]
-    },
-    {
-      "upstream": "github.com/dotnet/aspnetcore",
-      "commit": "v9.0.0",
-      "mirror": "sg-evals/aspnetcore--v9.0.0",
-      "pin_source": "task.toml repos[].rev",
-      "tasks": [
-        "aspnetcore-code-review-001"
       ]
     },
     {
@@ -111,15 +101,6 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "refactor-orch-005"
-      ]
-    },
-    {
-      "upstream": "github.com/apache/beam",
-      "commit": "v2.55.0",
-      "mirror": "sg-evals/beam--v2.55.0",
-      "pin_source": "task.toml repos[].rev",
-      "tasks": [
-        "beam-pipeline-builder-refac-001"
       ]
     },
     {

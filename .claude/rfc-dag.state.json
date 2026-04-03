@@ -56,7 +56,7 @@
         "scripts/orchestration/run_task.py",
         "tests/"
       ],
-      "status": "active",
+      "status": "passed",
       "branch": null,
       "pipeline_stage": null,
       "pipeline_output": {},
@@ -82,7 +82,7 @@
         "scripts/infra/check_repo_staleness.py",
         "tests/"
       ],
-      "status": "active",
+      "status": "passed",
       "branch": null,
       "pipeline_stage": null,
       "pipeline_output": {},
@@ -106,7 +106,7 @@
         "scripts/orchestration/chain_runner.py",
         "tests/"
       ],
-      "status": "active",
+      "status": "passed",
       "branch": null,
       "pipeline_stage": null,
       "pipeline_output": {},
@@ -132,7 +132,7 @@
         "scripts/infra/verify_sg_indexing.py",
         "tests/"
       ],
-      "status": "active",
+      "status": "passed",
       "branch": null,
       "pipeline_stage": null,
       "pipeline_output": {},
@@ -158,7 +158,7 @@
         "scripts/validation/crnt_validator.py",
         "tests/"
       ],
-      "status": "active",
+      "status": "passed",
       "branch": null,
       "pipeline_stage": null,
       "pipeline_output": {},
