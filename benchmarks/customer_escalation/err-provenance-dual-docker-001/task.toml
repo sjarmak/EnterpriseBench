@@ -1,0 +1,119 @@
+# Error Provenance: Docker CLI error to Moby daemon origin
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "docker-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "err-provenance-dual-docker-001"
+suite = "customer_escalation"
+task_type = "error_provenance"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace user-facing Docker 'executable file not found in $PATH' error through CLI to Moby daemon origin"
+prompt = """
+A customer reports this error when running `docker run`:
+
+    docker: Error response from daemon: failed to create task for container:
+    failed to create shim task: OCI runtime create failed: runc create failed:
+    unable to start container process: exec: "myapp": executable file not found
+    in $PATH: unknown.
+
+The customer insists the executable exists in their image. Your task is to trace
+this error from the user-facing Docker CLI output all the way back to its origin
+in the Moby daemon code to understand the full error chain and identify potential
+false-positive conditions.
+
+Your task:
+1. Find where the Docker CLI formats and displays this error to the user — trace
+   from the `docker run` command handler through the API client.
+2. Find where the Moby daemon generates the "failed to create task" error — trace
+   through the container runtime integration (containerd, runc shim).
+3. Trace the full error propagation chain: daemon → API response → CLI parsing →
+   user-visible output. Document each file and function in the chain.
+4. Identify the conditions in the daemon code that can trigger this error beyond
+   the obvious "file doesn't exist" — PATH resolution logic, image layer issues,
+   or entrypoint/cmd override interactions.
+
+Write your analysis to /workspace/ERROR_PROVENANCE.md with:
+- Full error chain (file:function at each step)
+- Error origin in daemon code
+- Error formatting in CLI code
+- Alternative trigger conditions beyond missing executable
+"""
+
+[[repos]]
+url = "https://github.com/docker/cli"
+rev = "v24.0.7"
+path = "docker-cli"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/moby/moby"
+rev = "v24.0.7"
+path = "moby"
+role = "upstream"
+
+[metadata]
+languages = ["go"]
+total_loc = 800_000
+dependency_depth = 2
+frameworks = ["docker", "containerd"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "find_error_origin"
+weight = 0.40
+verifier = "checks/check_error_origin.sh"
+description = "Agent identifies the daemon-side origin of the error in Moby"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trace_error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the full error propagation chain from daemon to CLI output"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "identify_trigger_conditions"
+weight = 0.30
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies alternative trigger conditions beyond missing executable"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing error strings across Docker CLI and Moby daemon requires cross-repo symbol search to follow error wrapping through API boundaries"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "cli/command/container/run.go"
+repo = "docker-cli"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "daemon/start.go"
+repo = "moby"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "cli/error.go"
+repo = "docker-cli"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "daemon/oci_linux.go"
+repo = "moby"
+confidence = 0.75

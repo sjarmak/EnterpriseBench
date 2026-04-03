@@ -1,0 +1,123 @@
+# Dead Code Necropsy: client-go references to removed Kubernetes API groups
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "kubernetes-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "dead-code-dual-k8s-001"
+suite = "technical_debt"
+task_type = "dead_code_necropsy"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Identify dead code in client-go from removed or deprecated Kubernetes API groups in v1.28"
+prompt = """
+Kubernetes v1.28.0 removed several deprecated API groups and versions as part of the
+ongoing API lifecycle management. However, client-go v0.28.0 may still contain client
+code, informers, listers, and typed clients for these removed API groups.
+
+Your task:
+1. Identify API groups/versions that were removed or fully deprecated in Kubernetes
+   v1.28.0 — check the API server registration code, generated API types, and
+   deprecation annotations in staging/src/k8s.io/api/.
+2. Search client-go for code that references these removed API groups — look for
+   typed clients, informers, listers, and fake clients in the corresponding
+   directories.
+3. Determine which client-go code paths are now dead because the API server no
+   longer serves those endpoints — distinguish between:
+   - Fully dead (API group removed entirely)
+   - Partially dead (version removed but group still exists under a new version)
+   - Compatibility stubs (intentionally kept for backward compatibility)
+4. For each dead code path, document the removed API, the client-go files affected,
+   and whether removal would be safe.
+
+Write your findings to /workspace/dead_code_report.json as:
+[
+  {
+    "api_group": "apigroup/version",
+    "status": "removed|deprecated",
+    "k8s_evidence_file": "path/in/kubernetes/repo",
+    "client_go_files": ["path/in/client-go"],
+    "kind": "typed_client|informer|lister|fake_client|expansion",
+    "confidence": "high|medium|low",
+    "evidence": "explanation of why this is dead code",
+    "safe_to_remove": true|false
+  }
+]
+"""
+
+[[repos]]
+url = "https://github.com/kubernetes/kubernetes"
+rev = "v1.28.0"
+path = "kubernetes"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/kubernetes/client-go"
+rev = "v0.28.0"
+path = "client-go"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 3_500_000
+dependency_depth = 2
+frameworks = ["kubernetes"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_removed_apis"
+weight = 0.30
+verifier = "checks/check_removed_apis.sh"
+description = "Agent identifies removed or deprecated API groups in Kubernetes v1.28.0"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "find_client_go_dead_code"
+weight = 0.40
+verifier = "checks/check_client_go_dead_code.sh"
+description = "Agent finds client-go code referencing removed API groups"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "classify_removal_safety"
+weight = 0.30
+verifier = "checks/check_removal_safety.sh"
+description = "Agent correctly classifies dead code paths and removal safety"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo dead code detection requires matching API server registration in kubernetes with client library code in client-go across hundreds of generated files"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "staging/src/k8s.io/api/flowcontrol/v1beta2/types.go"
+repo = "kubernetes"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "kubernetes/typed/flowcontrol/v1beta2/flowcontrol_client.go"
+repo = "client-go"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pkg/registry/flowcontrol/rest/storage_flowcontrol.go"
+repo = "kubernetes"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "informers/flowcontrol/v1beta2/interface.go"
+repo = "client-go"
+confidence = 0.75

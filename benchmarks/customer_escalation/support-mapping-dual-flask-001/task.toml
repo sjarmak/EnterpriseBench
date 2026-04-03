@@ -1,0 +1,117 @@
+# Support Code Mapping: Flask routing error to Werkzeug URL routing implementation
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "flask-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "support-mapping-dual-flask-001"
+suite = "customer_escalation"
+task_type = "support_code_mapping"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Map Flask user-reported routing 405 Method Not Allowed error to Werkzeug URL routing implementation"
+prompt = """
+A customer support ticket reports:
+
+    "After upgrading to Flask 3.0.0, our API endpoint /api/users/<id> returns
+    '405 Method Not Allowed' for PUT requests that worked before. POST and GET
+    still work fine. We haven't changed our route definitions. The error trace
+    points to werkzeug.routing but we can't figure out what changed."
+
+Your task is to map this user-reported routing error from the Flask application
+layer down to Werkzeug's URL routing internals.
+
+Your task:
+1. Find where Flask handles route registration and method checking — trace from
+   @app.route() decorator through the Flask.add_url_rule() method.
+2. Find where Werkzeug implements URL rule matching and method validation — identify
+   the Map, Rule, and MapAdapter classes that enforce HTTP method restrictions.
+3. Trace the complete path: Flask route registration → Werkzeug Rule compilation →
+   request dispatch → method validation → 405 error generation.
+4. Identify what changed in Werkzeug 3.0.1 (or Flask 3.0.0) that could cause
+   previously-working PUT requests to return 405 — look for changes in method
+   inheritance, strict_slashes behavior, or Rule.methods handling.
+
+Write your analysis to /workspace/SUPPORT_MAPPING.md with:
+- Flask route registration code path (file:function)
+- Werkzeug URL routing and method validation code (file:function)
+- Complete error path from request to 405 response
+- What changed that could cause the regression
+"""
+
+[[repos]]
+url = "https://github.com/pallets/flask"
+rev = "3.0.0"
+path = "flask"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/pallets/werkzeug"
+rev = "3.0.1"
+path = "werkzeug"
+role = "upstream"
+
+[metadata]
+languages = ["python"]
+total_loc = 80_000
+dependency_depth = 2
+frameworks = ["flask", "werkzeug"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "find_flask_routing"
+weight = 0.30
+verifier = "checks/check_flask_routing.sh"
+description = "Agent identifies Flask route registration and method handling code"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "find_werkzeug_dispatch"
+weight = 0.40
+verifier = "checks/check_werkzeug_dispatch.sh"
+description = "Agent identifies Werkzeug URL rule matching and method validation code"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "identify_regression"
+weight = 0.30
+verifier = "checks/check_regression.sh"
+description = "Agent identifies the change causing PUT request 405 regression"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo tracing from Flask decorator internals to Werkzeug routing engine requires following Python class inheritance and method resolution across two codebases"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/flask/app.py"
+repo = "flask"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/werkzeug/routing/map.py"
+repo = "werkzeug"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/flask/scaffold.py"
+repo = "flask"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "src/werkzeug/routing/rules.py"
+repo = "werkzeug"
+confidence = 0.90

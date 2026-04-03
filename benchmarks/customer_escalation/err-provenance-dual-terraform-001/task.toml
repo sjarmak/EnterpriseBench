@@ -1,0 +1,117 @@
+# Error Provenance: Terraform plan error to AWS provider implementation
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "terraform-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "err-provenance-dual-terraform-001"
+suite = "customer_escalation"
+task_type = "error_provenance"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace Terraform plan 'InvalidParameterValue' error to AWS provider resource implementation"
+prompt = """
+A customer reports this error during `terraform plan`:
+
+    Error: creating EC2 Instance: InvalidParameterValue: Value (m6g.xlarge)
+    for parameter instanceType is not valid. Reason: The requested instance type
+    is not supported in the requested Availability Zone.
+
+The customer is confused because the instance type works in other availability zones
+and wants to understand why Terraform doesn't validate this before the plan phase.
+
+Your task:
+1. Find where Terraform core processes provider errors during the plan phase —
+   trace from the plan command through the provider plugin protocol.
+2. Find where the AWS provider creates EC2 instances and handles the
+   InvalidParameterValue error — trace through the aws_instance resource
+   implementation.
+3. Trace the full error chain: AWS API → provider error handling → Terraform core
+   plugin protocol → user-visible plan output. Document each file and function.
+4. Determine why this error only surfaces at plan time rather than during validation —
+   examine the provider's ValidateResourceConfig implementation and what pre-flight
+   checks exist (or don't exist) for instance type / AZ compatibility.
+
+Write your analysis to /workspace/ERROR_PROVENANCE.md with:
+- Full error chain (file:function at each step)
+- AWS provider error origin
+- Terraform core error processing
+- Why pre-flight validation doesn't catch this
+"""
+
+[[repos]]
+url = "https://github.com/hashicorp/terraform"
+rev = "v1.6.0"
+path = "terraform"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/hashicorp/terraform-provider-aws"
+rev = "v5.30.0"
+path = "terraform-provider-aws"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 2_500_000
+dependency_depth = 2
+frameworks = ["terraform", "aws-sdk-go"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "find_provider_error_origin"
+weight = 0.35
+verifier = "checks/check_provider_error.sh"
+description = "Agent identifies the AWS provider EC2 instance creation code that surfaces this error"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trace_error_chain"
+weight = 0.35
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces error from AWS API through provider protocol to Terraform CLI output"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "explain_validation_gap"
+weight = 0.30
+verifier = "checks/check_validation_gap.sh"
+description = "Agent explains why pre-flight validation doesn't catch AZ/instance-type incompatibility"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing error propagation across Terraform core plugin protocol and AWS provider requires cross-repo search to follow gRPC error wrapping"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "internal/command/plan.go"
+repo = "terraform"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "internal/service/ec2/ec2_instance.go"
+repo = "terraform-provider-aws"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "internal/providers/provider.go"
+repo = "terraform"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "internal/service/ec2/ec2_instance_schema.go"
+repo = "terraform-provider-aws"
+confidence = 0.75

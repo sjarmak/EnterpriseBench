@@ -1,0 +1,115 @@
+# DB Schema Evolution: Django model changes impacting Wagtail dependent models
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "django-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "schema-evolution-dual-django-001"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace Django 5.0 model field changes that break Wagtail v5.2 dependent model assumptions"
+prompt = """
+Your team maintains a Wagtail-based CMS running on Django. You're upgrading from
+Django 4.2 to Django 5.0. Wagtail v5.2 claims Django 5.0 compatibility, but after
+the upgrade, certain page models are failing migration checks and admin views are
+raising FieldError exceptions.
+
+The issue stems from Django 5.0's changes to model field internals and the
+GeneratedField introduction, which affects how Wagtail's Page model hierarchy and
+its StreamField implementation interact with Django's ORM.
+
+Your task:
+1. Identify the specific Django 5.0 model/field changes that affect ORM internals
+   used by Wagtail — focus on changes to Field.contribute_to_class, model Meta
+   handling, and the new GeneratedField.
+2. Find all Wagtail model classes that inherit from or depend on Django model
+   behavior that changed in 5.0 (Page, StreamField, Orderable, RevisionMixin).
+3. Trace the impact chain: which Django internal changes break which specific
+   Wagtail model operations (migrations, queries, admin serialization).
+4. Identify the migration files in both repos that would need coordination.
+
+Write your analysis to /workspace/SCHEMA_IMPACT.md with:
+- Django 5.0 breaking changes relevant to Wagtail (with source file paths)
+- Affected Wagtail models and their Django dependencies
+- Impact chain showing which Django change breaks which Wagtail operation
+- Migration coordination requirements
+"""
+
+[[repos]]
+url = "https://github.com/django/django"
+rev = "5.0"
+path = "django"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/wagtail/wagtail"
+rev = "v5.2"
+path = "wagtail"
+role = "consumer"
+
+[metadata]
+languages = ["python"]
+total_loc = 800_000
+dependency_depth = 2
+frameworks = ["django", "wagtail"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_django_changes"
+weight = 0.30
+verifier = "checks/check_django_changes.sh"
+description = "Agent identifies Django 5.0 model field changes affecting ORM internals"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "find_wagtail_deps"
+weight = 0.40
+verifier = "checks/check_wagtail_deps.sh"
+description = "Agent finds Wagtail models dependent on changed Django internals"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trace_impact_chain"
+weight = 0.30
+verifier = "checks/check_impact_chain.sh"
+description = "Agent traces the impact chain from Django changes to Wagtail breakage"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch", "migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo tracing of Django model internals to Wagtail model inheritance chains requires matching Python class hierarchies across two large codebases"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "django/db/models/fields/__init__.py"
+repo = "django"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "wagtail/models/__init__.py"
+repo = "wagtail"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "django/db/models/options.py"
+repo = "django"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "wagtail/fields/streamfield.py"
+repo = "wagtail"
+confidence = 0.85

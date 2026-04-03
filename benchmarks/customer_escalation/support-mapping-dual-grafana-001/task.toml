@@ -1,0 +1,117 @@
+# Support Code Mapping: Grafana dashboard query failure to Prometheus query engine
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "grafana-prometheus-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "support-mapping-dual-grafana-001"
+suite = "customer_escalation"
+task_type = "support_code_mapping"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Map Grafana dashboard 'execution exceeded' query timeout to Prometheus query engine code"
+prompt = """
+A customer support ticket reports:
+
+    "Our Grafana dashboard panels are showing 'Error: query timeout' for panels
+    with complex PromQL queries. The error message is: 'query processing would
+    load too many samples into memory in query execution'. This started after we
+    upgraded Prometheus to v2.48.0. Simple queries work fine."
+
+Your task is to map this user-reported issue from the Grafana UI all the way down
+to the Prometheus query engine code that enforces the limit.
+
+Your task:
+1. Find where Grafana surfaces this error to the user — trace from the dashboard
+   panel rendering code through the data source proxy to the Prometheus data source
+   plugin.
+2. Find where Prometheus generates the "query processing would load too many samples"
+   error — identify the query engine code that enforces sample limits.
+3. Map the complete path: Prometheus query engine limit → HTTP API error response →
+   Grafana data source proxy → panel error display.
+4. Identify the configuration parameters in both Grafana and Prometheus that control
+   this behavior (query timeout, max samples, step interval).
+
+Write your analysis to /workspace/SUPPORT_MAPPING.md with:
+- Grafana code path for error display (file:function)
+- Prometheus query engine limit code (file:function)
+- Complete error path between the two
+- Configuration knobs the customer can adjust
+"""
+
+[[repos]]
+url = "https://github.com/grafana/grafana"
+rev = "v10.2.0"
+path = "grafana"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/prometheus/prometheus"
+rev = "v2.48.0"
+path = "prometheus"
+role = "upstream"
+
+[metadata]
+languages = ["go", "typescript"]
+total_loc = 1_500_000
+dependency_depth = 2
+frameworks = ["grafana", "prometheus"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "find_grafana_error_path"
+weight = 0.30
+verifier = "checks/check_grafana_error_path.sh"
+description = "Agent identifies Grafana code that surfaces query timeout errors to dashboard panels"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "find_prometheus_limit"
+weight = 0.40
+verifier = "checks/check_prometheus_limit.sh"
+description = "Agent identifies Prometheus query engine code enforcing sample limits"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "map_config_knobs"
+weight = 0.30
+verifier = "checks/check_config_knobs.sh"
+description = "Agent identifies configuration parameters in both systems that control this behavior"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["kb_article"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo tracing from Grafana TypeScript UI through Go backend proxy to Prometheus query engine requires matching error strings across languages and repos"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pkg/tsdb/prometheus/querydata/request.go"
+repo = "grafana"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "promql/engine.go"
+repo = "prometheus"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "public/app/plugins/datasource/prometheus/datasource.ts"
+repo = "grafana"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "web/api/v1/api.go"
+repo = "prometheus"
+confidence = 0.80

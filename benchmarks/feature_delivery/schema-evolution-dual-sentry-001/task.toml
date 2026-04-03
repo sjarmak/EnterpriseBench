@@ -1,0 +1,116 @@
+# DB Schema Evolution: Sentry Django models vs Relay Rust schema definitions
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "sentry-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "schema-evolution-dual-sentry-001"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace schema evolution between Sentry's Django models and Relay's Rust schema definitions for event processing"
+prompt = """
+Sentry uses a dual-language architecture: the main application is Django/Python, while
+Relay (the event ingestion pipeline) is written in Rust. Both services need to agree on
+the schema for events, envelopes, and project configuration.
+
+After upgrading to Sentry 23.11.0, some event types are being rejected by Relay with
+schema validation errors. The issue is that Sentry's Django models for event types and
+project configuration have evolved, but Relay's Rust schema definitions haven't been
+updated to match.
+
+Your task:
+1. Identify the Sentry Django models that define event types, project configuration,
+   and data categories — focus on models in sentry/models/ and the event schema
+   definitions in sentry/event_manager.py and related modules.
+2. Find the corresponding Rust schema definitions in Relay — look in relay-general/src/
+   and relay-server/src/ for Protocol structs, enums, and validation logic.
+3. Identify schema drift points where the Sentry Python definitions have fields, enums,
+   or validation rules that differ from Relay's Rust definitions.
+4. For each drift point, document the Sentry definition, the Relay definition, and the
+   impact on event processing.
+
+Write your analysis to /workspace/SCHEMA_IMPACT.md with:
+- Sentry model changes with file paths
+- Corresponding Relay Rust schema definitions
+- Schema drift points with both-side file references
+- Impact on event ingestion pipeline
+"""
+
+[[repos]]
+url = "https://github.com/getsentry/sentry"
+rev = "23.11.0"
+path = "sentry"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/getsentry/relay"
+rev = "23.11.0"
+path = "relay"
+role = "consumer"
+
+[metadata]
+languages = ["python", "rust"]
+total_loc = 1_200_000
+dependency_depth = 2
+frameworks = ["django", "sentry", "relay"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_sentry_models"
+weight = 0.30
+verifier = "checks/check_sentry_models.sh"
+description = "Agent identifies Sentry Django models for event types and project config"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "find_relay_schemas"
+weight = 0.35
+verifier = "checks/check_relay_schemas.sh"
+description = "Agent finds corresponding Relay Rust schema definitions"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "identify_drift"
+weight = 0.35
+verifier = "checks/check_schema_drift.sh"
+description = "Agent identifies schema drift points between Sentry and Relay definitions"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-language schema tracing between Python Django models and Rust struct definitions requires semantic matching across different type systems"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/sentry/models/project.py"
+repo = "sentry"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "relay-general/src/protocol/event.rs"
+repo = "relay"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/sentry/event_manager.py"
+repo = "sentry"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "relay-server/src/envelope.rs"
+repo = "relay"
+confidence = 0.80

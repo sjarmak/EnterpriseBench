@@ -1,0 +1,122 @@
+# Dead Code Necropsy: React deprecated internals referenced by create-react-app
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "react-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "dead-code-dual-react-001"
+suite = "technical_debt"
+task_type = "dead_code_necropsy"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Identify dead code from deprecated React internals still referenced by create-react-app templates and scripts"
+prompt = """
+React v18.2.0 deprecated several internal APIs and module structures as part of the
+transition toward React Server Components and the new JSX transform. However,
+create-react-app v5.0.1 was built for an earlier React API surface and may still
+reference deprecated or removed React internals.
+
+Your task:
+1. Identify deprecated or dead exports in React v18.2.0 — look for modules marked
+   with deprecation warnings, __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+   APIs that are no longer functional, and exports that have no internal callers.
+2. Search create-react-app for references to these deprecated React internals —
+   check template files, react-scripts webpack configuration, testing utilities,
+   and build scripts.
+3. For each dead code reference found in create-react-app, determine:
+   - The React export/module that is dead or deprecated
+   - The create-react-app file(s) that reference it
+   - Whether the reference is load-bearing (breaks if removed) or vestigial
+4. Identify any create-react-app shims or polyfills that exist solely to bridge
+   deprecated React APIs.
+
+Write your findings to /workspace/dead_code_report.json as:
+[
+  {
+    "react_module": "path/to/react/module.js",
+    "react_symbol": "exportName",
+    "cra_references": ["path/to/cra/file.js"],
+    "kind": "deprecated_api|dead_export|vestigial_shim",
+    "confidence": "high|medium|low",
+    "evidence": "explanation of why this is dead code",
+    "load_bearing": true|false
+  }
+]
+"""
+
+[[repos]]
+url = "https://github.com/facebook/react"
+rev = "v18.2.0"
+path = "react"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/facebook/create-react-app"
+rev = "v5.0.1"
+path = "create-react-app"
+role = "consumer"
+
+[metadata]
+languages = ["javascript"]
+total_loc = 350_000
+dependency_depth = 2
+frameworks = ["react", "webpack"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "find_react_dead_exports"
+weight = 0.35
+verifier = "checks/check_react_dead_exports.sh"
+description = "Agent identifies deprecated or dead exports in React v18.2.0"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "find_cra_references"
+weight = 0.35
+verifier = "checks/check_cra_references.sh"
+description = "Agent finds create-react-app references to deprecated React internals"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "classify_impact"
+weight = 0.30
+verifier = "checks/check_impact_classification.sh"
+description = "Agent classifies each reference as load-bearing or vestigial"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo dead code detection requires exhaustive reference search across React internals and CRA templates/scripts to prove absence of live callers"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "packages/react/src/ReactSharedInternals.js"
+repo = "react"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/react-scripts/config/webpack.config.js"
+repo = "create-react-app"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "packages/react-dom/src/client/ReactDOM.js"
+repo = "react"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "packages/react-scripts/scripts/build.js"
+repo = "create-react-app"
+confidence = 0.75
