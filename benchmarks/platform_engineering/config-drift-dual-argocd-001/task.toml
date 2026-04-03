@@ -71,25 +71,25 @@ frameworks = ["argocd", "helm", "kubernetes"]
 multi_repo_pattern = "enforce"
 
 [[checkpoints]]
-name = "identify_controller_defaults"
-weight = 0.35
-verifier = "checks/check_controller_defaults.sh"
-description = "Agent identifies ArgoCD application controller default config values from Go source"
-timeout_seconds = 120
-
-[[checkpoints]]
-name = "identify_helm_overrides"
-weight = 0.35
-verifier = "checks/check_helm_overrides.sh"
-description = "Agent identifies Helm chart values that override controller defaults"
-timeout_seconds = 120
-
-[[checkpoints]]
-name = "map_drift_impact"
-weight = 0.30
-verifier = "checks/check_drift_impact.sh"
-description = "Agent maps drift points to potential operational impact"
+name = "config_valid"
+weight = 0.20
+verifier = "checks/check_config_valid.sh"
+description = "Agent produces valid configuration analysis"
 timeout_seconds = 60
+
+[[checkpoints]]
+name = "drift_points"
+weight = 0.45
+verifier = "checks/check_drift_points.sh"
+description = "Agent identifies all drift points across repos"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "expected_values"
+weight = 0.35
+verifier = "checks/check_expected_values.sh"
+description = "Agent determines correct expected values"
+timeout_seconds = 120
 
 [artifacts]
 required = ["answer"]

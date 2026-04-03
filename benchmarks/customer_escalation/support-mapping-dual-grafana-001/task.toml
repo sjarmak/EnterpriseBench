@@ -63,24 +63,31 @@ frameworks = ["grafana", "prometheus"]
 multi_repo_pattern = "investigate"
 
 [[checkpoints]]
-name = "find_grafana_error_path"
-weight = 0.30
-verifier = "checks/check_grafana_error_path.sh"
-description = "Agent identifies Grafana code that surfaces query timeout errors to dashboard panels"
+name = "code_paths"
+weight = 0.60
+verifier = "checks/check_code_paths.sh"
+description = "Agent identifies correct code paths across repos"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "find_prometheus_limit"
-weight = 0.40
-verifier = "checks/check_prometheus_limit.sh"
-description = "Agent identifies Prometheus query engine code enforcing sample limits"
+name = "ownership"
+weight = 0.15
+verifier = "checks/check_ownership.sh"
+description = "Agent identifies code ownership for identified paths"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "map_config_knobs"
-weight = 0.30
-verifier = "checks/check_config_knobs.sh"
-description = "Agent identifies configuration parameters in both systems that control this behavior"
+name = "related_issues"
+weight = 0.15
+verifier = "checks/check_related_issues.sh"
+description = "Agent finds related issues and context"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "severity"
+weight = 0.10
+verifier = "checks/check_severity.sh"
+description = "Agent correctly assesses severity"
 timeout_seconds = 60
 
 [artifacts]

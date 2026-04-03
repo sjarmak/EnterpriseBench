@@ -1,0 +1,51 @@
+{
+  "task_id": "dead-code-dual-k8s-001",
+  "task_type": "dead_code_necropsy",
+  "repos": [
+    {
+      "url": "https://github.com/kubernetes/kubernetes",
+      "rev": "v1.28.0",
+      "path": "kubernetes"
+    },
+    {
+      "url": "https://github.com/kubernetes/client-go",
+      "rev": "v0.28.0",
+      "path": "client-go"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "staging/src/k8s.io/api/flowcontrol/v1beta2/types.go",
+      "repo": "kubernetes",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "kubernetes/typed/flowcontrol/v1beta2/flowcontrol_client.go",
+      "repo": "client-go",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pkg/registry/flowcontrol/rest/storage_flowcontrol.go",
+      "repo": "kubernetes",
+      "confidence": 0.8
+    },
+    {
+      "path": "informers/flowcontrol/v1beta2/interface.go",
+      "repo": "client-go",
+      "confidence": 0.75
+    }
+  ],
+  "dead_code": [
+    {
+      "description": "Cross-repo dead code reference",
+      "repos_involved": [
+        "kubernetes",
+        "client-go"
+      ]
+    }
+  ]
+}

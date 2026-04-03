@@ -191,7 +191,7 @@
         "benchmarks/technical_debt/",
         "benchmarks/customer_escalation/"
       ],
-      "status": "active",
+      "status": "landed",
       "branch": null,
       "pipeline_stage": null,
       "pipeline_output": {},
@@ -206,7 +206,8 @@
     "repo-versions-manifest",
     "chain-runner-mode-arg",
     "sg-indexing-fix",
-    "crnt-framework"
+    "crnt-framework",
+    "multi-repo-task-authoring"
   ],
   "evicted_units": []
 }

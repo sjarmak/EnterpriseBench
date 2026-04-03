@@ -1,0 +1,51 @@
+{
+  "task_id": "schema-evolution-dual-django-001",
+  "task_type": "db_schema_evolution",
+  "repos": [
+    {
+      "url": "https://github.com/django/django",
+      "rev": "5.0",
+      "path": "django"
+    },
+    {
+      "url": "https://github.com/wagtail/wagtail",
+      "rev": "v5.2",
+      "path": "wagtail"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "django/db/models/fields/__init__.py",
+      "repo": "django",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "wagtail/models/__init__.py",
+      "repo": "wagtail",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "django/db/models/options.py",
+      "repo": "django",
+      "confidence": 0.85
+    },
+    {
+      "path": "wagtail/fields/streamfield.py",
+      "repo": "wagtail",
+      "confidence": 0.85
+    }
+  ],
+  "schema_changes": [
+    {
+      "description": "Cross-repo schema dependency",
+      "repos_involved": [
+        "django",
+        "wagtail"
+      ]
+    }
+  ]
+}

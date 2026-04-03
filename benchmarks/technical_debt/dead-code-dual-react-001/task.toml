@@ -68,24 +68,24 @@ frameworks = ["react", "webpack"]
 multi_repo_pattern = "investigate"
 
 [[checkpoints]]
-name = "find_react_dead_exports"
-weight = 0.35
-verifier = "checks/check_react_dead_exports.sh"
-description = "Agent identifies deprecated or dead exports in React v18.2.0"
+name = "dead_code"
+weight = 0.40
+verifier = "checks/check_dead_code.sh"
+description = "Agent identifies dead code across repos"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "find_cra_references"
+name = "evidence"
 weight = 0.35
-verifier = "checks/check_cra_references.sh"
-description = "Agent finds create-react-app references to deprecated React internals"
+verifier = "checks/check_evidence.sh"
+description = "Agent provides evidence for dead code classification"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "classify_impact"
-weight = 0.30
-verifier = "checks/check_impact_classification.sh"
-description = "Agent classifies each reference as load-bearing or vestigial"
+name = "feature_flags"
+weight = 0.25
+verifier = "checks/check_feature_flags.sh"
+description = "Agent checks for feature flag dependencies"
 timeout_seconds = 60
 
 [artifacts]

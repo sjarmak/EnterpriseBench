@@ -1,0 +1,51 @@
+{
+  "task_id": "config-drift-dual-prometheus-001",
+  "task_type": "config_drift",
+  "repos": [
+    {
+      "url": "https://github.com/prometheus/prometheus",
+      "rev": "v2.48.0",
+      "path": "prometheus"
+    },
+    {
+      "url": "https://github.com/thanos-io/thanos",
+      "rev": "v0.32.5",
+      "path": "thanos"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "tsdb/db.go",
+      "repo": "prometheus",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "cmd/thanos/sidecar.go",
+      "repo": "thanos",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "cmd/prometheus/main.go",
+      "repo": "prometheus",
+      "confidence": 0.85
+    },
+    {
+      "path": "pkg/shipper/shipper.go",
+      "repo": "thanos",
+      "confidence": 0.8
+    }
+  ],
+  "drift_points": [
+    {
+      "description": "Cross-repo config value inconsistency",
+      "repos_involved": [
+        "prometheus",
+        "thanos"
+      ]
+    }
+  ]
+}

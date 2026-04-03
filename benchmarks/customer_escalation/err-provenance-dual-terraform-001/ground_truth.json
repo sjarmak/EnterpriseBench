@@ -1,0 +1,55 @@
+{
+  "task_id": "err-provenance-dual-terraform-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/hashicorp/terraform",
+      "rev": "v1.6.0",
+      "path": "terraform"
+    },
+    {
+      "url": "https://github.com/hashicorp/terraform-provider-aws",
+      "rev": "v5.30.0",
+      "path": "terraform-provider-aws"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "internal/command/plan.go",
+      "repo": "terraform",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "internal/service/ec2/ec2_instance.go",
+      "repo": "terraform-provider-aws",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "internal/providers/provider.go",
+      "repo": "terraform",
+      "confidence": 0.8
+    },
+    {
+      "path": "internal/service/ec2/ec2_instance_schema.go",
+      "repo": "terraform-provider-aws",
+      "confidence": 0.75
+    }
+  ],
+  "error_chain": [
+    "User runs terraform plan with an AWS resource configuration",
+    "Terraform core evaluates the configuration and calls provider plugin",
+    "terraform-provider-aws receives the plan request via gRPC",
+    "Provider validates resource attributes in internal/service validation",
+    "Provider returns validation error via gRPC to Terraform core",
+    "Terraform core formats and displays the error with provider attribution"
+  ],
+  "trigger_conditions": [
+    "Resource configuration uses a deprecated or invalid attribute combination",
+    "Provider-side validation catches the invalid combination in CustomizeDiff or Validate",
+    "The error message from the provider is generic and doesn't indicate which specific attribute pair conflicts"
+  ]
+}

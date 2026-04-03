@@ -61,24 +61,31 @@ frameworks = ["django", "wagtail"]
 multi_repo_pattern = "propagate"
 
 [[checkpoints]]
-name = "identify_django_changes"
+name = "schema_change"
 weight = 0.30
-verifier = "checks/check_django_changes.sh"
-description = "Agent identifies Django 5.0 model field changes affecting ORM internals"
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the schema change"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "find_wagtail_deps"
-weight = 0.40
-verifier = "checks/check_wagtail_deps.sh"
-description = "Agent finds Wagtail models dependent on changed Django internals"
+name = "direct_refs"
+weight = 0.30
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds direct references to changed schema"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "trace_impact_chain"
-weight = 0.30
-verifier = "checks/check_impact_chain.sh"
-description = "Agent traces the impact chain from Django changes to Wagtail breakage"
+name = "indirect_refs"
+weight = 0.20
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent traces indirect schema dependencies"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies test impact of schema changes"
 timeout_seconds = 60
 
 [artifacts]

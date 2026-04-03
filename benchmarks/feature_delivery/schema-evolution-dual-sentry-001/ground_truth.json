@@ -1,0 +1,51 @@
+{
+  "task_id": "schema-evolution-dual-sentry-001",
+  "task_type": "db_schema_evolution",
+  "repos": [
+    {
+      "url": "https://github.com/getsentry/sentry",
+      "rev": "23.11.0",
+      "path": "sentry"
+    },
+    {
+      "url": "https://github.com/getsentry/relay",
+      "rev": "23.11.0",
+      "path": "relay"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "src/sentry/models/project.py",
+      "repo": "sentry",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "relay-general/src/protocol/event.rs",
+      "repo": "relay",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/sentry/event_manager.py",
+      "repo": "sentry",
+      "confidence": 0.85
+    },
+    {
+      "path": "relay-server/src/envelope.rs",
+      "repo": "relay",
+      "confidence": 0.8
+    }
+  ],
+  "schema_changes": [
+    {
+      "description": "Cross-repo schema dependency",
+      "repos_involved": [
+        "sentry",
+        "relay"
+      ]
+    }
+  ]
+}

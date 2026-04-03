@@ -1,0 +1,54 @@
+{
+  "task_id": "err-provenance-dual-docker-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/docker/cli",
+      "rev": "v24.0.7",
+      "path": "docker-cli"
+    },
+    {
+      "url": "https://github.com/moby/moby",
+      "rev": "v24.0.7",
+      "path": "moby"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "cli/command/container/create.go",
+      "repo": "cli",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "daemon/create.go",
+      "repo": "moby",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "cli/error.go",
+      "repo": "docker-cli",
+      "confidence": 0.8
+    },
+    {
+      "path": "daemon/oci_linux.go",
+      "repo": "moby",
+      "confidence": 0.75
+    }
+  ],
+  "error_chain": [
+    "User runs docker container create with invalid options",
+    "Docker CLI parses command and sends request to Moby daemon via API",
+    "Moby daemon container.go validates container configuration",
+    "Moby daemon returns error response with internal error details",
+    "Docker CLI formats and displays error to user without full context"
+  ],
+  "trigger_conditions": [
+    "Docker CLI sends a container creation request with conflicting network options",
+    "Moby daemon validates the configuration in daemon/create.go",
+    "The error message from Moby is wrapped by CLI without preserving the root cause context"
+  ]
+}

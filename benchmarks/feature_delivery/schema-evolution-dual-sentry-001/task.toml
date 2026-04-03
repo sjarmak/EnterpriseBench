@@ -62,24 +62,31 @@ frameworks = ["django", "sentry", "relay"]
 multi_repo_pattern = "propagate"
 
 [[checkpoints]]
-name = "identify_sentry_models"
+name = "schema_change"
 weight = 0.30
-verifier = "checks/check_sentry_models.sh"
-description = "Agent identifies Sentry Django models for event types and project config"
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the schema change"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "find_relay_schemas"
-weight = 0.35
-verifier = "checks/check_relay_schemas.sh"
-description = "Agent finds corresponding Relay Rust schema definitions"
+name = "direct_refs"
+weight = 0.30
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds direct references to changed schema"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "identify_drift"
-weight = 0.35
-verifier = "checks/check_schema_drift.sh"
-description = "Agent identifies schema drift points between Sentry and Relay definitions"
+name = "indirect_refs"
+weight = 0.20
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent traces indirect schema dependencies"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies test impact of schema changes"
 timeout_seconds = 60
 
 [artifacts]

@@ -1,0 +1,51 @@
+{
+  "task_id": "dead-code-dual-react-001",
+  "task_type": "dead_code_necropsy",
+  "repos": [
+    {
+      "url": "https://github.com/facebook/react",
+      "rev": "v18.2.0",
+      "path": "react"
+    },
+    {
+      "url": "https://github.com/facebook/create-react-app",
+      "rev": "v5.0.1",
+      "path": "create-react-app"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "packages/react/src/ReactSharedInternals.js",
+      "repo": "react",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "packages/react-scripts/config/webpack.config.js",
+      "repo": "create-react-app",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "packages/react-dom/src/client/ReactDOM.js",
+      "repo": "react",
+      "confidence": 0.8
+    },
+    {
+      "path": "packages/react-scripts/scripts/build.js",
+      "repo": "create-react-app",
+      "confidence": 0.75
+    }
+  ],
+  "dead_code": [
+    {
+      "description": "Cross-repo dead code reference",
+      "repos_involved": [
+        "react",
+        "create-react-app"
+      ]
+    }
+  ]
+}

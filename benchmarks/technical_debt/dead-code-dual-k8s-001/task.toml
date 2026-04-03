@@ -69,24 +69,24 @@ frameworks = ["kubernetes"]
 multi_repo_pattern = "investigate"
 
 [[checkpoints]]
-name = "identify_removed_apis"
-weight = 0.30
-verifier = "checks/check_removed_apis.sh"
-description = "Agent identifies removed or deprecated API groups in Kubernetes v1.28.0"
-timeout_seconds = 120
-
-[[checkpoints]]
-name = "find_client_go_dead_code"
+name = "dead_code"
 weight = 0.40
-verifier = "checks/check_client_go_dead_code.sh"
-description = "Agent finds client-go code referencing removed API groups"
+verifier = "checks/check_dead_code.sh"
+description = "Agent identifies dead code across repos"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "classify_removal_safety"
-weight = 0.30
-verifier = "checks/check_removal_safety.sh"
-description = "Agent correctly classifies dead code paths and removal safety"
+name = "evidence"
+weight = 0.35
+verifier = "checks/check_evidence.sh"
+description = "Agent provides evidence for dead code classification"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "feature_flags"
+weight = 0.25
+verifier = "checks/check_feature_flags.sh"
+description = "Agent checks for feature flag dependencies"
 timeout_seconds = 60
 
 [artifacts]

@@ -65,24 +65,24 @@ frameworks = ["docker", "containerd"]
 multi_repo_pattern = "investigate"
 
 [[checkpoints]]
-name = "find_error_origin"
+name = "error_source"
 weight = 0.40
-verifier = "checks/check_error_origin.sh"
-description = "Agent identifies the daemon-side origin of the error in Moby"
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the error source across repos"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "trace_error_chain"
+name = "error_chain"
 weight = 0.30
 verifier = "checks/check_error_chain.sh"
-description = "Agent traces the full error propagation chain from daemon to CLI output"
+description = "Agent traces the error propagation chain"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "identify_trigger_conditions"
+name = "trigger_conditions"
 weight = 0.30
 verifier = "checks/check_trigger_conditions.sh"
-description = "Agent identifies alternative trigger conditions beyond missing executable"
+description = "Agent identifies conditions that trigger the error"
 timeout_seconds = 60
 
 [artifacts]

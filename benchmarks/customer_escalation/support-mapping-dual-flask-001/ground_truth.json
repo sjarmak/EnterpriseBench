@@ -1,0 +1,107 @@
+{
+  "task_id": "support-mapping-dual-flask-001",
+  "task_type": "support_code_mapping",
+  "repos": [
+    {
+      "url": "https://github.com/pallets/flask",
+      "rev": "3.0.0",
+      "path": "flask"
+    },
+    {
+      "url": "https://github.com/pallets/werkzeug",
+      "rev": "3.0.1",
+      "path": "werkzeug"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "src/flask/app.py",
+      "repo": "flask",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "src/werkzeug/routing/map.py",
+      "repo": "werkzeug",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/flask/scaffold.py",
+      "repo": "flask",
+      "confidence": 0.85
+    },
+    {
+      "path": "src/werkzeug/routing/rules.py",
+      "repo": "werkzeug",
+      "confidence": 0.9
+    }
+  ],
+  "code_mapping": [
+    {
+      "description": "User-facing symptom maps to code across repos",
+      "repos_involved": [
+        "flask",
+        "werkzeug"
+      ]
+    }
+  ],
+  "csb_lineage": {
+    "parent_csb_id": null,
+    "origin_suite": "eb_v1_net_new",
+    "migration_status": "net_new",
+    "bugs_fixed": [],
+    "metadata_sources": [
+      "task.toml"
+    ]
+  },
+  "ownership_keywords": [
+    "pallets",
+    "flask",
+    "werkzeug",
+    "routing",
+    "url",
+    "map"
+  ],
+  "expected_severity": "medium",
+  "related_references": [
+    "src/flask/sansio/app.py",
+    "src/werkzeug/routing/rules.py",
+    "src/werkzeug/routing/converters.py"
+  ],
+  "ground_truth": {
+    "required_files": [
+      {
+        "path": "src/flask/app.py",
+        "repo": "flask",
+        "confidence": 0.95,
+        "source": "deterministic"
+      },
+      {
+        "path": "src/werkzeug/routing/map.py",
+        "repo": "werkzeug",
+        "confidence": 0.95,
+        "source": "deterministic"
+      }
+    ],
+    "code_paths": [
+      "Flask.add_url_rule delegates to Werkzeug Map.add",
+      "Werkzeug Map.add validates URL pattern and creates Rule",
+      "Rule matching in werkzeug.routing.map.MapAdapter.match"
+    ],
+    "sufficient_files": [
+      {
+        "path": "src/flask/sansio/app.py",
+        "repo": "flask",
+        "confidence": 0.8
+      },
+      {
+        "path": "src/werkzeug/routing/rules.py",
+        "repo": "werkzeug",
+        "confidence": 0.8
+      }
+    ]
+  }
+}

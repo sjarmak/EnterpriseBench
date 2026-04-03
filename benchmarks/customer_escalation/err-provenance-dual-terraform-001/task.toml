@@ -63,24 +63,24 @@ frameworks = ["terraform", "aws-sdk-go"]
 multi_repo_pattern = "investigate"
 
 [[checkpoints]]
-name = "find_provider_error_origin"
-weight = 0.35
-verifier = "checks/check_provider_error.sh"
-description = "Agent identifies the AWS provider EC2 instance creation code that surfaces this error"
+name = "error_source"
+weight = 0.40
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the error source across repos"
 timeout_seconds = 120
 
 [[checkpoints]]
-name = "trace_error_chain"
-weight = 0.35
-verifier = "checks/check_error_chain.sh"
-description = "Agent traces error from AWS API through provider protocol to Terraform CLI output"
-timeout_seconds = 120
-
-[[checkpoints]]
-name = "explain_validation_gap"
+name = "error_chain"
 weight = 0.30
-verifier = "checks/check_validation_gap.sh"
-description = "Agent explains why pre-flight validation doesn't catch AZ/instance-type incompatibility"
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the error propagation chain"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.30
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies conditions that trigger the error"
 timeout_seconds = 60
 
 [artifacts]
