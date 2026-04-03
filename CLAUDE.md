@@ -8,7 +8,7 @@ Phase 6: Task mix realignment complete. 112 active benchmark tasks across 10 tas
 
 ## Key Files
 
-- `PRD.md` — product requirements document
+- `docs/internal/PRD.md` — product requirements document
 - `docs/CONVERGENCE_REPORT.md` — converged architecture from debate synthesis (detailed design decisions)
 - `docs/ARCHITECTURE.md` — system architecture and verification flow
 - `docs/TASK_TYPE_PRD.md` — 10 task type definitions with MCP signal ratings

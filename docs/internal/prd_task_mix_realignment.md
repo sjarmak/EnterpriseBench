@@ -2,7 +2,7 @@
 
 > **Risk-annotated** — see [premortem_task_mix_realignment.md](premortem_task_mix_realignment.md) for full failure analysis.
 > Top 3 risks: (1) 8GB memory limit untested for 3-5 repo tier, (2) SG indexing at 0% with no API stability contract, (3) Ground truth rot at O(tasks x repos) not budgeted.
-> See also: [docs/CONVERGENCE_REPORT_TASK_MIX.md](docs/CONVERGENCE_REPORT_TASK_MIX.md) for debate synthesis.
+> See also: [CONVERGENCE_REPORT_TASK_MIX.md](../CONVERGENCE_REPORT_TASK_MIX.md) for debate synthesis.
 
 ## Problem Statement
 
@@ -59,7 +59,7 @@ _Updated after structured convergence debate — see [docs/CONVERGENCE_REPORT_TA
   - Acceptance: 4-repo task (containerd/runc/moby + K8s or equivalent) either runs within 8GB/3000s OR the 4-repo tier is killed and PRD targets adjusted
   - Note: This is a 2-day kill-or-proceed gate. If it fails, cap at 3-repo max and redistribute the 20% "3-5 repo" target.
 
-- Requirement: Distinguish infrastructure failures from agent failures in run_task.py _(per premortem Risk #3)_
+- Requirement: Distinguish infrastructure failures from agent failures in run*task.py *(per premortem Risk #3)\_
   - Acceptance: OOM (exit 137), disk full, and timeout (exit 124) produce `infra_error` status, not `score=0.00 completed`
 
 - Requirement: Implement eager mirror creation + pinned SHA manifest with staleness detection _(per premortem Risk #2, #4)_
