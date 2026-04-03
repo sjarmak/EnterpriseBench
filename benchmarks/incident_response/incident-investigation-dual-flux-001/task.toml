@@ -1,0 +1,138 @@
+# Incident Investigation: Flux/Helm-Controller Failed Release Reconciliation
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "gitops-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "incident-investigation-dual-flux-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace a stuck Helm release from Flux reconciliation loop to helm-controller status condition handling"
+prompt = """
+After upgrading Flux from v2.1 to v2.2, several HelmRelease resources are stuck
+in a "not ready" state. The Helm releases themselves were successfully deployed
+by helm-controller, but Flux's reconciliation loop cannot detect the success.
+The HelmRelease objects show `Ready=False` with message "waiting for completion"
+indefinitely.
+
+Symptoms:
+- HelmRelease resources show status `Ready: False` with reason "ArtifactFailed"
+  or "ReconciliationFailed"
+- `helm list` shows the releases as deployed successfully
+- helm-controller logs show successful reconciliation but Flux source-controller
+  reports the HelmRelease as not ready
+- The issue affects only HelmReleases that were in-progress during the upgrade
+- New HelmReleases created after the upgrade work correctly
+- Flux kustomize-controller also cannot see the HelmRelease as ready
+
+Investigation notes:
+- Flux v2.2 updated the status condition API for HelmRelease resources
+- helm-controller writes status conditions using the new API format
+- Flux's reconciler reads status conditions to determine readiness
+- HelmReleases that were in-progress during upgrade have old-format conditions
+- The reconciler does not handle the transition from old to new condition format
+- The stale condition causes an infinite reconciliation loop
+
+Your task:
+1. Find where Flux's reconciler evaluates HelmRelease readiness conditions —
+   identify how it reads and interprets status conditions.
+2. Find where helm-controller writes HelmRelease status conditions after
+   successful reconciliation — identify the status update code.
+3. Trace the failure: old-format status condition → Flux reconciler cannot
+   parse → reports not-ready → triggers re-reconciliation → helm-controller
+   succeeds but old condition persists.
+4. Identify the specific status condition fields that changed between versions
+   and why the transition is not handled.
+
+Write your incident report to /workspace/flux2/INCIDENT_REPORT.md with:
+- Root cause identification (file and function in each repo)
+- Full reconciliation failure chain
+- Affected Flux components and resources
+- Remediation steps
+"""
+
+[[repos]]
+url = "https://github.com/fluxcd/flux2"
+rev = "v2.2.0"
+path = "flux2"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/fluxcd/helm-controller"
+rev = "v0.37.0"
+path = "helm-controller"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 300_000
+dependency_depth = 2
+frameworks = ["flux", "helm"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies Flux reconciler condition parsing and helm-controller status writer"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces: stale status condition → reconciler mismatch → not-ready → re-reconciliation loop"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "affected_resources"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent identifies HelmRelease resources and kustomize-controller as affected"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes status condition migration or backward-compatible parsing"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Understanding how Flux reconciler interprets helm-controller status conditions requires cross-repo navigation of the GitOps control loop"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "internal/reconcile/helmrelease_reconciler.go"
+repo = "flux2"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "internal/reconcile/helmrelease.go"
+repo = "helm-controller"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "internal/controller/helmrelease_controller.go"
+repo = "helm-controller"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "cmd/flux/reconcile.go"
+repo = "flux2"
+confidence = 0.70

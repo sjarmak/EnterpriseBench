@@ -1,0 +1,74 @@
+{
+  "task_id": "incident-investigation-tri-containerd-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/moby/moby",
+      "rev": "v24.0.7",
+      "path": "moby"
+    },
+    {
+      "url": "https://github.com/containerd/containerd",
+      "rev": "v1.7.8",
+      "path": "containerd"
+    },
+    {
+      "url": "https://github.com/opencontainers/runc",
+      "rev": "v1.1.10",
+      "path": "runc"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "daemon/start.go",
+      "repo": "moby",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "pkg/process/init.go",
+      "repo": "containerd",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "libcontainer/process_linux.go",
+      "repo": "runc",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "daemon/oci_linux.go",
+      "repo": "moby",
+      "confidence": 0.75
+    },
+    {
+      "path": "libcontainer/init_linux.go",
+      "repo": "runc",
+      "confidence": 0.8
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "When a container entrypoint is a shell script without a proper shebang line, the Linux kernel's execve() in runc's process_linux.go falls back to /bin/sh. On multi-arch images, /bin/sh may be a binary of the wrong architecture (e.g., amd64 on an arm64 node), producing 'exec format error'. The error propagates from runc through containerd shim to Docker daemon without additional architecture context.",
+    "error_chain": [
+      "Docker daemon start.go initiates container start via containerd gRPC API",
+      "containerd creates a shim process via pkg/process/init.go",
+      "containerd shim delegates process execution to runc",
+      "runc process_linux.go calls execve() with the container entrypoint",
+      "Linux kernel attempts to execute the script, falls back to /bin/sh due to missing shebang",
+      "/bin/sh is a wrong-architecture binary, kernel returns ENOEXEC (exec format error)",
+      "runc wraps the error and returns it to containerd shim",
+      "containerd propagates the error to Docker daemon",
+      "Docker daemon returns 'OCI runtime create failed' to the user"
+    ],
+    "affected_components": [
+      "runc process execution (libcontainer/process_linux.go)",
+      "containerd shim process management (pkg/process/init.go)",
+      "Docker daemon container start (daemon/start.go)",
+      "All multi-arch images with shell script entrypoints missing shebang lines"
+    ],
+    "remediation": "Ensure all entrypoint scripts include a proper shebang line (e.g., #!/bin/sh). For platform operators, add image validation that checks entrypoint executability and shebang presence. Consider adding architecture-aware error messages in runc to distinguish between 'wrong architecture' and 'missing shebang' failures."
+  }
+}

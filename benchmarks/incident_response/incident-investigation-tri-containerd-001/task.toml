@@ -1,0 +1,150 @@
+# Incident Investigation: Docker/containerd/runc Container Start Failure
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "container-runtime-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "incident-investigation-tri-containerd-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "expert"
+estimated_duration_minutes = 60
+session_type = "single"
+description = "Trace a container start failure with 'exec format error' from Docker daemon through containerd to runc process execution"
+prompt = """
+A multi-architecture Kubernetes cluster reports that containers fail to start on
+arm64 nodes with "exec format error" despite pulling the correct platform-specific
+image. The error occurs after the image is successfully pulled and the container
+is created — it fails only at the start/exec phase.
+
+Symptoms:
+- `docker run` fails with: "OCI runtime create failed: runc create failed:
+  unable to start container process: exec: '/entrypoint.sh': permission denied
+  or exec format error"
+- The image manifest lists both amd64 and arm64 variants
+- `docker inspect` shows the correct arm64 image is pulled
+- The error occurs in runc during process creation, not during image pull
+- containerd logs show the container is created successfully but start fails
+- The issue only affects images using a shell script as entrypoint with
+  a missing or incorrect shebang line
+
+Investigation notes:
+- Docker daemon delegates container lifecycle to containerd via gRPC
+- containerd creates a shim process and delegates exec to runc
+- runc uses the Linux kernel's execve() syscall to start the container process
+- When the entrypoint is a script without a shebang, the kernel falls back to
+  /bin/sh, but the image's /bin/sh may be a different architecture binary
+- The error message varies: "exec format error" when the binary is wrong arch,
+  "permission denied" when the file is not executable
+
+Your task:
+1. Find where the Docker daemon initiates container start and how it delegates
+   to containerd — trace the gRPC call chain.
+2. Find where containerd creates the shim process and delegates to runc —
+   identify the container start flow.
+3. Find where runc executes the container process using execve — identify how
+   it handles entrypoint resolution and the exec format error.
+4. Trace the full error propagation: runc execve failure → containerd shim
+   error → Docker daemon error response → user-visible error.
+
+Write your incident report to /workspace/moby/INCIDENT_REPORT.md with:
+- Root cause identification (file and function in each repo)
+- Full error chain across all three repos
+- Affected container runtime components
+- Remediation steps
+"""
+
+[[repos]]
+url = "https://github.com/moby/moby"
+rev = "v24.0.7"
+path = "moby"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/containerd/containerd"
+rev = "v1.7.8"
+path = "containerd"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/opencontainers/runc"
+rev = "v1.1.10"
+path = "runc"
+role = "upstream"
+
+[metadata]
+languages = ["go"]
+total_loc = 1_200_000
+dependency_depth = 3
+frameworks = ["docker", "containerd", "runc"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.30
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies runc process execution code and the execve error path"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces error from runc execve through containerd shim to Docker daemon"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.20
+verifier = "checks/check_affected_components.sh"
+description = "Agent identifies all three runtime layers and their roles in the failure"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes entrypoint validation or architecture-aware error messages"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing container start across Docker daemon, containerd, and runc requires navigating three separate Go codebases with gRPC boundaries"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "daemon/start.go"
+repo = "moby"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/process/init.go"
+repo = "containerd"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "libcontainer/process_linux.go"
+repo = "runc"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "daemon/oci_linux.go"
+repo = "moby"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "libcontainer/init_linux.go"
+repo = "runc"
+confidence = 0.80

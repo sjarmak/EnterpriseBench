@@ -1,0 +1,134 @@
+# Incident Investigation: Prometheus/Alertmanager Silenced Alert
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "observability-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "incident-investigation-dual-prometheus-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace a silenced critical alert from Alertmanager inhibition rules to a Prometheus recording rule misconfiguration"
+prompt = """
+A critical disk-usage alert failed to fire during a production outage. The alert
+rule exists in Prometheus and evaluates correctly in the Prometheus UI, but
+Alertmanager never sends the notification. The on-call team discovered the issue
+only after the disk filled completely and the service crashed.
+
+Symptoms:
+- Alert rule `DiskUsageCritical` evaluates to firing state in Prometheus
+- Prometheus sends the alert to Alertmanager (confirmed in Prometheus logs)
+- Alertmanager receives the alert but never dispatches notification
+- Alertmanager UI shows the alert as "suppressed" by an inhibition rule
+- The inhibiting alert is `NodeNotReady`, which fires based on a recording rule
+- The recording rule `node:ready:condition` has a subtle label mismatch
+
+Investigation notes:
+- Alertmanager inhibition rules suppress alerts when a "source" alert matches
+- The `NodeNotReady` alert fires from recording rule `node:ready:condition`
+- The recording rule aggregates `kube_node_status_condition` but drops the
+  `condition` label during aggregation, causing it to always evaluate to 1
+- This means `NodeNotReady` is perpetually firing, inhibiting `DiskUsageCritical`
+- The inhibition rule matches on `severity` label: source=critical inhibits target=critical
+
+Your task:
+1. Find where Alertmanager implements inhibition rule matching — how does it
+   decide which alerts to suppress based on source/target matchers?
+2. Find where Prometheus evaluates recording rules and how label manipulation
+   during aggregation can produce incorrect results.
+3. Trace the full failure chain: recording rule misconfiguration → perpetual
+   source alert → inhibition match → suppressed target alert.
+4. Identify the specific code paths in both repos that contribute to this
+   silent failure mode.
+
+Write your incident report to /workspace/alertmanager/INCIDENT_REPORT.md with:
+- Root cause identification (file and function in each repo)
+- Full inhibition chain from recording rule to suppressed alert
+- Affected alerting components
+- Remediation steps
+"""
+
+[[repos]]
+url = "https://github.com/prometheus/prometheus"
+rev = "v2.48.0"
+path = "prometheus"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/prometheus/alertmanager"
+rev = "v0.26.0"
+path = "alertmanager"
+role = "upstream"
+
+[metadata]
+languages = ["go"]
+total_loc = 600_000
+dependency_depth = 2
+frameworks = ["prometheus", "alertmanager"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies inhibitor.go in Alertmanager and rules/manager.go in Prometheus as root cause files"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces: recording rule → label mismatch → perpetual alert → inhibition match → suppressed alert"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent identifies both inhibition pipeline and recording rule evaluation as affected"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes fixing the recording rule label aggregation or inhibition rule specificity"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Understanding how Prometheus recording rule evaluation interacts with Alertmanager inhibition requires tracing data flow across both codebases"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "rules/manager.go"
+repo = "prometheus"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "inhibit/inhibitor.go"
+repo = "alertmanager"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "promql/engine.go"
+repo = "prometheus"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "dispatch/dispatch.go"
+repo = "alertmanager"
+confidence = 0.70

@@ -1,0 +1,60 @@
+{
+  "task_id": "incident-investigation-dual-prometheus-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/prometheus/prometheus",
+      "rev": "v2.48.0",
+      "path": "prometheus"
+    },
+    {
+      "url": "https://github.com/prometheus/alertmanager",
+      "rev": "v0.26.0",
+      "path": "alertmanager"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "rules/manager.go",
+      "repo": "prometheus",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "inhibit/inhibitor.go",
+      "repo": "alertmanager",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "promql/engine.go",
+      "repo": "prometheus",
+      "confidence": 0.75
+    },
+    {
+      "path": "dispatch/dispatch.go",
+      "repo": "alertmanager",
+      "confidence": 0.7
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "A Prometheus recording rule drops the 'condition' label during aggregation, causing the derived metric to always evaluate to 1. This triggers a perpetually firing NodeNotReady alert, which matches Alertmanager's inhibition rule and suppresses all critical alerts including DiskUsageCritical.",
+    "error_chain": [
+      "Recording rule 'node:ready:condition' aggregates kube_node_status_condition but drops 'condition' label",
+      "Prometheus rules/manager.go evaluates the recording rule, producing a metric that always equals 1",
+      "Alert rule NodeNotReady fires based on the incorrect recording rule value",
+      "Prometheus sends NodeNotReady alert to Alertmanager",
+      "Alertmanager inhibit/inhibitor.go matches NodeNotReady as source alert against inhibition rule",
+      "Inhibition rule suppresses DiskUsageCritical because both have severity=critical",
+      "DiskUsageCritical alert is never dispatched to notification receivers"
+    ],
+    "affected_components": [
+      "Prometheus recording rule evaluation (rules/manager.go)",
+      "Alertmanager inhibition pipeline (inhibit/inhibitor.go)",
+      "All critical-severity alerts that share the inhibition rule target matcher"
+    ],
+    "remediation": "Fix the recording rule to preserve the 'condition' label during aggregation, or scope the inhibition rule more narrowly to prevent a single source alert from suppressing unrelated target alerts. Add alerting on inhibition rule match counts to detect over-broad suppression."
+  }
+}

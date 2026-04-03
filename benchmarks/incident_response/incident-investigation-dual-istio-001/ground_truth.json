@@ -1,0 +1,59 @@
+{
+  "task_id": "incident-investigation-dual-istio-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/istio/istio",
+      "rev": "1.20.0",
+      "path": "istio"
+    },
+    {
+      "url": "https://github.com/envoyproxy/envoy",
+      "rev": "v1.28.0",
+      "path": "envoy"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "pilot/pkg/networking/core/v1alpha3/route/route.go",
+      "repo": "istio",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "source/common/router/config_impl.cc",
+      "repo": "envoy",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pilot/pkg/networking/core/v1alpha3/httproute.go",
+      "repo": "istio",
+      "confidence": 0.8
+    },
+    {
+      "path": "source/common/http/header_utility.cc",
+      "repo": "envoy",
+      "confidence": 0.75
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "Istio 1.20 changed the default regex engine configuration in Pilot's route translation, causing VirtualService regex header matchers to generate Envoy route config with an incompatible regex engine setting. Envoy's RouteMatch in config_impl.cc rejects the regex pattern or fails to match headers that previously worked.",
+    "error_chain": [
+      "VirtualService with regex header matching is configured",
+      "Istio Pilot translates VirtualService HTTPRoute to Envoy route config in route.go",
+      "Pilot generates safe_regex matcher with changed engine configuration in 1.20",
+      "Envoy receives route config and attempts regex header matching in config_impl.cc",
+      "Regex match fails due to engine configuration change, no upstream selected",
+      "Envoy returns 503 UC (Upstream Connection) to the client"
+    ],
+    "affected_components": [
+      "Istio Pilot route translation (VirtualService to Envoy config)",
+      "Envoy HTTP router filter chain (regex header matching)",
+      "All VirtualServices using regex-based header matching"
+    ],
+    "remediation": "Update VirtualService configurations to use the new regex syntax compatible with Istio 1.20, or configure Istio to use the legacy regex engine setting via mesh configuration."
+  }
+}

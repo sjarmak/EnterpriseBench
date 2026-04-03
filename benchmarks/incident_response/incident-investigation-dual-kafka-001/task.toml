@@ -1,0 +1,137 @@
+# Incident Investigation: Kafka Connect JDBC Sink Connector Transaction Timeout
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "kafka-connect-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "incident-investigation-dual-kafka-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Trace a JDBC Sink Connector failure from Kafka Connect task execution to JDBC transaction timeout interaction"
+prompt = """
+A production Kafka Connect cluster running JDBC Sink Connectors is experiencing
+periodic task failures. The connector tasks fail with a transaction timeout error
+after processing large batches, and the tasks enter a restart loop. The connector
+is configured with `batch.size=5000` and the target PostgreSQL database has a
+`statement_timeout` of 30 seconds.
+
+Symptoms:
+- JDBC Sink Connector tasks fail with: "org.apache.kafka.connect.errors.
+  ConnectException: java.sql.SQLException: transaction timeout"
+- The failure occurs during offset commit after a large batch is processed
+- Task restarts and reprocesses the same batch, causing duplicates
+- The issue is intermittent and correlates with batch sizes > 3000 records
+- Connector status shows tasks cycling between RUNNING and FAILED
+- The JDBC connection pool shows connections in "idle in transaction" state
+
+Investigation notes:
+- Kafka Connect's WorkerSinkTask handles the put() → flush() → commit cycle
+- The JDBC Sink Connector wraps batch inserts in a database transaction
+- The offset commit happens after the JDBC transaction is committed
+- When the batch is large, the JDBC transaction takes longer than the DB timeout
+- The error propagation from JDBC driver through the connector to the Connect
+  framework obscures the root cause
+- The WorkerSinkTask's `offset.flush.timeout.ms` interacts with the DB timeout
+
+Your task:
+1. Find where Kafka Connect's WorkerSinkTask orchestrates the put/flush/commit
+   cycle — identify how batch processing interacts with offset management.
+2. Find where the JDBC Sink Connector executes batch inserts within a database
+   transaction — trace the transaction lifecycle.
+3. Trace the full failure chain: large batch → long JDBC transaction → DB
+   timeout → connector exception → task failure → restart loop.
+4. Identify the configuration interaction between Connect's offset flush timeout
+   and the JDBC transaction/statement timeout.
+
+Write your incident report to /workspace/kafka/INCIDENT_REPORT.md with:
+- Root cause identification (file and class in each repo)
+- Full error chain from batch processing to task failure
+- Affected connector configurations
+- Remediation steps
+"""
+
+[[repos]]
+url = "https://github.com/apache/kafka"
+rev = "3.6.0"
+path = "kafka"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/confluentinc/kafka-connect-jdbc"
+rev = "v10.7.4"
+path = "kafka-connect-jdbc"
+role = "dependency"
+
+[metadata]
+languages = ["java"]
+total_loc = 1_800_000
+dependency_depth = 2
+frameworks = ["kafka-connect", "jdbc"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies WorkerSinkTask in Kafka and JdbcSinkTask/BufferedRecords in JDBC connector"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces: large batch → JDBC transaction → DB timeout → ConnectException → task failure"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "affected_connectors"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent identifies JDBC Sink Connector batch/transaction configuration as affected"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes batch size tuning or transaction timeout alignment"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Understanding the interaction between Kafka Connect task lifecycle and JDBC connector transaction management requires cross-repo Java code navigation"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "connect/runtime/src/main/java/org/apache/kafka/connect/runtime/WorkerSinkTask.java"
+repo = "kafka"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/main/java/io/confluent/connect/jdbc/sink/JdbcSinkTask.java"
+repo = "kafka-connect-jdbc"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "connect/runtime/src/main/java/org/apache/kafka/connect/runtime/WorkerTask.java"
+repo = "kafka"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "src/main/java/io/confluent/connect/jdbc/sink/BufferedRecords.java"
+repo = "kafka-connect-jdbc"
+confidence = 0.80
