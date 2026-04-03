@@ -1,4 +1,4 @@
-difficulty_stratum = "large_single"
+difficulty_stratum = "dual_repo"
 mcp_suite = "eb_v1"
 repo_set_id = "observability-ecosystem"
 org_scale = true
@@ -8,10 +8,10 @@ verification_modes = ["deterministic"]
 id = "support-map-grafana-alerts-004"
 suite = "customer_escalation"
 difficulty = "hard"
-estimated_duration_minutes = 35
+estimated_duration_minutes = 40
 session_type = "single"
 task_type = "support_code_mapping"
-description = "Map customer-reported late or missing alert notifications to Grafana alert scheduler code"
+description = "Map customer-reported late or missing alert notifications to Grafana alert scheduler and Alertmanager notification pipeline"
 prompt = "See instruction.md"
 
 [[repos]]
@@ -20,38 +20,49 @@ rev = "v10.2.0"
 path = "grafana"
 role = "primary"
 
+[[repos]]
+url = "https://github.com/prometheus/alertmanager"
+rev = "v0.26.0"
+path = "alertmanager"
+role = "dependency"
+
 [metadata]
 languages = ["go"]
-frameworks = ["grafana"]
+dependency_depth = 2
+frameworks = ["grafana", "alertmanager"]
 multi_repo_pattern = "investigate"
 
 [[checkpoints]]
 name = "code_paths"
 weight = 0.60
 verifier = "checks/check_code_paths.sh"
-description = "Agent identifies the alert scheduler and evaluation engine code paths"
+description = "Agent identifies the alert scheduler and evaluation engine code paths in Grafana"
 timeout_seconds = 120
+repo_deps = ["grafana"]
 
 [[checkpoints]]
 name = "ownership"
 weight = 0.15
 verifier = "checks/check_ownership.sh"
-description = "Agent identifies the ngalert/schedule subsystem as responsible"
+description = "Agent identifies the ngalert/schedule subsystem in Grafana and dispatch/notify subsystem in Alertmanager"
 timeout_seconds = 60
+repo_deps = ["grafana", "alertmanager"]
 
 [[checkpoints]]
 name = "severity"
 weight = 0.15
 verifier = "checks/check_severity.sh"
-description = "Agent correctly assesses severity for late or missing production alerts"
+description = "Agent correctly assesses severity considering both scheduler delays and notification pipeline failures"
 timeout_seconds = 60
+repo_deps = ["grafana", "alertmanager"]
 
 [[checkpoints]]
 name = "related_issues"
 weight = 0.10
 verifier = "checks/check_related_issues.sh"
-description = "Agent identifies related evaluation interval or scheduling issues"
+description = "Agent identifies Alertmanager notification pipeline and dispatch routing issues"
 timeout_seconds = 60
+repo_deps = ["alertmanager"]
 
 [artifacts]
 required = ["answer"]
@@ -59,8 +70,8 @@ optional = ["kb_article", "reproduction_script"]
 
 [tool_access]
 sourcegraph_mirror_config = "configs/sg_mirrors/support-map-grafana-alerts-004.json"
-expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Alert scheduler is well-contained in ngalert package; MCP helps discover scheduler tick loop and evaluation overrun detection"
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo navigation needed: tracing alert flow from Grafana scheduler through Alertmanager dispatch and notification pipeline requires understanding integration points across both repositories"
 
 [ground_truth]
 tiers = ["deterministic"]
@@ -77,6 +88,18 @@ repo = "grafana"
 confidence = 0.85
 source = "deterministic"
 
+[[ground_truth.required_files]]
+path = "dispatch/dispatch.go"
+repo = "alertmanager"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "notify/notify.go"
+repo = "alertmanager"
+confidence = 0.80
+source = "deterministic"
+
 [[ground_truth.sufficient_files]]
 path = "pkg/services/ngalert/eval/eval.go"
 repo = "grafana"
@@ -91,6 +114,11 @@ confidence = 0.70
 path = "pkg/services/ngalert/models/alert_rule.go"
 repo = "grafana"
 confidence = 0.60
+
+[[ground_truth.sufficient_files]]
+path = "api/v2/api.go"
+repo = "alertmanager"
+confidence = 0.70
 
 [csb_lineage]
 parent_csb_id = "ccx-incident-145"
