@@ -1,21 +1,21 @@
 {
   "generated_at": "2026-04-02T12:45:33.818551+00:00",
-  "total_combinations": 333,
+  "total_combinations": 285,
   "by_status": {
-    "scored": 327,
+    "scored": 279,
     "pending": 6
   },
   "by_mode": {
     "baseline": {
-      "scored": 109,
+      "scored": 93,
       "pending": 2
     },
     "mcp_only": {
-      "scored": 109,
+      "scored": 93,
       "pending": 2
     },
     "hybrid": {
-      "scored": 109,
+      "scored": 93,
       "pending": 2
     }
   },
@@ -1629,150 +1629,6 @@
       "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-004/hybrid/results.json"
     },
     {
-      "task_id": "schema-evolution-005",
-      "mode": "baseline",
-      "suite": "feature_delivery",
-      "difficulty": "expert",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-005/results.json"
-    },
-    {
-      "task_id": "schema-evolution-005",
-      "mode": "mcp_only",
-      "suite": "feature_delivery",
-      "difficulty": "expert",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-005/mcp_only/results.json"
-    },
-    {
-      "task_id": "schema-evolution-005",
-      "mode": "hybrid",
-      "suite": "feature_delivery",
-      "difficulty": "expert",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-005/hybrid/results.json"
-    },
-    {
-      "task_id": "schema-evolution-006",
-      "mode": "baseline",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-006/baseline/results.json"
-    },
-    {
-      "task_id": "schema-evolution-006",
-      "mode": "mcp_only",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-006/mcp_only/results.json"
-    },
-    {
-      "task_id": "schema-evolution-006",
-      "mode": "hybrid",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-006/hybrid/results.json"
-    },
-    {
-      "task_id": "schema-evolution-007",
-      "mode": "baseline",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-007/results.json"
-    },
-    {
-      "task_id": "schema-evolution-007",
-      "mode": "mcp_only",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-007/mcp_only/results.json"
-    },
-    {
-      "task_id": "schema-evolution-007",
-      "mode": "hybrid",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-007/hybrid/results.json"
-    },
-    {
-      "task_id": "schema-evolution-008",
-      "mode": "baseline",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-008/baseline/results.json"
-    },
-    {
-      "task_id": "schema-evolution-008",
-      "mode": "mcp_only",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-008/mcp_only/results.json"
-    },
-    {
-      "task_id": "schema-evolution-008",
-      "mode": "hybrid",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-008/hybrid/results.json"
-    },
-    {
-      "task_id": "schema-evolution-009",
-      "mode": "baseline",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-009/baseline/results.json"
-    },
-    {
-      "task_id": "schema-evolution-009",
-      "mode": "mcp_only",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-009/mcp_only/results.json"
-    },
-    {
-      "task_id": "schema-evolution-009",
-      "mode": "hybrid",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-009/hybrid/results.json"
-    },
-    {
-      "task_id": "schema-evolution-010",
-      "mode": "baseline",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-010/results.json"
-    },
-    {
-      "task_id": "schema-evolution-010",
-      "mode": "mcp_only",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-010/mcp_only/results.json"
-    },
-    {
-      "task_id": "schema-evolution-010",
-      "mode": "hybrid",
-      "suite": "feature_delivery",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/schema-evolution-010/hybrid/results.json"
-    },
-    {
       "task_id": "ansible-galaxy-tar-regression-prove-001",
       "mode": "baseline",
       "suite": "incident_response",
@@ -2085,54 +1941,6 @@
       "results_path": "/home/ds/EnterpriseBench/results/runs/config-drift-argocd-redis-ha-004/hybrid/results.json"
     },
     {
-      "task_id": "ccx-compliance-052",
-      "mode": "baseline",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/ccx-compliance-052/results.json"
-    },
-    {
-      "task_id": "ccx-compliance-052",
-      "mode": "mcp_only",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/ccx-compliance-052/mcp_only/results.json"
-    },
-    {
-      "task_id": "ccx-compliance-052",
-      "mode": "hybrid",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/ccx-compliance-052/hybrid/results.json"
-    },
-    {
-      "task_id": "ccx-compliance-053",
-      "mode": "baseline",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/ccx-compliance-053/results.json"
-    },
-    {
-      "task_id": "ccx-compliance-053",
-      "mode": "mcp_only",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/ccx-compliance-053/mcp_only/results.json"
-    },
-    {
-      "task_id": "ccx-compliance-053",
-      "mode": "hybrid",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/ccx-compliance-053/hybrid/results.json"
-    },
-    {
       "task_id": "ceph-rgw-auth-secure-001",
       "mode": "baseline",
       "suite": "security_operations",
@@ -2179,78 +1987,6 @@
       "difficulty": "hard",
       "status": "scored",
       "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-001/hybrid/results.json"
-    },
-    {
-      "task_id": "rbac-audit-002",
-      "mode": "baseline",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-002/results.json"
-    },
-    {
-      "task_id": "rbac-audit-002",
-      "mode": "mcp_only",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-002/mcp_only/results.json"
-    },
-    {
-      "task_id": "rbac-audit-002",
-      "mode": "hybrid",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-002/hybrid/results.json"
-    },
-    {
-      "task_id": "rbac-audit-003",
-      "mode": "baseline",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-003/results.json"
-    },
-    {
-      "task_id": "rbac-audit-003",
-      "mode": "mcp_only",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-003/mcp_only/results.json"
-    },
-    {
-      "task_id": "rbac-audit-003",
-      "mode": "hybrid",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-003/hybrid/results.json"
-    },
-    {
-      "task_id": "rbac-audit-004",
-      "mode": "baseline",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-004/baseline/results.json"
-    },
-    {
-      "task_id": "rbac-audit-004",
-      "mode": "mcp_only",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-004/mcp_only/results.json"
-    },
-    {
-      "task_id": "rbac-audit-004",
-      "mode": "hybrid",
-      "suite": "security_operations",
-      "difficulty": "hard",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/rbac-audit-004/hybrid/results.json"
     },
     {
       "task_id": "cal-dead-click-legacy-001",
@@ -2371,54 +2107,6 @@
       "difficulty": "hard",
       "status": "scored",
       "results_path": "/home/ds/EnterpriseBench/results/runs/dead-code-003/hybrid/results.json"
-    },
-    {
-      "task_id": "dead-code-004",
-      "mode": "baseline",
-      "suite": "technical_debt",
-      "difficulty": "expert",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/dead-code-004/baseline/results.json"
-    },
-    {
-      "task_id": "dead-code-004",
-      "mode": "mcp_only",
-      "suite": "technical_debt",
-      "difficulty": "expert",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/dead-code-004/mcp_only/results.json"
-    },
-    {
-      "task_id": "dead-code-004",
-      "mode": "hybrid",
-      "suite": "technical_debt",
-      "difficulty": "expert",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/dead-code-004/hybrid/results.json"
-    },
-    {
-      "task_id": "dead-code-005",
-      "mode": "baseline",
-      "suite": "technical_debt",
-      "difficulty": "expert",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/dead-code-005/baseline/results.json"
-    },
-    {
-      "task_id": "dead-code-005",
-      "mode": "mcp_only",
-      "suite": "technical_debt",
-      "difficulty": "expert",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/dead-code-005/mcp_only/results.json"
-    },
-    {
-      "task_id": "dead-code-005",
-      "mode": "hybrid",
-      "suite": "technical_debt",
-      "difficulty": "expert",
-      "status": "scored",
-      "results_path": "/home/ds/EnterpriseBench/results/runs/dead-code-005/hybrid/results.json"
     },
     {
       "task_id": "refactor-orch-001",
