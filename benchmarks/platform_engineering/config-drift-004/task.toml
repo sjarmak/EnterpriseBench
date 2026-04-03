@@ -1,6 +1,6 @@
 # Config Drift: ArgoCD redis-ha subchart values securityContext null override drift
 
-difficulty_stratum = "large_single"
+difficulty_stratum = "dual_repo"
 mcp_suite = "eb_v1"
 repo_set_id = "argocd-ecosystem"
 org_scale = true
@@ -13,7 +13,7 @@ task_type = "config_drift"
 difficulty = "medium"
 estimated_duration_minutes = 20
 session_type = "single"
-description = "Identify securityContext null override drift in ArgoCD's nested redis-ha Helm chart values"
+description = "Identify securityContext null override drift in ArgoCD's nested redis-ha Helm chart values by comparing against upstream chart defaults"
 prompt = """
 ArgoCD's HA deployment mode bundles a redis-ha Helm chart as a dependency. After
 upgrading Helm to version 3.17.1, the CI pipeline started failing because the
@@ -24,13 +24,18 @@ the override chain between the upstream redis-ha defaults and ArgoCD's customiza
 is producing invalid or unexpected rendered output under the stricter Helm 3.17.1
 validation.
 
+The upstream redis-ha chart from dandydeveloper/charts is available at
+/workspace/dandydeveloper-charts/ for reference. Its default values are in
+/workspace/dandydeveloper-charts/charts/redis-ha/values.yaml.
+
 Your task:
 1. Examine the ArgoCD HA manifest configuration hierarchy:
-   - The redis-ha subchart definition and Chart.yaml
+   - The redis-ha subchart definition and Chart.yaml in /workspace/argo-cd/
    - ArgoCD's value overrides for the redis-ha subchart
-   - The upstream redis-ha chart's own default values
-2. Identify all configuration drift points where ArgoCD's value overrides
-   conflict with or incorrectly override the upstream defaults.
+   - The upstream redis-ha chart's own default values in /workspace/dandydeveloper-charts/charts/redis-ha/values.yaml
+2. Compare ArgoCD's value overrides against the upstream chart defaults to
+   identify all configuration drift points where ArgoCD's overrides conflict
+   with or incorrectly override the upstream defaults.
 3. Focus on securityContext and any null/empty values that may behave
    differently under strict Helm validation.
 4. For each drift point, specify the file, key, expected value, actual value,
@@ -57,6 +62,12 @@ rev = "v2.14.0-rc3"
 path = "argo-cd"
 role = "primary"
 
+[[repos]]
+url = "https://github.com/dandydeveloper/charts"
+rev = "redis-ha-4.26.6"
+path = "dandydeveloper-charts"
+role = "upstream"
+
 [metadata]
 languages = ["yaml", "go-template", "go"]
 total_loc = 350_000
@@ -70,6 +81,7 @@ weight = 0.40
 verifier = "checks/check_drift_points.sh"
 description = "Agent identifies null securityContext overrides in redis-ha values as drift points"
 timeout_seconds = 60
+repo_deps = ["argo-cd"]
 
 [[checkpoints]]
 name = "determine_expected_values"
@@ -77,6 +89,7 @@ weight = 0.35
 verifier = "checks/check_expected_values.sh"
 description = "Agent correctly determines that null overrides should be removed to let upstream defaults apply"
 timeout_seconds = 60
+repo_deps = ["argo-cd", "dandydeveloper-charts"]
 
 [[checkpoints]]
 name = "validate_corrected_config"
@@ -84,6 +97,7 @@ weight = 0.25
 verifier = "checks/check_config_valid.sh"
 description = "If corrected config provided, validate it renders without null securityContext issues"
 timeout_seconds = 120
+repo_deps = ["argo-cd", "dandydeveloper-charts"]
 
 [artifacts]
 required = ["answer"]
@@ -91,8 +105,8 @@ optional = ["config"]
 
 [tool_access]
 sourcegraph_mirror_config = "configs/sg_mirrors/config-drift-argocd-redis-ha-004.json"
-expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Cross-file search helps trace value override chain from ArgoCD's values.yaml through the subchart dependency, but the drift is contained in a known file"
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Cross-repo search across ArgoCD overrides and upstream dandydeveloper/charts defaults enables tracing the full value override chain without manual file navigation"
 
 [ground_truth]
 tiers = ["deterministic"]
@@ -109,7 +123,18 @@ repo = "argo-cd"
 confidence = 0.85
 source = "deterministic"
 
+[[ground_truth.required_files]]
+path = "charts/redis-ha/values.yaml"
+repo = "dandydeveloper-charts"
+confidence = 0.95
+source = "deterministic"
+
 [[ground_truth.sufficient_files]]
 path = "manifests/ha/base/kustomization.yaml"
 repo = "argo-cd"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "charts/redis-ha/Chart.yaml"
+repo = "dandydeveloper-charts"
 confidence = 0.70
