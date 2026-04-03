@@ -1,0 +1,191 @@
+{
+  "_description": "Mirrors to create in sg-evals org for MCP-mode evaluation",
+  "_generated": "2026-04-03",
+  "mirrors": [
+    {
+      "mirror": "sg-evals/postgrest-postgrest",
+      "upstream": "github.com/PostgREST/postgrest",
+      "commit": "v12.0.2"
+    },
+    {
+      "mirror": "sg-evals/angular-components",
+      "upstream": "github.com/angular/components",
+      "commit": "18.0.0"
+    },
+    {
+      "mirror": "sg-evals/argoproj-argo-helm",
+      "upstream": "github.com/argoproj/argo-helm",
+      "commit": "argo-cd-5.51.0"
+    },
+    {
+      "mirror": "sg-evals/boto-botocore",
+      "upstream": "github.com/boto/botocore",
+      "commit": "1.31.0"
+    },
+    {
+      "mirror": "sg-evals/boto-s3transfer",
+      "upstream": "github.com/boto/s3transfer",
+      "commit": "0.6.1"
+    },
+    {
+      "mirror": "sg-evals/celery-celery",
+      "upstream": "github.com/celery/celery",
+      "commit": "v5.3.6"
+    },
+    {
+      "mirror": "sg-evals/celery-kombu",
+      "upstream": "github.com/celery/kombu",
+      "commit": "v5.3.4"
+    },
+    {
+      "mirror": "sg-evals/confluentinc-kafka-connect-jdbc",
+      "upstream": "github.com/confluentinc/kafka-connect-jdbc",
+      "commit": "v10.7.4"
+    },
+    {
+      "mirror": "sg-evals/containerd-containerd",
+      "upstream": "github.com/containerd/containerd",
+      "commit": "v1.7.8"
+    },
+    {
+      "mirror": "sg-evals/django-django",
+      "upstream": "github.com/django/django",
+      "commit": "5.0"
+    },
+    {
+      "mirror": "sg-evals/docker-cli",
+      "upstream": "github.com/docker/cli",
+      "commit": "v24.0.7"
+    },
+    {
+      "mirror": "sg-evals/encode-httpx",
+      "upstream": "github.com/encode/httpx",
+      "commit": "0.26.0"
+    },
+    {
+      "mirror": "sg-evals/facebook-create-react-app",
+      "upstream": "github.com/facebook/create-react-app",
+      "commit": "v5.0.1"
+    },
+    {
+      "mirror": "sg-evals/fluxcd-flux2",
+      "upstream": "github.com/fluxcd/flux2",
+      "commit": "v2.2.0"
+    },
+    {
+      "mirror": "sg-evals/fluxcd-helm-controller",
+      "upstream": "github.com/fluxcd/helm-controller",
+      "commit": "v0.37.0"
+    },
+    {
+      "mirror": "sg-evals/getsentry-relay",
+      "upstream": "github.com/getsentry/relay",
+      "commit": "23.11.0"
+    },
+    {
+      "mirror": "sg-evals/googleapis-googleapis",
+      "upstream": "github.com/googleapis/googleapis",
+      "commit": "common-protos-1_3_1"
+    },
+    {
+      "mirror": "sg-evals/grpc-grpc",
+      "upstream": "github.com/grpc/grpc",
+      "commit": "v1.60.0"
+    },
+    {
+      "mirror": "sg-evals/hashicorp-terraform-provider-aws",
+      "upstream": "github.com/hashicorp/terraform-provider-aws",
+      "commit": "v5.30.0"
+    },
+    {
+      "mirror": "sg-evals/hyperium-hyper",
+      "upstream": "github.com/hyperium/hyper",
+      "commit": "v1.0.0-rc.4"
+    },
+    {
+      "mirror": "sg-evals/kubernetes-sigs-kustomize",
+      "upstream": "github.com/kubernetes-sigs/kustomize",
+      "commit": "kustomize/v5.3.0"
+    },
+    {
+      "mirror": "sg-evals/kubernetes-client-go",
+      "upstream": "github.com/kubernetes/client-go",
+      "commit": "v0.28.0"
+    },
+    {
+      "mirror": "sg-evals/opencontainers-runc",
+      "upstream": "github.com/opencontainers/runc",
+      "commit": "v1.1.10"
+    },
+    {
+      "mirror": "sg-evals/openssl-openssl",
+      "upstream": "github.com/openssl/openssl",
+      "commit": "openssl-3.1.1"
+    },
+    {
+      "mirror": "sg-evals/pallets-jinja",
+      "upstream": "github.com/pallets/jinja",
+      "commit": "3.1.3"
+    },
+    {
+      "mirror": "sg-evals/pallets-werkzeug",
+      "upstream": "github.com/pallets/werkzeug",
+      "commit": "3.0.1"
+    },
+    {
+      "mirror": "sg-evals/prometheus-alertmanager",
+      "upstream": "github.com/prometheus/alertmanager",
+      "commit": "v0.26.0"
+    },
+    {
+      "mirror": "sg-evals/protocolbuffers-protobuf",
+      "upstream": "github.com/protocolbuffers/protobuf",
+      "commit": "v25.1"
+    },
+    {
+      "mirror": "sg-evals/spring-projects-spring-framework",
+      "upstream": "github.com/spring-projects/spring-framework",
+      "commit": "v6.0.11"
+    },
+    {
+      "mirror": "sg-evals/spring-projects-spring-kafka",
+      "upstream": "github.com/spring-projects/spring-kafka",
+      "commit": "v3.0.9"
+    },
+    {
+      "mirror": "sg-evals/supabase-gotrue",
+      "upstream": "github.com/supabase/gotrue",
+      "commit": "v2.143.0"
+    },
+    {
+      "mirror": "sg-evals/supabase-supabase",
+      "upstream": "github.com/supabase/supabase",
+      "commit": "v0.24.12"
+    },
+    {
+      "mirror": "sg-evals/thanos-io-thanos",
+      "upstream": "github.com/thanos-io/thanos",
+      "commit": "v0.32.5"
+    },
+    {
+      "mirror": "sg-evals/tiangolo-fastapi",
+      "upstream": "github.com/tiangolo/fastapi",
+      "commit": "0.109.0"
+    },
+    {
+      "mirror": "sg-evals/tokio-rs-axum",
+      "upstream": "github.com/tokio-rs/axum",
+      "commit": "axum-v0.6.19"
+    },
+    {
+      "mirror": "sg-evals/tokio-rs-tokio",
+      "upstream": "github.com/tokio-rs/tokio",
+      "commit": "tokio-1.29.1"
+    },
+    {
+      "mirror": "sg-evals/wagtail-wagtail",
+      "upstream": "github.com/wagtail/wagtail",
+      "commit": "v5.2"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "_description": "Mirrors needed for reproducible Sourcegraph indexing (EnterpriseBench)",
-  "_generated": "2026-03-31",
-  "_status": "132 mirrors from 119 task files",
+  "_generated": "2026-04-03",
+  "_status": "187 mirrors from 148 task files",
   "mirrors": [
     {
       "upstream": "github.com/NodeBB/NodeBB",
@@ -22,6 +22,24 @@
       ]
     },
     {
+      "upstream": "github.com/prometheus/alertmanager",
+      "commit": "v0.26.0",
+      "mirror": "sg-evals/alertmanager--v0.26.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-investigation-dual-prometheus-001"
+      ]
+    },
+    {
+      "upstream": "github.com/angular/angular",
+      "commit": "18.0.0",
+      "mirror": "sg-evals/angular--18.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-dual-angular-001"
+      ]
+    },
+    {
       "upstream": "github.com/angular/angular",
       "commit": "891318e805da3cdfb9839bf6cb3412c15c146253",
       "mirror": "sg-evals/angular--891318e8",
@@ -36,6 +54,7 @@
       "mirror": "sg-evals/ansible--v2.16.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
+        "support-mapping-dual-ansible-001",
         "ansible-galaxy-tar-regression-prove-001"
       ]
     },
@@ -46,6 +65,25 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "config-drift-argocd-redis-ha-004"
+      ]
+    },
+    {
+      "upstream": "github.com/argoproj/argo-cd",
+      "commit": "v2.9.0",
+      "mirror": "sg-evals/argo-cd--v2.9.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-dual-argocd-001",
+        "config-drift-tri-kustomize-001"
+      ]
+    },
+    {
+      "upstream": "github.com/argoproj/argo-helm",
+      "commit": "argo-cd-5.51.0",
+      "mirror": "sg-evals/argo-helm--argo-cd-5.51.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-dual-argocd-001"
       ]
     },
     {
@@ -67,12 +105,30 @@
       ]
     },
     {
+      "upstream": "github.com/tokio-rs/axum",
+      "commit": "axum-v0.6.19",
+      "mirror": "sg-evals/axum--axum-v0.6.19",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orchestration-tri-tokio-001"
+      ]
+    },
+    {
       "upstream": "github.com/babel/babel",
       "commit": "v7.22.20",
       "mirror": "sg-evals/babel--v7.22.20",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "monorepo-boundary-babel-metadata-003"
+      ]
+    },
+    {
+      "upstream": "github.com/babel/babel",
+      "commit": "v7.22.9",
+      "mirror": "sg-evals/babel--v7.22.9",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orchestration-tri-babel-001"
       ]
     },
     {
@@ -114,6 +170,24 @@
       ]
     },
     {
+      "upstream": "github.com/boto/boto3",
+      "commit": "1.28.0",
+      "mirror": "sg-evals/boto3--1.28.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-tri-boto3-001"
+      ]
+    },
+    {
+      "upstream": "github.com/boto/botocore",
+      "commit": "1.31.0",
+      "mirror": "sg-evals/botocore--1.31.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-tri-boto3-001"
+      ]
+    },
+    {
       "upstream": "github.com/projectcalico/calico",
       "commit": "70ebb8c4fd8cd32233afce241f013d484b4bb860",
       "mirror": "sg-evals/calico--70ebb8c4",
@@ -129,6 +203,15 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "camel-routing-arch-001"
+      ]
+    },
+    {
+      "upstream": "github.com/celery/celery",
+      "commit": "v5.3.6",
+      "mirror": "sg-evals/celery--v5.3.6",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "err-provenance-dual-celery-001"
       ]
     },
     {
@@ -177,6 +260,15 @@
       ]
     },
     {
+      "upstream": "github.com/docker/cli",
+      "commit": "v24.0.7",
+      "mirror": "sg-evals/cli--v24.0.7",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "err-provenance-dual-docker-001"
+      ]
+    },
+    {
       "upstream": "github.com/pallets/click",
       "commit": "8.1.7",
       "mirror": "sg-evals/click--8.1.7",
@@ -199,12 +291,30 @@
       ]
     },
     {
+      "upstream": "github.com/kubernetes/client-go",
+      "commit": "v0.28.0",
+      "mirror": "sg-evals/client-go--v0.28.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-dual-k8s-001"
+      ]
+    },
+    {
       "upstream": "github.com/spf13/cobra",
       "commit": "v1.10.2",
       "mirror": "sg-evals/cobra--v1.10.2",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "refactor-orch-002"
+      ]
+    },
+    {
+      "upstream": "github.com/angular/components",
+      "commit": "18.0.0",
+      "mirror": "sg-evals/components--18.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-dual-angular-001"
       ]
     },
     {
@@ -217,6 +327,15 @@
       ]
     },
     {
+      "upstream": "github.com/containerd/containerd",
+      "commit": "v1.7.8",
+      "mirror": "sg-evals/containerd--v1.7.8",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-investigation-tri-containerd-001"
+      ]
+    },
+    {
       "upstream": "github.com/LibreOffice/core",
       "commit": "61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e",
       "mirror": "sg-evals/core--61f8fb64",
@@ -226,12 +345,30 @@
       ]
     },
     {
+      "upstream": "github.com/facebook/create-react-app",
+      "commit": "v5.0.1",
+      "mirror": "sg-evals/create-react-app--v5.0.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-dual-react-001"
+      ]
+    },
+    {
       "upstream": "github.com/curl/curl",
       "commit": "curl-7_82_0",
       "mirror": "sg-evals/curl--curl-7_82_0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "dep-traversal-012"
+      ]
+    },
+    {
+      "upstream": "github.com/curl/curl",
+      "commit": "curl-8_1_2",
+      "mirror": "sg-evals/curl--curl-8_1_2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-tri-openssl-001"
       ]
     },
     {
@@ -268,6 +405,15 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "schema-evolution-005"
+      ]
+    },
+    {
+      "upstream": "github.com/django/django",
+      "commit": "5.0",
+      "mirror": "sg-evals/django--5.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-dual-django-001"
       ]
     },
     {
@@ -317,13 +463,23 @@
     },
     {
       "upstream": "github.com/envoyproxy/envoy",
+      "commit": "v1.28.0",
+      "mirror": "sg-evals/envoy--v1.28.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-tri-envoy-001",
+        "incident-investigation-dual-istio-001"
+      ]
+    },
+    {
+      "upstream": "github.com/envoyproxy/envoy",
       "commit": "v1.31.2",
       "mirror": "sg-evals/envoy--v1.31.2",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
+        "ccx-compliance-052",
         "support-map-envoy-connpool-001",
-        "ccx-incident-032",
-        "ccx-compliance-052"
+        "ccx-incident-032"
       ]
     },
     {
@@ -421,6 +577,24 @@
       ]
     },
     {
+      "upstream": "github.com/tiangolo/fastapi",
+      "commit": "0.109.0",
+      "mirror": "sg-evals/fastapi--0.109.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-dual-fastapi-001"
+      ]
+    },
+    {
+      "upstream": "github.com/pallets/flask",
+      "commit": "3.0.0",
+      "mirror": "sg-evals/flask--3.0.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-mapping-dual-flask-001"
+      ]
+    },
+    {
       "upstream": "github.com/pallets/flask",
       "commit": "3.1.0",
       "mirror": "sg-evals/flask--3.1.0",
@@ -432,6 +606,16 @@
         "chain-err-flask-import-001",
         "cal-drift-flask-config-001",
         "cal-dead-flask-legacy-002"
+      ]
+    },
+    {
+      "upstream": "github.com/fluxcd/flux2",
+      "commit": "v2.2.0",
+      "mirror": "sg-evals/flux2--v2.2.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-investigation-dual-flux-001",
+        "config-drift-tri-kustomize-001"
       ]
     },
     {
@@ -471,11 +655,21 @@
       ]
     },
     {
+      "upstream": "github.com/git/git",
+      "commit": "v2.41.0",
+      "mirror": "sg-evals/git--v2.41.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-tri-openssl-001"
+      ]
+    },
+    {
       "upstream": "github.com/envoyproxy/go-control-plane",
       "commit": "v0.12.0",
       "mirror": "sg-evals/go-control-plane--v0.12.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
+        "api-contract-tri-envoy-001",
         "dep-traversal-006"
       ]
     },
@@ -507,6 +701,24 @@
       ]
     },
     {
+      "upstream": "github.com/googleapis/googleapis",
+      "commit": "common-protos-1_3_1",
+      "mirror": "sg-evals/googleapis--common-protos-1_3_1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-tri-protobuf-001"
+      ]
+    },
+    {
+      "upstream": "github.com/supabase/gotrue",
+      "commit": "v2.143.0",
+      "mirror": "sg-evals/gotrue--v2.143.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-tri-supabase-001"
+      ]
+    },
+    {
       "upstream": "github.com/grafana/grafana",
       "commit": "v10.1.0",
       "mirror": "sg-evals/grafana--v10.1.0",
@@ -522,8 +734,10 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "error-trace-grafana-jaeger-panic-001",
+        "err-provenance-dual-grafana-001",
         "support-map-grafana-import-003",
-        "support-map-grafana-alerts-004"
+        "support-map-grafana-alerts-004",
+        "support-mapping-dual-grafana-001"
       ]
     },
     {
@@ -533,6 +747,15 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "dep-traversal-002"
+      ]
+    },
+    {
+      "upstream": "github.com/grpc/grpc",
+      "commit": "v1.60.0",
+      "mirror": "sg-evals/grpc--v1.60.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-tri-protobuf-001"
       ]
     },
     {
@@ -666,6 +889,24 @@
       ]
     },
     {
+      "upstream": "github.com/fluxcd/helm-controller",
+      "commit": "v0.37.0",
+      "mirror": "sg-evals/helm-controller--v0.37.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-investigation-dual-flux-001"
+      ]
+    },
+    {
+      "upstream": "github.com/encode/httpx",
+      "commit": "0.26.0",
+      "mirror": "sg-evals/httpx--0.26.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-dual-fastapi-001"
+      ]
+    },
+    {
       "upstream": "github.com/gohugoio/hugo",
       "commit": "v0.111.0",
       "mirror": "sg-evals/hugo--v0.111.0",
@@ -675,12 +916,23 @@
       ]
     },
     {
+      "upstream": "github.com/hyperium/hyper",
+      "commit": "v1.0.0-rc.4",
+      "mirror": "sg-evals/hyper--v1.0.0-rc.4",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orchestration-tri-tokio-001"
+      ]
+    },
+    {
       "upstream": "github.com/istio/istio",
       "commit": "1.20.0",
       "mirror": "sg-evals/istio--1.20.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
-        "dep-traversal-006"
+        "api-contract-tri-envoy-001",
+        "dep-traversal-006",
+        "incident-investigation-dual-istio-001"
       ]
     },
     {
@@ -711,6 +963,15 @@
       ]
     },
     {
+      "upstream": "github.com/FasterXML/jackson-databind",
+      "commit": "jackson-databind-2.15.2",
+      "mirror": "sg-evals/jackson-databind--jackson-databind-2.15.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-tri-jackson-001"
+      ]
+    },
+    {
       "upstream": "github.com/kubernetes-client/javascript",
       "commit": "0.18.0",
       "mirror": "sg-evals/javascript--0.18.0",
@@ -726,6 +987,15 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "dep-traversal-001"
+      ]
+    },
+    {
+      "upstream": "github.com/pallets/jinja",
+      "commit": "3.1.3",
+      "mirror": "sg-evals/jinja--3.1.3",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-mapping-dual-ansible-001"
       ]
     },
     {
@@ -748,11 +1018,29 @@
     },
     {
       "upstream": "github.com/apache/kafka",
+      "commit": "3.6.0",
+      "mirror": "sg-evals/kafka--3.6.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-investigation-dual-kafka-001"
+      ]
+    },
+    {
+      "upstream": "github.com/apache/kafka",
       "commit": "3.7.0",
       "mirror": "sg-evals/kafka--3.7.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "support-map-kafka-bufpool-012"
+      ]
+    },
+    {
+      "upstream": "github.com/confluentinc/kafka-connect-jdbc",
+      "commit": "v10.7.4",
+      "mirror": "sg-evals/kafka-connect-jdbc--v10.7.4",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-investigation-dual-kafka-001"
       ]
     },
     {
@@ -771,6 +1059,15 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "rbac-audit-002"
+      ]
+    },
+    {
+      "upstream": "github.com/celery/kombu",
+      "commit": "v5.3.4",
+      "mirror": "sg-evals/kombu--v5.3.4",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "err-provenance-dual-celery-001"
       ]
     },
     {
@@ -798,7 +1095,8 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "support-map-k8s-eviction-005",
-        "dep-traversal-004"
+        "dep-traversal-004",
+        "dead-code-dual-k8s-001"
       ]
     },
     {
@@ -807,8 +1105,8 @@
       "mirror": "sg-evals/kubernetes--v1.32.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
-        "error-trace-k8s-poststarthook-001",
         "error-trace-k8s-sessionaffinity-001",
+        "error-trace-k8s-poststarthook-001",
         "refactor-orch-001",
         "refactor-orch-003"
       ]
@@ -830,8 +1128,8 @@
       "mirror": "sg-evals/kubernetes--v1.33.0-alpha.1",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
-        "error-trace-k8s-job-starttime-001",
-        "error-trace-k8s-utf8-envvar-001"
+        "error-trace-k8s-utf8-envvar-001",
+        "error-trace-k8s-job-starttime-001"
       ]
     },
     {
@@ -840,8 +1138,8 @@
       "mirror": "sg-evals/kubernetes--v1.33.0-alpha.2",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
-        "error-trace-k8s-nftables-sync-001",
-        "error-trace-k8s-sidecar-restart-001"
+        "error-trace-k8s-sidecar-restart-001",
+        "error-trace-k8s-nftables-sync-001"
       ]
     },
     {
@@ -869,6 +1167,15 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "incident-inv-watch-delete-002"
+      ]
+    },
+    {
+      "upstream": "github.com/kubernetes-sigs/kustomize",
+      "commit": "kustomize/v5.3.0",
+      "mirror": "sg-evals/kustomize--kustomize_v5.3.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-tri-kustomize-001"
       ]
     },
     {
@@ -909,6 +1216,16 @@
     },
     {
       "upstream": "github.com/moby/moby",
+      "commit": "v24.0.7",
+      "mirror": "sg-evals/moby--v24.0.7",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "err-provenance-dual-docker-001",
+        "incident-investigation-tri-containerd-001"
+      ]
+    },
+    {
+      "upstream": "github.com/moby/moby",
       "commit": "v28.0.0",
       "mirror": "sg-evals/moby--v28.0.0",
       "pin_source": "task.toml repos[].rev",
@@ -918,11 +1235,29 @@
     },
     {
       "upstream": "github.com/vercel/next.js",
+      "commit": "v13.4.12",
+      "mirror": "sg-evals/next.js--v13.4.12",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orchestration-tri-babel-001"
+      ]
+    },
+    {
+      "upstream": "github.com/vercel/next.js",
       "commit": "v13.5.6",
       "mirror": "sg-evals/next.js--v13.5.6",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "monorepo-boundary-nextjs-og-008"
+      ]
+    },
+    {
+      "upstream": "github.com/openssl/openssl",
+      "commit": "openssl-3.1.1",
+      "mirror": "sg-evals/openssl--openssl-3.1.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-tri-openssl-001"
       ]
     },
     {
@@ -942,6 +1277,15 @@
       "tasks": [
         "monorepo-boundary-pnpm-lifecycle-006",
         "monorepo-boundary-pnpm-sha256-007"
+      ]
+    },
+    {
+      "upstream": "github.com/PostgREST/postgrest",
+      "commit": "v12.0.2",
+      "mirror": "sg-evals/postgrest--v12.0.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-tri-supabase-001"
       ]
     },
     {
@@ -968,7 +1312,20 @@
       "mirror": "sg-evals/prometheus--v2.48.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
-        "inc-grpc-goroutine-leak-001"
+        "inc-grpc-goroutine-leak-001",
+        "err-provenance-dual-grafana-001",
+        "support-mapping-dual-grafana-001",
+        "incident-investigation-dual-prometheus-001",
+        "config-drift-dual-prometheus-001"
+      ]
+    },
+    {
+      "upstream": "github.com/protocolbuffers/protobuf",
+      "commit": "v25.1",
+      "mirror": "sg-evals/protobuf--v25.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "api-contract-tri-protobuf-001"
       ]
     },
     {
@@ -1017,6 +1374,24 @@
       ]
     },
     {
+      "upstream": "github.com/facebook/react",
+      "commit": "v18.2.0",
+      "mirror": "sg-evals/react--v18.2.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dead-code-dual-react-001"
+      ]
+    },
+    {
+      "upstream": "github.com/getsentry/relay",
+      "commit": "23.11.0",
+      "mirror": "sg-evals/relay--23.11.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-dual-sentry-001"
+      ]
+    },
+    {
       "upstream": "github.com/unknown/repo",
       "commit": "HEAD",
       "mirror": "sg-evals/repo--HEAD",
@@ -1046,12 +1421,30 @@
     },
     {
       "upstream": "github.com/psf/requests",
+      "commit": "v2.31.0",
+      "mirror": "sg-evals/requests--v2.31.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "err-provenance-dual-requests-001"
+      ]
+    },
+    {
+      "upstream": "github.com/psf/requests",
       "commit": "v2.32.3",
       "mirror": "sg-evals/requests--v2.32.3",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "cal-err-requests-proxy-003",
         "cal-sup-requests-cabundle-007"
+      ]
+    },
+    {
+      "upstream": "github.com/opencontainers/runc",
+      "commit": "v1.1.10",
+      "mirror": "sg-evals/runc--v1.1.10",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "incident-investigation-tri-containerd-001"
       ]
     },
     {
@@ -1070,6 +1463,24 @@
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "monorepo-boundary-rustc-attr-009"
+      ]
+    },
+    {
+      "upstream": "github.com/boto/s3transfer",
+      "commit": "0.6.1",
+      "mirror": "sg-evals/s3transfer--0.6.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-tri-boto3-001"
+      ]
+    },
+    {
+      "upstream": "github.com/getsentry/sentry",
+      "commit": "23.11.0",
+      "mirror": "sg-evals/sentry--23.11.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-dual-sentry-001"
       ]
     },
     {
@@ -1100,12 +1511,50 @@
       ]
     },
     {
+      "upstream": "github.com/spring-projects/spring-boot",
+      "commit": "v3.1.2",
+      "mirror": "sg-evals/spring-boot--v3.1.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-tri-jackson-001",
+        "refactor-orchestration-tri-spring-001"
+      ]
+    },
+    {
+      "upstream": "github.com/spring-projects/spring-framework",
+      "commit": "v6.0.11",
+      "mirror": "sg-evals/spring-framework--v6.0.11",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "dep-traversal-tri-jackson-001",
+        "refactor-orchestration-tri-spring-001"
+      ]
+    },
+    {
+      "upstream": "github.com/spring-projects/spring-kafka",
+      "commit": "v3.0.9",
+      "mirror": "sg-evals/spring-kafka--v3.0.9",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orchestration-tri-spring-001"
+      ]
+    },
+    {
       "upstream": "github.com/stripe/stripe-go",
       "commit": "v76.0.0",
       "mirror": "sg-evals/stripe-go--v76.0.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "ir-deploy-error-spike-001"
+      ]
+    },
+    {
+      "upstream": "github.com/supabase/supabase",
+      "commit": "v0.24.12",
+      "mirror": "sg-evals/supabase--v0.24.12",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-tri-supabase-001"
       ]
     },
     {
@@ -1124,7 +1573,53 @@
       "mirror": "sg-evals/terraform--v1.6.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
-        "error-trace-tf-builtin-schema-001"
+        "error-trace-tf-builtin-schema-001",
+        "err-provenance-dual-terraform-001"
+      ]
+    },
+    {
+      "upstream": "github.com/hashicorp/terraform",
+      "commit": "v1.7.0",
+      "mirror": "sg-evals/terraform--v1.7.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-dual-terraform-001"
+      ]
+    },
+    {
+      "upstream": "github.com/hashicorp/terraform-provider-aws",
+      "commit": "v5.30.0",
+      "mirror": "sg-evals/terraform-provider-aws--v5.30.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "err-provenance-dual-terraform-001"
+      ]
+    },
+    {
+      "upstream": "github.com/hashicorp/terraform-provider-aws",
+      "commit": "v5.31.0",
+      "mirror": "sg-evals/terraform-provider-aws--v5.31.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-dual-terraform-001"
+      ]
+    },
+    {
+      "upstream": "github.com/thanos-io/thanos",
+      "commit": "v0.32.5",
+      "mirror": "sg-evals/thanos--v0.32.5",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "config-drift-dual-prometheus-001"
+      ]
+    },
+    {
+      "upstream": "github.com/tokio-rs/tokio",
+      "commit": "tokio-1.29.1",
+      "mirror": "sg-evals/tokio--tokio-1.29.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orchestration-tri-tokio-001"
       ]
     },
     {
@@ -1155,6 +1650,15 @@
       ]
     },
     {
+      "upstream": "github.com/urllib3/urllib3",
+      "commit": "2.1.0",
+      "mirror": "sg-evals/urllib3--2.1.0",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "err-provenance-dual-requests-001"
+      ]
+    },
+    {
       "upstream": "github.com/hashicorp/vault",
       "commit": "v1.14.0",
       "mirror": "sg-evals/vault--v1.14.0",
@@ -1164,12 +1668,39 @@
       ]
     },
     {
+      "upstream": "github.com/wagtail/wagtail",
+      "commit": "v5.2",
+      "mirror": "sg-evals/wagtail--v5.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "schema-evolution-dual-django-001"
+      ]
+    },
+    {
       "upstream": "github.com/webpack/webpack",
       "commit": "v5.64.0",
       "mirror": "sg-evals/webpack--v5.64.0",
       "pin_source": "task.toml repos[].rev",
       "tasks": [
         "dep-traversal-001"
+      ]
+    },
+    {
+      "upstream": "github.com/webpack/webpack",
+      "commit": "v5.88.2",
+      "mirror": "sg-evals/webpack--v5.88.2",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "refactor-orchestration-tri-babel-001"
+      ]
+    },
+    {
+      "upstream": "github.com/pallets/werkzeug",
+      "commit": "3.0.1",
+      "mirror": "sg-evals/werkzeug--3.0.1",
+      "pin_source": "task.toml repos[].rev",
+      "tasks": [
+        "support-mapping-dual-flask-001"
       ]
     },
     {
