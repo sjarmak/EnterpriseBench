@@ -1,0 +1,128 @@
+# Error Provenance: Grafana dashboard query failure to Prometheus query engine timeout
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "grafana-prometheus-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "err-provenance-dual-grafana-001"
+suite = "customer_escalation"
+task_type = "error_provenance"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace Grafana dashboard 'Bad Gateway' datasource proxy error to Prometheus query engine timeout origin"
+prompt = """
+A customer reports that their Grafana dashboard intermittently shows a "Bad Gateway"
+error on panels backed by a Prometheus datasource. The raw error visible in the
+browser network tab is:
+
+    {"message":"Bad Gateway","status":"bad-gateway"}
+
+The Grafana server logs show:
+
+    logger=datasource.proxy t=2024-01-15T10:23:45Z level=error msg="Data proxy error"
+    error="context deadline exceeded" remote_addr=10.0.0.5
+    url=/api/datasources/proxy/1/api/v1/query_range
+
+The Prometheus server logs show:
+
+    ts=2024-01-15T10:23:44Z caller=query_logger.go:114 level=warn component=activeQueryTracker
+    msg="query timed out" query="rate(http_requests_total{job=~\".*\"}[5m])"
+
+The customer wants to understand why a Prometheus timeout surfaces as a generic
+"Bad Gateway" in Grafana rather than a descriptive error about query timeout.
+
+Your task:
+1. Find where Grafana's datasource proxy handles outbound HTTP requests to
+   Prometheus — trace from the dashboard query API through the proxy middleware.
+2. Find where Prometheus's query engine enforces timeouts and returns timeout
+   errors — trace through the v1 API query handler to the PromQL engine.
+3. Trace the full error propagation chain: Prometheus engine timeout -> HTTP 503
+   response -> Grafana proxy receives error -> Grafana formats "Bad Gateway" for
+   the frontend. Document each file and function in the chain.
+4. Identify why the original timeout context is lost — examine how Grafana's
+   proxy translates upstream HTTP errors and whether the Prometheus error body
+   is preserved or discarded.
+
+Write your analysis to /workspace/ERROR_PROVENANCE.md with:
+- Full error chain (file:function at each step)
+- Error origin in Prometheus query engine
+- Error translation in Grafana datasource proxy
+- Why the original timeout message is lost in translation
+"""
+
+[[repos]]
+url = "https://github.com/grafana/grafana"
+rev = "v10.2.0"
+path = "grafana"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/prometheus/prometheus"
+rev = "v2.48.0"
+path = "prometheus"
+role = "upstream"
+
+[metadata]
+languages = ["go", "typescript"]
+total_loc = 2_000_000
+dependency_depth = 2
+frameworks = ["grafana", "prometheus", "promql"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.40
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the error source across repos"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the error propagation chain"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.30
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies conditions that trigger the error"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing error propagation from Grafana datasource proxy through HTTP boundary to Prometheus query engine requires cross-repo search to follow error wrapping across Go HTTP client/server boundary"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pkg/api/datasource_proxy.go"
+repo = "grafana"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "web/api/v1/api.go"
+repo = "prometheus"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pkg/tsdb/prometheus/resource.go"
+repo = "grafana"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "promql/engine.go"
+repo = "prometheus"
+confidence = 0.85

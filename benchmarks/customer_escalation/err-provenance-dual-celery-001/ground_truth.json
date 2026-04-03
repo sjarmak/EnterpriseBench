@@ -1,0 +1,61 @@
+{
+  "task_id": "err-provenance-dual-celery-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/celery/celery",
+      "rev": "v5.3.6",
+      "path": "celery"
+    },
+    {
+      "url": "https://github.com/celery/kombu",
+      "rev": "v5.3.4",
+      "path": "kombu"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "celery/app/task.py",
+      "repo": "celery",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "kombu/connection.py",
+      "repo": "kombu",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "celery/worker/request.py",
+      "repo": "celery",
+      "confidence": 0.8
+    },
+    {
+      "path": "kombu/transport/pyamqp.py",
+      "repo": "kombu",
+      "confidence": 0.75
+    }
+  ],
+  "error_chain": [
+    "Kombu connection pool in kombu/connection.py exhausts available connections to RabbitMQ broker",
+    "New connection attempt fails with ConnectionResetError in kombu/transport/pyamqp.py",
+    "Celery worker catches the ConnectionResetError as a generic Exception in celery/worker/request.py",
+    "Celery autoretry_for=(Exception,) in celery/app/task.py matches ConnectionResetError and schedules retry",
+    "Retry attempts to publish message through kombu which needs a connection from the exhausted pool",
+    "Cycle repeats creating a retry storm until max_retries is reached across all affected tasks"
+  ],
+  "trigger_conditions": [
+    "autoretry_for=(Exception,) is too broad and catches broker-level ConnectionResetError alongside task exceptions",
+    "Kombu connection pool reaches configured limit due to connection leaks or high concurrency",
+    "RabbitMQ server hits max connection limit and resets new connection attempts",
+    "Celery retry mechanism does not classify exceptions as task-level vs transport-level before retrying"
+  ],
+  "expected_answer": {
+    "error_origin": "Kombu connection pool exhaustion in kombu/connection.py when broker rejects new connections",
+    "retry_mechanism": "Celery autoretry_for in celery/app/task.py treats all Exception subclasses equally without distinguishing transport errors",
+    "root_cause": "The autoretry_for mechanism has no built-in exception classification to exclude broker/transport errors from retry eligibility"
+  }
+}

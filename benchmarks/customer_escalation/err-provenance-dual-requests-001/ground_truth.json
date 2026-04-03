@@ -1,0 +1,61 @@
+{
+  "task_id": "err-provenance-dual-requests-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/psf/requests",
+      "rev": "v2.31.0",
+      "path": "requests"
+    },
+    {
+      "url": "https://github.com/urllib3/urllib3",
+      "rev": "2.1.0",
+      "path": "urllib3"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "src/requests/adapters.py",
+      "repo": "requests",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "src/urllib3/connectionpool.py",
+      "repo": "urllib3",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/requests/models.py",
+      "repo": "requests",
+      "confidence": 0.8
+    },
+    {
+      "path": "src/urllib3/util/ssl_.py",
+      "repo": "urllib3",
+      "confidence": 0.85
+    }
+  ],
+  "error_chain": [
+    "Python ssl module raises SSLCertVerificationError during TLS handshake when certificate chain validation fails",
+    "urllib3 HTTPSConnectionPool in src/urllib3/connectionpool.py catches SSLError during connection",
+    "urllib3 wraps the SSLError in a MaxRetryError after exhausting retry attempts",
+    "requests HTTPAdapter in src/requests/adapters.py catches urllib3 MaxRetryError",
+    "requests wraps the exception in requests.exceptions.SSLError with nested exception context",
+    "User sees multi-layered wrapped exception with original ssl module error buried in the chain"
+  ],
+  "trigger_conditions": [
+    "REQUESTS_CA_BUNDLE env var is overridden when verify parameter is explicitly passed as True in requests.get()",
+    "requests merge_environment_settings resolves verify=True to certifi default bundle instead of env var",
+    "Corporate CA certificate is not in the certifi CA bundle and custom CA path is silently ignored",
+    "urllib3 ssl_wrap_socket uses the resolved CA bundle path which does not contain the corporate CA root"
+  ],
+  "expected_answer": {
+    "error_origin": "Python ssl module SSLCertVerificationError when the CA bundle does not contain the issuer certificate",
+    "ca_resolution": "requests merge_environment_settings in adapters.py resolves CA bundle with specific precedence: explicit verify param > REQUESTS_CA_BUNDLE > CURL_CA_BUNDLE > certifi default",
+    "root_cause": "When verify=True is passed explicitly (not as default), it takes precedence over REQUESTS_CA_BUNDLE, causing the env var to be silently ignored and falling back to certifi bundle"
+  }
+}

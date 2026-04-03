@@ -1,0 +1,125 @@
+# Error Provenance: requests SSL verification error to urllib3 certificate handling
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "requests-urllib3-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "err-provenance-dual-requests-001"
+suite = "customer_escalation"
+task_type = "error_provenance"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace requests SSLError through to urllib3 certificate verification and ssl module interaction"
+prompt = """
+A customer reports this error when calling an internal API endpoint signed by
+their corporate CA:
+
+    requests.exceptions.SSLError: HTTPSConnectionPool(host='api.internal.corp',
+    port=443): Max retries exceeded with url: /v1/data (Caused by
+    SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED]
+    certificate verify failed: unable to get local issuer certificate
+    (_ssl.c:1006)')))
+
+The customer has set `REQUESTS_CA_BUNDLE=/etc/ssl/certs/corp-ca.pem` but the
+error persists. They have verified the certificate file exists and is valid
+using `openssl verify`.
+
+Your task:
+1. Find where the requests library initiates HTTPS connections and how it
+   resolves CA bundle configuration — trace from requests.get() through the
+   Session, HTTPAdapter, and into urllib3 pool manager creation.
+2. Find where urllib3 performs SSL certificate verification — trace through
+   HTTPSConnectionPool, the ssl_wrap_socket utility, and how it interacts
+   with Python's ssl module.
+3. Trace the full error propagation chain: Python ssl module raises
+   SSLCertVerificationError -> urllib3 catches and wraps in MaxRetryError ->
+   requests catches and wraps in SSLError -> user sees nested exception.
+   Document each file and function in the chain.
+4. Identify why REQUESTS_CA_BUNDLE might not take effect — examine the
+   precedence of verify parameter, environment variables, certifi fallback,
+   and how the merge_environment_settings method resolves the final CA bundle
+   path. Determine conditions where the env var is silently overridden.
+
+Write your analysis to /workspace/ERROR_PROVENANCE.md with:
+- Full error chain (file:function at each step)
+- Error origin in urllib3/Python ssl module
+- CA bundle resolution logic in requests
+- Conditions where REQUESTS_CA_BUNDLE is silently ignored
+"""
+
+[[repos]]
+url = "https://github.com/psf/requests"
+rev = "v2.31.0"
+path = "requests"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/urllib3/urllib3"
+rev = "2.1.0"
+path = "urllib3"
+role = "upstream"
+
+[metadata]
+languages = ["python"]
+total_loc = 50_000
+dependency_depth = 2
+frameworks = ["requests", "urllib3", "ssl"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.40
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the error source across repos"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the error propagation chain"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.30
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies conditions that trigger the error"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing SSL error propagation from requests through urllib3 to Python ssl module requires cross-repo search to follow exception wrapping through adapter and connection pool layers"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/requests/adapters.py"
+repo = "requests"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/urllib3/connectionpool.py"
+repo = "urllib3"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/requests/models.py"
+repo = "requests"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "src/urllib3/util/ssl_.py"
+repo = "urllib3"
+confidence = 0.85
