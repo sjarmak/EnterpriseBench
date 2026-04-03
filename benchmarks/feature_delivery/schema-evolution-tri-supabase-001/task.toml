@@ -49,7 +49,7 @@ Write your analysis to /workspace/SCHEMA_IMPACT.md with:
 
 [[repos]]
 url = "https://github.com/supabase/supabase"
-rev = "v0.24.12"
+rev = "v0.24.03"
 path = "supabase"
 role = "primary"
 
