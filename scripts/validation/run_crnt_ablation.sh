@@ -13,7 +13,8 @@
 #   --dry-run       Show what would be done without building or running
 #   --help          Show this help message
 #
-# Output:
+# Output follows results/runs/<task_id>/<mode>/rep<N>/ convention where
+# <mode> = ablate-<excluded_repo> for ablation runs:
 #   results/runs/<task_id>/ablate-<excluded_repo>/rep<N>/
 #
 # Example:
@@ -46,7 +47,8 @@ Options:
   --dry-run         Print plan without building or running anything
   --help            Show this help message
 
-Output paths:
+Output paths follow results/runs/<task_id>/<mode>/rep<N>/ convention.
+  For ablation runs, <mode> = ablate-<excluded_repo>:
   results/runs/<task_id>/ablate-<excluded_repo>/rep<N>/
 
 Examples:
