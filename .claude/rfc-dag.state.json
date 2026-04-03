@@ -2,14 +2,14 @@
   "version": 1,
   "id": "20260403-072114",
   "session_id": "unknown",
-  "status": "executing",
+  "status": "done",
   "prd_path": "prd_task_mix_realignment.md",
   "integration_branch": "rfc-dag/20260403-072114/integration",
   "current_pass": 1,
   "max_passes": 3,
   "max_parallel": 4,
   "started_at": "2026-04-03T11:21:14Z",
-  "updated_at": "2026-04-03T12:40:07Z",
+  "updated_at": "2026-04-03T13:06:52Z",
   "units": [
     {
       "id": "multi-repo-incident-investigation",
@@ -165,7 +165,7 @@
         "configs/sweep_manifest.json",
         "configs/validation_registry.json"
       ],
-      "status": "active",
+      "status": "passed",
       "branch": null,
       "pipeline_stage": null,
       "pipeline_output": {},
@@ -192,7 +192,7 @@
         "scripts/validation/task_mix_validator.py",
         "configs/repo_versions.json"
       ],
-      "status": "pending",
+      "status": "passed",
       "branch": null,
       "pipeline_stage": null,
       "pipeline_output": {},

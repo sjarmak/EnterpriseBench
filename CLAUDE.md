@@ -4,7 +4,7 @@ Evolution of CodeScaleBench (CSB, 275 tasks, unpublished) into a benchmark measu
 
 ## Project Status
 
-Phase 5 complete. 100 benchmark tasks across 10 task types, 779+ tests passing, full verification pipeline operational.
+Phase 6: Task mix realignment complete. 112 active benchmark tasks across 10 task types (28 archived), 50.9% strict multi-repo coverage, all types with 2+ multi-repo variants. 779+ tests passing, full verification pipeline operational.
 
 ## Key Files
 
@@ -16,12 +16,16 @@ Phase 5 complete. 100 benchmark tasks across 10 task types, 779+ tests passing, 
 - `schemas/task.schema.json` — task definition schema (includes tool_access, ground_truth, difficulty_stratum)
 - `lib/eb_verify/` — centralized verification library with plugin architecture
 - `lib/eb_verify/plugins/` — 9 artifact validators (answer, code_patch, config_validator, incident_report, runbook, security_assessment, reproduction_script, topological_order, call_graph)
-- `benchmarks/` — 100 task definitions organized by suite
+- `benchmarks/` — 112 active task definitions organized by suite
+- `benchmarks/_archived/` — 28 retired single-repo tasks (preserved for reference)
 - `benchmarks/mined/` — mining candidate lists and provenance data
 - `results/sample_runs/` — sample verification outputs by task type
 - `scripts/` — task mining, sandbox management, orchestration
 - `scripts/sandbox/templates/` — Dockerfile templates (Go, Java, Python multi-repo)
 - `configs/` — run configurations
+- `configs/repo_versions.json` — pinned SHA manifest for all task repos (staleness detection via `scripts/infra/check_repo_staleness.py`)
+- `scripts/validation/task_mix_validator.py` — validates PRD task mix targets
+- `scripts/validation/crnt_validator.py` — Cross-Repo Necessity Test for multi-repo tasks
 
 ## CSB Foundation
 
@@ -30,29 +34,32 @@ Phase 5 complete. 100 benchmark tasks across 10 task types, 779+ tests passing, 
 - Primary measurement: context retrieval quality (not code generation)
 - Layered ground truth (deterministic + LLM curator + solve-verification) replaces single-source
 
-## Task Suites (100 tasks total)
+## Task Suites (112 active tasks)
 
 Tasks are organized by enterprise workflow cluster (not artificial SDLC/Org splits):
 
-- `dependency_management` (21) — dep_traversal, api_contract tasks
-- `incident_response` (7) — incident_investigation tasks
-- `platform_engineering` (4) — config_drift tasks
-- `security_operations` (7) — vulnerability assessment, access control audit tasks
-- `customer_escalation` (22) — error_provenance, support_code_mapping tasks
-- `feature_delivery` (23) — monorepo_boundary, db_schema_evolution tasks
-- `technical_debt` (14) — refactor_orchestration, dead_code_necropsy tasks
+- `dependency_management` (27) — dep_traversal, api_contract tasks
+- `incident_response` (12) — incident_investigation tasks
+- `platform_engineering` (10) — config_drift tasks
+- `security_operations` (2) — vulnerability assessment, access control audit tasks
+- `customer_escalation` (24) — error_provenance, support_code_mapping tasks
+- `feature_delivery` (18) — monorepo_boundary, db_schema_evolution tasks
+- `technical_debt` (19) — refactor_orchestration, dead_code_necropsy tasks
 
 ## Task Types (10)
 
 api_contract, config_drift, db_schema_evolution, dead_code_necropsy, dependency_graph, error_provenance, incident_investigation, monorepo_boundary, refactor_orchestration, support_code_mapping
 
-## Task Mix Gradient
+## Task Mix (actual)
 
-- 15% calibration (single-repo, MCP bias check)
-- 25% large single-repo
-- 30% dual-repo
-- 20% 3-5 repo
-- 10% monorepo cross-package
+- 12.5% calibration (14 tasks)
+- 25.9% large single-repo (29 tasks)
+- 25.0% dual-repo (28 tasks)
+- 14.3% tri-repo (16 tasks)
+- 11.6% multi-repo (13 tasks)
+- 10.7% monorepo cross-package (12 tasks)
+- Strict multi-repo (dual+tri+multi): 50.9%
+- Validate with: `python scripts/validation/task_mix_validator.py`
 
 ## Multi-Repo Design
 
