@@ -1,0 +1,119 @@
+# API Contract: FastAPI schema handling vs httpx client request construction
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "python-http-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "api-contract-dual-fastapi-001"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace API schema handling differences between FastAPI server validation and httpx client request encoding"
+prompt = """
+Your team uses FastAPI for backend services and httpx as the HTTP client in
+service-to-service communication. After upgrading FastAPI to 0.109.0 and httpx
+to 0.26.0, some inter-service requests that previously worked now fail with
+422 Unprocessable Entity errors.
+
+The issue appears to be a contract mismatch in how FastAPI's Pydantic v2
+validation handles request body encoding vs how httpx constructs and encodes
+request bodies. Specifically, the handling of nested models, optional fields
+with defaults, and union types differs between the two libraries.
+
+Your task:
+1. Find where FastAPI processes incoming request bodies — locate the dependency
+   injection, body parsing, and Pydantic model validation logic. Identify how
+   FastAPI handles Content-Type negotiation and body deserialization for JSON
+   requests with nested models.
+2. Find where httpx constructs outgoing request bodies — locate the request
+   encoding, JSON serialization, and Content-Type header logic. Identify how
+   httpx handles nested dict/model serialization and None/default value handling.
+3. Identify the specific contract drift points: where FastAPI expects a
+   certain JSON structure that httpx's default serialization does not produce
+   (e.g., None vs missing keys, nested model serialization, union type encoding).
+4. Document each drift point with source files from both repos.
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md with:
+- FastAPI request validation chain (file paths)
+- httpx request encoding chain (file paths)
+- Contract drift points with examples
+- Recommended fixes
+"""
+
+[[repos]]
+url = "https://github.com/tiangolo/fastapi"
+rev = "0.109.0"
+path = "fastapi"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/encode/httpx"
+rev = "0.26.0"
+path = "httpx"
+role = "consumer"
+
+[metadata]
+languages = ["python"]
+total_loc = 150_000
+dependency_depth = 2
+frameworks = ["fastapi", "httpx", "pydantic", "starlette"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "contract_source"
+weight = 0.35
+verifier = "checks/check_contract_source.sh"
+description = "Agent identifies FastAPI request validation logic"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "consumer_usage"
+weight = 0.35
+verifier = "checks/check_consumer_usage.sh"
+description = "Agent finds httpx request encoding logic"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "drift_analysis"
+weight = 0.30
+verifier = "checks/check_drift_analysis.sh"
+description = "Agent identifies contract drift between FastAPI and httpx"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Both repos are moderate size; cross-repo search helps trace Pydantic validation paths in FastAPI to JSON encoding paths in httpx, but the repos are navigable independently"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "fastapi/routing.py"
+repo = "fastapi"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "httpx/_content.py"
+repo = "httpx"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "fastapi/dependencies/utils.py"
+repo = "fastapi"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "httpx/_models.py"
+repo = "httpx"
+confidence = 0.85

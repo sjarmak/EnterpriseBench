@@ -1,0 +1,64 @@
+{
+  "task_id": "api-contract-tri-protobuf-001",
+  "task_type": "api_contract",
+  "repos": [
+    {
+      "url": "https://github.com/protocolbuffers/protobuf",
+      "rev": "v25.1",
+      "path": "protobuf"
+    },
+    {
+      "url": "https://github.com/grpc/grpc",
+      "rev": "v1.60.0",
+      "path": "grpc"
+    },
+    {
+      "url": "https://github.com/googleapis/googleapis",
+      "rev": "common-protos-1_3_1",
+      "path": "googleapis"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "src/google/protobuf/timestamp.proto",
+      "repo": "protobuf",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "src/core/ext/filters/message_size/message_size_filter.cc",
+      "repo": "grpc",
+      "confidence": 0.85,
+      "source": "deterministic"
+    },
+    {
+      "path": "google/api/httpbody.proto",
+      "repo": "googleapis",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/google/protobuf/duration.proto",
+      "repo": "protobuf",
+      "confidence": 0.9
+    },
+    {
+      "path": "src/google/protobuf/struct.proto",
+      "repo": "protobuf",
+      "confidence": 0.9
+    },
+    {
+      "path": "google/rpc/status.proto",
+      "repo": "googleapis",
+      "confidence": 0.8
+    }
+  ],
+  "contract_chain": [
+    "Protobuf defines well-known types with specific JSON serialization semantics",
+    "gRPC runtime serializes/deserializes protobuf messages with well-known type special-casing",
+    "googleapis common protos import well-known types assuming specific field presence and format",
+    "Version drift between protobuf definitions and gRPC runtime causes serialization mismatches"
+  ]
+}

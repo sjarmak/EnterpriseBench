@@ -1,0 +1,63 @@
+{
+  "task_id": "config-drift-tri-kustomize-001",
+  "task_type": "config_drift",
+  "repos": [
+    {
+      "url": "https://github.com/kubernetes-sigs/kustomize",
+      "rev": "kustomize/v5.3.0",
+      "path": "kustomize"
+    },
+    {
+      "url": "https://github.com/argoproj/argo-cd",
+      "rev": "v2.9.0",
+      "path": "argo-cd"
+    },
+    {
+      "url": "https://github.com/fluxcd/flux2",
+      "rev": "v2.2.0",
+      "path": "flux2"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "api/types/kustomization.go",
+      "repo": "kustomize",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "util/argo/normalizers/diff_normalizer.go",
+      "repo": "argo-cd",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "internal/controller/kustomization_controller.go",
+      "repo": "flux2",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "api/internal/localizer/util.go",
+      "repo": "kustomize",
+      "confidence": 0.8
+    },
+    {
+      "path": "controller/appcontroller.go",
+      "repo": "argo-cd",
+      "confidence": 0.8
+    }
+  ],
+  "drift_points": [
+    {
+      "description": "Strategic merge patch list ordering divergence across kustomize, ArgoCD normalizer, and Flux kustomize-controller",
+      "repos_involved": ["kustomize", "argo-cd", "flux2"]
+    },
+    {
+      "description": "Resource tracking annotation handling differs between ArgoCD sync and Flux reconciliation",
+      "repos_involved": ["argo-cd", "flux2"]
+    }
+  ]
+}

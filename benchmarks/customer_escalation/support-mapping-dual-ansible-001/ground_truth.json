@@ -1,0 +1,55 @@
+{
+  "task_id": "support-mapping-dual-ansible-001",
+  "task_type": "support_code_mapping",
+  "repos": [
+    {
+      "url": "https://github.com/ansible/ansible",
+      "rev": "v2.16.0",
+      "path": "ansible"
+    },
+    {
+      "url": "https://github.com/pallets/jinja",
+      "rev": "3.1.3",
+      "path": "jinja"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "lib/ansible/template/__init__.py",
+      "repo": "ansible",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "src/jinja2/lexer.py",
+      "repo": "jinja",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "lib/ansible/plugins/lookup/file.py",
+      "repo": "ansible",
+      "confidence": 0.85
+    },
+    {
+      "path": "src/jinja2/exceptions.py",
+      "repo": "jinja",
+      "confidence": 0.8
+    }
+  ],
+  "error_chain": [
+    "Ansible lookup('file') plugin reads binary file content from disk",
+    "Ansible Templar class receives template string with embedded binary lookup result",
+    "Ansible passes the full template expression to Jinja2 Environment.parse()",
+    "Jinja2 lexer tokenizes the template and encounters non-UTF-8 bytes",
+    "Jinja2 raises TemplateSyntaxError for unexpected character",
+    "Ansible catches and wraps the error with template context information"
+  ],
+  "trigger_conditions": [
+    "Ansible lookup plugin returns binary (non-UTF-8) content that gets embedded in template string before Jinja2 processing",
+    "Jinja2 lexer validates all characters in template source before filter evaluation occurs",
+    "The b64encode filter would handle binary data correctly but is never reached because lexer fails first"
+  ]
+}

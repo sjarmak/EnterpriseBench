@@ -1,0 +1,52 @@
+{
+  "task_id": "api-contract-dual-fastapi-001",
+  "task_type": "api_contract",
+  "repos": [
+    {
+      "url": "https://github.com/tiangolo/fastapi",
+      "rev": "0.109.0",
+      "path": "fastapi"
+    },
+    {
+      "url": "https://github.com/encode/httpx",
+      "rev": "0.26.0",
+      "path": "httpx"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "fastapi/routing.py",
+      "repo": "fastapi",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "httpx/_content.py",
+      "repo": "httpx",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "fastapi/dependencies/utils.py",
+      "repo": "fastapi",
+      "confidence": 0.85
+    },
+    {
+      "path": "httpx/_models.py",
+      "repo": "httpx",
+      "confidence": 0.85
+    }
+  ],
+  "contract_drift": [
+    {
+      "description": "FastAPI Pydantic v2 validation expects explicit None vs missing key distinction that httpx JSON serialization does not preserve",
+      "repos_involved": ["fastapi", "httpx"]
+    },
+    {
+      "description": "Nested model serialization in httpx uses default json.dumps which may not match FastAPI's expected Pydantic model structure",
+      "repos_involved": ["fastapi", "httpx"]
+    }
+  ]
+}

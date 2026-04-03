@@ -1,0 +1,143 @@
+# Config Drift: Kustomize overlay patching vs ArgoCD sync vs Flux reconciliation
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "gitops-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "config-drift-tri-kustomize-001"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "expert"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Detect configuration drift in strategic merge patch handling across Kustomize, ArgoCD, and Flux"
+prompt = """
+Your platform team uses a GitOps stack: Kustomize for overlay management, ArgoCD
+for application delivery, and Flux for HelmRelease reconciliation. After upgrading
+all three tools, you notice that strategic merge patches applied via Kustomize
+overlays are being handled differently by ArgoCD's sync engine and Flux's
+Kustomize controller.
+
+Specifically, list-type strategic merge patches (e.g., container env vars, volume
+mounts) produce different merge results depending on which tool processes them.
+ArgoCD's resource tracking and diff normalization may strip or reorder fields that
+Kustomize preserves, while Flux's Kustomize controller may apply patches in a
+different order than standalone Kustomize.
+
+Your task:
+1. Find where Kustomize implements strategic merge patch logic — locate the patch
+   transformer and the strategic merge patch library it delegates to. Identify how
+   list merge keys (e.g., `name` for containers, `mountPath` for volumeMounts) are
+   resolved.
+2. Find where ArgoCD normalizes resources during sync diff — locate the diff/
+   normalizer and the resource tracking annotation logic. Identify how ArgoCD's
+   normalizer handles list-type fields differently from raw Kustomize output.
+3. Find where Flux's kustomize-controller applies overlays — locate the build logic
+   and identify any differences in how it invokes the Kustomize API vs the standalone
+   `kustomize build` CLI.
+4. Document all drift points where the three tools diverge in merge behavior.
+
+Write your analysis to /workspace/DRIFT_REPORT.json with:
+{
+  "drift_points": [
+    {
+      "config_key": "<merge behavior or config parameter>",
+      "kustomize_behavior": "<behavior in kustomize>",
+      "kustomize_source_file": "<path in kustomize repo>",
+      "argocd_behavior": "<behavior in argo-cd>",
+      "argocd_source_file": "<path in argo-cd repo>",
+      "flux_behavior": "<behavior in flux2>",
+      "flux_source_file": "<path in flux2 repo>",
+      "impact": "<potential impact of this drift>"
+    }
+  ]
+}
+"""
+
+[[repos]]
+url = "https://github.com/kubernetes-sigs/kustomize"
+rev = "kustomize/v5.3.0"
+path = "kustomize"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/argoproj/argo-cd"
+rev = "v2.9.0"
+path = "argo-cd"
+role = "consumer"
+
+[[repos]]
+url = "https://github.com/fluxcd/flux2"
+rev = "v2.2.0"
+path = "flux2"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 1_200_000
+dependency_depth = 3
+frameworks = ["kustomize", "argocd", "flux", "kubernetes"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "config_valid"
+weight = 0.20
+verifier = "checks/check_config_valid.sh"
+description = "Agent produces valid drift report JSON"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "drift_points"
+weight = 0.45
+verifier = "checks/check_drift_points.sh"
+description = "Agent identifies drift points across all three tools"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "cross_repo_impact"
+weight = 0.35
+verifier = "checks/check_cross_repo_impact.sh"
+description = "Agent documents impact of drift across repos"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Three-way comparison of strategic merge patch handling requires tracing Go library dependencies and API usage patterns across Kustomize, ArgoCD, and Flux codebases"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "api/types/kustomization.go"
+repo = "kustomize"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "util/argo/normalizers/diff_normalizer.go"
+repo = "argo-cd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "internal/controller/kustomization_controller.go"
+repo = "flux2"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "api/internal/localizer/util.go"
+repo = "kustomize"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "controller/appcontroller.go"
+repo = "argo-cd"
+confidence = 0.80

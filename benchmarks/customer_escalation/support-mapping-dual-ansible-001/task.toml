@@ -1,0 +1,123 @@
+# Support Code Mapping: Ansible Jinja2 template rendering error to source code
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "ansible-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "support-mapping-dual-ansible-001"
+suite = "customer_escalation"
+task_type = "support_code_mapping"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Map customer Jinja2 template rendering error to code across Ansible core and Jinja2 template engine"
+prompt = """
+A customer reports the following error when running an Ansible playbook:
+
+    fatal: [webserver01]: FAILED! => {"msg": "An unhandled exception occurred
+    while templating '{{ lookup('file', '/etc/ssl/certs/ca-bundle.crt') |
+    b64encode }}'. Error was a <class 'jinja2.exceptions.TemplateSyntaxError'>,
+    original message: unexpected char '\\xff' at 12"}
+
+The customer is using Ansible v2.16 with Jinja2 3.1.3. The template expression
+works in isolation with Python's Jinja2 but fails when run through Ansible's
+template engine. The customer suspects the issue is related to how Ansible
+pre-processes template strings before passing them to Jinja2.
+
+Your task:
+1. Find where Ansible's template engine invokes Jinja2 — locate the Templar
+   class, the template string preprocessing pipeline, and the do_template
+   method chain. Identify how Ansible handles non-UTF-8 content in template
+   expressions.
+2. Find where Jinja2 raises TemplateSyntaxError — locate the lexer, the
+   character validation logic, and the error handling for unexpected characters.
+   Identify the specific code path that rejects '\\xff' bytes.
+3. Trace the error chain: Ansible lookup plugin returns binary data → Ansible
+   template engine passes it to Jinja2 → Jinja2 lexer encounters non-UTF-8
+   bytes → TemplateSyntaxError is raised → Ansible wraps and displays the error.
+4. Identify the conditions under which this error occurs vs when binary data
+   is handled correctly (e.g., the b64encode filter should handle binary input).
+
+Write your analysis to /workspace/ERROR_PROVENANCE.md with:
+- Full error chain (file:function at each step)
+- Ansible template preprocessing code path
+- Jinja2 lexer character validation code path
+- Root cause: why b64encode filter is not applied before Jinja2 lexer validation
+- Alternative trigger conditions
+"""
+
+[[repos]]
+url = "https://github.com/ansible/ansible"
+rev = "v2.16.0"
+path = "ansible"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/pallets/jinja"
+rev = "3.1.3"
+path = "jinja"
+role = "upstream"
+
+[metadata]
+languages = ["python"]
+total_loc = 500_000
+dependency_depth = 2
+frameworks = ["ansible", "jinja2"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.40
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the error source across repos"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the error propagation chain"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.30
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies conditions that trigger the error"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing template error from Ansible's Templar class through Jinja2's lexer requires cross-repo search to follow the template processing pipeline across two Python codebases"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "lib/ansible/template/__init__.py"
+repo = "ansible"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/jinja2/lexer.py"
+repo = "jinja"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "lib/ansible/plugins/lookup/file.py"
+repo = "ansible"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "src/jinja2/exceptions.py"
+repo = "jinja"
+confidence = 0.80

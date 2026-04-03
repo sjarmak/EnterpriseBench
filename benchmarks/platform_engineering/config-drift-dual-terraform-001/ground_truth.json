@@ -1,0 +1,52 @@
+{
+  "task_id": "config-drift-dual-terraform-001",
+  "task_type": "config_drift",
+  "repos": [
+    {
+      "url": "https://github.com/hashicorp/terraform",
+      "rev": "v1.7.0",
+      "path": "terraform"
+    },
+    {
+      "url": "https://github.com/hashicorp/terraform-provider-aws",
+      "rev": "v5.31.0",
+      "path": "terraform-provider-aws"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "internal/terraform/eval_diff.go",
+      "repo": "terraform",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "internal/services/ec2/resource_aws_security_group.go",
+      "repo": "terraform-provider-aws",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "internal/terraform/eval_refresh.go",
+      "repo": "terraform",
+      "confidence": 0.85
+    },
+    {
+      "path": "internal/services/iam/resource_aws_iam_policy.go",
+      "repo": "terraform-provider-aws",
+      "confidence": 0.8
+    }
+  ],
+  "drift_points": [
+    {
+      "description": "Terraform core attribute comparison normalizes differently than AWS provider Read output for JSON policy documents",
+      "repos_involved": ["terraform", "terraform-provider-aws"]
+    },
+    {
+      "description": "Set vs list ordering for security group ingress/egress rules",
+      "repos_involved": ["terraform", "terraform-provider-aws"]
+    }
+  ]
+}

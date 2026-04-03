@@ -1,0 +1,139 @@
+# API Contract: xDS API contract across Envoy, Istio, and go-control-plane
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "service-mesh-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "api-contract-tri-envoy-001"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "expert"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Verify xDS API contract compliance across Envoy proxy, Istio pilot, and go-control-plane"
+prompt = """
+Your service mesh team runs Istio with Envoy sidecars. After upgrading to Istio
+1.20 with Envoy v1.28, some services experience intermittent 503 errors during
+configuration pushes. The xDS (discovery service) API is the contract between
+Istio's pilot (control plane) and Envoy (data plane), with go-control-plane
+providing the reference server implementation.
+
+The issue may be caused by xDS API version drift — Envoy v1.28 may expect
+xDS v3 resource types that Istio 1.20's pilot sends in a slightly different
+format, or go-control-plane's snapshot cache may not handle certain edge cases
+that Envoy's xDS client requires.
+
+Your task:
+1. Find where Envoy implements the xDS client — locate the ADS (Aggregated
+   Discovery Service) client, the resource type URL handling, and the config
+   subscription logic. Identify how Envoy validates incoming xDS responses
+   and handles version/nonce tracking.
+2. Find where Istio pilot generates xDS responses — locate the xDS server,
+   the config generation pipeline, and the resource serialization code.
+   Identify how pilot constructs CDS, EDS, LDS, and RDS responses.
+3. Find where go-control-plane implements the xDS server framework — locate
+   the snapshot cache, the ADS stream handler, and the resource versioning
+   logic. Identify how it handles type URL registration and resource ordering.
+4. Map contract compliance: where do the three implementations diverge in
+   xDS protocol handling (version negotiation, resource ordering, type URL
+   formats, incremental vs state-of-the-world).
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md with:
+- Envoy xDS client implementation (file paths)
+- Istio pilot xDS server implementation (file paths)
+- go-control-plane framework implementation (file paths)
+- Contract divergence points
+"""
+
+[[repos]]
+url = "https://github.com/envoyproxy/envoy"
+rev = "v1.28.0"
+path = "envoy"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/istio/istio"
+rev = "1.20.0"
+path = "istio"
+role = "consumer"
+
+[[repos]]
+url = "https://github.com/envoyproxy/go-control-plane"
+rev = "v0.12.0"
+path = "go-control-plane"
+role = "consumer"
+
+[metadata]
+languages = ["cpp", "go"]
+total_loc = 3_000_000
+dependency_depth = 3
+frameworks = ["envoy", "istio", "xds", "grpc"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "contract_source"
+weight = 0.30
+verifier = "checks/check_contract_source.sh"
+description = "Agent identifies xDS API definitions in Envoy"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "direct_consumers"
+weight = 0.40
+verifier = "checks/check_direct_consumers.sh"
+description = "Agent finds Istio and go-control-plane xDS implementations"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "transitive_impact"
+weight = 0.30
+verifier = "checks/check_transitive_impact.sh"
+description = "Agent traces xDS contract divergence across all three repos"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "xDS protocol implementation spans C++ (Envoy), Go (Istio, go-control-plane), and protobuf definitions requiring cross-language, cross-repo tracing of protocol compliance"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "source/common/config/grpc_subscription_impl.cc"
+repo = "envoy"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pilot/pkg/xds/ads.go"
+repo = "istio"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/server/v3/server.go"
+repo = "go-control-plane"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "source/common/config/subscription_base.h"
+repo = "envoy"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "pilot/pkg/xds/delta.go"
+repo = "istio"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "pkg/cache/v3/snapshot.go"
+repo = "go-control-plane"
+confidence = 0.85

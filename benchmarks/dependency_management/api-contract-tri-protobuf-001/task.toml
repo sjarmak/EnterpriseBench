@@ -1,0 +1,136 @@
+# API Contract: Protobuf definition compliance across gRPC runtime and googleapis
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "protobuf-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "api-contract-tri-protobuf-001"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "expert"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Verify protobuf well-known type contract compliance across protobuf compiler, gRPC runtime, and googleapis"
+prompt = """
+Your team maintains a gRPC-based microservice architecture that depends on
+protobuf well-known types (Timestamp, Duration, FieldMask, Struct, Any). After
+upgrading protobuf to v25.1 and gRPC to v1.60.0, some services report
+serialization errors when exchanging messages containing well-known types.
+
+The issue may stem from contract drift between how protobuf defines well-known
+types, how the gRPC C++ core runtime handles their serialization, and how
+googleapis common protos depend on specific well-known type behaviors.
+
+Your task:
+1. Find where protobuf defines the well-known types — locate the .proto files
+   and the language-specific runtime implementations (particularly the JSON
+   serialization for Timestamp, Duration, and Struct). Identify any v25.x
+   changes to serialization behavior.
+2. Find where the gRPC C++ core handles protobuf serialization — locate the
+   protobuf serialization integration, message codec, and any well-known type
+   special-casing in the gRPC runtime.
+3. Find where googleapis common protos reference well-known types — locate
+   the .proto files that import google/protobuf/*.proto and identify any
+   assumptions about serialization format or field presence.
+4. Map the contract chain: protobuf definitions → gRPC runtime serialization
+   → googleapis consumer expectations.
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md with:
+- Well-known type definition locations (protobuf repo)
+- gRPC serialization integration points
+- googleapis dependencies on well-known type behavior
+- Contract violations or drift points
+"""
+
+[[repos]]
+url = "https://github.com/protocolbuffers/protobuf"
+rev = "v25.1"
+path = "protobuf"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/grpc/grpc"
+rev = "v1.60.0"
+path = "grpc"
+role = "consumer"
+
+[[repos]]
+url = "https://github.com/googleapis/googleapis"
+rev = "common-protos-1_3_1"
+path = "googleapis"
+role = "consumer"
+
+[metadata]
+languages = ["protobuf", "cpp", "python"]
+total_loc = 2_000_000
+dependency_depth = 3
+frameworks = ["protobuf", "grpc", "googleapis"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "contract_source"
+weight = 0.30
+verifier = "checks/check_contract_source.sh"
+description = "Agent identifies well-known type definitions in protobuf"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "direct_consumers"
+weight = 0.40
+verifier = "checks/check_direct_consumers.sh"
+description = "Agent finds gRPC and googleapis consumers of well-known types"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "compliance_check"
+weight = 0.30
+verifier = "checks/check_compliance.sh"
+description = "Agent identifies contract compliance issues"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing protobuf well-known type definitions through gRPC C++ runtime serialization to googleapis .proto consumers requires cross-repo search across protobuf, C++, and proto files"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/google/protobuf/timestamp.proto"
+repo = "protobuf"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/core/ext/filters/message_size/message_size_filter.cc"
+repo = "grpc"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "google/api/httpbody.proto"
+repo = "googleapis"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/google/protobuf/duration.proto"
+repo = "protobuf"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "src/google/protobuf/struct.proto"
+repo = "protobuf"
+confidence = 0.90
+
+[[ground_truth.sufficient_files]]
+path = "google/rpc/status.proto"
+repo = "googleapis"
+confidence = 0.80

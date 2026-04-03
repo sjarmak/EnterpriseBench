@@ -1,0 +1,129 @@
+# Config Drift: Terraform core state handling vs AWS provider resource implementations
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "terraform-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "config-drift-dual-terraform-001"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Detect drift between Terraform core state refresh logic and AWS provider resource read implementations"
+prompt = """
+Your infrastructure team reports that `terraform plan` shows phantom diffs for
+several AWS resources — the plan proposes changes even when no configuration has
+been modified. The issue appeared after upgrading from Terraform 1.6.x to 1.7.0
+alongside terraform-provider-aws v5.31.0.
+
+The root cause is suspected to be drift between how Terraform core handles state
+refresh (reading current resource state and comparing to config) and how the AWS
+provider implements the Read function for specific resource types. Terraform core
+may normalize or flatten certain state attributes differently than the provider
+expects.
+
+Your task:
+1. Find where Terraform core implements the state refresh/plan diff logic —
+   locate the resource evaluation, state refresh, and diff computation code in
+   the `terraform/` package. Focus on how attributes are compared between prior
+   state and refreshed state.
+2. Find where the AWS provider implements Read functions for resources that
+   commonly cause phantom diffs (e.g., aws_security_group, aws_iam_policy,
+   aws_lambda_function). Identify how the provider normalizes attributes like
+   JSON policy documents, list ordering, and default values.
+3. Identify the specific drift points where Terraform core's attribute comparison
+   logic disagrees with the AWS provider's state representation — particularly
+   around JSON normalization, set vs list ordering, and computed default values.
+4. Document each drift point with source files from both repos.
+
+Write your analysis to /workspace/DRIFT_REPORT.json with:
+{
+  "drift_points": [
+    {
+      "config_key": "<resource attribute causing phantom diff>",
+      "terraform_core_behavior": "<how core handles comparison>",
+      "terraform_core_file": "<path in terraform repo>",
+      "provider_behavior": "<how AWS provider represents state>",
+      "provider_file": "<path in terraform-provider-aws repo>",
+      "impact": "<phantom diff description>"
+    }
+  ]
+}
+"""
+
+[[repos]]
+url = "https://github.com/hashicorp/terraform"
+rev = "v1.7.0"
+path = "terraform"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/hashicorp/terraform-provider-aws"
+rev = "v5.31.0"
+path = "terraform-provider-aws"
+role = "consumer"
+
+[metadata]
+languages = ["go"]
+total_loc = 3_500_000
+dependency_depth = 2
+frameworks = ["terraform", "aws"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "config_valid"
+weight = 0.20
+verifier = "checks/check_config_valid.sh"
+description = "Agent produces valid drift report JSON"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "drift_points"
+weight = 0.45
+verifier = "checks/check_drift_points.sh"
+description = "Agent identifies drift points between core and provider"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "expected_values"
+weight = 0.35
+verifier = "checks/check_expected_values.sh"
+description = "Agent documents correct root cause for phantom diffs"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["config"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing state comparison logic in Terraform core and matching it to provider Read implementations requires cross-repo symbol search across two very large Go codebases"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "internal/terraform/eval_diff.go"
+repo = "terraform"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "internal/services/ec2/resource_aws_security_group.go"
+repo = "terraform-provider-aws"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "internal/terraform/eval_refresh.go"
+repo = "terraform"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "internal/services/iam/resource_aws_iam_policy.go"
+repo = "terraform-provider-aws"
+confidence = 0.80

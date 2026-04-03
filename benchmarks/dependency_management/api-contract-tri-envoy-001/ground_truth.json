@@ -1,0 +1,64 @@
+{
+  "task_id": "api-contract-tri-envoy-001",
+  "task_type": "api_contract",
+  "repos": [
+    {
+      "url": "https://github.com/envoyproxy/envoy",
+      "rev": "v1.28.0",
+      "path": "envoy"
+    },
+    {
+      "url": "https://github.com/istio/istio",
+      "rev": "1.20.0",
+      "path": "istio"
+    },
+    {
+      "url": "https://github.com/envoyproxy/go-control-plane",
+      "rev": "v0.12.0",
+      "path": "go-control-plane"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "source/common/config/grpc_subscription_impl.cc",
+      "repo": "envoy",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "pilot/pkg/xds/ads.go",
+      "repo": "istio",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "pkg/server/v3/server.go",
+      "repo": "go-control-plane",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "source/common/config/subscription_base.h",
+      "repo": "envoy",
+      "confidence": 0.85
+    },
+    {
+      "path": "pilot/pkg/xds/delta.go",
+      "repo": "istio",
+      "confidence": 0.85
+    },
+    {
+      "path": "pkg/cache/v3/snapshot.go",
+      "repo": "go-control-plane",
+      "confidence": 0.85
+    }
+  ],
+  "contract_chain": [
+    "Envoy xDS client sends DiscoveryRequest with version_info and resource_names",
+    "Istio pilot receives request and generates DiscoveryResponse with updated resources",
+    "go-control-plane snapshot cache provides versioned resource snapshots to the server",
+    "Contract divergence in version/nonce handling between Envoy expectations and Istio responses"
+  ]
+}

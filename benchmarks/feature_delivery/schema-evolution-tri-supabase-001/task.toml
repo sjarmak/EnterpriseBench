@@ -1,0 +1,140 @@
+# DB Schema Evolution: Supabase migration impact on PostgREST auto-API and GoTrue auth
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "supabase-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "schema-evolution-tri-supabase-001"
+suite = "feature_delivery"
+task_type = "db_schema_evolution"
+difficulty = "expert"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Trace schema migration impact across Supabase core, PostgREST auto-API generation, and GoTrue auth tables"
+prompt = """
+Your team runs a Supabase-based platform. A schema migration adds a new RLS
+(Row Level Security) policy column to the auth.users table and modifies the
+auth.sessions table structure. After applying the migration, PostgREST's
+auto-generated API endpoints return unexpected 403 errors for authenticated
+users, and GoTrue's token refresh flow fails intermittently.
+
+The issue spans three repositories: the migration is defined in the Supabase
+monorepo, PostgREST auto-generates API routes from the database schema, and
+GoTrue directly queries auth tables with hardcoded column expectations.
+
+Your task:
+1. Find where Supabase defines the auth schema migrations — locate the SQL
+   migration files for auth.users and auth.sessions tables in the Supabase
+   monorepo. Identify the migration that modifies RLS policies and session
+   structure.
+2. Find where PostgREST discovers database schema to generate API endpoints —
+   locate the schema cache, table introspection, and RLS policy evaluation code.
+   Identify how PostgREST resolves permissions when RLS policies reference
+   columns it hasn't cached yet.
+3. Find where GoTrue queries auth tables — locate the session management,
+   token refresh, and user retrieval code. Identify all hardcoded column
+   references and table structure assumptions.
+4. Map the impact chain: which Supabase migration changes break which PostgREST
+   behaviors and which GoTrue queries.
+
+Write your analysis to /workspace/SCHEMA_IMPACT.md with:
+- Supabase migration changes (with file paths)
+- Affected PostgREST schema cache and API generation logic
+- Affected GoTrue query and session management code
+- Impact chain showing migration -> PostgREST failure -> GoTrue failure
+"""
+
+[[repos]]
+url = "https://github.com/supabase/supabase"
+rev = "v0.24.12"
+path = "supabase"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/PostgREST/postgrest"
+rev = "v12.0.2"
+path = "postgrest"
+role = "consumer"
+
+[[repos]]
+url = "https://github.com/supabase/gotrue"
+rev = "v2.143.0"
+path = "gotrue"
+role = "consumer"
+
+[metadata]
+languages = ["sql", "haskell", "go"]
+total_loc = 600_000
+dependency_depth = 3
+frameworks = ["supabase", "postgrest", "gotrue", "postgresql"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "schema_change"
+weight = 0.25
+verifier = "checks/check_schema_change.sh"
+description = "Agent identifies the schema migration in Supabase"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "direct_refs"
+weight = 0.30
+verifier = "checks/check_direct_refs.sh"
+description = "Agent finds direct references in PostgREST and GoTrue"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "indirect_refs"
+weight = 0.25
+verifier = "checks/check_indirect_refs.sh"
+description = "Agent traces indirect schema dependencies across repos"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "test_impact"
+weight = 0.20
+verifier = "checks/check_test_impact.sh"
+description = "Agent identifies test impact of schema changes"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = ["code_patch", "migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing SQL schema changes to Haskell schema cache introspection and Go query builders requires cross-language, cross-repo search across three different tech stacks"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "docker/volumes/db/init/00-initial-schema.sql"
+repo = "supabase"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/PostgREST/SchemaCache.hs"
+repo = "postgrest"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "internal/models/user.go"
+repo = "gotrue"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "src/PostgREST/ApiRequest.hs"
+repo = "postgrest"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "internal/api/token.go"
+repo = "gotrue"
+confidence = 0.85

@@ -1,0 +1,59 @@
+{
+  "task_id": "schema-evolution-tri-supabase-001",
+  "task_type": "db_schema_evolution",
+  "repos": [
+    {
+      "url": "https://github.com/supabase/supabase",
+      "rev": "v0.24.12",
+      "path": "supabase"
+    },
+    {
+      "url": "https://github.com/PostgREST/postgrest",
+      "rev": "v12.0.2",
+      "path": "postgrest"
+    },
+    {
+      "url": "https://github.com/supabase/gotrue",
+      "rev": "v2.143.0",
+      "path": "gotrue"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "docker/volumes/db/init/00-initial-schema.sql",
+      "repo": "supabase",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "src/PostgREST/SchemaCache.hs",
+      "repo": "postgrest",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "internal/models/user.go",
+      "repo": "gotrue",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "src/PostgREST/ApiRequest.hs",
+      "repo": "postgrest",
+      "confidence": 0.8
+    },
+    {
+      "path": "internal/api/token.go",
+      "repo": "gotrue",
+      "confidence": 0.85
+    }
+  ],
+  "impact_chain": [
+    "Supabase migration modifies auth.users table RLS policies and auth.sessions structure",
+    "PostgREST schema cache does not refresh automatically, serves stale RLS policy evaluation",
+    "PostgREST returns 403 because cached RLS policy references non-existent column state",
+    "GoTrue token refresh queries auth.sessions with hardcoded column assumptions that no longer match"
+  ]
+}
