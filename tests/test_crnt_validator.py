@@ -145,6 +145,87 @@ def _make_no_ground_truth_config() -> dict:
     }
 
 
+def _make_repo_deps_config() -> dict:
+    """A 2-repo task where each checkpoint has explicit repo_deps."""
+    return {
+        "task": {"id": "test-repodeps-001", "suite": "dependency_management"},
+        "repos": [
+            {
+                "url": "https://github.com/org/repo1",
+                "rev": "v1.0",
+                "path": "repo1",
+                "role": "primary",
+            },
+            {
+                "url": "https://github.com/org/repo2",
+                "rev": "v1.0",
+                "path": "repo2",
+                "role": "dependency",
+            },
+        ],
+        "checkpoints": [
+            {
+                "name": "cp_a",
+                "weight": 0.5,
+                "verifier": "checks/a.sh",
+                "repo_deps": ["repo1"],
+            },
+            {
+                "name": "cp_b",
+                "weight": 0.5,
+                "verifier": "checks/b.sh",
+                "repo_deps": ["repo2"],
+            },
+        ],
+        "ground_truth": {
+            "required_files": [
+                {"path": "src/main.py", "repo": "repo1"},
+                {"path": "lib/dep.py", "repo": "repo2"},
+            ]
+        },
+    }
+
+
+def _make_mixed_config() -> dict:
+    """A 2-repo task where one checkpoint has repo_deps, the other doesn't."""
+    return {
+        "task": {"id": "test-mixed-001", "suite": "feature_delivery"},
+        "repos": [
+            {
+                "url": "https://github.com/org/repo1",
+                "rev": "v1.0",
+                "path": "repo1",
+                "role": "primary",
+            },
+            {
+                "url": "https://github.com/org/repo2",
+                "rev": "v1.0",
+                "path": "repo2",
+                "role": "dependency",
+            },
+        ],
+        "checkpoints": [
+            {
+                "name": "explicit_cp",
+                "weight": 0.4,
+                "verifier": "checks/explicit.sh",
+                "repo_deps": ["repo1"],
+            },
+            {
+                "name": "heuristic_cp",
+                "weight": 0.6,
+                "verifier": "checks/heuristic.sh",
+            },
+        ],
+        "ground_truth": {
+            "required_files": [
+                {"path": "src/main.py", "repo": "repo1"},
+                {"path": "lib/dep.py", "repo": "repo2"},
+            ]
+        },
+    }
+
+
 # ── Test extract_repos ────────────────────────────────────────────
 
 
@@ -189,6 +270,18 @@ class TestExtractCheckpoints:
         cps = extract_checkpoints(config)
         assert abs(sum(cp.weight for cp in cps) - 1.0) < 1e-9
 
+    def test_extracts_repo_deps(self) -> None:
+        config = _make_repo_deps_config()
+        cps = extract_checkpoints(config)
+        assert cps[0].repo_deps == ("repo1",)
+        assert cps[1].repo_deps == ("repo2",)
+
+    def test_repo_deps_default_empty(self) -> None:
+        config = _make_multi_repo_config()
+        cps = extract_checkpoints(config)
+        for cp in cps:
+            assert cp.repo_deps == ()
+
 
 # ── Test map_checkpoints_to_repos ────────────────────────────────
 
@@ -213,6 +306,20 @@ class TestMapCheckpointsToRepos:
         # Both checkpoints map to both repos since both repos have required_files
         for cp_name, repos in mapping.items():
             assert repos == {"main-repo", "aux-repo"}
+
+    def test_repo_deps_anchors_to_declared_repos(self) -> None:
+        config = _make_repo_deps_config()
+        mapping = map_checkpoints_to_repos(config)
+        assert mapping["cp_a"] == {"repo1"}
+        assert mapping["cp_b"] == {"repo2"}
+
+    def test_mixed_config_anchoring(self) -> None:
+        config = _make_mixed_config()
+        mapping = map_checkpoints_to_repos(config)
+        # explicit_cp has repo_deps=["repo1"], anchored only to repo1
+        assert mapping["explicit_cp"] == {"repo1"}
+        # heuristic_cp has no repo_deps, falls back to gt_repos (both repos)
+        assert mapping["heuristic_cp"] == {"repo1", "repo2"}
 
 
 # ── Test generate_ablations ──────────────────────────────────────
@@ -276,6 +383,36 @@ class TestComputeMaxScore:
         assert score == pytest.approx(1.0)
         assert len(lost) == 0
 
+    def test_repo_deps_removing_repo1_keeps_cp_b(self) -> None:
+        """Removing repo1 loses cp_a (0.5) but keeps cp_b (0.5)."""
+        config = _make_repo_deps_config()
+        score, lost = compute_max_score_without_repo(config, "repo1")
+        assert score == pytest.approx(0.5)
+        assert lost == ("cp_a",)
+
+    def test_repo_deps_removing_repo2_keeps_cp_a(self) -> None:
+        """Removing repo2 loses cp_b (0.5) but keeps cp_a (0.5)."""
+        config = _make_repo_deps_config()
+        score, lost = compute_max_score_without_repo(config, "repo2")
+        assert score == pytest.approx(0.5)
+        assert lost == ("cp_b",)
+
+    def test_mixed_config_removing_repo1(self) -> None:
+        """Removing repo1 loses both checkpoints (explicit depends on repo1,
+        heuristic depends on both repos including repo1)."""
+        config = _make_mixed_config()
+        score, lost = compute_max_score_without_repo(config, "repo1")
+        assert score == pytest.approx(0.0)
+        assert set(lost) == {"explicit_cp", "heuristic_cp"}
+
+    def test_mixed_config_removing_repo2(self) -> None:
+        """Removing repo2 keeps explicit_cp (repo_deps=repo1 only),
+        loses heuristic_cp (depends on both repos)."""
+        config = _make_mixed_config()
+        score, lost = compute_max_score_without_repo(config, "repo2")
+        assert score == pytest.approx(0.4)
+        assert lost == ("heuristic_cp",)
+
 
 # ── Test evaluate_crnt ───────────────────────────────────────────
 
@@ -302,6 +439,25 @@ class TestEvaluateCRNT:
         config = _make_multi_repo_config()
         result = evaluate_crnt(config)
         assert len(result.repo_results) == 3
+
+    def test_repo_deps_dual_repo_passes_crnt(self) -> None:
+        """A dual-repo config with proper repo_deps passes CRNT because
+        removing either repo drops max_score to 0.5 (≤ 0.6 threshold)."""
+        config = _make_repo_deps_config()
+        result = evaluate_crnt(config)
+        assert result.passes_crnt is True
+        # Each ablation should yield max_score=0.5
+        for rr in result.repo_results:
+            assert rr.max_score_without == pytest.approx(0.5)
+            assert rr.passes_threshold is True
+
+    def test_repo_deps_differentiated_scores(self) -> None:
+        """Removing repo1 vs repo2 loses different checkpoints."""
+        config = _make_repo_deps_config()
+        result = evaluate_crnt(config)
+        rr_by_repo = {rr.removed_repo.path: rr for rr in result.repo_results}
+        assert rr_by_repo["repo1"].lost_checkpoints == ("cp_a",)
+        assert rr_by_repo["repo2"].lost_checkpoints == ("cp_b",)
 
 
 # ── Test format_result ───────────────────────────────────────────

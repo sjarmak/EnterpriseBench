@@ -60,6 +60,7 @@ class CheckpointInfo:
     weight: float
     verifier: str
     description: str = ""
+    repo_deps: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,7 @@ def extract_checkpoints(config: dict[str, Any]) -> tuple[CheckpointInfo, ...]:
             weight=c.get("weight", 0.0),
             verifier=c.get("verifier", ""),
             description=c.get("description", ""),
+            repo_deps=tuple(c.get("repo_deps", [])),
         )
         for c in cps
     )
@@ -138,8 +140,10 @@ def map_checkpoints_to_repos(
 ) -> dict[str, set[str]]:
     """Map checkpoint names to the set of repo paths they depend on.
 
-    Uses ground_truth.required_files to determine which repos each checkpoint
-    needs. If no ground_truth mapping exists, checkpoints are considered
+    Per-checkpoint anchoring: if a checkpoint has a non-empty repo_deps field,
+    it is anchored ONLY to those repos. Otherwise, falls back to the
+    ground_truth.required_files heuristic (all repos with required_files).
+    If no ground_truth mapping exists, checkpoints without repo_deps are
     anchored to ALL repos (conservative: removing any repo loses them).
     """
     checkpoints = extract_checkpoints(config)
@@ -149,22 +153,20 @@ def map_checkpoints_to_repos(
     # Build set of repos referenced in ground truth
     gt_repos: set[str] = {rf.get("repo", "") for rf in required_files if rf.get("repo")}
 
-    # If there's no ground_truth mapping at all, anchor every checkpoint to all repos
-    if not gt_repos:
-        all_repo_paths = {r.path for r in extract_repos(config)}
-        return {cp.name: all_repo_paths for cp in checkpoints}
+    # Fallback for checkpoints without repo_deps: use gt_repos if available,
+    # otherwise anchor to all repos (conservative).
+    all_repo_paths = {r.path for r in extract_repos(config)}
+    fallback_repos = gt_repos if gt_repos else all_repo_paths
 
-    # Heuristic: a checkpoint depends on a repo if required_files reference that repo.
-    # Since task.toml doesn't have explicit checkpoint→repo mapping, we use the
-    # ground_truth.required_files as a proxy. Each checkpoint is considered to depend
-    # on all repos that have required files (the checkpoint verifiers need those files).
-    #
-    # More precise: distribute repos across checkpoints proportionally. But since
-    # checkpoints typically span all repos in a multi-repo task, we use the conservative
-    # approach: each checkpoint depends on ALL repos that have required_files.
+    # Per-checkpoint anchoring: if a checkpoint declares repo_deps, use those directly.
+    # Otherwise fall back to the ground_truth heuristic (all repos with required_files,
+    # or all repos if no ground_truth exists).
     checkpoint_repos: dict[str, set[str]] = {}
     for cp in checkpoints:
-        checkpoint_repos[cp.name] = gt_repos.copy()
+        if cp.repo_deps:
+            checkpoint_repos[cp.name] = set(cp.repo_deps)
+        else:
+            checkpoint_repos[cp.name] = fallback_repos.copy()
 
     return checkpoint_repos
 
