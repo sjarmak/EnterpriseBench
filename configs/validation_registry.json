@@ -1441,36 +1441,6 @@
     ],
     "feature_delivery": [
       {
-        "task_id": "aspnetcore-code-review-001",
-        "suite": "feature_delivery",
-        "ready": true,
-        "has_instruction": true,
-        "has_ground_truth": true,
-        "has_dockerfile": false,
-        "has_dockerfile_hybrid": false,
-        "has_dockerfile_sg_only": false,
-        "has_environment_dir": false,
-        "has_checks_dir": true,
-        "has_test_sh": true,
-        "has_mirror_config": true,
-        "mirrors_indexed": true,
-        "schema_valid": true,
-        "weights_valid": true,
-        "scripts_valid": true,
-        "has_ground_truth_in_toml": true,
-        "has_tool_access": true,
-        "top_level_fields_present": true,
-        "error_count": 0,
-        "warning_count": 1,
-        "issues": [
-          {
-            "severity": "warning",
-            "check": "environment",
-            "message": "No environment/ directory"
-          }
-        ]
-      },
-      {
         "task_id": "camel-routing-arch-001",
         "suite": "feature_delivery",
         "ready": true,
@@ -2037,30 +2007,6 @@
     ],
     "incident_response": [
       {
-        "task_id": "ansible-abc-imports-fix-001",
-        "suite": "incident_response",
-        "ready": true,
-        "has_instruction": true,
-        "has_ground_truth": true,
-        "has_dockerfile": true,
-        "has_dockerfile_hybrid": true,
-        "has_dockerfile_sg_only": true,
-        "has_environment_dir": true,
-        "has_checks_dir": true,
-        "has_test_sh": true,
-        "has_mirror_config": true,
-        "mirrors_indexed": true,
-        "schema_valid": true,
-        "weights_valid": true,
-        "scripts_valid": true,
-        "has_ground_truth_in_toml": true,
-        "has_tool_access": true,
-        "top_level_fields_present": true,
-        "error_count": 0,
-        "warning_count": 0,
-        "issues": []
-      },
-      {
         "task_id": "ansible-galaxy-tar-regression-prove-001",
         "suite": "incident_response",
         "ready": true,
@@ -2586,30 +2532,6 @@
       }
     ],
     "technical_debt": [
-      {
-        "task_id": "beam-pipeline-builder-refac-001",
-        "suite": "technical_debt",
-        "ready": true,
-        "has_instruction": true,
-        "has_ground_truth": true,
-        "has_dockerfile": true,
-        "has_dockerfile_hybrid": true,
-        "has_dockerfile_sg_only": true,
-        "has_environment_dir": true,
-        "has_checks_dir": true,
-        "has_test_sh": true,
-        "has_mirror_config": true,
-        "mirrors_indexed": true,
-        "schema_valid": true,
-        "weights_valid": true,
-        "scripts_valid": true,
-        "has_ground_truth_in_toml": true,
-        "has_tool_access": true,
-        "top_level_fields_present": true,
-        "error_count": 0,
-        "warning_count": 0,
-        "issues": []
-      },
       {
         "task_id": "calibration-001",
         "suite": "technical_debt",

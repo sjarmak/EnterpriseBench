@@ -28,15 +28,18 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SessionConfig:
     """Configuration for a single session within a chain."""
+
     session_number: int
     prompt: str
     milestones: list[dict] = field(default_factory=list)
     context: dict = field(default_factory=dict)  # Extra context passed to agent
+    mode: str = "baseline"  # Tool access mode: baseline, mcp_only, hybrid
 
 
 @dataclass
 class SessionResult:
     """Result of running a single session."""
+
     session_number: int
     branch_state: BranchState | None = None
     agent_output: str = ""
@@ -79,8 +82,12 @@ def setup_workspace(
                 readme.write_text(f"# {repo['path']}\nSimulated repo for {task_id}\n")
                 _run_git(str(repo_path), "add", "-A")
                 _run_git(str(repo_path), "commit", "-m", "Initial simulated state")
-                logger.info("Initialized simulated repo: %s (would clone %s@%s)",
-                           repo_path, repo.get("url", "?"), repo.get("rev", "?"))
+                logger.info(
+                    "Initialized simulated repo: %s (would clone %s@%s)",
+                    repo_path,
+                    repo.get("url", "?"),
+                    repo.get("rev", "?"),
+                )
 
             # Create session 1 branch
             create_session_branch(str(repo_path), task_id, session_number)
@@ -195,8 +202,12 @@ def run_session(
         result.branch_state = branch_state
         result.success = True
 
-        logger.info("Session %d completed. Branch: %s, SHA: %s",
-                     session_num, branch_state.branch_name, branch_state.commit_sha[:8])
+        logger.info(
+            "Session %d completed. Branch: %s, SHA: %s",
+            session_num,
+            branch_state.branch_name,
+            branch_state.commit_sha[:8],
+        )
 
     except Exception as e:
         result.error = str(e)

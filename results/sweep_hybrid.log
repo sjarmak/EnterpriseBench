@@ -1,0 +1,349 @@
+INFO Matched 114 task(s)
+INFO Tool-access mode(s): hybrid
+INFO Parallel mode: 5 workers, 5 account(s)
+ERROR [error] bustub-hyperloglog-impl-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] bustub-hyperloglog-impl-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-mgmt-proto-v2-chain-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-mgmt-proto-v2-chain-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] ir-deploy-error-spike-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] ir-deploy-error-spike-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] cal-err-flask-blueprint-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-err-flask-blueprint-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] cal-err-click-flagval-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-err-click-flagval-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] cal-err-requests-proxy-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-err-requests-proxy-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] cal-err-flask-endpoint-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-err-flask-endpoint-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] cal-sup-click-sentinel-005 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-sup-click-sentinel-005 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] cal-sup-flask-errhandler-006 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-sup-flask-errhandler-006 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] cal-sup-requests-cabundle-007 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-sup-requests-cabundle-007 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] cal-sup-click-clirunner-008 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-sup-click-clirunner-008 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] chain-err-flask-import-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] chain-err-flask-import-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-k8s-job-starttime-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-k8s-job-starttime-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-grafana-jaeger-panic-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-grafana-jaeger-panic-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-k8s-nftables-sync-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-k8s-nftables-sync-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-k8s-poststarthook-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-k8s-poststarthook-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-k8s-sidecar-restart-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-k8s-sidecar-restart-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-k8s-sessionaffinity-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-k8s-sessionaffinity-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-k8s-utf8-envvar-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-k8s-utf8-envvar-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-tf-builtin-schema-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-tf-builtin-schema-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-tf-backend-nilptr-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-tf-backend-nilptr-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] error-trace-tf-backend-copypaste-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] error-trace-tf-backend-copypaste-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-envoy-connpool-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-envoy-connpool-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-llvm-assertion-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-llvm-assertion-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-grafana-import-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-grafana-import-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-grafana-alerts-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-grafana-alerts-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-k8s-eviction-005 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-k8s-eviction-005 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-firefox-css-crash-006 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-firefox-css-crash-006 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-libreoffice-formula-007 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-libreoffice-formula-007 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-qutebrowser-cache-008 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-qutebrowser-cache-008 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-element-threads-009 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-element-threads-009 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-element-unread-010 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-element-unread-010 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-nodebb-notif-011 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-nodebb-notif-011 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] support-map-kafka-bufpool-012 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] support-map-kafka-bufpool-012 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] api-contract-grpc-metadata-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] api-contract-grpc-metadata-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] api-contract-grpc-balancer-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] api-contract-grpc-balancer-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] api-contract-grpc-transport-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] api-contract-grpc-transport-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] api-contract-grpc-clientconn-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] api-contract-grpc-clientconn-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] api-contract-protobuf-v2-005 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] api-contract-protobuf-v2-005 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] api-contract-envoy-xds-v2-006 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] api-contract-envoy-xds-v2-006 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] api-contract-gocp-module-007 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] api-contract-gocp-module-007 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] api-contract-celgo-program-008 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] api-contract-celgo-program-008 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] ccx-dep-trace-106 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] ccx-dep-trace-106 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-005 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-005 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-006 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-006 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-007 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-007 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-008 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-008 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-009 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-009 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-010 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-010 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-011 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-011 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] dep-traversal-012 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dep-traversal-012 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] aspnetcore-code-review-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] aspnetcore-code-review-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] camel-routing-arch-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] camel-routing-arch-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-babel-ts-init-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-babel-ts-init-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-babel-decorators-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-babel-decorators-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-babel-metadata-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-babel-metadata-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-babel-forof-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-babel-forof-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-pnpm-lockfile-005 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-pnpm-lockfile-005 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-pnpm-lifecycle-006 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-pnpm-lifecycle-006 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-pnpm-sha256-007 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-pnpm-sha256-007 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-nextjs-og-008 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-nextjs-og-008 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-rustc-attr-009 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-rustc-attr-009 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] monorepo-boundary-rustc-statics-010 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] monorepo-boundary-rustc-statics-010 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-005 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-005 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-006 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-006 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-007 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-007 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-008 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-008 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-009 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-009 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] schema-evolution-010 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] schema-evolution-010 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] ansible-abc-imports-fix-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] ansible-abc-imports-fix-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] ansible-galaxy-tar-regression-prove-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] ansible-galaxy-tar-regression-prove-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] ccx-incident-032 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] ccx-incident-032 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] event-replay-click-ci-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] event-replay-click-ci-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] incident-inv-watch-cache-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] incident-inv-watch-cache-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] incident-inv-watch-delete-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] incident-inv-watch-delete-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] incident-inv-prom-parse-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] incident-inv-prom-parse-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] incident-inv-docker-shutdown-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] incident-inv-docker-shutdown-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.00
+ERROR [error] cal-drift-flask-config-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-drift-flask-config-001 [hybrid]  score=—  error  (0s)  cost=$0.24  cumulative=$0.24
+ERROR [error] cal-drift-click-envvar-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-drift-click-envvar-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] config-drift-consul-serf-port-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] config-drift-consul-serf-port-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] config-drift-scdf-rabbitmq-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] config-drift-scdf-rabbitmq-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] config-drift-redis-password-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] config-drift-redis-password-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] config-drift-argocd-redis-ha-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] config-drift-argocd-redis-ha-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] ccx-compliance-052 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] ccx-compliance-052 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] ccx-compliance-053 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] ccx-compliance-053 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] ceph-rgw-auth-secure-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] ceph-rgw-auth-secure-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] rbac-audit-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] rbac-audit-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] rbac-audit-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] rbac-audit-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] rbac-audit-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] rbac-audit-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] rbac-audit-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] rbac-audit-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] beam-pipeline-builder-refac-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] beam-pipeline-builder-refac-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] cal-dead-click-legacy-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-dead-click-legacy-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] cal-dead-flask-legacy-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] cal-dead-flask-legacy-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] dead-code-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dead-code-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] dead-code-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dead-code-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] dead-code-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dead-code-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] dead-code-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dead-code-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] dead-code-005 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] dead-code-005 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] refactor-orch-001 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] refactor-orch-001 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] refactor-orch-002 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] refactor-orch-002 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] refactor-orch-003 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] refactor-orch-003 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] refactor-orch-004 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] refactor-orch-004 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] refactor-orch-005 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] refactor-orch-005 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] refactor-orch-006 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] refactor-orch-006 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] refactor-orch-007 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] refactor-orch-007 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+ERROR [error] refactor-orch-008 — Can't pickle local object 'main.<locals>._run_with_account'
+INFO [done] refactor-orch-008 [hybrid]  score=—  error  (0s)  cost=$0.00  cumulative=$0.24
+
+task_id                                       mode         difficulty  score   duration status    
+--------------------------------------------------------------------------------------------------
+bustub-hyperloglog-impl-001                   hybrid       hard            —          — error     
+dep-mgmt-proto-v2-chain-001                   hybrid       hard            —          — error     
+ir-deploy-error-spike-001                     hybrid       hard            —          — error     
+cal-err-flask-blueprint-001                   hybrid       medium          —          — error     
+cal-err-click-flagval-002                     hybrid       medium          —          — error     
+cal-err-requests-proxy-003                    hybrid       medium          —          — error     
+cal-err-flask-endpoint-004                    hybrid       medium          —          — error     
+cal-sup-click-sentinel-005                    hybrid       medium          —          — error     
+cal-sup-flask-errhandler-006                  hybrid       medium          —          — error     
+cal-sup-requests-cabundle-007                 hybrid       medium          —          — error     
+cal-sup-click-clirunner-008                   hybrid       medium          —          — error     
+chain-err-flask-import-001                    hybrid       medium          —          — error     
+error-trace-k8s-job-starttime-001             hybrid       medium          —          — error     
+error-trace-grafana-jaeger-panic-001          hybrid       hard            —          — error     
+error-trace-k8s-nftables-sync-001             hybrid       hard            —          — error     
+error-trace-k8s-poststarthook-001             hybrid       expert          —          — error     
+error-trace-k8s-sidecar-restart-001           hybrid       hard            —          — error     
+error-trace-k8s-sessionaffinity-001           hybrid       medium          —          — error     
+error-trace-k8s-utf8-envvar-001               hybrid       hard            —          — error     
+error-trace-tf-builtin-schema-001             hybrid       hard            —          — error     
+error-trace-tf-backend-nilptr-001             hybrid       hard            —          — error     
+error-trace-tf-backend-copypaste-001          hybrid       medium          —          — error     
+support-map-envoy-connpool-001                hybrid       hard            —          — error     
+support-map-llvm-assertion-002                hybrid       hard            —          — error     
+support-map-grafana-import-003                hybrid       hard            —          — error     
+support-map-grafana-alerts-004                hybrid       hard            —          — error     
+support-map-k8s-eviction-005                  hybrid       hard            —          — error     
+support-map-firefox-css-crash-006             hybrid       hard            —          — error     
+support-map-libreoffice-formula-007           hybrid       hard            —          — error     
+support-map-qutebrowser-cache-008             hybrid       hard            —          — error     
+support-map-element-threads-009               hybrid       hard            —          — error     
+support-map-element-unread-010                hybrid       hard            —          — error     
+support-map-nodebb-notif-011                  hybrid       hard            —          — error     
+support-map-kafka-bufpool-012                 hybrid       expert          —          — error     
+api-contract-grpc-metadata-001                hybrid       hard            —          — error     
+api-contract-grpc-balancer-002                hybrid       hard            —          — error     
+api-contract-grpc-transport-003               hybrid       expert          —          — error     
+api-contract-grpc-clientconn-004              hybrid       hard            —          — error     
+api-contract-protobuf-v2-005                  hybrid       expert          —          — error     
+api-contract-envoy-xds-v2-006                 hybrid       expert          —          — error     
+api-contract-gocp-module-007                  hybrid       hard            —          — error     
+api-contract-celgo-program-008                hybrid       medium          —          — error     
+ccx-dep-trace-106                             hybrid       hard            —          — error     
+dep-traversal-001                             hybrid       medium          —          — error     
+dep-traversal-002                             hybrid       medium          —          — error     
+dep-traversal-003                             hybrid       medium          —          — error     
+dep-traversal-004                             hybrid       hard            —          — error     
+dep-traversal-005                             hybrid       hard            —          — error     
+dep-traversal-006                             hybrid       hard            —          — error     
+dep-traversal-007                             hybrid       hard            —          — error     
+dep-traversal-008                             hybrid       hard            —          — error     
+dep-traversal-009                             hybrid       hard            —          — error     
+dep-traversal-010                             hybrid       hard            —          — error     
+dep-traversal-011                             hybrid       expert          —          — error     
+dep-traversal-012                             hybrid       expert          —          — error     
+aspnetcore-code-review-001                    hybrid       medium          —          — error     
+camel-routing-arch-001                        hybrid       hard            —          — error     
+monorepo-boundary-babel-ts-init-001           hybrid       medium          —          — error     
+monorepo-boundary-babel-decorators-002        hybrid       expert          —          — error     
+monorepo-boundary-babel-metadata-003          hybrid       hard            —          — error     
+monorepo-boundary-babel-forof-004             hybrid       hard            —          — error     
+monorepo-boundary-pnpm-lockfile-005           hybrid       expert          —          — error     
+monorepo-boundary-pnpm-lifecycle-006          hybrid       hard            —          — error     
+monorepo-boundary-pnpm-sha256-007             hybrid       hard            —          — error     
+monorepo-boundary-nextjs-og-008               hybrid       hard            —          — error     
+monorepo-boundary-rustc-attr-009              hybrid       expert          —          — error     
+monorepo-boundary-rustc-statics-010           hybrid       hard            —          — error     
+schema-evolution-001                          hybrid       hard            —          — error     
+schema-evolution-002                          hybrid       hard            —          — error     
+schema-evolution-003                          hybrid       expert          —          — error     
+schema-evolution-004                          hybrid       hard            —          — error     
+schema-evolution-005                          hybrid       expert          —          — error     
+schema-evolution-006                          hybrid       hard            —          — error     
+schema-evolution-007                          hybrid       hard            —          — error     
+schema-evolution-008                          hybrid       hard            —          — error     
+schema-evolution-009                          hybrid       hard            —          — error     
+schema-evolution-010                          hybrid       hard            —          — error     
+INFO Summary written to /home/ds/EnterpriseBench/results/runs/20260401_213343/summary.json
+ansible-abc-imports-fix-001                   hybrid       medium          —          — error     
+ansible-galaxy-tar-regression-prove-001       hybrid       hard            —          — error     
+ccx-incident-032                              hybrid       hard            —          — error     
+event-replay-click-ci-001                     hybrid       medium          —          — error     
+incident-inv-watch-cache-001                  hybrid       hard            —          — error     
+incident-inv-watch-delete-002                 hybrid       hard            —          — error     
+incident-inv-prom-parse-003                   hybrid       hard            —          — error     
+incident-inv-docker-shutdown-004              hybrid       hard            —          — error     
+cal-drift-flask-config-001                    hybrid       medium          —          — error     
+cal-drift-click-envvar-002                    hybrid       medium          —          — error     
+config-drift-consul-serf-port-001             hybrid       medium          —          — error     
+config-drift-scdf-rabbitmq-002                hybrid       hard            —          — error     
+config-drift-redis-password-003               hybrid       hard            —          — error     
+config-drift-argocd-redis-ha-004              hybrid       medium          —          — error     
+ccx-compliance-052                            hybrid       hard            —          — error     
+ccx-compliance-053                            hybrid       hard            —          — error     
+ceph-rgw-auth-secure-001                      hybrid       hard            —          — error     
+rbac-audit-001                                hybrid       hard            —          — error     
+rbac-audit-002                                hybrid       hard            —          — error     
+rbac-audit-003                                hybrid       hard            —          — error     
+rbac-audit-004                                hybrid       hard            —          — error     
+beam-pipeline-builder-refac-001               hybrid       medium          —          — error     
+cal-dead-click-legacy-001                     hybrid       medium          —          — error     
+cal-dead-flask-legacy-002                     hybrid       medium          —          — error     
+dead-code-001                                 hybrid       hard            —          — error     
+dead-code-002                                 hybrid       hard            —          — error     
+dead-code-003                                 hybrid       hard            —          — error     
+dead-code-004                                 hybrid       expert          —          — error     
+dead-code-005                                 hybrid       expert          —          — error     
+refactor-orch-001                             hybrid       medium          —          — error     
+refactor-orch-002                             hybrid       medium          —          — error     
+refactor-orch-003                             hybrid       hard            —          — error     
+refactor-orch-004                             hybrid       hard            —          — error     
+refactor-orch-005                             hybrid       hard            —          — error     
+refactor-orch-006                             hybrid       hard            —          — error     
+refactor-orch-007                             hybrid       expert          —          — error     
+refactor-orch-008                             hybrid       expert          —          — error     

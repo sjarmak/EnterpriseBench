@@ -1,6 +1,6 @@
 {
   "_description": "Centralized repo index for EnterpriseBench. Consolidates configs/sg_mirrors/ into a single index. Each entry maps an sg-evals mirror name to its source GitHub repo, pinned commit, and metadata.",
-  "_generated": "2026-04-01",
+  "_generated": "2026-04-02",
   "_total_unique_repos": 131,
   "_total_mirror_files": 117,
   "suites": {

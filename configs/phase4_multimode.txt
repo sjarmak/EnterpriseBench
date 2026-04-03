@@ -10,7 +10,6 @@
 # Total runs needed: 66 tasks x 2 modes = 132 additional runs
 
 # incident_response (6)
-benchmarks/incident_response/ansible-abc-imports-fix-001/task.toml
 benchmarks/incident_response/ansible-galaxy-tar-regression-prove-001/task.toml
 benchmarks/incident_response/incident-investigation-001/task.toml
 benchmarks/incident_response/incident-investigation-002/task.toml
@@ -102,5 +101,4 @@ benchmarks/technical_debt/refactor-orchestration-005/task.toml
 benchmarks/technical_debt/refactor-orchestration-007/task.toml
 
 # technical_debt — other (2)
-benchmarks/technical_debt/beam-pipeline-builder-refac-001/task.toml
 benchmarks/technical_debt/calibration-002/task.toml

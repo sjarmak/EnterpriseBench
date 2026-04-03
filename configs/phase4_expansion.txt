@@ -1,0 +1,74 @@
+# Phase 4 Task Expansion — 47 tasks across 7 suites, 10 task types
+# Selection: unrun non-calibration tasks, maximizing diversity
+# Strata mix: large_single, dual_repo, multi_repo, tri_repo, monorepo_cross_package
+
+# customer_escalation — error_provenance (5)
+benchmarks/customer_escalation/err-provenance-01/task.toml
+benchmarks/customer_escalation/err-provenance-02/task.toml
+benchmarks/customer_escalation/err-provenance-03/task.toml
+benchmarks/customer_escalation/err-provenance-04/task.toml
+benchmarks/customer_escalation/err-provenance-05/task.toml
+
+# customer_escalation — support_code_mapping (5)
+benchmarks/customer_escalation/support-mapping-001/task.toml
+benchmarks/customer_escalation/support-mapping-003/task.toml
+benchmarks/customer_escalation/support-mapping-004/task.toml
+benchmarks/customer_escalation/support-mapping-005/task.toml
+benchmarks/customer_escalation/support-mapping-006/task.toml
+
+# dependency_management — api_contract (4)
+benchmarks/dependency_management/api-contract-001/task.toml
+benchmarks/dependency_management/api-contract-002/task.toml
+benchmarks/dependency_management/api-contract-005/task.toml
+benchmarks/dependency_management/api-contract-007/task.toml
+
+# dependency_management — dependency_graph (4)
+benchmarks/dependency_management/dep-traversal-001/task.toml
+benchmarks/dependency_management/dep-traversal-003/task.toml
+benchmarks/dependency_management/dep-traversal-005/task.toml
+benchmarks/dependency_management/dep-traversal-010/task.toml
+
+# feature_delivery — monorepo_boundary (4)
+benchmarks/feature_delivery/monorepo-boundary-001/task.toml
+benchmarks/feature_delivery/monorepo-boundary-002/task.toml
+benchmarks/feature_delivery/monorepo-boundary-005/task.toml
+benchmarks/feature_delivery/monorepo-boundary-008/task.toml
+
+# feature_delivery — db_schema_evolution (4)
+benchmarks/feature_delivery/schema-evolution-001/task.toml
+benchmarks/feature_delivery/schema-evolution-003/task.toml
+benchmarks/feature_delivery/schema-evolution-005/task.toml
+benchmarks/feature_delivery/schema-evolution-007/task.toml
+
+# feature_delivery — api_contract (1)
+benchmarks/feature_delivery/camel-routing-arch-001/task.toml
+
+# incident_response — incident_investigation (3)
+benchmarks/incident_response/incident-investigation-002/task.toml
+benchmarks/incident_response/incident-investigation-003/task.toml
+benchmarks/incident_response/incident-investigation-004/task.toml
+
+# incident_response — refactor_orchestration + error_provenance (2)
+benchmarks/incident_response/ansible-galaxy-tar-regression-prove-001/task.toml
+
+# platform_engineering — config_drift (4)
+benchmarks/platform_engineering/config-drift-001/task.toml
+benchmarks/platform_engineering/config-drift-002/task.toml
+benchmarks/platform_engineering/config-drift-003/task.toml
+benchmarks/platform_engineering/config-drift-004/task.toml
+
+# security_operations — config_drift + incident_investigation (5)
+benchmarks/security_operations/ccx-compliance-052/task.toml
+benchmarks/security_operations/ccx-compliance-053/task.toml
+benchmarks/security_operations/rbac-audit-001/task.toml
+benchmarks/security_operations/rbac-audit-002/task.toml
+benchmarks/security_operations/rbac-audit-003/task.toml
+
+# technical_debt — dead_code_necropsy (2)
+benchmarks/technical_debt/dead-code-001/task.toml
+benchmarks/technical_debt/dead-code-002/task.toml
+
+# technical_debt — refactor_orchestration (3)
+benchmarks/technical_debt/refactor-orchestration-001/task.toml
+benchmarks/technical_debt/refactor-orchestration-003/task.toml
+benchmarks/technical_debt/refactor-orchestration-005/task.toml

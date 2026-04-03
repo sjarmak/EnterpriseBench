@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ChainTaskDefinition:
     """Parsed chain task with per-session configuration."""
+
     task_id: str
     suite: str
     difficulty: str
@@ -54,6 +55,7 @@ class ChainTaskDefinition:
 @dataclass
 class ChainResult:
     """Complete result of running a chain task."""
+
     task_id: str
     total_sessions: int = 0
     session_results: list[SessionResult] = field(default_factory=list)
@@ -74,10 +76,14 @@ class ChainResult:
 
         lines.append("")
         for ms in self.milestone_scores:
-            lines.append(f"  Session {ms.session_number} milestones: {ms.total_score:.2f}")
+            lines.append(
+                f"  Session {ms.session_number} milestones: {ms.total_score:.2f}"
+            )
             for m in ms.milestones:
                 status = "PASS" if m.passed else "FAIL"
-                lines.append(f"    {m.milestone_name}: {status} ({m.score:.2f}) {m.message}")
+                lines.append(
+                    f"    {m.milestone_name}: {status} ({m.score:.2f}) {m.message}"
+                )
 
         lines.append(f"\nFinal score: {self.final_score:.2f}")
         lines.append(f"Total score: {self.total_score:.2f}")
@@ -101,7 +107,9 @@ def parse_chain_task(toml_path: str) -> ChainTaskDefinition:
 
     task = data["task"]
     if task.get("session_type") != "chain":
-        raise ValueError(f"Task {task['id']} is not a chain task (session_type={task.get('session_type')})")
+        raise ValueError(
+            f"Task {task['id']} is not a chain task (session_type={task.get('session_type')})"
+        )
 
     session_count = task.get("session_count", 2)
 
@@ -109,12 +117,14 @@ def parse_chain_task(toml_path: str) -> ChainTaskDefinition:
     sessions_data = data.get("sessions", [])
     sessions = []
     for i, s in enumerate(sessions_data):
-        sessions.append(SessionConfig(
-            session_number=i + 1,
-            prompt=s["prompt"],
-            milestones=s.get("milestones", []),
-            context=s.get("context", {}),
-        ))
+        sessions.append(
+            SessionConfig(
+                session_number=i + 1,
+                prompt=s["prompt"],
+                milestones=s.get("milestones", []),
+                context=s.get("context", {}),
+            )
+        )
 
     # Validate session count matches
     if len(sessions) != session_count:
@@ -141,6 +151,7 @@ def run_chain(
     simulate: bool = False,
     agent_callable=None,
     task_dir: str = "",
+    mode: str = "baseline",
 ) -> ChainResult:
     """Execute a full session chain.
 
@@ -151,15 +162,25 @@ def run_chain(
        d. Run milestone verifiers (if not the last session)
     2. After all sessions: run final checkpoints, compute total score.
     """
-    chain_result = ChainResult(task_id=task_def.task_id, total_sessions=task_def.session_count)
+    chain_result = ChainResult(
+        task_id=task_def.task_id, total_sessions=task_def.session_count
+    )
 
     if workspace_root is None:
         workspace_root = tempfile.mkdtemp(prefix=f"eb-chain-{task_def.task_id}-")
 
-    logger.info("Starting chain: %s (%d sessions) in %s",
-                task_def.task_id, task_def.session_count, workspace_root)
+    logger.info(
+        "Starting chain: %s (%d sessions) in %s",
+        task_def.task_id,
+        task_def.session_count,
+        workspace_root,
+    )
 
     previous_branch_state = None
+
+    # Propagate mode to all session configs
+    for sc in task_def.sessions:
+        sc.mode = mode
 
     for session_config in task_def.sessions:
         session_num = session_config.session_number
@@ -230,7 +251,9 @@ def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinitio
 
     # Final checkpoints have explicit weights; milestones are equal-weighted
     final_cp_names = {cp["name"] for cp in task_def.final_checkpoints}
-    final_cp_weights = {cp["name"]: cp.get("weight", 1.0) for cp in task_def.final_checkpoints}
+    final_cp_weights = {
+        cp["name"]: cp.get("weight", 1.0) for cp in task_def.final_checkpoints
+    }
 
     weighted_sum = 0.0
     weight_sum = 0.0
@@ -253,10 +276,18 @@ def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinitio
 def main():
     parser = argparse.ArgumentParser(description="Run a session-chain task")
     parser.add_argument("task_toml", help="Path to the chain task.toml file")
-    parser.add_argument("--simulate", action="store_true",
-                        help="Run in simulation mode (no real agent)")
-    parser.add_argument("--workspace", default=None,
-                        help="Workspace root directory (default: temp dir)")
+    parser.add_argument(
+        "--simulate", action="store_true", help="Run in simulation mode (no real agent)"
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["baseline", "mcp_only", "hybrid"],
+        default="baseline",
+        help="Tool access mode (default: baseline)",
+    )
+    parser.add_argument(
+        "--workspace", default=None, help="Workspace root directory (default: temp dir)"
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     # Passthrough args forwarded by run_benchmark.py (accepted but not used here)
     parser.add_argument("--source", choices=["mirror", "upstream"])
@@ -279,6 +310,7 @@ def main():
         workspace_root=args.workspace,
         simulate=args.simulate,
         task_dir=task_dir,
+        mode=args.mode,
     )
 
     print("\n" + "=" * 60)
@@ -288,12 +320,18 @@ def main():
     # Write result JSON
     result_path = Path(task_dir) / "chain_result.json"
     with open(result_path, "w") as f:
-        json.dump({
-            "task_id": result.task_id,
-            "total_score": result.total_score,
-            "sessions_completed": len([s for s in result.session_results if s.success]),
-            "sessions_total": len(result.session_results),
-        }, f, indent=2)
+        json.dump(
+            {
+                "task_id": result.task_id,
+                "total_score": result.total_score,
+                "sessions_completed": len(
+                    [s for s in result.session_results if s.success]
+                ),
+                "sessions_total": len(result.session_results),
+            },
+            f,
+            indent=2,
+        )
     print(f"\nResult written to: {result_path}")
 
 

@@ -1,75 +1,67 @@
 # Instruction Quality Audit Report
 
 **Date:** 2026-03-29
-**Tasks audited:** 97
+**Tasks audited:** 111
 
 ## Summary
 
 | Rating | Count |
 |--------|-------|
-| PASS | 47 |
-| WARN | 45 |
-| FAIL | 5 |
+| PASS | 59 |
+| WARN | 52 |
+| FAIL | 0 |
 
 ## Issue Frequency
 
 | Issue Category | Count |
 |---------------|-------|
-| Alignment: checkpoint concept missing | 26 |
-| GT leakage: FAIL-level file path leak (3+ paths) | 23 |
-| GT leakage: file path mentioned (1-2 paths) | 22 |
-| Completeness: no workspace location | 11 |
+| Alignment: checkpoint concept missing | 38 |
+| GT leakage: file path mentioned (1-2 paths) | 18 |
 | Realism: missing enterprise framing | 8 |
 | Completeness: no output format | 3 |
+| Completeness: no workspace location | 2 |
 
-## FAIL Tasks (5)
+## WARN Tasks (52)
 
-### dependency_management/ccx-dep-trace-106
+### customer_escalation/calibration-001
 
-- FAIL: Instruction reveals GT file path: gcc/passes.def
-- FAIL: Instruction reveals GT file path: gcc/passes.cc
-- FAIL: Instruction reveals GT file path: gcc/tree-pass.h
-- FAIL: Instruction reveals GT file path: gcc/pass_manager.h
-- FAIL: Instruction reveals GT file path: gcc/tree-ssa-dce.cc
-- FAIL: Instruction leaks 5 ground-truth file paths — gives away the answer
+- WARN: Checkpoint 'error_source' concept may not be addressed in instruction
 
-### feature_delivery/schema-evolution-009
+### customer_escalation/calibration-002
 
-- FAIL: Instruction reveals GT file path: src/sentry/backup/comparators.py
-- FAIL: Instruction reveals GT file path: src/sentry/migrations/0947_add_dashboard_last_visited_model.py
-- FAIL: Instruction reveals GT file path: src/sentry/testutils/helpers/backups.py
-- FAIL: Instruction leaks 3 ground-truth file paths — gives away the answer
+- WARN: Checkpoint 'error_source' concept may not be addressed in instruction
+- WARN: Checkpoint 'error_chain' concept may not be addressed in instruction
 
-### feature_delivery/schema-evolution-010
+### customer_escalation/calibration-003
 
-- FAIL: Instruction reveals GT file path: server/channels/app/view_test.go
-- FAIL: Instruction reveals GT file path: server/channels/api4/view_test.go
-- FAIL: Instruction reveals GT file path: server/public/model/view.go
-- FAIL: Instruction reveals GT file path: server/i18n/en.json
-- FAIL: Instruction reveals GT file path: server/channels/store/sqlstore/view_store.go
-- FAIL: Instruction reveals GT file path: server/channels/db/migrations/postgres/000167_views_drop_icon.up.sql
-- FAIL: Instruction reveals GT file path: server/public/model/view_test.go
-- FAIL: Instruction reveals GT file path: server/channels/store/storetest/view_store.go
-- FAIL: Instruction leaks 8 ground-truth file paths — gives away the answer
+- WARN: Checkpoint 'error_source' concept may not be addressed in instruction
+- WARN: Checkpoint 'error_chain' concept may not be addressed in instruction
 
-### security_operations/ceph-rgw-auth-secure-001
+### customer_escalation/calibration-004
 
-- FAIL: Instruction reveals GT file path: src/rgw/rgw_rest_s3.cc
-- FAIL: Instruction reveals GT file path: src/rgw/rgw_auth.h
-- FAIL: Instruction reveals GT file path: src/rgw/rgw_auth_s3.h
-- FAIL: Instruction reveals GT file path: src/rgw/rgw_auth_s3.cc
-- FAIL: Instruction leaks 4 ground-truth file paths — gives away the answer
+- WARN: Checkpoint 'error_source' concept may not be addressed in instruction
+- WARN: Checkpoint 'error_chain' concept may not be addressed in instruction
+
+### customer_escalation/calibration-005
+
+- WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
+
+### customer_escalation/calibration-006
+
+- WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
+
+### customer_escalation/calibration-007
+
+- WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
+
+### customer_escalation/calibration-008
+
+- WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
+
+### customer_escalation/chain-err-flask-import-001
+
 - WARN: Instruction lacks enterprise scenario framing (no ticket/report/narrative)
-
-### technical_debt/beam-pipeline-builder-refac-001
-
-- FAIL: Instruction reveals GT file path: sdks/java/core/src/main/java/org/apache/beam/sdk/options/PipelineOptionsValidator.java
-- FAIL: Instruction reveals GT file path: sdks/java/core/src/main/java/org/apache/beam/sdk/options/PipelineOptions.java
-- FAIL: Instruction reveals GT file path: sdks/java/core/src/main/java/org/apache/beam/sdk/options/PipelineOptionsFactory.java
-- FAIL: Instruction leaks 3 ground-truth file paths — gives away the answer
-- WARN: Instruction lacks enterprise scenario framing (no ticket/report/narrative)
-
-## WARN Tasks (45)
+- WARN: Instruction does not mention workspace/repository location
 
 ### customer_escalation/err-provenance-01
 
@@ -109,12 +101,10 @@
 
 ### customer_escalation/support-mapping-002
 
-- WARN: Instruction does not mention workspace/repository location
 - WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
 
 ### customer_escalation/support-mapping-003
 
-- WARN: Instruction does not mention workspace/repository location
 - WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
 
 ### customer_escalation/support-mapping-004
@@ -123,43 +113,32 @@
 
 ### customer_escalation/support-mapping-005
 
-- WARN: Instruction does not mention workspace/repository location
 - WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
-
-### customer_escalation/support-mapping-006
-
-- WARN: Instruction does not mention workspace/repository location
 
 ### customer_escalation/support-mapping-007
 
-- WARN: Instruction does not mention workspace/repository location
 - WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
 
 ### customer_escalation/support-mapping-008
 
-- WARN: Instruction does not mention workspace/repository location
 - WARN: Instruction does not specify expected output format or clear deliverables
 - WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
 
 ### customer_escalation/support-mapping-009
 
-- WARN: Instruction does not mention workspace/repository location
 - WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
 
 ### customer_escalation/support-mapping-010
 
-- WARN: Instruction does not mention workspace/repository location
 - WARN: Instruction does not specify expected output format or clear deliverables
 - WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
 
 ### customer_escalation/support-mapping-011
 
-- WARN: Instruction does not mention workspace/repository location
 - WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
 
 ### customer_escalation/support-mapping-012
 
-- WARN: Instruction does not mention workspace/repository location
 - WARN: Instruction does not specify expected output format or clear deliverables
 - WARN: Checkpoint 'code_paths' concept may not be addressed in instruction
 
@@ -182,18 +161,9 @@
 
 - WARN: Checkpoint 'identify_breaking_api' concept may not be addressed in instruction
 
-### dependency_management/dep-traversal-007
-
-- WARN: Instruction mentions GT file path: packages/grpc-js/package.json
-
 ### feature_delivery/aspnetcore-code-review-001
 
 - WARN: Instruction mentions GT file path: src/Components/Web/src/Forms/ExpressionMemberAccessor.cs
-- WARN: Instruction mentions GT file path: src/Components/Web/src/Forms/DisplayName.cs
-
-### feature_delivery/camel-routing-arch-001
-
-- WARN: Instruction does not mention workspace/repository location
 
 ### feature_delivery/monorepo-boundary-001
 
@@ -232,10 +202,10 @@
 
 - WARN: Checkpoint 'test_fails_on_buggy_code' concept may not be addressed in instruction
 
-### incident_response/incident-investigation-002
+### incident_response/event-replay-click-ci-001
 
-- WARN: Instruction mentions GT file path: staging/src/k8s.io/apiserver/pkg/storage/etcd3/watcher.go
-- WARN: Instruction mentions GT file path: staging/src/k8s.io/apiserver/pkg/storage/etcd/etcd_watcher.go
+- WARN: Instruction does not mention workspace/repository location
+- WARN: Checkpoint 'triage_severity' concept may not be addressed in instruction
 
 ### platform_engineering/config-drift-001
 
@@ -253,6 +223,10 @@
 
 - WARN: Instruction mentions GT file path: src/common/security/robot/context.go
 - WARN: Instruction mentions GT file path: src/server/v2.0/handler/robot.go
+
+### technical_debt/beam-pipeline-builder-refac-001
+
+- WARN: Instruction lacks enterprise scenario framing (no ticket/report/narrative)
 
 ### technical_debt/refactor-orchestration-003
 
@@ -274,7 +248,7 @@
 
 - WARN: Instruction lacks enterprise scenario framing (no ticket/report/narrative)
 
-## PASS Tasks (47)
+## PASS Tasks (59)
 
 ### customer_escalation/err-provenance-02
 
@@ -285,6 +259,10 @@
 - No issues found
 
 ### customer_escalation/err-provenance-09
+
+- No issues found
+
+### customer_escalation/support-mapping-006
 
 - No issues found
 
@@ -301,6 +279,10 @@
 - No issues found
 
 ### dependency_management/api-contract-008
+
+- No issues found
+
+### dependency_management/ccx-dep-trace-106
 
 - No issues found
 
@@ -328,6 +310,10 @@
 
 - No issues found
 
+### dependency_management/dep-traversal-007
+
+- No issues found
+
 ### dependency_management/dep-traversal-008
 
 - No issues found
@@ -345,6 +331,10 @@
 - No issues found
 
 ### dependency_management/dep-traversal-012
+
+- No issues found
+
+### feature_delivery/camel-routing-arch-001
 
 - No issues found
 
@@ -392,6 +382,14 @@
 
 - No issues found
 
+### feature_delivery/schema-evolution-009
+
+- No issues found
+
+### feature_delivery/schema-evolution-010
+
+- No issues found
+
 ### incident_response/ccx-incident-032
 
 - No issues found
@@ -400,11 +398,23 @@
 
 - No issues found
 
+### incident_response/incident-investigation-002
+
+- No issues found
+
 ### incident_response/incident-investigation-003
 
 - No issues found
 
 ### incident_response/incident-investigation-004
+
+- No issues found
+
+### platform_engineering/calibration-001
+
+- No issues found
+
+### platform_engineering/calibration-002
 
 - No issues found
 
@@ -424,11 +434,23 @@
 
 - No issues found
 
+### security_operations/ceph-rgw-auth-secure-001
+
+- No issues found
+
 ### security_operations/rbac-audit-002
 
 - No issues found
 
 ### security_operations/rbac-audit-004
+
+- No issues found
+
+### technical_debt/calibration-001
+
+- No issues found
+
+### technical_debt/calibration-002
 
 - No issues found
 
