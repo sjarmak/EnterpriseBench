@@ -1,0 +1,597 @@
+[
+  {
+    "url": "https://github.com/FasterXML/jackson-databind",
+    "pinned_rev": "jackson-databind-2.13.2",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/LibreOffice/core",
+    "pinned_rev": "61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/NodeBB/NodeBB",
+    "pinned_rev": "8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/angular/angular",
+    "pinned_rev": "891318e805da3cdfb9839bf6cb3412c15c146253",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/ansible/ansible",
+    "pinned_rev": "v2.16.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/apache/camel",
+    "pinned_rev": "camel-4.4.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/apache/druid",
+    "pinned_rev": "druid-26.0.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/apache/kafka",
+    "pinned_rev": "0753c489afad403fb6e78fda4c4a380e46f500c0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/apache/kafka",
+    "pinned_rev": "3.1.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/apache/kafka",
+    "pinned_rev": "3.7.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/apache/logging-log4j2",
+    "pinned_rev": "rel/2.14.1",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/argoproj/argo-cd",
+    "pinned_rev": "v2.14.0-rc3",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/aws/aws-cli",
+    "pinned_rev": "2.11.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/axios/axios",
+    "pinned_rev": "v0.21.1",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/babel/babel",
+    "pinned_rev": "v7.22.20",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/babel/babel",
+    "pinned_rev": "v7.23.5",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/babel/babel",
+    "pinned_rev": "v7.23.9",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/babel/babel",
+    "pinned_rev": "v7.25.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/bitnami/charts",
+    "pinned_rev": "130ffd163382dffd5762034291203a3ac2792fba",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/bitnami/charts",
+    "pinned_rev": "478a81c9e91d2c2cf867e70aeea81e10cbcab9ce",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/bitnami/charts",
+    "pinned_rev": "53aca51120f86086e6780dc0453b93fbf49766b4",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/boto/boto3",
+    "pinned_rev": "1.26.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/ceph/ceph",
+    "pinned_rev": "v19.2.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/curl/curl",
+    "pinned_rev": "curl-7_82_0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/discourse/discourse",
+    "pinned_rev": "168de52538632ae18b95c0757ab2ae5e21ff240c",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/discourse/discourse",
+    "pinned_rev": "290b435a727ed1d95aef554d60d8572eba7e818a",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/discourse/discourse",
+    "pinned_rev": "5d603ece49a296da47197bc91ea8e1d178d5772c",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/discourse/discourse",
+    "pinned_rev": "e7c3abb94b1db0ff811f991b873dcca9d589cd3a",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/dropwizard/dropwizard",
+    "pinned_rev": "v2.1.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/element-hq/element-web",
+    "pinned_rev": "526645c79160ab1ad4b4c3845de27d51263a405e",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/element-hq/element-web",
+    "pinned_rev": "8ebdcab7d92f90422776c4390363338dcfd98ba5",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/envoyproxy/envoy",
+    "pinned_rev": "v1.18.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/envoyproxy/envoy",
+    "pinned_rev": "v1.31.2",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/envoyproxy/go-control-plane",
+    "pinned_rev": "v0.12.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/envoyproxy/go-control-plane",
+    "pinned_rev": "v0.13.2",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/envoyproxy/go-control-plane",
+    "pinned_rev": "v0.9.8",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/etcd-io/etcd",
+    "pinned_rev": "v3.3.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/etcd-io/etcd",
+    "pinned_rev": "v3.3.10",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/etcd-io/etcd",
+    "pinned_rev": "v3.4.3",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/etcd-io/etcd",
+    "pinned_rev": "v3.5.12",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/etcd-io/etcd",
+    "pinned_rev": "v3.5.17",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/etcd-io/etcd",
+    "pinned_rev": "v3.5.9",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/etcd-io/etcd",
+    "pinned_rev": "v3.6.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/facebook/react",
+    "pinned_rev": "56408a5b12fa4099e9dbbeca7f6bc59e1307e507",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/facebook/react",
+    "pinned_rev": "9fba65efa50fe5f38e5664729d4aa6f85cf7be92",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/facebook/react",
+    "pinned_rev": "ab18f33d46171ed1963ae1ac955c5110bb1eb199",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/gcc-mirror/gcc",
+    "pinned_rev": "releases/gcc-14.2.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/getsentry/sentry",
+    "pinned_rev": "fad1fc61366a8162823603a9e86eafd96faa9c00",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/git/git",
+    "pinned_rev": "v2.35.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/go-chi/chi",
+    "pinned_rev": "v5.0.8",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/goharbor/harbor",
+    "pinned_rev": "v2.12.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/gohugoio/hugo",
+    "pinned_rev": "v0.111.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grafana/grafana",
+    "pinned_rev": "v10.1.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grafana/grafana",
+    "pinned_rev": "v10.2.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grafana/grafana",
+    "pinned_rev": "v9.5.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc-ecosystem/go-grpc-middleware",
+    "pinned_rev": "v1.4.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.14.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.27.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.4.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.46.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.58.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.62.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.68.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.70.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.71.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.72.1",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-go",
+    "pinned_rev": "v1.79.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc-node",
+    "pinned_rev": "v1.8.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/hashicorp/consul",
+    "pinned_rev": "v1.16.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/hashicorp/terraform",
+    "pinned_rev": "v1.10.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/hashicorp/terraform",
+    "pinned_rev": "v1.6.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/hashicorp/vault",
+    "pinned_rev": "v1.14.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/istio/istio",
+    "pinned_rev": "1.20.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/istio/istio",
+    "pinned_rev": "1.24.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/istio/istio",
+    "pinned_rev": "1.6.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/jestjs/jest",
+    "pinned_rev": "v29.0.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/keycloak/keycloak",
+    "pinned_rev": "6fd372cbe60dff025c30da9d69da00f74097b1b9",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/keycloak/keycloak",
+    "pinned_rev": "c8428c040a896696d9d0e99b37df509e59c6c7a4",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes-client/javascript",
+    "pinned_rev": "0.18.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.13.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.24.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.28.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.32.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.33.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.33.0-alpha.1",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.33.0-alpha.2",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.34.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.7.3",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes/kubernetes",
+    "pinned_rev": "v1.9.1",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/llvm/llvm-project",
+    "pinned_rev": "llvmorg-18.1.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/lodash/lodash",
+    "pinned_rev": "4.17.20",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/mattermost/mattermost",
+    "pinned_rev": "1349899f42212aab066a8d1a6caed08b7d3d2b53",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/microsoft/TypeScript",
+    "pinned_rev": "f7833b2a72309dd695b45cf2cf2187e2f2f264df",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/moby/moby",
+    "pinned_rev": "v28.0.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/mozilla/gecko-dev",
+    "pinned_rev": "1a843e2167f97a3789f9d8a7a9772586f0e1c16f",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/pallets/click",
+    "pinned_rev": "8.1.7",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/pallets/click",
+    "pinned_rev": "8.2.1",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/pallets/flask",
+    "pinned_rev": "3.1.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/pnpm/pnpm",
+    "pinned_rev": "v8.15.9",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/pnpm/pnpm",
+    "pinned_rev": "v9.15.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/projectcalico/calico",
+    "pinned_rev": "70ebb8c4fd8cd32233afce241f013d484b4bb860",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/prometheus/prometheus",
+    "pinned_rev": "v2.45.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/prometheus/prometheus",
+    "pinned_rev": "v2.46.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/protocolbuffers/protobuf-go",
+    "pinned_rev": "v1.32.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/psf/requests",
+    "pinned_rev": "v2.28.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/psf/requests",
+    "pinned_rev": "v2.32.3",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/qutebrowser/qutebrowser",
+    "pinned_rev": "v3.0.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/rust-lang/rust",
+    "pinned_rev": "1.76.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/rust-lang/rust",
+    "pinned_rev": "1.83.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/spf13/cobra",
+    "pinned_rev": "v1.10.2",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/spring-projects/spring-boot",
+    "pinned_rev": "v2.6.1",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/spring-projects/spring-boot",
+    "pinned_rev": "v2.7.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/urllib3/urllib3",
+    "pinned_rev": "1.26.16",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/vercel/next.js",
+    "pinned_rev": "v13.5.6",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/webpack/webpack",
+    "pinned_rev": "v5.64.0",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/zulip/zulip",
+    "pinned_rev": "38053e9c7cc59b5e3f7c26af49fc1bb57acf0b86",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/zulip/zulip",
+    "pinned_rev": "912c1b598458f89afa6814b3a19b95d4648e2371",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/zulip/zulip",
+    "pinned_rev": "f2a5dc949a7c0ec776b3729b2c92703292404127",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/zulip/zulip",
+    "pinned_rev": "faa06497ed09f65dc0c7ba510dc56ebd41fbe037",
+    "last_verified": "2026-04-02"
+  }
+]

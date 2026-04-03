@@ -8,31 +8,341 @@
       "_status": "pending_verification",
       "_indexed_count": 0,
       "_repo_count": 33,
-      "_task_count": 13
+      "_task_count": 13,
+      "repos": [
+        {
+          "name": "FasterXML/jackson-databind",
+          "url": "https://github.com/FasterXML/jackson-databind",
+          "_indexed": false
+        },
+        {
+          "name": "apache/druid",
+          "url": "https://github.com/apache/druid",
+          "_indexed": false
+        },
+        {
+          "name": "apache/kafka",
+          "url": "https://github.com/apache/kafka",
+          "_indexed": false
+        },
+        {
+          "name": "apache/logging-log4j2",
+          "url": "https://github.com/apache/logging-log4j2",
+          "_indexed": false
+        },
+        {
+          "name": "aws/aws-cli",
+          "url": "https://github.com/aws/aws-cli",
+          "_indexed": false
+        },
+        {
+          "name": "axios/axios",
+          "url": "https://github.com/axios/axios",
+          "_indexed": false
+        },
+        {
+          "name": "boto/boto3",
+          "url": "https://github.com/boto/boto3",
+          "_indexed": false
+        },
+        {
+          "name": "curl/curl",
+          "url": "https://github.com/curl/curl",
+          "_indexed": false
+        },
+        {
+          "name": "dropwizard/dropwizard",
+          "url": "https://github.com/dropwizard/dropwizard",
+          "_indexed": false
+        },
+        {
+          "name": "envoyproxy/go-control-plane",
+          "url": "https://github.com/envoyproxy/go-control-plane",
+          "_indexed": false
+        },
+        {
+          "name": "etcd-io/etcd",
+          "url": "https://github.com/etcd-io/etcd",
+          "_indexed": false
+        },
+        {
+          "name": "gcc-mirror/gcc",
+          "url": "https://github.com/gcc-mirror/gcc",
+          "_indexed": false
+        },
+        {
+          "name": "git/git",
+          "url": "https://github.com/git/git",
+          "_indexed": false
+        },
+        {
+          "name": "go-chi/chi",
+          "url": "https://github.com/go-chi/chi",
+          "_indexed": false
+        },
+        {
+          "name": "gohugoio/hugo",
+          "url": "https://github.com/gohugoio/hugo",
+          "_indexed": false
+        },
+        {
+          "name": "grafana/grafana",
+          "url": "https://github.com/grafana/grafana",
+          "_indexed": false
+        },
+        {
+          "name": "grpc/grpc-go",
+          "url": "https://github.com/grpc/grpc-go",
+          "_indexed": false
+        },
+        {
+          "name": "grpc/grpc-go",
+          "url": "https://github.com/grpc/grpc-go",
+          "_indexed": false
+        },
+        {
+          "name": "grpc/grpc-node",
+          "url": "https://github.com/grpc/grpc-node",
+          "_indexed": false
+        },
+        {
+          "name": "hashicorp/consul",
+          "url": "https://github.com/hashicorp/consul",
+          "_indexed": false
+        },
+        {
+          "name": "hashicorp/vault",
+          "url": "https://github.com/hashicorp/vault",
+          "_indexed": false
+        },
+        {
+          "name": "istio/istio",
+          "url": "https://github.com/istio/istio",
+          "_indexed": false
+        },
+        {
+          "name": "jestjs/jest",
+          "url": "https://github.com/jestjs/jest",
+          "_indexed": false
+        },
+        {
+          "name": "kubernetes-client/javascript",
+          "url": "https://github.com/kubernetes-client/javascript",
+          "_indexed": false
+        },
+        {
+          "name": "kubernetes/kubernetes",
+          "url": "https://github.com/kubernetes/kubernetes",
+          "_indexed": false
+        },
+        {
+          "name": "kubernetes/kubernetes",
+          "url": "https://github.com/kubernetes/kubernetes",
+          "_indexed": false
+        },
+        {
+          "name": "lodash/lodash",
+          "url": "https://github.com/lodash/lodash",
+          "_indexed": false
+        },
+        {
+          "name": "prometheus/prometheus",
+          "url": "https://github.com/prometheus/prometheus",
+          "_indexed": false
+        },
+        {
+          "name": "psf/requests",
+          "url": "https://github.com/psf/requests",
+          "_indexed": false
+        },
+        {
+          "name": "spring-projects/spring-boot",
+          "url": "https://github.com/spring-projects/spring-boot",
+          "_indexed": false
+        },
+        {
+          "name": "spring-projects/spring-boot",
+          "url": "https://github.com/spring-projects/spring-boot",
+          "_indexed": false
+        },
+        {
+          "name": "urllib3/urllib3",
+          "url": "https://github.com/urllib3/urllib3",
+          "_indexed": false
+        },
+        {
+          "name": "webpack/webpack",
+          "url": "https://github.com/webpack/webpack",
+          "_indexed": false
+        }
+      ]
     },
     "feature_delivery": {
       "_status": "pending_verification",
       "_indexed_count": 0,
       "_repo_count": 12,
-      "_task_count": 12
+      "_task_count": 12,
+      "repos": [
+        {
+          "name": "apache/camel",
+          "url": "https://github.com/apache/camel",
+          "_indexed": false
+        },
+        {
+          "name": "discourse/discourse",
+          "url": "https://github.com/discourse/discourse",
+          "_indexed": false
+        },
+        {
+          "name": "discourse/discourse",
+          "url": "https://github.com/discourse/discourse",
+          "_indexed": false
+        },
+        {
+          "name": "discourse/discourse",
+          "url": "https://github.com/discourse/discourse",
+          "_indexed": false
+        },
+        {
+          "name": "discourse/discourse",
+          "url": "https://github.com/discourse/discourse",
+          "_indexed": false
+        },
+        {
+          "name": "dotnet/aspnetcore",
+          "url": "https://github.com/dotnet/aspnetcore",
+          "_indexed": false
+        },
+        {
+          "name": "getsentry/sentry",
+          "url": "https://github.com/getsentry/sentry",
+          "_indexed": false
+        },
+        {
+          "name": "mattermost/mattermost",
+          "url": "https://github.com/mattermost/mattermost",
+          "_indexed": false
+        },
+        {
+          "name": "zulip/zulip",
+          "url": "https://github.com/zulip/zulip",
+          "_indexed": false
+        },
+        {
+          "name": "zulip/zulip",
+          "url": "https://github.com/zulip/zulip",
+          "_indexed": false
+        },
+        {
+          "name": "zulip/zulip",
+          "url": "https://github.com/zulip/zulip",
+          "_indexed": false
+        },
+        {
+          "name": "zulip/zulip",
+          "url": "https://github.com/zulip/zulip",
+          "_indexed": false
+        }
+      ]
     },
     "incident_response": {
       "_status": "pending_verification",
       "_indexed_count": 0,
       "_repo_count": 2,
-      "_task_count": 3
+      "_task_count": 3,
+      "repos": [
+        {
+          "name": "ansible/ansible",
+          "url": "https://github.com/ansible/ansible",
+          "_indexed": false
+        },
+        {
+          "name": "envoyproxy/envoy",
+          "url": "https://github.com/envoyproxy/envoy",
+          "_indexed": false
+        }
+      ]
     },
     "security_operations": {
       "_status": "pending_verification",
       "_indexed_count": 0,
       "_repo_count": 7,
-      "_task_count": 7
+      "_task_count": 7,
+      "repos": [
+        {
+          "name": "apache/kafka",
+          "url": "https://github.com/apache/kafka",
+          "_indexed": false
+        },
+        {
+          "name": "ceph/ceph",
+          "url": "https://github.com/ceph/ceph",
+          "_indexed": false
+        },
+        {
+          "name": "envoyproxy/envoy",
+          "url": "https://github.com/envoyproxy/envoy",
+          "_indexed": false
+        },
+        {
+          "name": "goharbor/harbor",
+          "url": "https://github.com/goharbor/harbor",
+          "_indexed": false
+        },
+        {
+          "name": "keycloak/keycloak",
+          "url": "https://github.com/keycloak/keycloak",
+          "_indexed": false
+        },
+        {
+          "name": "keycloak/keycloak",
+          "url": "https://github.com/keycloak/keycloak",
+          "_indexed": false
+        },
+        {
+          "name": "projectcalico/calico",
+          "url": "https://github.com/projectcalico/calico",
+          "_indexed": false
+        }
+      ]
     },
     "technical_debt": {
       "_status": "pending_verification",
       "_indexed_count": 0,
       "_repo_count": 6,
-      "_task_count": 6
+      "_task_count": 6,
+      "repos": [
+        {
+          "name": "angular/angular",
+          "url": "https://github.com/angular/angular",
+          "_indexed": false
+        },
+        {
+          "name": "apache/beam",
+          "url": "https://github.com/apache/beam",
+          "_indexed": false
+        },
+        {
+          "name": "facebook/react",
+          "url": "https://github.com/facebook/react",
+          "_indexed": false
+        },
+        {
+          "name": "facebook/react",
+          "url": "https://github.com/facebook/react",
+          "_indexed": false
+        },
+        {
+          "name": "facebook/react",
+          "url": "https://github.com/facebook/react",
+          "_indexed": false
+        },
+        {
+          "name": "microsoft/TypeScript",
+          "url": "https://github.com/microsoft/TypeScript",
+          "_indexed": false
+        }
+      ]
     }
   },
   "repos": [
