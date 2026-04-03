@@ -278,15 +278,31 @@ def build_index(mirrors: dict[str, Any], task_suites: dict[str, str]) -> dict[st
 
         repos_list.append(entry)
 
+    # Build per-suite repo lists from the flat repos list
+    suite_repo_entries: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for entry in repos_list:
+        github_repo = entry["github_repo"]
+        for s in entry.get("_suites", []):
+            suite_repo_entries[s].append(
+                {
+                    "name": github_repo,
+                    "url": f"https://github.com/{github_repo}",
+                    "_indexed": entry.get("_indexed", False),
+                }
+            )
+
     # Build suite summary section
     suites_summary: dict[str, Any] = {}
     for suite_name in sorted(suite_stats.keys()):
         stats = suite_stats[suite_name]
+        suite_repos = suite_repo_entries.get(suite_name, [])
+        indexed_count = sum(1 for r in suite_repos if r["_indexed"])
         suites_summary[suite_name] = {
             "_status": "pending_verification",
-            "_indexed_count": 0,
+            "_indexed_count": indexed_count,
             "_repo_count": stats["repos"],
             "_task_count": stats["tasks"],
+            "repos": suite_repos,
         }
 
     index: dict[str, Any] = {

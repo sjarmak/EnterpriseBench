@@ -1,8 +1,8 @@
 {
   "_description": "Centralized repo index for EnterpriseBench. Consolidates configs/sg_mirrors/ into a single index. Each entry maps an sg-evals mirror name to its source GitHub repo, pinned commit, and metadata.",
   "_generated": "2026-04-02",
-  "_total_unique_repos": 131,
-  "_total_mirror_files": 117,
+  "_total_unique_repos": 129,
+  "_total_mirror_files": 114,
   "suites": {
     "dependency_management": {
       "_status": "pending_verification",
@@ -180,8 +180,8 @@
     "feature_delivery": {
       "_status": "pending_verification",
       "_indexed_count": 0,
-      "_repo_count": 12,
-      "_task_count": 12,
+      "_repo_count": 11,
+      "_task_count": 11,
       "repos": [
         {
           "name": "apache/camel",
@@ -206,11 +206,6 @@
         {
           "name": "discourse/discourse",
           "url": "https://github.com/discourse/discourse",
-          "_indexed": false
-        },
-        {
-          "name": "dotnet/aspnetcore",
-          "url": "https://github.com/dotnet/aspnetcore",
           "_indexed": false
         },
         {
@@ -249,7 +244,7 @@
       "_status": "pending_verification",
       "_indexed_count": 0,
       "_repo_count": 2,
-      "_task_count": 3,
+      "_task_count": 2,
       "repos": [
         {
           "name": "ansible/ansible",
@@ -309,17 +304,12 @@
     "technical_debt": {
       "_status": "pending_verification",
       "_indexed_count": 0,
-      "_repo_count": 6,
-      "_task_count": 6,
+      "_repo_count": 5,
+      "_task_count": 5,
       "repos": [
         {
           "name": "angular/angular",
           "url": "https://github.com/angular/angular",
-          "_indexed": false
-        },
-        {
-          "name": "apache/beam",
-          "url": "https://github.com/apache/beam",
           "_indexed": false
         },
         {
@@ -400,22 +390,9 @@
       "_loc_estimate": 600000,
       "_tier": "A",
       "_indexed": false,
-      "_task_count": 2,
-      "_suites": [
-        "incident_response"
-      ]
-    },
-    {
-      "sg_name": "sg-evals/apache/beam--v2.55.0",
-      "github_repo": "apache/beam",
-      "commit": "v2.55.0",
-      "_language": "Java/Python",
-      "_loc_estimate": 1200000,
-      "_tier": "A",
-      "_indexed": false,
       "_task_count": 1,
       "_suites": [
-        "technical_debt"
+        "incident_response"
       ]
     },
     {
@@ -684,19 +661,6 @@
       "_language": "Ruby",
       "_loc_estimate": 350000,
       "_tier": "B",
-      "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "feature_delivery"
-      ]
-    },
-    {
-      "sg_name": "sg-evals/dotnet/aspnetcore--v9.0.0",
-      "github_repo": "dotnet/aspnetcore",
-      "commit": "v9.0.0",
-      "_language": "C#",
-      "_loc_estimate": 1500000,
-      "_tier": "A",
       "_indexed": false,
       "_task_count": 1,
       "_suites": [
