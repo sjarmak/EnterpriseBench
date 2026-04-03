@@ -1,0 +1,123 @@
+# Refactor Orchestration: JS compilation pipeline refactoring across Babel/webpack/Next.js
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "js-build-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "refactor-orchestration-tri-babel-001"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Plan refactoring JS compilation pipeline when Babel parser AST changes propagate through webpack's babel-loader to Next.js build"
+prompt = """
+As tech lead for a frontend platform team, you need to plan the rollout of a
+breaking change in the JavaScript compilation pipeline. Babel is refactoring
+its parser to produce a new AST node type for decorator metadata (stage 3
+decorators), which affects how webpack processes JavaScript through babel-loader
+and how Next.js configures its build pipeline.
+
+The dependency chain is:
+
+  babel -> webpack -> next.js
+
+The change: Babel's @babel/parser is adding a new DecoratorMetadata AST node.
+This requires updates to:
+- webpack's babel-loader to pass the correct parser options
+- webpack's tree-shaking to understand decorator side effects
+- Next.js's SWC/Babel configuration to support the new syntax
+- Next.js's next/font and next/image plugins that parse JS AST
+
+Your task is to produce a topologically sorted execution plan:
+
+1. Identify all repos requiring changes and in what order.
+2. Map the dependency relationships between repos.
+3. Produce a numbered, ordered list of repos to update.
+4. Identify any steps that can be done in parallel.
+5. Note which changes are breaking vs. compatible.
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of repos to update
+- Dependency graph explanation
+- Parallelization annotations
+- Risk assessment and breaking change annotations
+"""
+
+[[repos]]
+url = "https://github.com/babel/babel"
+rev = "v7.22.9"
+path = "babel"
+role = "upstream"
+
+[[repos]]
+url = "https://github.com/webpack/webpack"
+rev = "v5.88.2"
+path = "webpack"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/vercel/next.js"
+rev = "v13.4.12"
+path = "nextjs"
+role = "consumer"
+
+[metadata]
+languages = ["javascript"]
+total_loc = 2200000
+dependency_depth = 3
+frameworks = ["babel", "webpack", "nextjs"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies all repos requiring changes"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "3-repo JS build chain requires cross-repo package.json analysis and understanding how Babel AST changes propagate through webpack loaders to Next.js build config"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "packages/babel-parser/package.json"
+repo = "babel"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "package.json"
+repo = "webpack"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/next/package.json"
+repo = "nextjs"
+confidence = 0.95
+source = "deterministic"

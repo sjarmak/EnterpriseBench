@@ -1,0 +1,87 @@
+{
+  "task_id": "dep-traversal-tri-jackson-001",
+  "task_type": "dependency_graph",
+  "description": "Trace Jackson ObjectMapper module registration through Spring Framework HTTP converter into Spring Boot autoconfiguration",
+  "repos": [
+    {
+      "url": "https://github.com/FasterXML/jackson-databind",
+      "rev": "jackson-databind-2.15.2",
+      "path": "jackson-databind"
+    },
+    {
+      "url": "https://github.com/spring-projects/spring-framework",
+      "rev": "v6.0.11",
+      "path": "spring-framework"
+    },
+    {
+      "url": "https://github.com/spring-projects/spring-boot",
+      "rev": "v3.1.2",
+      "path": "spring-boot"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "src/main/java/com/fasterxml/jackson/databind/ObjectMapper.java",
+      "repo": "jackson-databind",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "spring-web/src/main/java/org/springframework/http/converter/json/MappingJackson2HttpMessageConverter.java",
+      "repo": "spring-framework",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/jackson/JacksonAutoConfiguration.java",
+      "repo": "spring-boot",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "spring-web/src/main/java/org/springframework/http/converter/json/Jackson2ObjectMapperBuilder.java",
+      "repo": "spring-framework",
+      "confidence": 0.85
+    },
+    {
+      "path": "src/main/java/com/fasterxml/jackson/databind/Module.java",
+      "repo": "jackson-databind",
+      "confidence": 0.8
+    }
+  ],
+  "dependency_chain": [
+    {
+      "from": "jackson-databind",
+      "to": "spring-framework",
+      "relationship": "ObjectMapper consumed by MappingJackson2HttpMessageConverter via Jackson2ObjectMapperBuilder",
+      "key_classes": [
+        "ObjectMapper",
+        "Module",
+        "Jackson2ObjectMapperBuilder",
+        "MappingJackson2HttpMessageConverter"
+      ]
+    },
+    {
+      "from": "spring-framework",
+      "to": "spring-boot",
+      "relationship": "Jackson2ObjectMapperBuilder customized by JacksonAutoConfiguration via Jackson2ObjectMapperBuilderCustomizer beans",
+      "key_classes": [
+        "JacksonAutoConfiguration",
+        "Jackson2ObjectMapperBuilderCustomizer"
+      ]
+    }
+  ],
+  "integration_path": [
+    "Jackson Module bean defined in ApplicationContext",
+    "JacksonAutoConfiguration detects Module beans via @ConditionalOnClass",
+    "Jackson2ObjectMapperBuilderCustomizer registers modules with builder",
+    "Jackson2ObjectMapperBuilder creates ObjectMapper with registered modules",
+    "MappingJackson2HttpMessageConverter uses configured ObjectMapper for REST serialization"
+  ],
+  "verification": {
+    "method": "source_analysis",
+    "verified": true
+  }
+}

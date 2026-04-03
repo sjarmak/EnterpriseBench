@@ -1,0 +1,123 @@
+# Refactor Orchestration: Spring Kafka listener container refactoring across Framework/Boot/Kafka
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "spring-kafka-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "refactor-orchestration-tri-spring-001"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Plan refactoring Spring Kafka's listener container threading model across spring-kafka, spring-framework messaging, and spring-boot autoconfiguration"
+prompt = """
+As tech lead for a platform team, you need to plan a refactoring of Spring
+Kafka's listener container threading model. The current KafkaMessageListenerContainer
+uses a single-threaded model per partition assignment, but the team wants to
+migrate to the ConcurrentMessageListenerContainer with configurable concurrency.
+
+This change cascades across three repos:
+
+  spring-kafka -> spring-framework -> spring-boot
+
+The dependency chain:
+- spring-kafka defines KafkaMessageListenerContainer and ConcurrentMessageListenerContainer,
+  plus the @KafkaListener annotation processing
+- spring-framework provides the core messaging abstractions (MessageListenerContainer,
+  MessageHandler, SmartLifecycle) that spring-kafka implements
+- spring-boot provides KafkaAutoConfiguration and KafkaProperties that wire the
+  listener containers with defaults
+
+Your task is to produce a topologically sorted execution plan:
+
+1. Identify all repos requiring changes and in what order.
+2. Map the dependency relationships between repos.
+3. Produce a numbered, ordered list of repos to update.
+4. Identify any steps that can be done in parallel.
+5. Note which changes are breaking vs. compatible.
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of repos to update
+- Dependency graph explanation
+- Parallelization annotations
+- Risk assessment and breaking change annotations
+"""
+
+[[repos]]
+url = "https://github.com/spring-projects/spring-kafka"
+rev = "v3.0.9"
+path = "spring-kafka"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/spring-projects/spring-framework"
+rev = "v6.0.11"
+path = "spring-framework"
+role = "upstream"
+
+[[repos]]
+url = "https://github.com/spring-projects/spring-boot"
+rev = "v3.1.2"
+path = "spring-boot"
+role = "consumer"
+
+[metadata]
+languages = ["java"]
+total_loc = 4000000
+dependency_depth = 3
+frameworks = ["spring-kafka", "spring-framework", "spring-boot"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies all repos requiring changes"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "3-repo dependency chain requires cross-repo interface analysis — Spring Kafka implements Spring Framework messaging interfaces, Spring Boot autoconfigures them"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "spring-kafka/src/main/java/org/springframework/kafka/listener/ConcurrentMessageListenerContainer.java"
+repo = "spring-kafka"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "spring-messaging/src/main/java/org/springframework/messaging/handler/annotation/support/MessageHandlerMethodFactory.java"
+repo = "spring-framework"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/kafka/KafkaAutoConfiguration.java"
+repo = "spring-boot"
+confidence = 0.95
+source = "deterministic"

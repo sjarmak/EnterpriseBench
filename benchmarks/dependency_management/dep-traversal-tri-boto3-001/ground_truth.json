@@ -1,0 +1,90 @@
+{
+  "task_id": "dep-traversal-tri-boto3-001",
+  "task_type": "dependency_graph",
+  "description": "Trace S3 multipart upload from boto3 through s3transfer to botocore",
+  "repos": [
+    {
+      "url": "https://github.com/boto/boto3",
+      "rev": "1.28.0",
+      "path": "boto3"
+    },
+    {
+      "url": "https://github.com/boto/s3transfer",
+      "rev": "0.6.1",
+      "path": "s3transfer"
+    },
+    {
+      "url": "https://github.com/boto/botocore",
+      "rev": "1.31.0",
+      "path": "botocore"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "boto3/s3/transfer.py",
+      "repo": "boto3",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "s3transfer/manager.py",
+      "repo": "s3transfer",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "botocore/client.py",
+      "repo": "botocore",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "s3transfer/tasks.py",
+      "repo": "s3transfer",
+      "confidence": 0.85
+    },
+    {
+      "path": "botocore/serialize.py",
+      "repo": "botocore",
+      "confidence": 0.8
+    }
+  ],
+  "dependency_chain": [
+    {
+      "from": "boto3",
+      "to": "s3transfer",
+      "relationship": "boto3 S3 resource upload_file delegates to s3transfer TransferManager",
+      "key_classes": ["S3Transfer", "TransferConfig", "upload_file"]
+    },
+    {
+      "from": "s3transfer",
+      "to": "botocore",
+      "relationship": "s3transfer MultipartUploader calls botocore client for CreateMultipartUpload/UploadPart/CompleteMultipartUpload",
+      "key_classes": [
+        "TransferManager",
+        "MultipartUploader",
+        "UploadSubmissionTask"
+      ]
+    }
+  ],
+  "integration_path": [
+    "boto3 S3 resource upload_file called with file path and optional TransferConfig",
+    "boto3 S3Transfer delegates to s3transfer TransferManager.upload",
+    "TransferManager checks multipart_threshold to decide single vs multipart upload",
+    "MultipartUploader splits file into chunks and submits UploadPart tasks concurrently",
+    "Each UploadPart task calls botocore S3 client upload_part operation",
+    "After all parts complete, CompleteMultipartUpload is called via botocore client",
+    "botocore serializes API calls to HTTP requests with retry logic"
+  ],
+  "configuration_options": [
+    "boto3: TransferConfig(multipart_threshold, max_concurrency, multipart_chunksize, num_download_attempts)",
+    "s3transfer: TransferManager max_request_concurrency, max_submission_concurrency",
+    "botocore: retry configuration, connect_timeout, read_timeout"
+  ],
+  "verification": {
+    "method": "source_analysis",
+    "verified": true
+  }
+}

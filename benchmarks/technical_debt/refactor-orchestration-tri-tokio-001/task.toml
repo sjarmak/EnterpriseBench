@@ -1,0 +1,120 @@
+# Refactor Orchestration: Async HTTP handler trait refactoring across tokio/hyper/axum
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "rust-async-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "refactor-orchestration-tri-tokio-001"
+suite = "technical_debt"
+task_type = "refactor_orchestration"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Plan refactoring async HTTP handler chain when tokio runtime trait changes propagate through hyper to axum"
+prompt = """
+As tech lead for a Rust microservices platform, you need to plan the rollout
+of a breaking change in the async HTTP stack. The tokio project is refactoring
+its runtime builder API to support configurable task schedulers, which affects
+how hyper spawns connection handlers and how axum bootstraps its server.
+
+The dependency chain is:
+
+  tokio -> hyper -> axum
+
+The change: tokio's Runtime::new() builder is adding a required scheduler
+configuration parameter. This breaks hyper's default server implementation
+that calls tokio::spawn internally, and axum's Server::bind which depends on
+hyper's server builder.
+
+Your task is to produce a topologically sorted execution plan:
+
+1. Identify all repos requiring changes and in what order.
+2. Map the dependency relationships between repos.
+3. Produce a numbered, ordered list of repos to update.
+4. Identify any steps that can be done in parallel.
+5. Note which changes are breaking vs. compatible.
+
+Write your plan to /workspace/REFACTOR_PLAN.md with:
+- Numbered ordering of repos to update
+- Dependency graph explanation
+- Parallelization annotations
+- Risk assessment and breaking change annotations
+"""
+
+[[repos]]
+url = "https://github.com/tokio-rs/tokio"
+rev = "tokio-1.29.1"
+path = "tokio"
+role = "upstream"
+
+[[repos]]
+url = "https://github.com/hyperium/hyper"
+rev = "v1.0.0-rc.4"
+path = "hyper"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/tokio-rs/axum"
+rev = "axum-v0.6.19"
+path = "axum"
+role = "consumer"
+
+[metadata]
+languages = ["rust"]
+total_loc = 320000
+dependency_depth = 3
+frameworks = ["tokio", "hyper", "axum"]
+multi_repo_pattern = "orchestrate"
+
+[[checkpoints]]
+name = "identify_repos"
+weight = 0.25
+verifier = "checks/check_repo_set.sh"
+description = "Agent identifies all repos requiring changes"
+timeout_seconds = 30
+
+[[checkpoints]]
+name = "topological_order"
+weight = 0.45
+verifier = "checks/check_topo_order.sh"
+description = "Agent produces valid topological ordering"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "parallelism"
+weight = 0.30
+verifier = "checks/check_parallelism.sh"
+description = "Agent correctly identifies parallelizable steps"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer", "topological_order"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "3-repo Rust dependency chain requires cross-repo Cargo.toml analysis and trait compatibility checking across tokio/hyper/axum"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "tokio/Cargo.toml"
+repo = "tokio"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "Cargo.toml"
+repo = "hyper"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "axum/Cargo.toml"
+repo = "axum"
+confidence = 0.95
+source = "deterministic"

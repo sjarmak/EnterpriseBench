@@ -1,0 +1,126 @@
+# Dependency Graph Traversal: S3 multipart upload from boto3 through s3transfer to botocore
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "aws-python-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "dep-traversal-tri-boto3-001"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace S3 multipart upload from boto3's high-level resource API through s3transfer's transfer manager to botocore's low-level API calls"
+prompt = """
+A developer reports that large file uploads to S3 via boto3 are failing
+intermittently with timeout errors. The uploads work for small files but fail
+for files over 100MB. You suspect the issue is in the multipart upload
+configuration chain that spans three libraries.
+
+Your task:
+1. In boto3, find the S3 resource's upload_file method and trace how it
+   delegates to s3transfer. Identify the configuration options (multipart
+   threshold, max concurrency, chunk size) and where they are set.
+2. In s3transfer, find the MultipartUploader and TransferManager classes. Trace
+   how a large file upload is split into parts, how parts are uploaded
+   concurrently, and how the upload is finalized with CompleteMultipartUpload.
+3. In botocore, find the low-level S3 client operations: CreateMultipartUpload,
+   UploadPart, and CompleteMultipartUpload. Trace how botocore serializes these
+   API calls and handles retries.
+4. Document the complete chain showing how a single boto3 upload_file call
+   flows through the three libraries to produce multiple S3 API calls.
+
+Write your analysis to /workspace/DEPENDENCY_TRACE.md with:
+- boto3 high-level API entry points and configuration
+- s3transfer's multipart upload orchestration
+- botocore's low-level API call serialization
+- Configuration options that affect upload behavior at each layer
+"""
+
+[[repos]]
+url = "https://github.com/boto/boto3"
+rev = "1.28.0"
+path = "boto3"
+role = "consumer"
+
+[[repos]]
+url = "https://github.com/boto/s3transfer"
+rev = "0.6.1"
+path = "s3transfer"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/boto/botocore"
+rev = "1.31.0"
+path = "botocore"
+role = "upstream"
+
+[metadata]
+languages = ["python"]
+total_loc = 450000
+dependency_depth = 3
+frameworks = ["boto3", "s3transfer", "botocore"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_api_surface"
+weight = 0.25
+verifier = "checks/check_api_surface.sh"
+description = "Agent identifies the key classes and entry points in all three repos"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_transfer_path"
+weight = 0.40
+verifier = "checks/check_transfer_path.sh"
+description = "Agent traces the multipart upload flow across the three libraries"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "botocore_integration"
+weight = 0.35
+verifier = "checks/check_botocore.sh"
+description = "Agent identifies botocore's low-level API operations and retry logic"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing Python method delegation across boto3/s3transfer/botocore requires cross-repo class hierarchy search and understanding dynamic dispatch patterns"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "boto3/s3/transfer.py"
+repo = "boto3"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "s3transfer/manager.py"
+repo = "s3transfer"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "botocore/client.py"
+repo = "botocore"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "s3transfer/tasks.py"
+repo = "s3transfer"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "botocore/serialize.py"
+repo = "botocore"
+confidence = 0.80

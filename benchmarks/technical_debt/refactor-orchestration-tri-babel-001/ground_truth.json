@@ -1,0 +1,56 @@
+{
+  "candidate_id": "refactor-orchestration-tri-babel-001",
+  "description": "JS compilation pipeline refactoring across Babel parser, webpack bundler, and Next.js framework",
+  "repos": ["babel/babel", "webpack/webpack", "vercel/next.js"],
+  "merge_order": [
+    {
+      "repo": "babel/babel",
+      "description": "Add DecoratorMetadata AST node to @babel/parser, update @babel/types and @babel/traverse for new node type"
+    },
+    {
+      "repo": "webpack/webpack",
+      "description": "Update babel-loader parser options passthrough, update tree-shaking to handle decorator side effects with new AST node"
+    },
+    {
+      "repo": "vercel/next.js",
+      "description": "Update Next.js Babel/SWC configuration to support new decorator syntax, update next/font and next/image AST parsing"
+    }
+  ],
+  "dependency_graph": {
+    "babel/babel": [],
+    "webpack/webpack": ["babel/babel"],
+    "vercel/next.js": ["babel/babel", "webpack/webpack"]
+  },
+  "required_files": [
+    {
+      "path": "packages/babel-parser/package.json",
+      "repo": "babel",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "package.json",
+      "repo": "webpack",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "packages/next/package.json",
+      "repo": "nextjs",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "parallelizable_steps": [],
+  "breaking_changes": [
+    "babel: New AST node type may break plugins that exhaustively match on node types",
+    "webpack: babel-loader configuration changes may require updates to webpack.config.js in consumer projects",
+    "next.js: next.config.js babel configuration changes, SWC fallback behavior may change"
+  ],
+  "difficulty": "hard",
+  "confidence": 0.9,
+  "verification": {
+    "method": "dependency_analysis",
+    "verified": true
+  }
+}

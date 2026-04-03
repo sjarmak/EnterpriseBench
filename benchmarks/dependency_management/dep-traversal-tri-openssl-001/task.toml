@@ -1,0 +1,132 @@
+# Dependency Graph Traversal: TLS certificate verification from git through curl to OpenSSL
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "tls-native-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "dep-traversal-tri-openssl-001"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace TLS certificate verification from git's HTTP transport through libcurl to OpenSSL's X509 verification chain"
+prompt = """
+A developer reports that `git clone https://...` fails with a TLS certificate
+verification error on a corporate network with a custom CA. The error is:
+
+    fatal: unable to access 'https://...': SSL certificate problem:
+    unable to get local issuer certificate
+
+Your task is to trace the full TLS verification path from git's HTTPS transport
+through libcurl to OpenSSL to understand every configuration point where
+certificate verification can be customized or can fail.
+
+Your task:
+1. In git, find the HTTP transport code that initiates HTTPS connections. Trace
+   how git configures curl for SSL — find where http.sslCAInfo, http.sslVerify,
+   and GIT_SSL_CAINFO are read and passed to curl.
+2. In curl, trace how libcurl configures OpenSSL for TLS. Find the code path
+   from curl_easy_setopt(CURLOPT_CAINFO) through the OpenSSL backend to where
+   SSL_CTX_load_verify_locations is called.
+3. In OpenSSL, find the X509 certificate chain verification code. Trace from
+   SSL_CTX_load_verify_locations through to X509_verify_cert and identify where
+   the "unable to get local issuer certificate" error (X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY)
+   is generated.
+4. Document the complete chain: git config -> curl options -> OpenSSL calls ->
+   verification result -> error propagation back to git.
+
+Write your analysis to /workspace/DEPENDENCY_TRACE.md with:
+- Git's SSL configuration entry points
+- Curl's OpenSSL backend integration
+- OpenSSL's X509 verification chain
+- All configuration knobs that affect certificate verification
+"""
+
+[[repos]]
+url = "https://github.com/openssl/openssl"
+rev = "openssl-3.1.1"
+path = "openssl"
+role = "upstream"
+
+[[repos]]
+url = "https://github.com/curl/curl"
+rev = "curl-8_1_2"
+path = "curl"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/git/git"
+rev = "v2.41.0"
+path = "git"
+role = "consumer"
+
+[metadata]
+languages = ["c"]
+total_loc = 2800000
+dependency_depth = 3
+frameworks = ["openssl", "libcurl"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_tls_entry"
+weight = 0.25
+verifier = "checks/check_tls_entry.sh"
+description = "Agent identifies git's HTTP/TLS configuration entry points"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_curl_integration"
+weight = 0.40
+verifier = "checks/check_curl_integration.sh"
+description = "Agent traces curl's OpenSSL backend configuration path"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "openssl_verification"
+weight = 0.35
+verifier = "checks/check_openssl_verify.sh"
+description = "Agent identifies OpenSSL X509 verification chain and error origin"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing C function calls across git/curl/OpenSSL requires cross-repo symbol search — function pointers and callbacks make static analysis essential"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "http.c"
+repo = "git"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "lib/vtls/openssl.c"
+repo = "curl"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "crypto/x509/x509_vfy.c"
+repo = "openssl"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "http.h"
+repo = "git"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "lib/urldata.h"
+repo = "curl"
+confidence = 0.75

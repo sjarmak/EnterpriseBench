@@ -1,0 +1,130 @@
+# Dependency Graph Traversal: Jackson ObjectMapper through Spring Framework into Spring Boot autoconfiguration
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "spring-jackson-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "dep-traversal-tri-jackson-001"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace Jackson ObjectMapper integration through Spring Framework's HTTP message converters into Spring Boot's JacksonAutoConfiguration"
+prompt = """
+Your platform team needs to understand how Jackson's ObjectMapper customization
+propagates through the Spring stack. A developer added a custom Jackson module
+to their Spring Boot application, but the module's serializers are not being
+picked up by REST endpoints. You need to trace the full dependency and
+configuration chain.
+
+Your task:
+1. In jackson-databind, find the ObjectMapper class and understand how modules
+   are registered (registerModule) and how serializers/deserializers are resolved
+   during JSON processing.
+2. In spring-framework, find MappingJackson2HttpMessageConverter and trace how
+   it creates/configures its internal ObjectMapper. Identify where Spring's
+   Jackson2ObjectMapperBuilder hooks into module auto-discovery.
+3. In spring-boot, find JacksonAutoConfiguration and trace how it auto-detects
+   Jackson Module beans from the ApplicationContext and registers them with the
+   ObjectMapper. Map the full autoconfiguration chain:
+   JacksonAutoConfiguration -> Jackson2ObjectMapperBuilderCustomizer ->
+   Jackson2ObjectMapperBuilder -> ObjectMapper.
+4. Produce the complete dependency trace showing how a custom Module bean flows
+   from Spring Boot autoconfiguration through Spring Framework's builder into
+   Jackson's ObjectMapper.
+
+Write your analysis to /workspace/DEPENDENCY_TRACE.md with:
+- Full class/method chain from Jackson Module registration to REST serialization
+- Spring Boot autoconfiguration entry points
+- Spring Framework builder integration points
+- Key configuration files from each repo
+"""
+
+[[repos]]
+url = "https://github.com/FasterXML/jackson-databind"
+rev = "jackson-databind-2.15.2"
+path = "jackson-databind"
+role = "upstream"
+
+[[repos]]
+url = "https://github.com/spring-projects/spring-framework"
+rev = "v6.0.11"
+path = "spring-framework"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/spring-projects/spring-boot"
+rev = "v3.1.2"
+path = "spring-boot"
+role = "consumer"
+
+[metadata]
+languages = ["java"]
+total_loc = 3500000
+dependency_depth = 3
+frameworks = ["jackson", "spring-framework", "spring-boot"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "identify_packages"
+weight = 0.25
+verifier = "checks/check_packages.sh"
+description = "Agent identifies key packages and classes in all three repos"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "trace_integration_path"
+weight = 0.40
+verifier = "checks/check_integration_path.sh"
+description = "Agent traces the ObjectMapper configuration chain across repos"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "autoconfiguration_analysis"
+weight = 0.35
+verifier = "checks/check_autoconfig.sh"
+description = "Agent maps Spring Boot autoconfiguration to Jackson module registration"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing ObjectMapper configuration across 3 repos requires cross-repo class reference search and understanding Spring's annotation-driven autoconfiguration wiring"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "src/main/java/com/fasterxml/jackson/databind/ObjectMapper.java"
+repo = "jackson-databind"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "spring-web/src/main/java/org/springframework/http/converter/json/MappingJackson2HttpMessageConverter.java"
+repo = "spring-framework"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/jackson/JacksonAutoConfiguration.java"
+repo = "spring-boot"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "spring-web/src/main/java/org/springframework/http/converter/json/Jackson2ObjectMapperBuilder.java"
+repo = "spring-framework"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "src/main/java/com/fasterxml/jackson/databind/Module.java"
+repo = "jackson-databind"
+confidence = 0.80

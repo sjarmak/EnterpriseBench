@@ -1,0 +1,56 @@
+{
+  "candidate_id": "refactor-orchestration-tri-tokio-001",
+  "description": "Async HTTP handler trait refactoring across tokio runtime, hyper server, and axum framework",
+  "repos": ["tokio-rs/tokio", "hyperium/hyper", "tokio-rs/axum"],
+  "merge_order": [
+    {
+      "repo": "tokio-rs/tokio",
+      "description": "Refactor Runtime builder API to support configurable task schedulers, maintain backward-compatible default"
+    },
+    {
+      "repo": "hyperium/hyper",
+      "description": "Update hyper server to use new tokio Runtime builder API, adapt connection handler spawning"
+    },
+    {
+      "repo": "tokio-rs/axum",
+      "description": "Update axum Server::bind to work with refactored hyper server builder and new tokio runtime configuration"
+    }
+  ],
+  "dependency_graph": {
+    "tokio-rs/tokio": [],
+    "hyperium/hyper": ["tokio-rs/tokio"],
+    "tokio-rs/axum": ["tokio-rs/tokio", "hyperium/hyper"]
+  },
+  "required_files": [
+    {
+      "path": "tokio/Cargo.toml",
+      "repo": "tokio",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "Cargo.toml",
+      "repo": "hyper",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "axum/Cargo.toml",
+      "repo": "axum",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "parallelizable_steps": [],
+  "breaking_changes": [
+    "tokio: Runtime builder API change requires all consumers to update builder calls",
+    "hyper: Server implementation changes may affect custom connection handlers",
+    "axum: Server::bind API may change, affecting all axum application bootstrap code"
+  ],
+  "difficulty": "hard",
+  "confidence": 0.9,
+  "verification": {
+    "method": "dependency_analysis",
+    "verified": true
+  }
+}

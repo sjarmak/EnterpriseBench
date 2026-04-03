@@ -1,0 +1,94 @@
+{
+  "task_id": "dep-traversal-tri-openssl-001",
+  "task_type": "dependency_graph",
+  "description": "Trace TLS certificate verification from git HTTP transport through libcurl to OpenSSL X509 verification",
+  "repos": [
+    {
+      "url": "https://github.com/openssl/openssl",
+      "rev": "openssl-3.1.1",
+      "path": "openssl"
+    },
+    {
+      "url": "https://github.com/curl/curl",
+      "rev": "curl-8_1_2",
+      "path": "curl"
+    },
+    {
+      "url": "https://github.com/git/git",
+      "rev": "v2.41.0",
+      "path": "git"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "http.c",
+      "repo": "git",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "lib/vtls/openssl.c",
+      "repo": "curl",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "crypto/x509/x509_vfy.c",
+      "repo": "openssl",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "http.h",
+      "repo": "git",
+      "confidence": 0.8
+    },
+    {
+      "path": "lib/urldata.h",
+      "repo": "curl",
+      "confidence": 0.75
+    }
+  ],
+  "dependency_chain": [
+    {
+      "from": "git",
+      "to": "curl",
+      "relationship": "git's http.c uses libcurl for HTTPS transport, configuring SSL options via curl_easy_setopt",
+      "key_functions": [
+        "http_request",
+        "curl_easy_setopt",
+        "CURLOPT_CAINFO",
+        "CURLOPT_SSL_VERIFYPEER"
+      ]
+    },
+    {
+      "from": "curl",
+      "to": "openssl",
+      "relationship": "curl's OpenSSL backend calls SSL_CTX_load_verify_locations and SSL_CTX_set_verify",
+      "key_functions": [
+        "ossl_connect_step1",
+        "SSL_CTX_load_verify_locations",
+        "SSL_CTX_set_verify"
+      ]
+    }
+  ],
+  "integration_path": [
+    "git reads http.sslCAInfo/http.sslVerify config and GIT_SSL_CAINFO env var in http.c",
+    "git passes CA info to curl via curl_easy_setopt(CURLOPT_CAINFO) and CURLOPT_SSL_VERIFYPEER",
+    "curl OpenSSL backend in vtls/openssl.c calls SSL_CTX_load_verify_locations with the CA path",
+    "OpenSSL X509_verify_cert in x509_vfy.c performs certificate chain verification",
+    "Verification failure returns X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+    "Error propagates back through curl to git as SSL certificate problem"
+  ],
+  "configuration_knobs": [
+    "git: http.sslCAInfo, http.sslVerify, GIT_SSL_CAINFO, GIT_SSL_NO_VERIFY",
+    "curl: CURLOPT_CAINFO, CURLOPT_CAPATH, CURLOPT_SSL_VERIFYPEER, CURLOPT_SSL_VERIFYHOST",
+    "openssl: SSL_CTX_load_verify_locations, SSL_CTX_set_default_verify_paths"
+  ],
+  "verification": {
+    "method": "source_analysis",
+    "verified": true
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "candidate_id": "refactor-orchestration-tri-spring-001",
+  "description": "Spring Kafka listener container threading model refactoring across spring-kafka, spring-framework, and spring-boot",
+  "repos": [
+    "spring-projects/spring-kafka",
+    "spring-projects/spring-framework",
+    "spring-projects/spring-boot"
+  ],
+  "merge_order": [
+    {
+      "repo": "spring-projects/spring-framework",
+      "description": "Ensure messaging abstractions (MessageListenerContainer, SmartLifecycle) support concurrency configuration if needed"
+    },
+    {
+      "repo": "spring-projects/spring-kafka",
+      "description": "Refactor KafkaMessageListenerContainer to ConcurrentMessageListenerContainer with configurable concurrency, update @KafkaListener annotation processing"
+    },
+    {
+      "repo": "spring-projects/spring-boot",
+      "description": "Update KafkaAutoConfiguration and KafkaProperties to expose concurrency defaults and wire ConcurrentMessageListenerContainer"
+    }
+  ],
+  "dependency_graph": {
+    "spring-projects/spring-framework": [],
+    "spring-projects/spring-kafka": ["spring-projects/spring-framework"],
+    "spring-projects/spring-boot": [
+      "spring-projects/spring-framework",
+      "spring-projects/spring-kafka"
+    ]
+  },
+  "required_files": [
+    {
+      "path": "spring-kafka/src/main/java/org/springframework/kafka/listener/ConcurrentMessageListenerContainer.java",
+      "repo": "spring-kafka",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "spring-messaging/src/main/java/org/springframework/messaging/handler/annotation/support/MessageHandlerMethodFactory.java",
+      "repo": "spring-framework",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/kafka/KafkaAutoConfiguration.java",
+      "repo": "spring-boot",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "parallelizable_steps": [],
+  "breaking_changes": [
+    "spring-kafka: Changing default container type from KafkaMessageListenerContainer to ConcurrentMessageListenerContainer may affect partition assignment behavior",
+    "spring-boot: New KafkaProperties.listener.concurrency default may change behavior for existing applications"
+  ],
+  "difficulty": "hard",
+  "confidence": 0.9,
+  "verification": {
+    "method": "dependency_analysis",
+    "verified": true
+  }
+}
