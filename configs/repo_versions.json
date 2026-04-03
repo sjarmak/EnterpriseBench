@@ -200,6 +200,11 @@
     "last_verified": "2026-04-03"
   },
   {
+    "url": "https://github.com/dandydeveloper/charts",
+    "pinned_rev": "redis-ha-4.26.6",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/discourse/discourse",
     "pinned_rev": "168de52538632ae18b95c0757ab2ae5e21ff240c",
     "last_verified": "2026-04-02"
@@ -558,6 +563,11 @@
     "url": "https://github.com/kubernetes-client/javascript",
     "pinned_rev": "0.18.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes-sigs/knftables",
+    "pinned_rev": "v0.6.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/kubernetes-sigs/kustomize",
