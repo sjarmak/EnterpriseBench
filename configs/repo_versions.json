@@ -5,6 +5,11 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/FasterXML/jackson-databind",
+    "pinned_rev": "jackson-databind-2.15.2",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/LibreOffice/core",
     "pinned_rev": "61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e",
     "last_verified": "2026-04-02"
@@ -15,9 +20,24 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/PostgREST/postgrest",
+    "pinned_rev": "v12.0.2",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/angular/angular",
+    "pinned_rev": "18.0.0",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/angular/angular",
     "pinned_rev": "891318e805da3cdfb9839bf6cb3412c15c146253",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/angular/components",
+    "pinned_rev": "18.0.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/ansible/ansible",
@@ -46,6 +66,11 @@
   },
   {
     "url": "https://github.com/apache/kafka",
+    "pinned_rev": "3.6.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/apache/kafka",
     "pinned_rev": "3.7.0",
     "last_verified": "2026-04-02"
   },
@@ -58,6 +83,16 @@
     "url": "https://github.com/argoproj/argo-cd",
     "pinned_rev": "v2.14.0-rc3",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/argoproj/argo-cd",
+    "pinned_rev": "v2.9.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/argoproj/argo-helm",
+    "pinned_rev": "argo-cd-5.51.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/aws/aws-cli",
@@ -73,6 +108,11 @@
     "url": "https://github.com/babel/babel",
     "pinned_rev": "v7.22.20",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/babel/babel",
+    "pinned_rev": "v7.22.9",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/babel/babel",
@@ -110,14 +150,54 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/boto/boto3",
+    "pinned_rev": "1.28.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/boto/botocore",
+    "pinned_rev": "1.31.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/boto/s3transfer",
+    "pinned_rev": "0.6.1",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/celery/celery",
+    "pinned_rev": "v5.3.6",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/celery/kombu",
+    "pinned_rev": "v5.3.4",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/ceph/ceph",
     "pinned_rev": "v19.2.0",
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/confluentinc/kafka-connect-jdbc",
+    "pinned_rev": "v10.7.4",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/containerd/containerd",
+    "pinned_rev": "v1.7.8",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/curl/curl",
     "pinned_rev": "curl-7_82_0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/curl/curl",
+    "pinned_rev": "curl-8_1_2",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/discourse/discourse",
@@ -140,6 +220,16 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/django/django",
+    "pinned_rev": "5.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/docker/cli",
+    "pinned_rev": "v24.0.7",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/dropwizard/dropwizard",
     "pinned_rev": "v2.1.0",
     "last_verified": "2026-04-02"
@@ -155,9 +245,19 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/encode/httpx",
+    "pinned_rev": "0.26.0",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/envoyproxy/envoy",
     "pinned_rev": "v1.18.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/envoyproxy/envoy",
+    "pinned_rev": "v1.28.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/envoyproxy/envoy",
@@ -215,6 +315,11 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/facebook/create-react-app",
+    "pinned_rev": "v5.0.1",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/facebook/react",
     "pinned_rev": "56408a5b12fa4099e9dbbeca7f6bc59e1307e507",
     "last_verified": "2026-04-02"
@@ -230,9 +335,34 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/facebook/react",
+    "pinned_rev": "v18.2.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/fluxcd/flux2",
+    "pinned_rev": "v2.2.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/fluxcd/helm-controller",
+    "pinned_rev": "v0.37.0",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/gcc-mirror/gcc",
     "pinned_rev": "releases/gcc-14.2.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/getsentry/relay",
+    "pinned_rev": "23.11.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/getsentry/sentry",
+    "pinned_rev": "23.11.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/getsentry/sentry",
@@ -243,6 +373,11 @@
     "url": "https://github.com/git/git",
     "pinned_rev": "v2.35.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/git/git",
+    "pinned_rev": "v2.41.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/go-chi/chi",
@@ -258,6 +393,11 @@
     "url": "https://github.com/gohugoio/hugo",
     "pinned_rev": "v0.111.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/googleapis/googleapis",
+    "pinned_rev": "common-protos-1_3_1",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/grafana/grafana",
@@ -278,6 +418,11 @@
     "url": "https://github.com/grpc-ecosystem/go-grpc-middleware",
     "pinned_rev": "v1.4.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/grpc/grpc",
+    "pinned_rev": "v1.60.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/grpc/grpc-go",
@@ -355,9 +500,29 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/hashicorp/terraform",
+    "pinned_rev": "v1.7.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/hashicorp/terraform-provider-aws",
+    "pinned_rev": "v5.30.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/hashicorp/terraform-provider-aws",
+    "pinned_rev": "v5.31.0",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/hashicorp/vault",
     "pinned_rev": "v1.14.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/hyperium/hyper",
+    "pinned_rev": "v1.0.0-rc.4",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/istio/istio",
@@ -393,6 +558,16 @@
     "url": "https://github.com/kubernetes-client/javascript",
     "pinned_rev": "0.18.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/kubernetes-sigs/kustomize",
+    "pinned_rev": "kustomize/v5.3.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/kubernetes/client-go",
+    "pinned_rev": "v0.28.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/kubernetes/kubernetes",
@@ -466,6 +641,11 @@
   },
   {
     "url": "https://github.com/moby/moby",
+    "pinned_rev": "v24.0.7",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/moby/moby",
     "pinned_rev": "v28.0.0",
     "last_verified": "2026-04-02"
   },
@@ -473,6 +653,16 @@
     "url": "https://github.com/mozilla/gecko-dev",
     "pinned_rev": "1a843e2167f97a3789f9d8a7a9772586f0e1c16f",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/opencontainers/runc",
+    "pinned_rev": "v1.1.10",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/openssl/openssl",
+    "pinned_rev": "openssl-3.1.1",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/pallets/click",
@@ -486,8 +676,23 @@
   },
   {
     "url": "https://github.com/pallets/flask",
+    "pinned_rev": "3.0.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/pallets/flask",
     "pinned_rev": "3.1.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/pallets/jinja",
+    "pinned_rev": "3.1.3",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/pallets/werkzeug",
+    "pinned_rev": "3.0.1",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/pnpm/pnpm",
@@ -505,6 +710,11 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/prometheus/alertmanager",
+    "pinned_rev": "v0.26.0",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/prometheus/prometheus",
     "pinned_rev": "v2.45.0",
     "last_verified": "2026-04-02"
@@ -515,6 +725,16 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/prometheus/prometheus",
+    "pinned_rev": "v2.48.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/protocolbuffers/protobuf",
+    "pinned_rev": "v25.1",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/protocolbuffers/protobuf-go",
     "pinned_rev": "v1.32.0",
     "last_verified": "2026-04-02"
@@ -523,6 +743,11 @@
     "url": "https://github.com/psf/requests",
     "pinned_rev": "v2.28.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/psf/requests",
+    "pinned_rev": "v2.31.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/psf/requests",
@@ -560,9 +785,64 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/spring-projects/spring-boot",
+    "pinned_rev": "v3.1.2",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/spring-projects/spring-framework",
+    "pinned_rev": "v6.0.11",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/spring-projects/spring-kafka",
+    "pinned_rev": "v3.0.9",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/supabase/gotrue",
+    "pinned_rev": "v2.143.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/supabase/supabase",
+    "pinned_rev": "v0.24.12",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/thanos-io/thanos",
+    "pinned_rev": "v0.32.5",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/tiangolo/fastapi",
+    "pinned_rev": "0.109.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/tokio-rs/axum",
+    "pinned_rev": "axum-v0.6.19",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/tokio-rs/tokio",
+    "pinned_rev": "tokio-1.29.1",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/urllib3/urllib3",
     "pinned_rev": "1.26.16",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/urllib3/urllib3",
+    "pinned_rev": "2.1.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/vercel/next.js",
+    "pinned_rev": "v13.4.12",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/vercel/next.js",
@@ -570,9 +850,19 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/wagtail/wagtail",
+    "pinned_rev": "v5.2",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/webpack/webpack",
     "pinned_rev": "v5.64.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/webpack/webpack",
+    "pinned_rev": "v5.88.2",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/zulip/zulip",
