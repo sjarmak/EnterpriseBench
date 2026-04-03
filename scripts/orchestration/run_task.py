@@ -1364,7 +1364,15 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             )
             timings["agent"] = agent_duration
 
-            if agent_exit != 0:
+            if agent_exit == 137:
+                result.failure_class = "infra_oom"
+                result.phase = "agent_infra_error"
+                logger.warning("Agent killed by OOM/SIGKILL (exit 137)")
+            elif agent_exit == 124:
+                result.failure_class = "infra_timeout"
+                result.phase = "agent_infra_error"
+                logger.warning("Agent timed out (exit 124)")
+            elif agent_exit != 0:
                 result.failure_class = "agent_error"
                 logger.warning("Agent exited with non-zero code: %d", agent_exit)
 
@@ -1397,8 +1405,9 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         result.scores = scores
 
         # --- Save ---
-        result.phase = "complete"
-        result.success = True
+        if result.phase != "agent_infra_error":
+            result.phase = "complete"
+            result.success = True
         result.timing = timings
         _save_results(result, task_data, output_dir, config)
 
