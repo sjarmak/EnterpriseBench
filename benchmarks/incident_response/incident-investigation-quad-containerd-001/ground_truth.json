@@ -1,0 +1,56 @@
+{
+  "candidate_id": "incident-investigation-quad-containerd-001",
+  "repos": [
+    "kubernetes/kubernetes",
+    "containerd/containerd",
+    "opencontainers/runc",
+    "moby/moby"
+  ],
+  "issue_refs": [],
+  "fix_pr": "",
+  "fix_merged": "",
+  "buggy_rev": "",
+  "description": "Containers with custom seccomp profiles fail to start after cluster upgrade because the profiles were authored against an older kernel and do not include newer syscalls (clone3, close_range, openat2). The seccomp profile processing chain spans four repos: kubelet converts pod security context to CRI seccomp fields, containerd CRI plugin maps profiles to OCI spec, runc libcontainer generates BPF seccomp filters, and moby provides the default profile with newer syscalls included.",
+  "root_cause": {
+    "file": "libcontainer/seccomp/seccomp_linux.go",
+    "function": "InitSeccomp / buildFilter",
+    "summary": "Custom seccomp profiles omit newer syscalls like clone3 (added in kernel 5.3). When runc builds the BPF filter from the OCI spec seccomp section, unrecognized syscalls in the default action result in EPERM. The custom profile uses SCMP_ACT_ERRNO for the default action, blocking any syscall not explicitly whitelisted. Since clone3 is not in the whitelist, glibc's fallback from clone3 to clone may or may not work depending on the application.",
+    "mechanism": "The custom seccomp profile was based on an older version of moby's default profile (pre-clone3). The default moby profile at profiles/seccomp/default_linux.go includes clone3 and other newer syscalls. The custom profile does not, causing EPERM when applications use these newer syscalls."
+  },
+  "error_chain": [
+    {
+      "component": "kubelet kuberuntime/security_context.go",
+      "action": "Converts pod spec seccomp profile annotation/field to CRI LinuxContainerSecurityContext SeccompProfilePath"
+    },
+    {
+      "component": "kubelet kuberuntime/kuberuntime_container_linux.go",
+      "action": "Sets seccomp profile in container config sent to CRI runtime"
+    },
+    {
+      "component": "containerd pkg/cri/server/container_create_linux.go",
+      "action": "CRI plugin reads seccomp profile from CRI request and maps it into OCI runtime spec SecurityContext"
+    },
+    {
+      "component": "containerd contrib/seccomp/seccomp_default.go",
+      "action": "Provides seccomp spec generation utilities for custom profiles"
+    },
+    {
+      "component": "runc libcontainer/seccomp/seccomp_linux.go",
+      "action": "Reads OCI spec seccomp section, resolves syscall names to numbers, builds BPF filter. Unknown syscalls or missing whitelist entries result in the default action (EPERM) being applied"
+    },
+    {
+      "component": "moby profiles/seccomp/default_linux.go",
+      "action": "Defines the default seccomp profile including newer syscalls (clone3, close_range, openat2). Custom profiles based on older versions lack these entries"
+    }
+  ],
+  "affected_services": [
+    "kubelet kuberuntime (seccomp profile conversion to CRI)",
+    "containerd CRI plugin (seccomp profile to OCI spec mapping)",
+    "runc libcontainer seccomp (BPF filter generation)",
+    "moby seccomp profiles (default profile definition)"
+  ],
+  "remediation": "Update custom seccomp profiles to include newer syscalls from the current moby default profile (clone3, close_range, openat2, faccessat2, pidfd_open). Alternatively, use RuntimeDefault seccomp profile which is automatically kept up to date. For custom profiles, establish a process to periodically sync with the upstream moby default profile at profiles/seccomp/default_linux.go.",
+  "fix_files": [],
+  "difficulty": "expert",
+  "confidence": 0.92
+}
