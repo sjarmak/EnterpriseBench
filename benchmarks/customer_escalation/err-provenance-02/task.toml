@@ -1,4 +1,4 @@
-difficulty_stratum = "large_single"
+difficulty_stratum = "dual_repo"
 mcp_suite = "eb_v1"
 repo_set_id = "kubernetes-ecosystem"
 org_scale = true
@@ -11,7 +11,7 @@ difficulty = "hard"
 estimated_duration_minutes = 45
 session_type = "single"
 task_type = "error_provenance"
-description = "Trace kube-proxy nftables sync failure through vendor library"
+description = "Trace kube-proxy nftables sync failure across kubernetes and upstream knftables library"
 prompt = "See instruction.md"
 
 [[repos]]
@@ -20,10 +20,17 @@ rev = "v1.33.0-alpha.2"
 path = "kubernetes"
 role = "primary"
 
+[[repos]]
+url = "https://github.com/kubernetes-sigs/knftables"
+rev = "v0.6.0"
+path = "knftables"
+role = "dependency"
+
 [metadata]
 languages = ["go"]
 frameworks = ["kubernetes", "nftables"]
 multi_repo_pattern = "investigate"
+dependency_depth = 2
 
 [[checkpoints]]
 name = "error_source"
@@ -31,6 +38,7 @@ weight = 0.40
 verifier = "checks/check_error_source.sh"
 description = "Agent identifies the exact source file and function that generates the error"
 timeout_seconds = 120
+repo_deps = ["kubernetes"]
 
 [[checkpoints]]
 name = "error_chain"
@@ -38,6 +46,7 @@ weight = 0.30
 verifier = "checks/check_error_chain.sh"
 description = "Agent traces the error propagation chain from source to user-visible output"
 timeout_seconds = 120
+repo_deps = ["kubernetes", "knftables"]
 
 [[checkpoints]]
 name = "trigger_conditions"
@@ -45,6 +54,7 @@ weight = 0.30
 verifier = "checks/check_trigger_conditions.sh"
 description = "Agent identifies the conditions that trigger this error"
 timeout_seconds = 60
+repo_deps = ["knftables"]
 
 [artifacts]
 required = ["answer"]
@@ -52,8 +62,8 @@ optional = ["code_patch"]
 
 [tool_access]
 sourcegraph_mirror_config = "configs/sg_mirrors/error-trace-k8s-nftables-sync-001.json"
-expected_mcp_benefit = "medium"
-mcp_benefit_rationale = "Error wraps through kube-proxy into the vendored knftables library; cross-package boundary tracing benefits from MCP, though the single-repo layout keeps discovery straightforward"
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Error propagation crosses from kubernetes kube-proxy into the upstream knftables library; dual-repo layout requires cross-repo navigation to trace the full error chain and identify trigger conditions in the dependency"
 
 [ground_truth]
 tiers = ["deterministic"]
@@ -65,8 +75,8 @@ confidence = 0.9
 source = "deterministic"
 
 [[ground_truth.required_files]]
-path = "vendor/sigs.k8s.io/knftables/nftables.go"
-repo = "kubernetes"
+path = "nftables.go"
+repo = "knftables"
 confidence = 0.85
 source = "deterministic"
 
@@ -76,6 +86,6 @@ repo = "kubernetes"
 confidence = 0.5
 
 [[ground_truth.sufficient_files]]
-path = "go.sum"
-repo = "kubernetes"
+path = "go.mod"
+repo = "knftables"
 confidence = 0.4
