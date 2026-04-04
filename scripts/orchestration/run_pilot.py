@@ -139,7 +139,7 @@ def _build_run_command(entry: RunEntry) -> list[str]:
         ]
 
     # Full runs use run_task.py
-    return [
+    cmd = [
         sys.executable,
         str(RUN_TASK_SCRIPT),
         task_toml,
@@ -149,7 +149,18 @@ def _build_run_command(entry: RunEntry) -> list[str]:
         output_dir,
         "--account",
         str(entry.account_id),
+        "--rep",
+        str(entry.rep_index),
+        "--source",
+        "upstream",
     ]
+
+    # Pass ablation variant for ablate-* modes so Docker tags don't collide
+    if is_ablation_run(entry):
+        excluded_repo = entry.mode.removeprefix("ablate-")
+        cmd.extend(["--ablation-variant", excluded_repo])
+
+    return cmd
 
 
 def execute_run(entry: RunEntry, dry_run: bool = False) -> RunResult:

@@ -1,8 +1,8 @@
 {
   "_description": "Centralized repo index for EnterpriseBench. Consolidates configs/sg_mirrors/ into a single index. Each entry maps an sg-evals mirror name to its source GitHub repo, pinned commit, and metadata.",
-  "_generated": "2026-04-02",
-  "_total_unique_repos": 129,
-  "_total_mirror_files": 114,
+  "_generated": "2026-04-04",
+  "_total_unique_repos": 135,
+  "_total_mirror_files": 115,
   "suites": {
     "dependency_management": {
       "_status": "pending_verification",
@@ -180,42 +180,12 @@
     "feature_delivery": {
       "_status": "pending_verification",
       "_indexed_count": 0,
-      "_repo_count": 11,
-      "_task_count": 11,
+      "_repo_count": 5,
+      "_task_count": 5,
       "repos": [
         {
           "name": "apache/camel",
           "url": "https://github.com/apache/camel",
-          "_indexed": false
-        },
-        {
-          "name": "discourse/discourse",
-          "url": "https://github.com/discourse/discourse",
-          "_indexed": false
-        },
-        {
-          "name": "discourse/discourse",
-          "url": "https://github.com/discourse/discourse",
-          "_indexed": false
-        },
-        {
-          "name": "discourse/discourse",
-          "url": "https://github.com/discourse/discourse",
-          "_indexed": false
-        },
-        {
-          "name": "discourse/discourse",
-          "url": "https://github.com/discourse/discourse",
-          "_indexed": false
-        },
-        {
-          "name": "getsentry/sentry",
-          "url": "https://github.com/getsentry/sentry",
-          "_indexed": false
-        },
-        {
-          "name": "mattermost/mattermost",
-          "url": "https://github.com/mattermost/mattermost",
           "_indexed": false
         },
         {
@@ -243,8 +213,8 @@
     "incident_response": {
       "_status": "pending_verification",
       "_indexed_count": 0,
-      "_repo_count": 2,
-      "_task_count": 2,
+      "_repo_count": 6,
+      "_task_count": 3,
       "repos": [
         {
           "name": "ansible/ansible",
@@ -252,8 +222,28 @@
           "_indexed": false
         },
         {
+          "name": "containerd/containerd",
+          "url": "https://github.com/containerd/containerd",
+          "_indexed": false
+        },
+        {
           "name": "envoyproxy/envoy",
           "url": "https://github.com/envoyproxy/envoy",
+          "_indexed": false
+        },
+        {
+          "name": "kubernetes/kubernetes",
+          "url": "https://github.com/kubernetes/kubernetes",
+          "_indexed": false
+        },
+        {
+          "name": "moby/moby",
+          "url": "https://github.com/moby/moby",
+          "_indexed": false
+        },
+        {
+          "name": "opencontainers/runc",
+          "url": "https://github.com/opencontainers/runc",
           "_indexed": false
         }
       ]
@@ -261,37 +251,12 @@
     "security_operations": {
       "_status": "pending_verification",
       "_indexed_count": 0,
-      "_repo_count": 7,
-      "_task_count": 7,
+      "_repo_count": 2,
+      "_task_count": 2,
       "repos": [
-        {
-          "name": "apache/kafka",
-          "url": "https://github.com/apache/kafka",
-          "_indexed": false
-        },
         {
           "name": "ceph/ceph",
           "url": "https://github.com/ceph/ceph",
-          "_indexed": false
-        },
-        {
-          "name": "envoyproxy/envoy",
-          "url": "https://github.com/envoyproxy/envoy",
-          "_indexed": false
-        },
-        {
-          "name": "goharbor/harbor",
-          "url": "https://github.com/goharbor/harbor",
-          "_indexed": false
-        },
-        {
-          "name": "keycloak/keycloak",
-          "url": "https://github.com/keycloak/keycloak",
-          "_indexed": false
-        },
-        {
-          "name": "keycloak/keycloak",
-          "url": "https://github.com/keycloak/keycloak",
           "_indexed": false
         },
         {
@@ -304,15 +269,10 @@
     "technical_debt": {
       "_status": "pending_verification",
       "_indexed_count": 0,
-      "_repo_count": 5,
-      "_task_count": 5,
+      "_repo_count": 3,
+      "_task_count": 3,
       "repos": [
         {
-          "name": "angular/angular",
-          "url": "https://github.com/angular/angular",
-          "_indexed": false
-        },
-        {
           "name": "facebook/react",
           "url": "https://github.com/facebook/react",
           "_indexed": false
@@ -325,11 +285,6 @@
         {
           "name": "facebook/react",
           "url": "https://github.com/facebook/react",
-          "_indexed": false
-        },
-        {
-          "name": "microsoft/TypeScript",
-          "url": "https://github.com/microsoft/TypeScript",
           "_indexed": false
         }
       ]
@@ -377,10 +332,7 @@
       "_loc_estimate": 700000,
       "_tier": "A",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "technical_debt"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/ansible/ansible--v2.16.0",
@@ -429,10 +381,7 @@
       "_loc_estimate": 800000,
       "_tier": "A",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "security_operations"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/apache/kafka--3.1.0",
@@ -603,6 +552,16 @@
       ]
     },
     {
+      "sg_name": "sg-evals/containerd/containerd--v1.7.24",
+      "github_repo": "containerd/containerd",
+      "commit": "v1.7.24",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "incident_response"
+      ]
+    },
+    {
       "sg_name": "sg-evals/curl/curl--curl-7_82_0",
       "github_repo": "curl/curl",
       "commit": "curl-7_82_0",
@@ -623,10 +582,7 @@
       "_loc_estimate": 350000,
       "_tier": "B",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "feature_delivery"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/discourse/discourse--290b435a",
@@ -636,10 +592,7 @@
       "_loc_estimate": 350000,
       "_tier": "B",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "feature_delivery"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/discourse/discourse--5d603ece",
@@ -649,10 +602,7 @@
       "_loc_estimate": 350000,
       "_tier": "B",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "feature_delivery"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/discourse/discourse--e7c3abb9",
@@ -662,10 +612,7 @@
       "_loc_estimate": 350000,
       "_tier": "B",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "feature_delivery"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/dropwizard/dropwizard--v2.1.0",
@@ -720,8 +667,7 @@
       "_indexed": false,
       "_task_count": 3,
       "_suites": [
-        "incident_response",
-        "security_operations"
+        "incident_response"
       ]
     },
     {
@@ -920,10 +866,7 @@
       "_loc_estimate": 500000,
       "_tier": "B",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "feature_delivery"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/gin-gonic/gin--v1.9.1",
@@ -969,10 +912,7 @@
       "_loc_estimate": 200000,
       "_tier": "B",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "security_operations"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/gohugoio/hugo--v0.111.0",
@@ -1269,10 +1209,7 @@
       "_loc_estimate": 700000,
       "_tier": "A",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "security_operations"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/keycloak/keycloak--bfcb150e312362fa6fd9c6ac080bf58989949d93~1",
@@ -1282,10 +1219,7 @@
       "_loc_estimate": 700000,
       "_tier": "A",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "security_operations"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/kubernetes-client/javascript--0.18.0",
@@ -1374,7 +1308,10 @@
       "_loc_estimate": 3500000,
       "_tier": "A",
       "_indexed": false,
-      "_task_count": 2
+      "_task_count": 3,
+      "_suites": [
+        "incident_response"
+      ]
     },
     {
       "sg_name": "sg-evals/kubernetes/kubernetes--v1.34.0",
@@ -1437,10 +1374,7 @@
       "_loc_estimate": 500000,
       "_tier": "B",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "feature_delivery"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/microsoft/TypeScript--f7833b2a",
@@ -1450,10 +1384,7 @@
       "_loc_estimate": 400000,
       "_tier": "B",
       "_indexed": false,
-      "_task_count": 1,
-      "_suites": [
-        "technical_debt"
-      ]
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/moby/moby--v28.0.0",
@@ -1463,7 +1394,10 @@
       "_loc_estimate": 500000,
       "_tier": "B",
       "_indexed": false,
-      "_task_count": 1
+      "_task_count": 2,
+      "_suites": [
+        "incident_response"
+      ]
     },
     {
       "sg_name": "sg-evals/mozilla/gecko-dev--1a843e2167f97a3789f9d8a7a9772586f0e1c16f",
@@ -1474,6 +1408,16 @@
       "_tier": "A",
       "_indexed": false,
       "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/opencontainers/runc--v1.2.4",
+      "github_repo": "opencontainers/runc",
+      "commit": "v1.2.4",
+      "_indexed": false,
+      "_task_count": 1,
+      "_suites": [
+        "incident_response"
+      ]
     },
     {
       "sg_name": "sg-evals/pallets/click--8.2.1",
@@ -1631,6 +1575,34 @@
       "_language": "Rust",
       "_loc_estimate": 5000000,
       "_tier": "A",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/sg-evals/containerd-containerd",
+      "github_repo": "containerd/containerd",
+      "commit": "v1.7.24",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/sg-evals/dandydeveloper-charts",
+      "github_repo": "dandydeveloper/charts",
+      "commit": "redis-ha-4.26.6",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/sg-evals/kubernetes-sigs-knftables",
+      "github_repo": "kubernetes-sigs/knftables",
+      "commit": "v0.6.0",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
+      "sg_name": "sg-evals/sg-evals/prometheus-alertmanager",
+      "github_repo": "prometheus/alertmanager",
+      "commit": "v0.26.0",
       "_indexed": false,
       "_task_count": 1
     },

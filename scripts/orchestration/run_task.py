@@ -93,6 +93,9 @@ class TaskRunConfig:
     verbose: bool = False
     account: int | None = None
     mode: str = "baseline"
+    rep: int | None = None
+    ablation_variant: str | None = None
+    min_disk_gb: float = 10.0
 
 
 @dataclass
@@ -209,7 +212,7 @@ def _generate_dockerfile(task_toml: Path, source: str) -> Path:
     return dockerfile_path
 
 
-def _docker_build(dockerfile_path: Path, image_tag: str) -> None:
+def _docker_build(dockerfile_path: Path, image_tag: str, timeout: int = 1800) -> None:
     """Build a Docker image from the generated Dockerfile."""
     context_dir = str(dockerfile_path.parent)
     cmd = [
@@ -221,16 +224,21 @@ def _docker_build(dockerfile_path: Path, image_tag: str) -> None:
         image_tag,
         context_dir,
     ]
-    logger.info("Building Docker image: %s", image_tag)
+    logger.info("Building Docker image: %s (timeout=%ds)", image_tag, timeout)
     logger.debug("Command: %s", " ".join(cmd))
 
     result = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=timeout,
     )
     if result.returncode != 0:
+        # Check for disk space errors before reporting generic build failure
+        if "No space left on device" in result.stderr:
+            raise RuntimeError(
+                f"Docker build failed: no disk space left\n{result.stderr[-2000:]}"
+            )
         raise RuntimeError(
             f"Docker build failed (exit {result.returncode}):\n{result.stderr[-2000:]}"
         )
@@ -1216,20 +1224,29 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         repos = task_data.get("repos", [])
 
         result.task_id = task_id
-        # Include mode in image tag to prevent concurrent build collisions
+        # Include mode + ablation variant in image tag to prevent cache collisions
         mode_suffix = f"-{config.mode}" if config.mode != "baseline" else ""
-        image_tag = f"eb-{task_id}{mode_suffix}"
-        container_name = f"eb-run-{task_id}{mode_suffix}-{int(time.time())}"
+        ablation_suffix = (
+            f"-ablate-{config.ablation_variant}" if config.ablation_variant else ""
+        )
+        image_tag = f"eb-{task_id}{mode_suffix}{ablation_suffix}"
+        container_name = (
+            f"eb-run-{task_id}{mode_suffix}{ablation_suffix}-{time.time_ns()}"
+        )
         result.image_tag = image_tag
         timings["parse"] = time.monotonic() - t0
 
         # Resolve output directory
-        # Layout: results/runs/<task_id>/<mode>/  (mode-partitioned)
-        # This prevents MCP runs from overwriting baseline results.
+        # Layout: results/runs/<task_id>/<mode>/rep<N>/  (mode + rep partitioned)
+        # This prevents concurrent and repeated runs from overwriting each other.
         if config.output_dir is not None:
             output_dir = config.output_dir
         else:
-            output_dir = REPO_ROOT / "results" / "runs" / task_id / config.mode
+            base = REPO_ROOT / "results" / "runs" / task_id / config.mode
+            if config.rep is not None:
+                output_dir = base / f"rep{config.rep}"
+            else:
+                output_dir = base
         output_dir.mkdir(parents=True, exist_ok=True)
         result.output_dir = str(output_dir)
 
@@ -1241,7 +1258,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         )
 
         # --- Disk pre-flight ---
-        if not _check_disk_space():
+        if not _check_disk_space(min_gb=config.min_disk_gb):
             result.phase = "preflight_failed"
             result.error = "Insufficient disk space"
             result.failure_class = "infra_disk"
@@ -1253,7 +1270,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             t0 = time.monotonic()
             try:
                 dockerfile_path = _generate_dockerfile(config.task_toml, config.source)
-                _docker_build(dockerfile_path, image_tag)
+                _docker_build(dockerfile_path, image_tag, timeout=config.build_timeout)
             except Exception as build_exc:
                 result.phase = "build_failed"
                 result.error = str(build_exc)
@@ -1549,6 +1566,33 @@ Examples:
         ),
     )
     parser.add_argument(
+        "--rep",
+        type=int,
+        default=None,
+        help=(
+            "Repetition index (1-based). When set, output directory includes "
+            "rep<N>/ suffix to prevent repeated runs from overwriting results."
+        ),
+    )
+    parser.add_argument(
+        "--ablation-variant",
+        default=None,
+        help=(
+            "Ablation variant name (e.g. excluded repo name). When set, "
+            "Docker image tag includes '-ablate-<variant>' to prevent "
+            "build cache returning non-ablated images."
+        ),
+    )
+    parser.add_argument(
+        "--min-disk-gb",
+        type=float,
+        default=10.0,
+        help=(
+            "Minimum available disk space in GB before starting (default: 10). "
+            "Increase when running multiple tasks concurrently."
+        ),
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -1577,6 +1621,9 @@ Examples:
         verbose=args.verbose,
         account=args.account,
         mode=args.mode,
+        rep=args.rep,
+        ablation_variant=args.ablation_variant,
+        min_disk_gb=args.min_disk_gb,
     )
 
     result = run_task(config)

@@ -22,7 +22,7 @@ role = "primary"
 
 [[repos]]
 url = "https://github.com/kubernetes-sigs/knftables"
-rev = "v0.6.0"
+rev = "v0.0.17"
 path = "knftables"
 role = "dependency"
 

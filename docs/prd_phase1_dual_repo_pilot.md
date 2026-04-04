@@ -73,25 +73,28 @@ Meanwhile, the Phase 1 pilot (convert 5 single-repo tasks to dual-repo, author f
   - Acceptance: Task directory at `benchmarks/incident_response/incident-investigation-quad-containerd-001/`, passes static CRNT, all 4 repos contribute unique checkpoints
   - Note: Deferred from must-have per convergence — orthogonal to CRNT protocol validation. CRI/seccomp scenario recommended (kubelet→containerd→runc→moby seccomp profile chain).
 
-### Must-Have (from premortem — P0)
+### Must-Have (from premortem — P0) — DONE
 
-- Requirement: Pin knftables SHA from K8s v1.33.0-alpha.2 `vendor/modules.txt`; verify dandydeveloper/charts is still accessible
-  - Acceptance: knftables entry in `configs/repo_versions.json` with SHA matching vendored version; dandydeveloper/charts cloned or mirrored
-  - Risk: Integration failure #2 — unpinned repos break ground truth silently
+- ~~Requirement: Pin knftables SHA from K8s v1.33.0-alpha.2 `vendor/modules.txt`; verify dandydeveloper/charts is still accessible~~
+  - **DONE**: knftables pinned to v0.0.17 in `configs/repo_versions.json` and `benchmarks/customer_escalation/err-provenance-02/task.toml`. dandydeveloper/charts verified accessible (not archived, last push 2026-02-14).
 
-- Requirement: Add rep index and ablation variant to output paths and Docker image tags
-  - Acceptance: Output layout is `results/runs/<task_id>/<mode>/rep<N>/`; ablation images tagged `eb-{task_id}-ablate-{excluded_repo}`
-  - Risk: Operational failure #3 — concurrent runs overwrite results
+- ~~Requirement: Add rep index and ablation variant to output paths and Docker image tags~~
+  - **DONE**: `run_task.py` now accepts `--rep N` (output dir: `results/runs/{id}/{mode}/rep{N}/`) and `--ablation-variant {repo}` (image tag: `eb-{id}-ablate-{repo}`). `run_pilot.py` passes both through.
 
-### Should-Have (from premortem — P1)
+### Should-Have (from premortem — P1) — PARTIALLY DONE
 
 - Requirement: Implement `--verify-files` on `check_repo_staleness.py` and run in CI on PRs touching `benchmarks/` or `configs/`
   - Acceptance: CI step clones each referenced repo at pinned SHA and asserts every `required_files` path exists
   - Risk: Integration failure #2, Evolution failure #5
 
-- Requirement: Write `run_pilot.py` batch orchestrator with rep tracking, account assignment, and retry
-  - Acceptance: `python scripts/orchestration/run_pilot.py --manifest pilot_manifest.json` executes all 48 runs with parallel account scheduling and produces summary CSV
-  - Risk: Operational failure #3
+- ~~Requirement: Write `run_pilot.py` batch orchestrator with rep tracking, account assignment, and retry~~
+  - **DONE**: `scripts/orchestration/run_pilot.py` exists with manifest loading, parallel execution, rep tracking, and summary CSV output.
+
+- ~~Requirement: Wire `config.build_timeout` to `_docker_build`~~
+  - **DONE** (bonus): `_docker_build` now accepts `timeout` param, wired from `config.build_timeout` (default 1800s, was hardcoded 600s). Also detects "No space left on device" errors distinctly.
+
+- ~~Requirement: Scale disk space pre-flight for concurrency~~
+  - **DONE** (bonus): `run_task.py` now accepts `--min-disk-gb` (default raised from 5GB to 10GB). `run_pilot.py` can pass higher values for concurrent runs.
 
 - Requirement: Add verifier grounding test — run each verifier in ablated sandbox, confirm it fails on removed-repo checkpoints
   - Acceptance: `scripts/validation/verify_grounding.py <task_dir>` returns pass only if verifiers fail when their declared repo is absent
