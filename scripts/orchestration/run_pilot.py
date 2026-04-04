@@ -134,6 +134,8 @@ def _build_run_command(entry: RunEntry) -> list[str]:
             "1",
             "--mode",
             "baseline",
+            "--repo",
+            excluded_repo,
         ]
 
     # Full runs use run_task.py

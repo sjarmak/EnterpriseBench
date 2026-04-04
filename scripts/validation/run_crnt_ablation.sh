@@ -11,6 +11,7 @@
 #   --reps N        Number of repetitions per ablation (default: 3)
 #   --mode MODE     Agent mode: baseline, mcp_only, hybrid (default: baseline)
 #   --dry-run       Show what would be done without building or running
+#   --repo REPO     Ablate only this specific repo (default: ablate all repos)
 #   --help          Show this help message
 #
 # Output follows results/runs/<task_id>/<mode>/rep<N>/ convention where
@@ -29,6 +30,7 @@ REPS=3
 MODE="baseline"
 DRY_RUN=false
 TASK_DIR=""
+SINGLE_REPO=""
 
 # ── Usage ─────────────────────────────────────────────────────────
 usage() {
@@ -44,6 +46,7 @@ Arguments:
 Options:
   --reps N          Number of repetitions per ablation (default: 3)
   --mode MODE       Agent mode: baseline, mcp_only, hybrid (default: baseline)
+  --repo REPO       Ablate only this specific repo (default: ablate all repos)
   --dry-run         Print plan without building or running anything
   --help            Show this help message
 
@@ -71,6 +74,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --mode)
             MODE="$2"
+            shift 2
+            ;;
+        --repo)
+            SINGLE_REPO="$2"
             shift 2
             ;;
         --dry-run)
@@ -121,6 +128,7 @@ repos = extract_repos(config)
 info = {
     'task_id': task_id,
     'repo_paths': [r.path for r in repos],
+    'repos': [{'path': r.path, 'url': r.url, 'rev': r.rev} for r in repos],
     'num_repos': len(repos),
 }
 print(json.dumps(info))
@@ -137,9 +145,25 @@ if [[ "$NUM_REPOS" -lt 2 ]]; then
     exit 0
 fi
 
+# If --repo is specified, validate it exists and only ablate that one
+if [[ -n "$SINGLE_REPO" ]]; then
+    if ! echo "$REPO_PATHS" | tr ' ' '\n' | grep -qx "$SINGLE_REPO"; then
+        echo "Error: repo '${SINGLE_REPO}' not found in task repos: ${REPO_PATHS}" >&2
+        exit 1
+    fi
+    ABLATE_REPOS="$SINGLE_REPO"
+else
+    ABLATE_REPOS="$REPO_PATHS"
+fi
+
 echo "=== CRNT Ablation Runner ==="
 echo "Task:    ${TASK_ID}"
 echo "Repos:   ${NUM_REPOS} (${REPO_PATHS})"
+if [[ -n "$SINGLE_REPO" ]]; then
+    echo "Ablate:  ${SINGLE_REPO} (single repo)"
+else
+    echo "Ablate:  all repos"
+fi
 echo "Reps:    ${REPS}"
 echo "Mode:    ${MODE}"
 echo "Dry run: ${DRY_RUN}"
@@ -160,7 +184,7 @@ echo ""
 declare -a SUMMARY_LINES=()
 
 # ── Per-repo ablation loop ────────────────────────────────────────
-for REPO_PATH in $REPO_PATHS; do
+for REPO_PATH in $ABLATE_REPOS; do
     ABLATION_TAG="eb-${TASK_ID}-ablate-${REPO_PATH}"
     OUTPUT_BASE="${REPO_ROOT}/results/runs/${TASK_ID}/ablate-${REPO_PATH}"
 
@@ -201,27 +225,29 @@ for cp in checkpoints:
         continue
     fi
 
-    # Generate Dockerfile for ablated config and build
-    # Uses the sandbox dockerfile_generator with the ablated config
-    python3 -c "
-import sys, json, subprocess
-sys.path.insert(0, '${REPO_ROOT}/scripts/sandbox')
-from pathlib import Path
+    # Generate ablated Dockerfile inline: clone all repos EXCEPT the excluded one
+    ABLATED_DOCKERFILE=$(python3 -c "
+import sys, json
+sys.path.insert(0, '${REPO_ROOT}/scripts/validation')
 
-# Load ablated config
-with open('${ABLATED_CONFIG}') as f:
-    config = json.load(f)
+task_info = json.loads('''${TASK_INFO}''')
+excluded = '${REPO_PATH}'
+lines = ['FROM ubuntu:22.04', 'RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*']
+for repo in task_info['repos']:
+    if repo['path'] == excluded:
+        continue
+    url = repo['url']
+    rev = repo['rev']
+    path = repo['path']
+    lines.append(f'RUN git clone {url} --branch {rev} --depth 1 /workspace/{path}')
+lines.append('WORKDIR /workspace')
+print('\n'.join(lines))
+")
 
-# Write a temporary task.toml-like JSON for the generator
-print(f'Ablated config loaded: {len(config.get(\"repos\", []))} repos remaining')
-"
-
-    # Build the Docker image (simplified: tag the ablated version)
+    # Build the Docker image with the ablated Dockerfile
     docker build \
         -t "${ABLATION_TAG}" \
-        -f <(python3 "${REPO_ROOT}/scripts/sandbox/dockerfile_generator.py" \
-             "${TASK_TOML}" --ablate-repo "${REPO_PATH}" 2>/dev/null || \
-             echo "FROM ubuntu:22.04") \
+        -f <(echo "$ABLATED_DOCKERFILE") \
         "${REPO_ROOT}" 2>/dev/null || {
         echo "  Warning: Docker build failed for ablation of ${REPO_PATH}" >&2
         continue
