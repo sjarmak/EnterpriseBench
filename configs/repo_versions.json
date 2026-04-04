@@ -190,6 +190,11 @@
     "last_verified": "2026-04-03"
   },
   {
+    "url": "https://github.com/containerd/containerd",
+    "pinned_rev": "v1.7.24",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/curl/curl",
     "pinned_rev": "curl-7_82_0",
     "last_verified": "2026-04-02"
