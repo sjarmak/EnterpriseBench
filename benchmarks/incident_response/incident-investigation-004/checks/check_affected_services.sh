@@ -9,7 +9,7 @@ if [[ ! -f "$REPORT" ]]; then
 fi
 
 FOUND=0
-TOTAL=3
+TOTAL=4
 
 # Must mention daemon monitor
 if grep -qiE 'daemon.*monitor|monitor\.go' "$REPORT"; then
@@ -26,12 +26,17 @@ if grep -qiE 'libcontainerd|containerd.*client|remote.*client' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
+# Must mention containerd shim runtime or task service components
+if grep -qiE 'containerd.*shim|runtime/v2|shim.*lifecycle|task.*service|services/tasks' "$REPORT"; then
+  FOUND=$((FOUND + 1))
+fi
+
 if [ "$TOTAL" -gt 0 ]; then
   SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
 else
   SCORE="0.00"
 fi
-if [ "$FOUND" -ge 2 ]; then
+if [ "$FOUND" -ge 3 ]; then
   PASSED=true
 else
   PASSED=false

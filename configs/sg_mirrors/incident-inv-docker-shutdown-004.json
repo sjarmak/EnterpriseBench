@@ -5,6 +5,11 @@
       "repo": "github.com/moby/moby",
       "rev": "v28.0.0",
       "mirror_id": "moby/moby--v28.0.0"
+    },
+    {
+      "repo": "github.com/containerd/containerd",
+      "rev": "v1.7.24",
+      "mirror_id": "sg-evals/containerd-containerd"
     }
   ]
 }

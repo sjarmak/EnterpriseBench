@@ -167,6 +167,13 @@
             "minimum": 1,
             "default": 120,
             "description": "Maximum seconds to wait for this checkpoint verifier before timing out (default: 120)"
+          },
+          "repo_deps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Repos this checkpoint depends on for per-checkpoint repo anchoring in CRNT validation. Values should match repo path names from the task's repos array."
           }
         }
       }

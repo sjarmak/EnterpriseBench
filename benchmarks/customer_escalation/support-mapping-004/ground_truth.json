@@ -1,22 +1,19 @@
 {
   "task_id": "support-map-grafana-alerts-004",
   "candidate_ref": "CSB-A4",
-  "description": "Grafana Alerts Running Slow \u2014 'alert evaluation took longer than expected' warnings, alerts firing late",
+  "description": "Grafana Alerts Running Slow / Missing Notifications — 'alert evaluation took longer than expected' warnings, alerts firing late, notification delivery failures via Alertmanager",
   "repo": "grafana/grafana",
   "repo_rev": null,
+  "secondary_repo": "prometheus/alertmanager",
   "csb_lineage": {
     "parent_csb_id": "ccx-incident-145",
     "origin_suite": "csb_org_incident",
     "migration_status": "schema_mapped",
     "bugs_fixed": [],
-    "metadata_sources": [
-      "task.toml"
-    ]
+    "metadata_sources": ["task.toml"]
   },
   "ground_truth": {
-    "tiers": [
-      "deterministic"
-    ],
+    "tiers": ["deterministic"],
     "required_files": [
       {
         "path": "pkg/services/ngalert/schedule/schedule.go",
@@ -24,7 +21,23 @@
         "line_range": null,
         "confidence": 0.95,
         "source": "deterministic",
-        "rationale": "Alert evaluation scheduler \u2014 contains tick loop, overrun detection, and 'took longer than expected' logging"
+        "rationale": "Alert evaluation scheduler — contains tick loop, overrun detection, and 'took longer than expected' logging"
+      },
+      {
+        "path": "dispatch/dispatch.go",
+        "repo": "alertmanager",
+        "line_range": null,
+        "confidence": 0.85,
+        "source": "deterministic",
+        "rationale": "Alert dispatch routing — routes incoming alerts through the routing tree, controls which receiver handles each alert"
+      },
+      {
+        "path": "notify/notify.go",
+        "repo": "alertmanager",
+        "line_range": null,
+        "confidence": 0.8,
+        "source": "deterministic",
+        "rationale": "Notification pipeline — handles deduplication, grouping, throttling, and delivery of alert notifications"
       }
     ],
     "sufficient_files": [
@@ -33,7 +46,7 @@
         "repo": "grafana",
         "line_range": null,
         "confidence": 0.8,
-        "rationale": "Alert evaluation engine \u2014 executes individual alert rule queries"
+        "rationale": "Alert evaluation engine — executes individual alert rule queries"
       },
       {
         "path": "pkg/services/ngalert/schedule/registry.go",
@@ -48,6 +61,20 @@
         "line_range": null,
         "confidence": 0.6,
         "rationale": "Alert rule model defining evaluation intervals and conditions"
+      },
+      {
+        "path": "api/v2/api.go",
+        "repo": "alertmanager",
+        "line_range": null,
+        "confidence": 0.7,
+        "rationale": "Alertmanager API v2 — receives alerts from Grafana, entry point for the notification pipeline"
+      },
+      {
+        "path": "silence/silence.go",
+        "repo": "alertmanager",
+        "line_range": null,
+        "confidence": 0.55,
+        "rationale": "Silence management — can suppress alert notifications, relevant when alerts appear to be missing"
       }
     ]
   },
@@ -56,11 +83,20 @@
     "evaluation-loop",
     "tick-loop",
     "performance",
-    "rule-group"
+    "rule-group",
+    "dispatch",
+    "notification-pipeline",
+    "alertmanager",
+    "routing-tree",
+    "notify"
   ],
   "expected_severity": "high",
   "related_references": [
     "pkg/services/ngalert/eval/eval.go",
-    "pkg/services/ngalert/schedule/registry.go"
+    "pkg/services/ngalert/schedule/registry.go",
+    "dispatch/dispatch.go",
+    "notify/notify.go",
+    "api/v2/api.go",
+    "silence/silence.go"
   ]
 }

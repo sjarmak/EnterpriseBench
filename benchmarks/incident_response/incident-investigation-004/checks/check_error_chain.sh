@@ -9,7 +9,7 @@ if [[ ! -f "$REPORT" ]]; then
 fi
 
 FOUND=0
-TOTAL=4
+TOTAL=5
 
 # Must mention signal handling (SIGINT/SIGTERM)
 if grep -qiE 'SIGINT|SIGTERM|signal.*interrupt|signal.*handler' "$REPORT"; then
@@ -26,6 +26,11 @@ if grep -qiE 'containerd.*shim|TaskDelete|task.*delete|shim.*disconnect' "$REPOR
   FOUND=$((FOUND + 1))
 fi
 
+# Must mention containerd-side code (runtime/v2/shim, pkg/process, or services/tasks)
+if grep -qiE 'runtime/v2/shim|pkg/process|services/tasks|shim\.go|exec\.go|local\.go' "$REPORT"; then
+  FOUND=$((FOUND + 1))
+fi
+
 # Must mention the monitor or handleContainerExit
 if grep -qiE 'monitor|handleContainerExit|handle.*exit' "$REPORT"; then
   FOUND=$((FOUND + 1))
@@ -36,7 +41,7 @@ if [ "$TOTAL" -gt 0 ]; then
 else
   SCORE="0.00"
 fi
-if [ "$FOUND" -ge 3 ]; then
+if [ "$FOUND" -ge 4 ]; then
   PASSED=true
 else
   PASSED=false

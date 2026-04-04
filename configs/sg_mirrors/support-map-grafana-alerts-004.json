@@ -5,6 +5,11 @@
       "repo": "github.com/grafana/grafana",
       "rev": "v10.2.0",
       "mirror_id": "grafana/grafana--v10.2.0"
+    },
+    {
+      "repo": "github.com/prometheus/alertmanager",
+      "rev": "v0.26.0",
+      "mirror_id": "sg-evals/prometheus-alertmanager"
     }
   ]
 }

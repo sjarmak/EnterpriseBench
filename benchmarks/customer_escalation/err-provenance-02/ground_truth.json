@@ -2,10 +2,7 @@
   "candidate_id": 2,
   "candidate_ref": "kubernetes/kubernetes#136786",
   "error_string": "Failed to list existing sets",
-  "secondary_errors": [
-    "nftables sync failed",
-    "Sync failed"
-  ],
+  "secondary_errors": ["nftables sync failed", "Sync failed"],
   "fix_pr": "https://github.com/kubernetes/kubernetes/pull/136796",
   "repo": "kubernetes/kubernetes",
   "repo_rev": "v1.33.0-alpha.2",
@@ -14,13 +11,13 @@
     {
       "path": "pkg/proxy/nftables/proxier.go",
       "repo": "kubernetes",
-      "confidence": 0.90,
+      "confidence": 0.9,
       "source": "deterministic",
       "rationale": "Contains the kube-proxy nftables sync logic that logs 'Failed to list existing sets' and 'nftables sync failed'. The error wrapping originates here."
     },
     {
-      "path": "vendor/sigs.k8s.io/knftables/nftables.go",
-      "repo": "kubernetes",
+      "path": "nftables.go",
+      "repo": "knftables",
       "confidence": 0.85,
       "source": "deterministic",
       "rationale": "The underlying knftables library that crashes with segfault when encountering sets with udata. Fix bumps this dependency."
@@ -30,13 +27,13 @@
     {
       "path": "go.mod",
       "repo": "kubernetes",
-      "confidence": 0.50,
+      "confidence": 0.5,
       "rationale": "Dependency version bump for knftables is part of the fix."
     },
     {
       "path": "go.sum",
       "repo": "kubernetes",
-      "confidence": 0.40,
+      "confidence": 0.4,
       "rationale": "Updated checksums for the dependency bump."
     }
   ],
