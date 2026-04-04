@@ -1,0 +1,25 @@
+{
+  "task_id": "incident-investigation-quad-containerd-001",
+  "mirrors": [
+    {
+      "repo": "github.com/kubernetes/kubernetes",
+      "rev": "v1.33.0-alpha.2",
+      "mirror_id": "kubernetes/kubernetes--v1.33.0-alpha.2"
+    },
+    {
+      "repo": "github.com/containerd/containerd",
+      "rev": "v1.7.24",
+      "mirror_id": "containerd/containerd--v1.7.24"
+    },
+    {
+      "repo": "github.com/opencontainers/runc",
+      "rev": "v1.2.4",
+      "mirror_id": "opencontainers/runc--v1.2.4"
+    },
+    {
+      "repo": "github.com/moby/moby",
+      "rev": "v28.0.0",
+      "mirror_id": "moby/moby--v28.0.0"
+    }
+  ]
+}

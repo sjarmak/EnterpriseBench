@@ -571,7 +571,7 @@
   },
   {
     "url": "https://github.com/kubernetes-sigs/knftables",
-    "pinned_rev": "v0.6.0",
+    "pinned_rev": "v0.0.17",
     "last_verified": "2026-04-03"
   },
   {
@@ -673,6 +673,11 @@
     "url": "https://github.com/opencontainers/runc",
     "pinned_rev": "v1.1.10",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/opencontainers/runc",
+    "pinned_rev": "v1.2.4",
+    "last_verified": "2026-04-04"
   },
   {
     "url": "https://github.com/openssl/openssl",

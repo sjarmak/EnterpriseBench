@@ -1,0 +1,213 @@
+# Incident Investigation: CRI Seccomp Profile Chain Failure (kubelet -> containerd -> runc -> moby)
+
+difficulty_stratum = "multi_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "container-runtime-ecosystem"
+org_scale = true
+verification_modes = ["deterministic"]
+
+[task]
+id = "incident-investigation-quad-containerd-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "expert"
+estimated_duration_minutes = 75
+session_type = "single"
+description = "Trace a CRI seccomp profile handling failure across kubelet, containerd, runc, and moby when a custom seccomp profile causes containers to fail with 'operation not permitted' errors"
+prompt = """
+Your platform team has received multiple reports from application developers
+that pods with custom seccomp profiles are failing to start after a cluster
+upgrade. The containers crash immediately with cryptic errors:
+
+  ERROR: container_linux.go: starting container process caused:
+    seccomp: unable to apply seccomp profile: operation not permitted
+
+  WARN: seccomp filter did not recognize syscall: clone3
+    action=SCMP_ACT_ERRNO errno=EPERM
+
+The cluster was recently upgraded to Kubernetes v1.33 with containerd v1.7.24
+as the CRI runtime, runc v1.2.4 as the OCI runtime, and Docker/moby v28.0.0
+for image building. The issue affects ONLY pods that specify a custom seccomp
+profile in their SecurityContext — pods using the RuntimeDefault profile work
+fine.
+
+Investigation notes from the on-call engineer:
+- The custom seccomp profile whitelists a set of syscalls and blocks all others
+- The profile was authored against the older kernel (5.10) and does not include
+  newer syscalls like clone3, close_range, or openat2
+- kubelet converts the pod seccomp annotation/field into a CRI
+  LinuxContainerSecurityContext and sends it to containerd
+- containerd's CRI plugin maps the seccomp profile into the OCI runtime spec
+- runc reads the OCI spec seccomp section and builds a BPF filter
+- moby provides the default seccomp profile that works; the custom profile
+  is based on an older version of moby's defaults
+
+The repos are available at:
+- /workspace/kubernetes/ — kubelet and CRI integration
+- /workspace/containerd/ — CRI plugin and seccomp handling
+- /workspace/runc/ — libcontainer seccomp BPF filter generation
+- /workspace/moby/ — default seccomp profile and loading utilities
+
+Your task:
+1. Identify how kubelet converts pod seccomp profiles into CRI requests —
+   find the specific file and function in the kubelet that handles
+   SecurityContext seccomp profile conversion.
+2. Trace how containerd's CRI plugin processes the seccomp profile from
+   the CRI request into the OCI runtime spec — identify where the
+   profile is parsed and applied.
+3. Find where runc's libcontainer generates the BPF seccomp filter from
+   the OCI spec — identify how unknown syscalls are handled and how the
+   filter action is determined.
+4. Identify moby's default seccomp profile definition and how it differs
+   from the custom profile — find where new syscalls like clone3 are
+   included in the defaults.
+5. Trace the full error chain: how does the seccomp failure propagate
+   from runc's BPF filter back through containerd to the kubelet error
+   visible to the user?
+
+Write your incident report to /workspace/moby/INCIDENT_REPORT.md with:
+- Root cause identification (file and function in each repo)
+- Full seccomp profile processing chain across all four repos
+- Comparison of default vs custom profile handling
+- Remediation steps for updating custom seccomp profiles
+"""
+
+[[repos]]
+url = "https://github.com/kubernetes/kubernetes"
+rev = "v1.33.0-alpha.2"
+path = "kubernetes"
+role = "consumer"
+
+[[repos]]
+url = "https://github.com/containerd/containerd"
+rev = "v1.7.24"
+path = "containerd"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/opencontainers/runc"
+rev = "v1.2.4"
+path = "runc"
+role = "upstream"
+
+[[repos]]
+url = "https://github.com/moby/moby"
+rev = "v28.0.0"
+path = "moby"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 3_500_000
+dependency_depth = 4
+frameworks = ["kubernetes", "containerd", "runc", "docker"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "kubelet_seccomp_conversion"
+weight = 0.18
+verifier = "checks/check_kubelet_seccomp.sh"
+description = "Agent identifies kubelet CRI seccomp profile conversion in kuberuntime"
+timeout_seconds = 120
+repo_deps = ["kubernetes"]
+
+[[checkpoints]]
+name = "containerd_cri_seccomp_mapping"
+weight = 0.18
+verifier = "checks/check_containerd_seccomp.sh"
+description = "Agent traces containerd CRI plugin seccomp profile to OCI spec mapping"
+timeout_seconds = 120
+repo_deps = ["containerd"]
+
+[[checkpoints]]
+name = "runc_seccomp_filter"
+weight = 0.18
+verifier = "checks/check_runc_seccomp.sh"
+description = "Agent identifies runc libcontainer seccomp BPF filter generation and unknown syscall handling"
+timeout_seconds = 120
+repo_deps = ["runc"]
+
+[[checkpoints]]
+name = "moby_default_profile"
+weight = 0.18
+verifier = "checks/check_moby_seccomp.sh"
+description = "Agent identifies moby default seccomp profile and how it includes newer syscalls like clone3"
+timeout_seconds = 120
+repo_deps = ["moby"]
+
+[[checkpoints]]
+name = "cross_repo_error_chain"
+weight = 0.28
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces seccomp failure propagation from runc BPF filter through containerd back to kubelet"
+timeout_seconds = 120
+repo_deps = ["kubernetes", "containerd", "runc", "moby"]
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+sourcegraph_mirror_config = "configs/sg_mirrors/incident-investigation-quad-containerd-001.json"
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing seccomp profile handling across 4 repos (kubelet CRI conversion, containerd CRI plugin, runc libcontainer, moby defaults) requires cross-repo symbol search and call chain navigation that MCP significantly accelerates"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pkg/kubelet/kuberuntime/kuberuntime_container_linux.go"
+repo = "kubernetes"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/kubelet/kuberuntime/security_context.go"
+repo = "kubernetes"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/cri/server/container_create_linux.go"
+repo = "containerd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "contrib/seccomp/seccomp_default.go"
+repo = "containerd"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "libcontainer/seccomp/seccomp_linux.go"
+repo = "runc"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "profiles/seccomp/seccomp.go"
+repo = "moby"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "profiles/seccomp/default_linux.go"
+repo = "moby"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "libcontainer/specconv/spec_linux.go"
+repo = "runc"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "pkg/kubelet/kuberuntime/kuberuntime_container.go"
+repo = "kubernetes"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "pkg/cri/server/container_create.go"
+repo = "containerd"
+confidence = 0.70
