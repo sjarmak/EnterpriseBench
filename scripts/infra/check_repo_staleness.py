@@ -4,17 +4,22 @@
 Usage:
     python scripts/infra/check_repo_staleness.py                  # human-readable staleness
     python scripts/infra/check_repo_staleness.py --json            # machine-readable JSON
-    python scripts/infra/check_repo_staleness.py --verify-files    # list required_files for verification
+    python scripts/infra/check_repo_staleness.py --verify-files    # clone repos and verify required_files exist
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import logging
 import pathlib
+import subprocess
 import sys
+import tempfile
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
+
+logger = logging.getLogger(__name__)
 
 try:
     import tomllib
@@ -189,6 +194,167 @@ def format_verify_files_report(
     return "\n".join(lines)
 
 
+@dataclass(frozen=True)
+class FileVerifyResult:
+    """Result of verifying a single required file against its pinned revision."""
+
+    entry: RequiredFileEntry
+    exists: bool
+    error: str = ""
+
+
+def _shallow_fetch_file_list(
+    repo_url: str,
+    rev: str,
+    work_dir: pathlib.Path,
+    timeout_seconds: int = 120,
+) -> set[str]:
+    """Fetch a repo at a specific revision and return the set of file paths.
+
+    Uses shallow fetch with no checkout to minimize disk and network usage.
+
+    Args:
+        repo_url: Git clone URL.
+        rev: Tag, branch, or SHA to fetch.
+        work_dir: Empty directory to use for the git operations.
+        timeout_seconds: Maximum time for each git command.
+
+    Returns:
+        Set of file paths present at the given revision.
+
+    Raises:
+        RuntimeError: If any git command fails.
+    """
+
+    def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            cmd,
+            cwd=str(work_dir),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"git command failed: {' '.join(cmd)}\n"
+                f"stderr: {result.stderr.strip()}"
+            )
+        return result
+
+    _run(["git", "init", "-q"])
+    _run(["git", "remote", "add", "origin", repo_url])
+    _run(["git", "fetch", "--depth", "1", "-q", "origin", rev])
+
+    result = _run(["git", "ls-tree", "-r", "--name-only", "FETCH_HEAD"])
+    return set(result.stdout.strip().splitlines())
+
+
+def verify_files_exist(
+    entries: list[RequiredFileEntry],
+    timeout_seconds: int = 120,
+) -> list[FileVerifyResult]:
+    """Clone repos at pinned revisions and verify required files exist.
+
+    Groups entries by (repo_url, pinned_rev) to avoid redundant clones.
+    Uses shallow fetch + git ls-tree for minimal disk/network usage.
+
+    Args:
+        entries: Required file entries from scan_required_files.
+        timeout_seconds: Timeout per git command.
+
+    Returns:
+        List of FileVerifyResult for every entry.
+    """
+    # Group by (url, rev) to deduplicate clones
+    groups: dict[tuple[str, str], list[RequiredFileEntry]] = {}
+    for entry in entries:
+        key = (entry.repo_url, entry.pinned_rev)
+        groups.setdefault(key, []).append(entry)
+
+    results: list[FileVerifyResult] = []
+
+    for (repo_url, rev), group_entries in groups.items():
+        file_set: set[str] | None = None
+        clone_error = ""
+
+        if not repo_url or not rev:
+            clone_error = "missing repo_url or pinned_rev"
+        else:
+            try:
+                with tempfile.TemporaryDirectory(prefix="eb_verify_") as tmpdir:
+                    file_set = _shallow_fetch_file_list(
+                        repo_url, rev, pathlib.Path(tmpdir), timeout_seconds
+                    )
+            except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
+                clone_error = str(exc)
+                logger.warning(
+                    "Failed to fetch %s @ %s: %s", repo_url, rev, clone_error
+                )
+
+        for entry in group_entries:
+            if clone_error:
+                results.append(
+                    FileVerifyResult(entry=entry, exists=False, error=clone_error)
+                )
+            else:
+                assert file_set is not None
+                exists = entry.file_path in file_set
+                results.append(FileVerifyResult(entry=entry, exists=exists))
+
+    return sorted(results, key=lambda r: (r.entry.task_id, r.entry.file_path))
+
+
+def format_verify_results_report(
+    results: list[FileVerifyResult],
+    json_output: bool = False,
+) -> str:
+    """Format verification results as human-readable text or JSON.
+
+    Args:
+        results: List of FileVerifyResult from verify_files_exist.
+        json_output: If True, return JSON; otherwise human-readable text.
+
+    Returns:
+        Formatted report string.
+    """
+    missing = [r for r in results if not r.exists]
+    passed = [r for r in results if r.exists]
+
+    if json_output:
+        return json.dumps(
+            {
+                "total_files": len(results),
+                "missing_count": len(missing),
+                "passed_count": len(passed),
+                "missing": [{**asdict(r.entry), "error": r.error} for r in missing],
+                "passed": [asdict(r.entry) for r in passed],
+            },
+            indent=2,
+        )
+
+    if not results:
+        return "No ground_truth.required_files found to verify."
+
+    if not missing:
+        return f"All {len(results)} required files verified successfully."
+
+    lines: list[str] = []
+    lines.append(
+        f"FAILED: {len(missing)} of {len(results)} required files not found:\n"
+    )
+    current_task = ""
+    for r in missing:
+        if r.entry.task_id != current_task:
+            current_task = r.entry.task_id
+            lines.append(f"  [{r.entry.task_id}]")
+        error_note = f"  (error: {r.error})" if r.error else ""
+        lines.append(
+            f"    {r.entry.repo_name}/{r.entry.file_path}  "
+            f"@ {r.entry.pinned_rev}{error_note}"
+        )
+    return "\n".join(lines)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Check for stale repo versions in the manifest."
@@ -214,7 +380,7 @@ def main() -> int:
     parser.add_argument(
         "--verify-files",
         action="store_true",
-        help="Scan task.toml files and list ground_truth.required_files with pinned revisions",
+        help="Clone repos at pinned SHAs and verify ground_truth.required_files exist",
     )
     parser.add_argument(
         "--benchmarks-dir",
@@ -224,12 +390,18 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # --verify-files mode: scan tasks and report required files
+    # --verify-files mode: clone repos and verify required files exist
     if args.verify_files:
         required = scan_required_files(args.benchmarks_dir)
-        report = format_verify_files_report(required, json_output=args.json_output)
+        if not required:
+            print(format_verify_files_report(required, json_output=args.json_output))
+            return 0
+
+        results = verify_files_exist(required)
+        report = format_verify_results_report(results, json_output=args.json_output)
         print(report)
-        return 0
+        missing = [r for r in results if not r.exists]
+        return 1 if missing else 0
 
     entries = load_manifest(args.manifest)
     stale = check_staleness(entries, threshold_days=args.threshold_days)
