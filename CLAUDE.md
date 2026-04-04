@@ -2,10 +2,6 @@
 
 Evolution of CodeScaleBench (CSB, 275 tasks, unpublished) into a benchmark measuring **codebase understanding and context gathering** — how well agents find and comprehend the right code across large, distributed codebases. Sourcegraph MCP is a first-class showcase, but tool access is a controlled independent variable (baseline / MCP-only / hybrid).
 
-## Project Status
-
-Phase 6: Task mix realignment complete. 112 active benchmark tasks across 10 task types (28 archived), 50.9% strict multi-repo coverage, all types with 2+ multi-repo variants. 779+ tests passing, full verification pipeline operational.
-
 ## Key Files
 
 - `docs/internal/PRD.md` — product requirements document
