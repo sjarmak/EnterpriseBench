@@ -5,6 +5,11 @@
       "repo": "github.com/argoproj/argo-cd",
       "rev": "v2.14.0-rc3",
       "mirror_id": "argoproj/argo-cd--v2.14.0-rc3"
+    },
+    {
+      "repo": "github.com/dandydeveloper/charts",
+      "rev": "redis-ha-4.26.6",
+      "mirror_id": "sg-evals/dandydeveloper-charts"
     }
   ]
 }

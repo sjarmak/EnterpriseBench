@@ -5,6 +5,11 @@
       "repo": "github.com/kubernetes/kubernetes",
       "rev": "v1.33.0-alpha.2",
       "mirror_id": "kubernetes/kubernetes--v1.33.0-alpha.2"
+    },
+    {
+      "repo": "github.com/kubernetes-sigs/knftables",
+      "rev": "v0.6.0",
+      "mirror_id": "sg-evals/kubernetes-sigs-knftables"
     }
   ]
 }
