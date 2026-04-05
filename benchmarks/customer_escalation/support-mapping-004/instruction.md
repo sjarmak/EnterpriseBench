@@ -14,18 +14,18 @@ We checked the Grafana server logs and see warnings about "alert evaluation took
 
 The weird thing is that simple alerts still work fine. It's mainly the ones with complex queries or rules that have multiple conditions that seem to be delayed. We haven't added many new rules recently, maybe 20 or so in the past month.
 
-Additionally, for some alerts that DO fire in Grafana, the actual notifications never arrive. We use Alertmanager as our notification backend and we're seeing some alerts get routed but the notifications seem to get stuck or silenced unexpectedly. We checked and there are no active silences we created, but some alerts appear to be suppressed by the Alertmanager dispatch routing tree. We also noticed that a few notification integrations are timing out.
+Additionally, for some alerts that DO fire in Grafana, the actual notifications never arrive. We use Alertmanager as our notification backend and we're seeing some alerts get routed but the notifications seem to get stuck or silenced unexpectedly. We checked and there are no active silences we created, but some alerts still don't result in delivered notifications. We also noticed that a few notification integrations are timing out.
 
 We need to understand:
 
 1. What controls alert evaluation timing in Grafana's codebase? How does Grafana decide when to check each rule and what happens when a check takes too long?
-2. How does the Alertmanager notification pipeline process alerts received from Grafana? Where could alerts get lost between Grafana firing and the notification actually being delivered?
-3. What related source files, components, or subsystems across both repos are involved in the end-to-end alert flow? Include supporting files beyond the core paths (e.g., evaluation engine, rule models, silence management, API entry points).
+2. How does Alertmanager process alerts received from Grafana? Where could alerts get lost between Grafana firing and the notification actually being delivered?
+3. What related source files and components across both repos are involved in the end-to-end alert flow?
 
 Repos are available at:
 
-- `/workspace/grafana/` — Grafana source (alert scheduler and evaluation engine)
-- `/workspace/alertmanager/` — Prometheus Alertmanager source (dispatch routing and notification delivery)
+- `/workspace/grafana/` — Grafana source
+- `/workspace/alertmanager/` — Prometheus Alertmanager source
 
 Regards,
 Marcus
