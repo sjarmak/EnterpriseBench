@@ -34,14 +34,14 @@ multi_repo_pattern = "investigate"
 
 [[checkpoints]]
 name = "code_paths"
-weight = 0.60
+weight = 0.40
 verifier = "checks/check_code_paths.sh"
-description = "Agent identifies the alert scheduler and evaluation engine code paths in Grafana"
+description = "Agent identifies the alert scheduler and evaluation engine code paths in Grafana and Alertmanager"
 timeout_seconds = 120
 
 [[checkpoints]]
 name = "ownership"
-weight = 0.15
+weight = 0.20
 verifier = "checks/check_ownership.sh"
 description = "Agent identifies the ngalert/schedule subsystem in Grafana and dispatch/notify subsystem in Alertmanager"
 timeout_seconds = 60
@@ -55,9 +55,9 @@ timeout_seconds = 60
 
 [[checkpoints]]
 name = "related_issues"
-weight = 0.10
+weight = 0.25
 verifier = "checks/check_related_issues.sh"
-description = "Agent identifies Alertmanager notification pipeline and dispatch routing issues"
+description = "Agent identifies related source files across both Grafana and Alertmanager repos"
 timeout_seconds = 60
 
 [artifacts]

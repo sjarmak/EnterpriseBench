@@ -371,7 +371,8 @@ def _build_instruction_text(
         '  "trigger_conditions": ["Condition 1"],\n'
         '  "code_paths": [{"path": "relative/path"}],\n'
         '  "ownership": "subsystem description",\n'
-        '  "severity": {"level": "high", "rationale": "..."}\n'
+        '  "severity": {"level": "high", "rationale": "..."},\n'
+        '  "related_issues": ["path/to/related/file.go", "description of related component"]\n'
         "}\n```\n"
         "Include only the fields relevant to this task. "
         "Your answer is evaluated against a closed-world oracle — completeness matters.\n"

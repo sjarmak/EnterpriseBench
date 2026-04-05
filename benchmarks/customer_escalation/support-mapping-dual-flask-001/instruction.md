@@ -11,6 +11,7 @@ Your task is to map this user-reported routing error from the Flask application
 layer down to Werkzeug's URL routing internals.
 
 Your task:
+
 1. Find where Flask handles route registration and method checking — trace from
    @app.route() decorator through the Flask.add_url_rule() method.
 2. Find where Werkzeug implements URL rule matching and method validation — identify
@@ -22,7 +23,9 @@ Your task:
    inheritance, strict_slashes behavior, or Rule.methods handling.
 
 Write your analysis to /workspace/SUPPORT_MAPPING.md with:
+
 - Flask route registration code path (file:function)
 - Werkzeug URL routing and method validation code (file:function)
 - Complete error path from request to 405 response
 - What changed that could cause the regression
+- Related source files and components across both repos involved in the routing and method dispatch flow

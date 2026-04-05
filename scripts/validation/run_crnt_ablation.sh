@@ -193,24 +193,35 @@ for REPO_PATH in $ABLATE_REPOS; do
     echo "  Output:    ${OUTPUT_BASE}/rep{1..${REPS}}/"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        # In dry-run mode, compute expected scores via crnt_validator
+        # In dry-run mode, estimate which checkpoints depend on the removed repo
         python3 -c "
 import sys, json
 sys.path.insert(0, '${REPO_ROOT}/scripts/validation')
-from crnt_validator import parse_toml, compute_max_score_without_repo, extract_checkpoints, map_checkpoints_to_repos
+from crnt_validator import parse_toml, extract_checkpoints
 from pathlib import Path
 
 config = parse_toml(Path('${TASK_TOML}'))
-max_score, lost = compute_max_score_without_repo(config, '${REPO_PATH}')
-cp_repos = map_checkpoints_to_repos(config)
 checkpoints = extract_checkpoints(config)
+removed = '${REPO_PATH}'
 
-print(f'  Max score without {\"${REPO_PATH}\"}: {max_score:.2f}')
-print(f'  Lost checkpoints: {list(lost)}')
+# Map repos to required_files
+gt = config.get('ground_truth', {})
+req_files = gt.get('required_files', [])
+repos_with_files = {rf.get('repo', '') for rf in req_files}
+
+# Estimate: a checkpoint likely depends on a repo if the repo has required_files
+# (structural heuristic — actual dependency requires reading verifier scripts)
+kept_weight = 0.0
+lost_cps = []
 for cp in checkpoints:
-    deps = cp_repos.get(cp.name, set())
-    status = 'LOST' if '${REPO_PATH}' in deps else 'kept'
-    print(f'    {cp.name}: weight={cp.weight:.2f} [{status}]')
+    # Heuristic: if removed repo has required_files, checkpoints touching it are at risk
+    print(f'    {cp.name}: weight={cp.weight:.2f}')
+    kept_weight += cp.weight
+
+total_weight = sum(cp.weight for cp in checkpoints)
+print(f'  Removed repo \"{removed}\" has required_files: {removed in repos_with_files}')
+print(f'  Total checkpoint weight: {total_weight:.2f}')
+print(f'  Note: actual score impact depends on verifier logic, not just file presence')
 "
         echo ""
         continue
@@ -225,30 +236,45 @@ for cp in checkpoints:
         continue
     fi
 
-    # Generate ablated Dockerfile inline: clone all repos EXCEPT the excluded one
-    ABLATED_DOCKERFILE=$(python3 -c "
-import sys, json
-sys.path.insert(0, '${REPO_ROOT}/scripts/validation')
-
-task_info = json.loads('''${TASK_INFO}''')
-excluded = '${REPO_PATH}'
-lines = ['FROM ubuntu:22.04', 'RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*']
-for repo in task_info['repos']:
-    if repo['path'] == excluded:
+    # Generate ablated Dockerfile by taking the task's real Dockerfile and
+    # removing the git clone line for the excluded repo.
+    TASK_DOCKERFILE="${TASK_DIR}/environment/Dockerfile"
+    if [[ ! -f "$TASK_DOCKERFILE" ]]; then
+        echo "  Warning: Dockerfile not found: ${TASK_DOCKERFILE}" >&2
         continue
-    url = repo['url']
-    rev = repo['rev']
-    path = repo['path']
-    lines.append(f'RUN git clone {url} --branch {rev} --depth 1 /workspace/{path}')
-lines.append('WORKDIR /workspace')
-print('\n'.join(lines))
+    fi
+
+    ABLATED_DOCKERFILE=$(python3 -c "
+import re, sys
+
+excluded_repo = '${REPO_PATH}'
+with open('${TASK_DOCKERFILE}') as f:
+    lines = f.readlines()
+
+result = []
+for line in lines:
+    # Skip git clone lines that reference the excluded repo path
+    if 'git clone' in line and f'/workspace/{excluded_repo}' in line:
+        result.append(f'# ABLATED: {line}')
+        continue
+    # Also skip comment lines immediately preceding the excluded clone
+    if result and result[-1].startswith('# ABLATED:') and line.strip().startswith('#') and excluded_repo in line:
+        result.append(f'# ABLATED: {line}')
+        continue
+    result.append(line)
+
+print(''.join(result), end='')
 ")
+
+    # Write ablated Dockerfile to temp file (process substitution doesn't work with BuildKit)
+    ABLATED_DOCKERFILE_PATH="${ABLATION_DIR}/Dockerfile.ablate-${REPO_PATH}"
+    echo "$ABLATED_DOCKERFILE" > "$ABLATED_DOCKERFILE_PATH"
 
     # Build the Docker image with the ablated Dockerfile
     docker build \
         -t "${ABLATION_TAG}" \
-        -f <(echo "$ABLATED_DOCKERFILE") \
-        "${REPO_ROOT}" 2>/dev/null || {
+        -f "$ABLATED_DOCKERFILE_PATH" \
+        "${TASK_DIR}/environment" 2>&1 | tail -5 || {
         echo "  Warning: Docker build failed for ablation of ${REPO_PATH}" >&2
         continue
     }
@@ -263,8 +289,11 @@ print('\n'.join(lines))
         python3 "${REPO_ROOT}/scripts/orchestration/run_task.py" \
             "${TASK_TOML}" \
             --mode "${MODE}" \
+            --ablation-variant "${REPO_PATH}" \
             --output-dir "${REP_DIR}" \
             --no-build \
+            --rep "${REP}" \
+            --account "${REP}" \
             2>&1 | tee "${REP_DIR}/run.log" || true
 
         # Collect scores if results.json exists

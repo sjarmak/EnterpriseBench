@@ -39,6 +39,12 @@
       "confidence": 0.8
     }
   ],
+  "related_references": [
+    "lib/ansible/plugins/lookup/file.py",
+    "src/jinja2/exceptions.py",
+    "lib/ansible/template/__init__.py",
+    "src/jinja2/lexer.py"
+  ],
   "error_chain": [
     "Ansible lookup('file') plugin reads binary file content from disk",
     "Ansible Templar class receives template string with embedded binary lookup result",

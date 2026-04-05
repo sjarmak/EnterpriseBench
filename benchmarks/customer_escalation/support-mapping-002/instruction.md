@@ -18,5 +18,7 @@ The crash happens deep in the compilation process, not during parsing or anythin
 
 We need to understand what part of the compiler is responsible for "expanding types" during code generation and why it would fail. Our team doesn't have deep compiler expertise so we need your help mapping this error to the right area of the codebase.
 
+Please also identify any related source files or components involved in the type legalization pipeline beyond the core crash site (e.g., related type expansion code for other data types, DAG lowering utilities).
+
 Thanks,
 Priya

@@ -16,5 +16,7 @@ We haven't changed any configuration recently. Our backends are running fine -- 
 
 Can you help us figure out what part of the proxy codebase is responsible for this "overflow" reset and what controls the limits? We need to understand the code path so we can tune the right settings.
 
+Also, please identify any related source files, documentation, or components that are relevant to understanding the full picture (e.g., configuration schemas, related circuit-breaking mechanisms, connection pool internals).
+
 Thanks,
 Jordan

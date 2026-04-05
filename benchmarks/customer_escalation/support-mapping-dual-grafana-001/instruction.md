@@ -11,6 +11,7 @@ Your task is to map this user-reported issue from the Grafana UI all the way dow
 to the Prometheus query engine code that enforces the limit.
 
 Your task:
+
 1. Find where Grafana surfaces this error to the user — trace from the dashboard
    panel rendering code through the data source proxy to the Prometheus data source
    plugin.
@@ -22,7 +23,9 @@ Your task:
    this behavior (query timeout, max samples, step interval).
 
 Write your analysis to /workspace/SUPPORT_MAPPING.md with:
+
 - Grafana code path for error display (file:function)
 - Prometheus query engine limit code (file:function)
 - Complete error path between the two
 - Configuration knobs the customer can adjust
+- Related source files and components across both repos involved in the query execution and error propagation flow

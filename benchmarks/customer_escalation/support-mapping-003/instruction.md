@@ -18,5 +18,7 @@ This happens with every dashboard we import, not just one specific one. The JSON
 
 Is there something in the import process that strips out panel configuration? We need to understand what's happening so we can figure out a workaround.
 
+Please also identify any related source files or components involved in dashboard serialization beyond the core import path (e.g., dashboard model definitions, panel plugin configuration handling, JSON schema validation).
+
 Best,
 Alex

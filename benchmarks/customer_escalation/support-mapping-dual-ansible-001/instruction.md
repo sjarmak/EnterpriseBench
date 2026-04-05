@@ -34,3 +34,4 @@ Write your analysis to /workspace/ERROR_PROVENANCE.md with:
 - Jinja2 lexer character validation code path
 - Root cause: why b64encode filter is not applied before Jinja2 lexer validation
 - Alternative trigger conditions
+- Related source files and components across both repos involved in the template rendering and error handling flow

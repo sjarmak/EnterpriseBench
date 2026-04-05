@@ -20,6 +20,7 @@ We need to understand:
 
 1. What controls alert evaluation timing in Grafana's codebase? How does Grafana decide when to check each rule and what happens when a check takes too long?
 2. How does the Alertmanager notification pipeline process alerts received from Grafana? Where could alerts get lost between Grafana firing and the notification actually being delivered?
+3. What related source files, components, or subsystems across both repos are involved in the end-to-end alert flow? Include supporting files beyond the core paths (e.g., evaluation engine, rule models, silence management, API entry points).
 
 Repos are available at:
 
