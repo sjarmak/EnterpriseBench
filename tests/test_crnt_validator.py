@@ -1,7 +1,6 @@
 """Tests for the Cross-Repo Necessity Test (CRNT) validator."""
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -10,15 +9,13 @@ from scripts.validation.crnt_validator import (
     AblatedConfig,
     CRNTResult,
     CheckpointInfo,
-    RepoAblationResult,
+    RepoFileCoverage,
     RepoInfo,
-    compute_max_score_without_repo,
     evaluate_crnt,
     extract_checkpoints,
     extract_repos,
     format_result,
     generate_ablations,
-    map_checkpoints_to_repos,
     main,
     parse_toml,
     write_ablated_configs,
@@ -28,7 +25,7 @@ from scripts.validation.crnt_validator import (
 
 
 def _make_multi_repo_config() -> dict:
-    """A 3-repo task config where all checkpoints depend on all repos."""
+    """A 3-repo task config with required_files across all repos."""
     return {
         "task": {"id": "test-multi-001", "suite": "dependency_management"},
         "repos": [
@@ -89,8 +86,8 @@ def _make_single_repo_config() -> dict:
     }
 
 
-def _make_partial_dependency_config() -> dict:
-    """A 2-repo task where only one checkpoint depends on the second repo."""
+def _make_partial_coverage_config() -> dict:
+    """A 2-repo task where only one repo has required_files — should fail CRNT."""
     return {
         "task": {"id": "test-partial-001", "suite": "feature_delivery"},
         "repos": [
@@ -114,14 +111,13 @@ def _make_partial_dependency_config() -> dict:
         "ground_truth": {
             "required_files": [
                 {"path": "src/app.py", "repo": "main-repo"},
-                {"path": "lib/dep.py", "repo": "aux-repo"},
             ]
         },
     }
 
 
 def _make_no_ground_truth_config() -> dict:
-    """A multi-repo task with no ground_truth section."""
+    """A multi-repo task with no ground_truth section — should fail CRNT."""
     return {
         "task": {"id": "test-nogt-001", "suite": "incident_response"},
         "repos": [
@@ -145,10 +141,10 @@ def _make_no_ground_truth_config() -> dict:
     }
 
 
-def _make_repo_deps_config() -> dict:
-    """A 2-repo task where each checkpoint has explicit repo_deps."""
+def _make_full_coverage_config() -> dict:
+    """A 2-repo task where both repos have required_files — should pass CRNT."""
     return {
-        "task": {"id": "test-repodeps-001", "suite": "dependency_management"},
+        "task": {"id": "test-full-001", "suite": "dependency_management"},
         "repos": [
             {
                 "url": "https://github.com/org/repo1",
@@ -164,58 +160,8 @@ def _make_repo_deps_config() -> dict:
             },
         ],
         "checkpoints": [
-            {
-                "name": "cp_a",
-                "weight": 0.5,
-                "verifier": "checks/a.sh",
-                "repo_deps": ["repo1"],
-            },
-            {
-                "name": "cp_b",
-                "weight": 0.5,
-                "verifier": "checks/b.sh",
-                "repo_deps": ["repo2"],
-            },
-        ],
-        "ground_truth": {
-            "required_files": [
-                {"path": "src/main.py", "repo": "repo1"},
-                {"path": "lib/dep.py", "repo": "repo2"},
-            ]
-        },
-    }
-
-
-def _make_mixed_config() -> dict:
-    """A 2-repo task where one checkpoint has repo_deps, the other doesn't."""
-    return {
-        "task": {"id": "test-mixed-001", "suite": "feature_delivery"},
-        "repos": [
-            {
-                "url": "https://github.com/org/repo1",
-                "rev": "v1.0",
-                "path": "repo1",
-                "role": "primary",
-            },
-            {
-                "url": "https://github.com/org/repo2",
-                "rev": "v1.0",
-                "path": "repo2",
-                "role": "dependency",
-            },
-        ],
-        "checkpoints": [
-            {
-                "name": "explicit_cp",
-                "weight": 0.4,
-                "verifier": "checks/explicit.sh",
-                "repo_deps": ["repo1"],
-            },
-            {
-                "name": "heuristic_cp",
-                "weight": 0.6,
-                "verifier": "checks/heuristic.sh",
-            },
+            {"name": "cp_a", "weight": 0.5, "verifier": "checks/a.sh"},
+            {"name": "cp_b", "weight": 0.5, "verifier": "checks/b.sh"},
         ],
         "ground_truth": {
             "required_files": [
@@ -270,56 +216,72 @@ class TestExtractCheckpoints:
         cps = extract_checkpoints(config)
         assert abs(sum(cp.weight for cp in cps) - 1.0) < 1e-9
 
-    def test_extracts_repo_deps(self) -> None:
-        config = _make_repo_deps_config()
-        cps = extract_checkpoints(config)
-        assert cps[0].repo_deps == ("repo1",)
-        assert cps[1].repo_deps == ("repo2",)
 
-    def test_repo_deps_default_empty(self) -> None:
+# ── Test evaluate_crnt ───────────────────────────────────────────
+
+
+class TestEvaluateCRNT:
+    def test_multi_repo_all_covered_passes(self) -> None:
         config = _make_multi_repo_config()
-        cps = extract_checkpoints(config)
-        for cp in cps:
-            assert cp.repo_deps == ()
+        result = evaluate_crnt(config)
+        assert result.passes_crnt is True
+        assert result.num_repos == 3
+        assert len(result.uncovered_repos) == 0
 
-
-# ── Test map_checkpoints_to_repos ────────────────────────────────
-
-
-class TestMapCheckpointsToRepos:
-    def test_all_repos_mapped(self) -> None:
+    def test_task_id_extracted(self) -> None:
         config = _make_multi_repo_config()
-        mapping = map_checkpoints_to_repos(config)
-        # All checkpoints should reference all 3 repos (since all 3 have required_files)
-        for cp_name, repos in mapping.items():
-            assert repos == {"alpha", "beta", "gamma"}
+        result = evaluate_crnt(config)
+        assert result.task_id == "test-multi-001"
 
-    def test_no_ground_truth_maps_to_all(self) -> None:
+    def test_all_repos_have_coverage(self) -> None:
+        config = _make_multi_repo_config()
+        result = evaluate_crnt(config)
+        assert len(result.repo_coverage) == 3
+        for rc in result.repo_coverage:
+            assert rc.has_coverage is True
+            assert rc.required_file_count >= 1
+
+    def test_full_coverage_passes(self) -> None:
+        config = _make_full_coverage_config()
+        result = evaluate_crnt(config)
+        assert result.passes_crnt is True
+
+    def test_partial_coverage_fails(self) -> None:
+        """A task where one repo has no required_files should fail CRNT."""
+        config = _make_partial_coverage_config()
+        result = evaluate_crnt(config)
+        assert result.passes_crnt is False
+        assert "aux-repo" in result.uncovered_repos
+
+    def test_no_ground_truth_fails(self) -> None:
+        """A task with no ground_truth section has no required_files coverage."""
         config = _make_no_ground_truth_config()
-        mapping = map_checkpoints_to_repos(config)
-        for cp_name, repos in mapping.items():
-            assert repos == {"a", "b"}
+        result = evaluate_crnt(config)
+        assert result.passes_crnt is False
+        assert len(result.uncovered_repos) == 2
 
-    def test_partial_dependency(self) -> None:
-        config = _make_partial_dependency_config()
-        mapping = map_checkpoints_to_repos(config)
-        # Both checkpoints map to both repos since both repos have required_files
-        for cp_name, repos in mapping.items():
-            assert repos == {"main-repo", "aux-repo"}
+    def test_single_repo_fails(self) -> None:
+        """Single-repo tasks cannot pass CRNT (requires >= 2 repos)."""
+        config = _make_single_repo_config()
+        result = evaluate_crnt(config)
+        assert result.passes_crnt is False
 
-    def test_repo_deps_anchors_to_declared_repos(self) -> None:
-        config = _make_repo_deps_config()
-        mapping = map_checkpoints_to_repos(config)
-        assert mapping["cp_a"] == {"repo1"}
-        assert mapping["cp_b"] == {"repo2"}
+    def test_file_counts_correct(self) -> None:
+        config = _make_multi_repo_config()
+        result = evaluate_crnt(config)
+        counts = {rc.repo_path: rc.required_file_count for rc in result.repo_coverage}
+        assert counts["alpha"] == 1
+        assert counts["beta"] == 1
+        assert counts["gamma"] == 1
 
-    def test_mixed_config_anchoring(self) -> None:
-        config = _make_mixed_config()
-        mapping = map_checkpoints_to_repos(config)
-        # explicit_cp has repo_deps=["repo1"], anchored only to repo1
-        assert mapping["explicit_cp"] == {"repo1"}
-        # heuristic_cp has no repo_deps, falls back to gt_repos (both repos)
-        assert mapping["heuristic_cp"] == {"repo1", "repo2"}
+    def test_multiple_files_per_repo(self) -> None:
+        config = _make_multi_repo_config()
+        config["ground_truth"]["required_files"].append(
+            {"path": "extra.py", "repo": "alpha"}
+        )
+        result = evaluate_crnt(config)
+        counts = {rc.repo_path: rc.required_file_count for rc in result.repo_coverage}
+        assert counts["alpha"] == 2
 
 
 # ── Test generate_ablations ──────────────────────────────────────
@@ -361,105 +323,6 @@ class TestGenerateAblations:
         assert len(ablations[0].remaining_repos) == 0
 
 
-# ── Test compute_max_score_without_repo ──────────────────────────
-
-
-class TestComputeMaxScore:
-    def test_all_lost_when_all_depend(self) -> None:
-        config = _make_multi_repo_config()
-        score, lost = compute_max_score_without_repo(config, "alpha")
-        assert score == 0.0
-        assert set(lost) == {"cp1", "cp2", "cp3"}
-
-    def test_no_ground_truth_all_lost(self) -> None:
-        config = _make_no_ground_truth_config()
-        score, lost = compute_max_score_without_repo(config, "a")
-        assert score == 0.0
-        assert len(lost) == 2
-
-    def test_nonexistent_repo_no_loss(self) -> None:
-        config = _make_multi_repo_config()
-        score, lost = compute_max_score_without_repo(config, "nonexistent")
-        assert score == pytest.approx(1.0)
-        assert len(lost) == 0
-
-    def test_repo_deps_removing_repo1_keeps_cp_b(self) -> None:
-        """Removing repo1 loses cp_a (0.5) but keeps cp_b (0.5)."""
-        config = _make_repo_deps_config()
-        score, lost = compute_max_score_without_repo(config, "repo1")
-        assert score == pytest.approx(0.5)
-        assert lost == ("cp_a",)
-
-    def test_repo_deps_removing_repo2_keeps_cp_a(self) -> None:
-        """Removing repo2 loses cp_b (0.5) but keeps cp_a (0.5)."""
-        config = _make_repo_deps_config()
-        score, lost = compute_max_score_without_repo(config, "repo2")
-        assert score == pytest.approx(0.5)
-        assert lost == ("cp_b",)
-
-    def test_mixed_config_removing_repo1(self) -> None:
-        """Removing repo1 loses both checkpoints (explicit depends on repo1,
-        heuristic depends on both repos including repo1)."""
-        config = _make_mixed_config()
-        score, lost = compute_max_score_without_repo(config, "repo1")
-        assert score == pytest.approx(0.0)
-        assert set(lost) == {"explicit_cp", "heuristic_cp"}
-
-    def test_mixed_config_removing_repo2(self) -> None:
-        """Removing repo2 keeps explicit_cp (repo_deps=repo1 only),
-        loses heuristic_cp (depends on both repos)."""
-        config = _make_mixed_config()
-        score, lost = compute_max_score_without_repo(config, "repo2")
-        assert score == pytest.approx(0.4)
-        assert lost == ("heuristic_cp",)
-
-
-# ── Test evaluate_crnt ───────────────────────────────────────────
-
-
-class TestEvaluateCRNT:
-    def test_multi_repo_passes(self) -> None:
-        config = _make_multi_repo_config()
-        result = evaluate_crnt(config)
-        assert result.passes_crnt is True
-        assert result.num_repos == 3
-
-    def test_threshold_respected(self) -> None:
-        config = _make_multi_repo_config()
-        # With threshold=0.0, removing a repo gives score 0.0 which is ≤ 0.0
-        result = evaluate_crnt(config, threshold=0.0)
-        assert result.passes_crnt is True
-
-    def test_task_id_extracted(self) -> None:
-        config = _make_multi_repo_config()
-        result = evaluate_crnt(config)
-        assert result.task_id == "test-multi-001"
-
-    def test_all_repo_results_present(self) -> None:
-        config = _make_multi_repo_config()
-        result = evaluate_crnt(config)
-        assert len(result.repo_results) == 3
-
-    def test_repo_deps_dual_repo_passes_crnt(self) -> None:
-        """A dual-repo config with proper repo_deps passes CRNT because
-        removing either repo drops max_score to 0.5 (≤ 0.6 threshold)."""
-        config = _make_repo_deps_config()
-        result = evaluate_crnt(config)
-        assert result.passes_crnt is True
-        # Each ablation should yield max_score=0.5
-        for rr in result.repo_results:
-            assert rr.max_score_without == pytest.approx(0.5)
-            assert rr.passes_threshold is True
-
-    def test_repo_deps_differentiated_scores(self) -> None:
-        """Removing repo1 vs repo2 loses different checkpoints."""
-        config = _make_repo_deps_config()
-        result = evaluate_crnt(config)
-        rr_by_repo = {rr.removed_repo.path: rr for rr in result.repo_results}
-        assert rr_by_repo["repo1"].lost_checkpoints == ("cp_a",)
-        assert rr_by_repo["repo2"].lost_checkpoints == ("cp_b",)
-
-
 # ── Test format_result ───────────────────────────────────────────
 
 
@@ -478,6 +341,19 @@ class TestFormatResult:
         assert "alpha" in text
         assert "beta" in text
         assert "gamma" in text
+
+    def test_fail_shows_uncovered(self) -> None:
+        config = _make_partial_coverage_config()
+        result = evaluate_crnt(config)
+        text = format_result(result)
+        assert "FAIL" in text
+        assert "aux-repo" in text
+
+    def test_file_counts_shown(self) -> None:
+        config = _make_multi_repo_config()
+        result = evaluate_crnt(config)
+        text = format_result(result)
+        assert "required_files=1" in text
 
 
 # ── Test write_ablated_configs ───────────────────────────────────
@@ -525,17 +401,6 @@ class TestParseTOML:
 
 
 class TestCLI:
-    def test_dry_run(self, capsys: pytest.CaptureFixture[str]) -> None:
-        task_path = Path("benchmarks/dependency_management/dep-traversal-001/task.toml")
-        if not task_path.exists():
-            pytest.skip("dep-traversal-001 task.toml not found")
-        ret = main(["str(task_path)", "--dry-run"])
-        # Will fail because path doesn't exist as string — use real path
-        ret = main([str(task_path), "--dry-run"])
-        assert ret == 0
-        captured = capsys.readouterr()
-        assert "Ablation" in captured.out
-
     def test_json_output(self, capsys: pytest.CaptureFixture[str]) -> None:
         task_path = Path("benchmarks/dependency_management/dep-traversal-001/task.toml")
         if not task_path.exists():
@@ -554,7 +419,6 @@ class TestCLI:
     def test_single_repo_skips(
         self, capsys: pytest.CaptureFixture[str], tmp_path: Path
     ) -> None:
-        # Create a minimal single-repo TOML
         toml_content = b"""
 [task]
 id = "single-001"

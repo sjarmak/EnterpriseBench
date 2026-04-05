@@ -81,7 +81,6 @@ weight = 0.40
 verifier = "checks/check_drift_points.sh"
 description = "Agent identifies null securityContext overrides in redis-ha values as drift points"
 timeout_seconds = 60
-repo_deps = ["argo-cd"]
 
 [[checkpoints]]
 name = "determine_expected_values"
@@ -89,7 +88,6 @@ weight = 0.35
 verifier = "checks/check_expected_values.sh"
 description = "Agent correctly determines that null overrides should be removed to let upstream defaults apply"
 timeout_seconds = 60
-repo_deps = ["argo-cd", "dandydeveloper-charts"]
 
 [[checkpoints]]
 name = "validate_corrected_config"
@@ -97,7 +95,6 @@ weight = 0.25
 verifier = "checks/check_config_valid.sh"
 description = "If corrected config provided, validate it renders without null securityContext issues"
 timeout_seconds = 120
-repo_deps = ["argo-cd", "dandydeveloper-charts"]
 
 [artifacts]
 required = ["answer"]

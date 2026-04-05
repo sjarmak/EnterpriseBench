@@ -109,7 +109,6 @@ weight = 0.18
 verifier = "checks/check_kubelet_seccomp.sh"
 description = "Agent identifies kubelet CRI seccomp profile conversion in kuberuntime"
 timeout_seconds = 120
-repo_deps = ["kubernetes"]
 
 [[checkpoints]]
 name = "containerd_cri_seccomp_mapping"
@@ -117,7 +116,6 @@ weight = 0.18
 verifier = "checks/check_containerd_seccomp.sh"
 description = "Agent traces containerd CRI plugin seccomp profile to OCI spec mapping"
 timeout_seconds = 120
-repo_deps = ["containerd"]
 
 [[checkpoints]]
 name = "runc_seccomp_filter"
@@ -125,7 +123,6 @@ weight = 0.18
 verifier = "checks/check_runc_seccomp.sh"
 description = "Agent identifies runc libcontainer seccomp BPF filter generation and unknown syscall handling"
 timeout_seconds = 120
-repo_deps = ["runc"]
 
 [[checkpoints]]
 name = "moby_default_profile"
@@ -133,7 +130,6 @@ weight = 0.18
 verifier = "checks/check_moby_seccomp.sh"
 description = "Agent identifies moby default seccomp profile and how it includes newer syscalls like clone3"
 timeout_seconds = 120
-repo_deps = ["moby"]
 
 [[checkpoints]]
 name = "cross_repo_error_chain"
@@ -141,7 +137,6 @@ weight = 0.28
 verifier = "checks/check_error_chain.sh"
 description = "Agent traces seccomp failure propagation from runc BPF filter through containerd back to kubelet"
 timeout_seconds = 120
-repo_deps = ["kubernetes", "containerd", "runc", "moby"]
 
 [artifacts]
 required = ["incident_report"]

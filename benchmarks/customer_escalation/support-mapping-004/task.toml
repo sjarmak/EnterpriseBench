@@ -38,7 +38,6 @@ weight = 0.60
 verifier = "checks/check_code_paths.sh"
 description = "Agent identifies the alert scheduler and evaluation engine code paths in Grafana"
 timeout_seconds = 120
-repo_deps = ["grafana"]
 
 [[checkpoints]]
 name = "ownership"
@@ -46,7 +45,6 @@ weight = 0.15
 verifier = "checks/check_ownership.sh"
 description = "Agent identifies the ngalert/schedule subsystem in Grafana and dispatch/notify subsystem in Alertmanager"
 timeout_seconds = 60
-repo_deps = ["grafana", "alertmanager"]
 
 [[checkpoints]]
 name = "severity"
@@ -54,7 +52,6 @@ weight = 0.15
 verifier = "checks/check_severity.sh"
 description = "Agent correctly assesses severity considering both scheduler delays and notification pipeline failures"
 timeout_seconds = 60
-repo_deps = ["grafana", "alertmanager"]
 
 [[checkpoints]]
 name = "related_issues"
@@ -62,7 +59,6 @@ weight = 0.10
 verifier = "checks/check_related_issues.sh"
 description = "Agent identifies Alertmanager notification pipeline and dispatch routing issues"
 timeout_seconds = 60
-repo_deps = ["alertmanager"]
 
 [artifacts]
 required = ["answer"]

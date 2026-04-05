@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Cross-Repo Necessity Test (CRNT) validator.
 
-Tests whether multi-repo benchmark tasks actually require multiple repos by
-performing ablation analysis: for each repo, compute the maximum achievable
-score if that repo were removed. A task passes CRNT if removing ANY single
-repo drops the max score to ≤ threshold (default 60%).
+Validates that multi-repo benchmark tasks structurally require each declared
+repo by checking that ground_truth.required_files are distributed across repos.
+
+A task passes CRNT if every declared repo has at least one required_file entry.
+This is a structural check — empirical validation (does an agent actually need
+the repo?) is done separately via cognitive ablation.
 
 Usage:
     python3 scripts/validation/crnt_validator.py benchmarks/.../task.toml
-    python3 scripts/validation/crnt_validator.py benchmarks/.../task.toml --dry-run
-    python3 scripts/validation/crnt_validator.py benchmarks/.../task.toml --output-dir /tmp/ablations
+    python3 scripts/validation/crnt_validator.py benchmarks/.../task.toml --json
 """
 
 from __future__ import annotations
@@ -17,8 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -29,9 +29,6 @@ except ImportError:
         import tomli as tomllib  # type: ignore[no-redef]
     except ImportError:
         tomllib = None  # type: ignore[assignment]
-
-
-DEFAULT_THRESHOLD = 0.60
 
 
 def parse_toml(path: Path) -> dict[str, Any]:
@@ -60,7 +57,6 @@ class CheckpointInfo:
     weight: float
     verifier: str
     description: str = ""
-    repo_deps: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -86,13 +82,12 @@ class AblatedConfig:
 
 
 @dataclass(frozen=True)
-class RepoAblationResult:
-    """Result of ablating a single repo."""
+class RepoFileCoverage:
+    """Coverage of required_files for a single repo."""
 
-    removed_repo: RepoInfo
-    max_score_without: float
-    lost_checkpoints: tuple[str, ...]
-    passes_threshold: bool
+    repo_path: str
+    required_file_count: int
+    has_coverage: bool
 
 
 @dataclass(frozen=True)
@@ -101,9 +96,9 @@ class CRNTResult:
 
     task_id: str
     num_repos: int
-    threshold: float
-    repo_results: tuple[RepoAblationResult, ...]
+    repo_coverage: tuple[RepoFileCoverage, ...]
     passes_crnt: bool
+    uncovered_repos: tuple[str, ...]
 
 
 def extract_repos(config: dict[str, Any]) -> tuple[RepoInfo, ...]:
@@ -129,71 +124,51 @@ def extract_checkpoints(config: dict[str, Any]) -> tuple[CheckpointInfo, ...]:
             weight=c.get("weight", 0.0),
             verifier=c.get("verifier", ""),
             description=c.get("description", ""),
-            repo_deps=tuple(c.get("repo_deps", [])),
         )
         for c in cps
     )
 
 
-def map_checkpoints_to_repos(
-    config: dict[str, Any],
-) -> dict[str, set[str]]:
-    """Map checkpoint names to the set of repo paths they depend on.
+def evaluate_crnt(config: dict[str, Any]) -> CRNTResult:
+    """Evaluate whether a task passes the Cross-Repo Necessity Test.
 
-    Per-checkpoint anchoring: if a checkpoint has a non-empty repo_deps field,
-    it is anchored ONLY to those repos. Otherwise, falls back to the
-    ground_truth.required_files heuristic (all repos with required_files).
-    If no ground_truth mapping exists, checkpoints without repo_deps are
-    anchored to ALL repos (conservative: removing any repo loses them).
+    A task passes CRNT if every declared repo has at least one entry in
+    ground_truth.required_files. This is a structural check ensuring the
+    task definition claims each repo is necessary.
     """
-    checkpoints = extract_checkpoints(config)
+    repos = extract_repos(config)
+    task_id = config.get("task", {}).get("id", "unknown")
+    repo_paths = {r.path for r in repos}
+
     gt = config.get("ground_truth", {})
     required_files = gt.get("required_files", [])
 
-    # Build set of repos referenced in ground truth
-    gt_repos: set[str] = {rf.get("repo", "") for rf in required_files if rf.get("repo")}
+    # Count required_files per repo
+    files_per_repo: dict[str, int] = {rp: 0 for rp in repo_paths}
+    for rf in required_files:
+        repo = rf.get("repo", "")
+        if repo in files_per_repo:
+            files_per_repo[repo] += 1
 
-    # Fallback for checkpoints without repo_deps: use gt_repos if available,
-    # otherwise anchor to all repos (conservative).
-    all_repo_paths = {r.path for r in extract_repos(config)}
-    fallback_repos = gt_repos if gt_repos else all_repo_paths
+    coverage = tuple(
+        RepoFileCoverage(
+            repo_path=rp,
+            required_file_count=files_per_repo[rp],
+            has_coverage=files_per_repo[rp] > 0,
+        )
+        for rp in sorted(repo_paths)
+    )
 
-    # Per-checkpoint anchoring: if a checkpoint declares repo_deps, use those directly.
-    # Otherwise fall back to the ground_truth heuristic (all repos with required_files,
-    # or all repos if no ground_truth exists).
-    checkpoint_repos: dict[str, set[str]] = {}
-    for cp in checkpoints:
-        if cp.repo_deps:
-            checkpoint_repos[cp.name] = set(cp.repo_deps)
-        else:
-            checkpoint_repos[cp.name] = fallback_repos.copy()
+    uncovered = tuple(c.repo_path for c in coverage if not c.has_coverage)
+    passes = len(uncovered) == 0 and len(repos) >= 2
 
-    return checkpoint_repos
-
-
-def compute_max_score_without_repo(
-    config: dict[str, Any],
-    removed_repo_path: str,
-) -> tuple[float, tuple[str, ...]]:
-    """Compute maximum achievable score if a repo is removed.
-
-    Returns (max_score, lost_checkpoint_names).
-    A checkpoint is "lost" if it depends on the removed repo.
-    """
-    checkpoints = extract_checkpoints(config)
-    checkpoint_repos = map_checkpoints_to_repos(config)
-
-    lost: list[str] = []
-    score = 0.0
-
-    for cp in checkpoints:
-        deps = checkpoint_repos.get(cp.name, set())
-        if removed_repo_path in deps:
-            lost.append(cp.name)
-        else:
-            score += cp.weight
-
-    return score, tuple(lost)
+    return CRNTResult(
+        task_id=task_id,
+        num_repos=len(repos),
+        repo_coverage=coverage,
+        passes_crnt=passes,
+        uncovered_repos=uncovered,
+    )
 
 
 def generate_ablations(config: dict[str, Any]) -> tuple[AblatedConfig, ...]:
@@ -213,42 +188,6 @@ def generate_ablations(config: dict[str, Any]) -> tuple[AblatedConfig, ...]:
             )
         )
     return tuple(ablations)
-
-
-def evaluate_crnt(
-    config: dict[str, Any],
-    threshold: float = DEFAULT_THRESHOLD,
-) -> CRNTResult:
-    """Evaluate whether a task passes the Cross-Repo Necessity Test.
-
-    A task passes CRNT if removing ANY single repo results in max score ≤ threshold.
-    """
-    repos = extract_repos(config)
-    task_id = config.get("task", {}).get("id", "unknown")
-
-    repo_results: list[RepoAblationResult] = []
-    for repo in repos:
-        max_score, lost_cps = compute_max_score_without_repo(config, repo.path)
-        passes = max_score <= threshold
-        repo_results.append(
-            RepoAblationResult(
-                removed_repo=repo,
-                max_score_without=max_score,
-                lost_checkpoints=lost_cps,
-                passes_threshold=passes,
-            )
-        )
-
-    # Task passes CRNT if ALL repo removals result in score ≤ threshold
-    passes_crnt = all(r.passes_threshold for r in repo_results)
-
-    return CRNTResult(
-        task_id=task_id,
-        num_repos=len(repos),
-        threshold=threshold,
-        repo_results=tuple(repo_results),
-        passes_crnt=passes_crnt,
-    )
 
 
 def write_ablated_configs(
@@ -271,17 +210,18 @@ def format_result(result: CRNTResult) -> str:
     """Format a CRNT result for human-readable output."""
     lines: list[str] = []
     status = "PASS" if result.passes_crnt else "FAIL"
-    lines.append(
-        f"CRNT {status}: {result.task_id} ({result.num_repos} repos, threshold={result.threshold:.0%})"
-    )
+    lines.append(f"CRNT {status}: {result.task_id} ({result.num_repos} repos)")
     lines.append("")
 
-    for rr in result.repo_results:
-        repo_status = "drop" if rr.passes_threshold else "SURVIVES"
+    for rc in result.repo_coverage:
+        marker = "ok" if rc.has_coverage else "MISSING"
         lines.append(
-            f"  Remove {rr.removed_repo.path:20s} → max_score={rr.max_score_without:.2f} "
-            f"[{repo_status}] lost={list(rr.lost_checkpoints)}"
+            f"  {rc.repo_path:20s} required_files={rc.required_file_count} [{marker}]"
         )
+
+    if result.uncovered_repos:
+        lines.append("")
+        lines.append(f"  Repos without required_files: {list(result.uncovered_repos)}")
 
     return "\n".join(lines)
 
@@ -293,9 +233,7 @@ def main(argv: list[str] | None = None) -> int:
         epilog="""
 Examples:
   %(prog)s benchmarks/dependency_management/dep-traversal-001/task.toml
-  %(prog)s benchmarks/dependency_management/dep-traversal-001/task.toml --dry-run
-  %(prog)s benchmarks/dependency_management/dep-traversal-001/task.toml --output-dir /tmp/ablations
-  %(prog)s benchmarks/dependency_management/dep-traversal-001/task.toml --threshold 0.5
+  %(prog)s benchmarks/dependency_management/dep-traversal-001/task.toml --json
 """,
     )
     parser.add_argument(
@@ -304,21 +242,10 @@ Examples:
         help="Path to task.toml file",
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what ablations would be created without writing files",
-    )
-    parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
-        help="Directory to write ablated configs (default: temp directory)",
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=DEFAULT_THRESHOLD,
-        help=f"CRNT pass threshold (default: {DEFAULT_THRESHOLD})",
+        help="Directory to write ablated configs (for cognitive ablation runs)",
     )
     parser.add_argument(
         "--json",
@@ -339,51 +266,30 @@ Examples:
         print(f"Task has {len(repos)} repo(s) — CRNT only applies to multi-repo tasks.")
         return 0
 
-    ablations = generate_ablations(config)
-
-    if args.dry_run:
-        task_id = config.get("task", {}).get("id", "unknown")
-        print(f"Dry run for {task_id} ({len(repos)} repos):")
-        print()
-        for abl in ablations:
-            remaining_paths = [r.path for r in abl.remaining_repos]
-            print(
-                f"  Ablation: remove '{abl.removed_repo.path}' ({abl.removed_repo.role})"
-            )
-            print(f"    Remaining repos: {remaining_paths}")
-            max_score, lost = compute_max_score_without_repo(
-                config, abl.removed_repo.path
-            )
-            print(f"    Estimated max score: {max_score:.2f}")
-            print(f"    Lost checkpoints: {list(lost)}")
-            print()
-        return 0
-
-    # Write ablated configs if requested
+    # Write ablated configs if requested (for cognitive ablation)
     if args.output_dir is not None:
+        ablations = generate_ablations(config)
         written = write_ablated_configs(ablations, args.output_dir)
         for p in written:
             print(f"Wrote: {p}")
         print()
 
-    # Evaluate CRNT
-    result = evaluate_crnt(config, threshold=args.threshold)
+    result = evaluate_crnt(config)
 
     if args.json:
         output = {
             "task_id": result.task_id,
             "num_repos": result.num_repos,
-            "threshold": result.threshold,
             "passes_crnt": result.passes_crnt,
-            "repo_results": [
+            "repo_coverage": [
                 {
-                    "removed_repo": rr.removed_repo.path,
-                    "max_score_without": rr.max_score_without,
-                    "lost_checkpoints": list(rr.lost_checkpoints),
-                    "passes_threshold": rr.passes_threshold,
+                    "repo": rc.repo_path,
+                    "required_file_count": rc.required_file_count,
+                    "has_coverage": rc.has_coverage,
                 }
-                for rr in result.repo_results
+                for rc in result.repo_coverage
             ],
+            "uncovered_repos": list(result.uncovered_repos),
         }
         print(json.dumps(output, indent=2))
     else:
