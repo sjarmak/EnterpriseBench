@@ -711,6 +711,111 @@ def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
     return scores
 
 
+def _apply_llm_judge(
+    scores: dict,
+    task_dir: Path,
+    container_id: str,
+    task_data: dict,
+) -> dict:
+    """Apply Tier 2 LLM judge to cap grep-based scores.
+
+    For each checkpoint with a curated expected_solution, runs the LLM judge
+    and takes min(grep_score, judge_score). Returns updated scores dict.
+    """
+    expected_path = task_dir / "expected_solution.json"
+    if not expected_path.exists():
+        logger.info("No expected_solution.json, skipping LLM judge")
+        return scores
+
+    try:
+        expected = json.loads(expected_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to load expected_solution.json: %s", exc)
+        return scores
+
+    checkpoints_gt = expected.get("checkpoints", {})
+    if not checkpoints_gt:
+        return scores
+
+    # Extract agent output from container
+    agent_output = ""
+    for path in [
+        "/workspace/agent_output/answer.json",
+        "/workspace/moby/INCIDENT_REPORT.md",
+        "/workspace/grafana/SUPPORT_MAPPING.md",
+        "/workspace/SUPPORT_MAPPING.md",
+        "/workspace/ERROR_PROVENANCE.md",
+    ]:
+        result = _docker_exec(container_id, ["cat", path], timeout=5)
+        if result.returncode == 0 and result.stdout.strip():
+            agent_output = result.stdout.strip()
+            break
+
+    if not agent_output:
+        logger.warning("LLM judge: no agent output found in container")
+        return scores
+
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "lib"))
+        from eb_verify.judge import CheckpointJudgeInput, LLMJudge
+
+        judge = LLMJudge(model="cc:haiku")
+    except Exception as exc:
+        logger.warning("Failed to init LLM judge: %s", exc)
+        return scores
+
+    task_desc = task_data.get("task", {}).get("description", "")
+
+    checkpoints = scores.get("checkpoints", [])
+    for cp in checkpoints:
+        cp_name = cp.get("name", "")
+        cp_gt = checkpoints_gt.get(cp_name)
+        if cp_gt is None:
+            continue
+
+        grep_score = cp.get("score", 0.0)
+
+        try:
+            judge_result = judge.evaluate_checkpoint(
+                CheckpointJudgeInput(
+                    task_id=expected.get("task_id", ""),
+                    checkpoint_name=cp_name,
+                    agent_output=agent_output,
+                    expected_solution=cp_gt["expected_solution"],
+                    evaluation_criteria=cp_gt.get("evaluation_criteria", []),
+                ),
+                task_description=task_desc,
+                checkpoint_description=cp_gt.get("expected_solution", "")[:200],
+            )
+            judge_score = judge_result.score
+        except Exception as exc:
+            logger.warning("LLM judge failed for %s: %s", cp_name, exc)
+            continue
+
+        final_score = min(grep_score, judge_score)
+        logger.info(
+            "LLM judge: %s grep=%.2f judge=%.2f final=%.2f (%s)",
+            cp_name,
+            grep_score,
+            judge_score,
+            final_score,
+            judge_result.reasoning[:80],
+        )
+        cp["score"] = final_score
+        cp["passed"] = final_score > 0.0
+        cp["judge_score"] = judge_score
+        cp["grep_score"] = grep_score
+
+    # Recompute task_score
+    total_weight = sum(c.get("weight", 1.0) for c in checkpoints)
+    if total_weight > 0:
+        scores["task_score"] = sum(
+            c.get("score", 0.0) * c.get("weight", 1.0) for c in checkpoints
+        )
+
+    return scores
+
+
 def _save_results(
     result: TaskRunResult,
     task_data: dict,
@@ -1416,10 +1521,16 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         else:
             logger.info("No agent command specified, skipping agent phase")
 
-        # --- Phase 5: Score ---
+        # --- Phase 5: Score (Tier 1 — deterministic) ---
         t0 = time.monotonic()
         scores = _run_scoring(container_id, config.verifier_timeout)
         timings["scoring"] = time.monotonic() - t0
+
+        # --- Phase 5b: Score (Tier 2 — LLM curator) ---
+        verification_modes = task_data.get("verification_modes", ["deterministic"])
+        if "llm_curator" in verification_modes:
+            scores = _apply_llm_judge(scores, task_dir, container_id, task_data)
+
         result.scores = scores
 
         # --- Save ---

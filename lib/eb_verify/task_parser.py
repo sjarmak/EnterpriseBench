@@ -115,6 +115,7 @@ class TaskDefinition:
     checkpoints: List[Checkpoint] = field(default_factory=list)
     artifacts: ArtifactSpec = field(default_factory=ArtifactSpec)
     difficulty_stratum: Optional[str] = None
+    verification_modes: List[str] = field(default_factory=lambda: ["deterministic"])
     ground_truth: Optional[GroundTruth] = None
     tool_access: Optional[ToolAccess] = None
     csb_lineage: Optional[CSBLineage] = None
@@ -130,6 +131,7 @@ class TaskDefinition:
 
 # --- Helper parsers ---
 
+
 def _parse_ground_truth_file(f: Dict[str, Any]) -> GroundTruthFile:
     return GroundTruthFile(
         path=f["path"],
@@ -143,8 +145,12 @@ def _parse_ground_truth_file(f: Dict[str, Any]) -> GroundTruthFile:
 def _parse_ground_truth(raw_gt: Dict[str, Any]) -> GroundTruth:
     return GroundTruth(
         tiers=raw_gt.get("tiers", []),
-        required_files=[_parse_ground_truth_file(f) for f in raw_gt.get("required_files", [])],
-        sufficient_files=[_parse_ground_truth_file(f) for f in raw_gt.get("sufficient_files", [])],
+        required_files=[
+            _parse_ground_truth_file(f) for f in raw_gt.get("required_files", [])
+        ],
+        sufficient_files=[
+            _parse_ground_truth_file(f) for f in raw_gt.get("sufficient_files", [])
+        ],
     )
 
 
@@ -170,7 +176,9 @@ def _parse_csb_lineage(raw_lin: Dict[str, Any]) -> CSBLineage:
     )
 
 
-def _parse_event_config(raw_events: Dict[str, Any], task_section: Dict[str, Any]) -> EventConfig:
+def _parse_event_config(
+    raw_events: Dict[str, Any], task_section: Dict[str, Any]
+) -> EventConfig:
     return EventConfig(
         event_stream_path=raw_events.get("event_file"),
         oracle_actions_path=raw_events.get("oracle_actions"),
@@ -239,7 +247,9 @@ def parse_task(path: str | Path) -> TaskDefinition:
 
     raw_events = raw.get("events")
     event_config = (
-        _parse_event_config(raw_events, task_section) if raw_events is not None else None
+        _parse_event_config(raw_events, task_section)
+        if raw_events is not None
+        else None
     )
 
     raw_rs = raw.get("resume_state")
@@ -249,10 +259,10 @@ def parse_task(path: str | Path) -> TaskDefinition:
     metadata = _parse_metadata(raw_meta) if raw_meta is not None else None
 
     try:
-      _id = task_section["id"]
-      _suite = task_section["suite"]
-      _difficulty = task_section["difficulty"]
-      _session_type = task_section["session_type"]
+        _id = task_section["id"]
+        _suite = task_section["suite"]
+        _difficulty = task_section["difficulty"]
+        _session_type = task_section["session_type"]
     except KeyError as e:
         raise ValueError(f"task.toml missing required field: {e}") from e
 
@@ -268,6 +278,7 @@ def parse_task(path: str | Path) -> TaskDefinition:
         checkpoints=checkpoints,
         artifacts=artifacts,
         difficulty_stratum=raw.get("difficulty_stratum"),
+        verification_modes=raw.get("verification_modes", ["deterministic"]),
         ground_truth=ground_truth,
         tool_access=tool_access,
         csb_lineage=csb_lineage,

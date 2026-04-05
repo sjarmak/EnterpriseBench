@@ -2,7 +2,7 @@ difficulty_stratum = "dual_repo"
 mcp_suite = "eb_v1"
 repo_set_id = "observability-ecosystem"
 org_scale = true
-verification_modes = ["deterministic"]
+verification_modes = ["deterministic", "llm_curator"]
 
 [task]
 id = "support-map-grafana-alerts-004"
