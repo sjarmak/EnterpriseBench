@@ -1,0 +1,41 @@
+{
+  "task_id": "incident-inv-docker-shutdown-004",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "The root cause is in daemon/monitor.go in the handleContainerExit function. When the daemon is shutting down (daemon.IsShuttingDown() returns true), containers with restart policies still go through the ShouldRestart check. The container's RestartManager returns ErrRestartCanceled (defined in container/container_unix.go or restartmanager package) because ExitOnNext was called during shutdown. This error is logged as a WARN even though it is the expected behavior during graceful shutdown.",
+      "evaluation_criteria": [
+        "Must identify daemon/monitor.go as the source file (not just 'the daemon' generically)",
+        "Must identify handleContainerExit as the function name",
+        "Must mention ErrRestartCanceled or the restart canceled error by its Go constant name",
+        "Must explain that ShouldRestart is called even during shutdown (the root cause mechanism)"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Error chain: (1) SIGINT/SIGTERM received by daemon, handled in cmd/dockerd/daemon.go or daemon/daemon.go shutdown path. (2) Daemon calls container.ExitOnNext() on each container's RestartManager, setting the cancel flag. (3) containerd shim (runtime/v2/shim.go) detects container exit via waitForExit/reap and publishes a TaskDelete event through containerd's event service. (4) The libcontainerd client in daemon/internal/libcontainerd/remote/client.go receives the TaskDelete event. (5) processEventStream routes the event to handleContainerExit in daemon/monitor.go. (6) handleContainerExit calls container.ShouldRestart() which calls RestartManager.ShouldRestart(), which returns ErrRestartCanceled because ExitOnNext was already called. (7) This is logged as WARN 'ShouldRestart failed'. (8) The 'ignoring event' message is logged in the libcontainerd client when it receives events for containers being cleaned up.",
+      "evaluation_criteria": [
+        "Must trace through containerd-side code: runtime/v2/shim.go for shim lifecycle or pkg/process/exec.go for process reaping",
+        "Must identify the libcontainerd client (daemon/internal/libcontainerd/remote/client.go) as the bridge between containerd events and daemon handlers",
+        "Must mention ExitOnNext as the shutdown mechanism that causes the restart manager to cancel",
+        "Must connect TaskDelete event to handleContainerExit via processEventStream or similar dispatcher",
+        "Must reference specific containerd file paths, not just 'containerd' generically"
+      ]
+    },
+    "affected_services": {
+      "expected_solution": "Affected components: (1) daemon/monitor.go - handleContainerExit log site. (2) container RestartManager (restartmanager/restartmanager.go or container/container.go) - ShouldRestart/ExitOnNext. (3) daemon/internal/libcontainerd/remote/client.go - event stream processing and 'ignoring event' log. (4) containerd runtime/v2/shim.go - shim lifecycle management, waitForExit. (5) containerd services/tasks/local.go or pkg/process/exec.go - task deletion event generation.",
+      "evaluation_criteria": [
+        "Must name at least 3 specific Go source files across both repos (not just package names)",
+        "Must include at least one containerd-side component with a file path",
+        "Must identify the libcontainerd client as a separate component from the daemon monitor"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Remediation: (1) In daemon/monitor.go handleContainerExit, check daemon.IsShuttingDown() before logging ErrRestartCanceled as a warning — during shutdown, this error is expected and should be logged at INFO or DEBUG level, not WARN. (2) In the libcontainerd client, improve the 'ignoring event' message to explain WHY the event is being ignored (daemon is shutting down, container cleanup in progress) rather than just saying events are dropped.",
+      "evaluation_criteria": [
+        "Must reference daemon/monitor.go specifically as the place to add the shutdown check",
+        "Must mention checking daemon.IsShuttingDown() or equivalent shutdown state",
+        "Must propose changing log level (WARN to INFO/DEBUG) rather than suppressing the message entirely",
+        "Must address the 'ignoring event' message separately from the ShouldRestart warning"
+      ]
+    }
+  }
+}

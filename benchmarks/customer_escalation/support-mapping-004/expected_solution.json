@@ -1,0 +1,39 @@
+{
+  "task_id": "support-map-grafana-alerts-004",
+  "checkpoints": {
+    "code_paths": {
+      "expected_solution": "Core code paths: (1) Grafana alert scheduler: pkg/services/ngalert/schedule/schedule.go - the Scheduler type runs a tick loop that dispatches evaluation jobs per alert rule. When evaluation takes longer than the rule's interval, it logs 'alert evaluation took longer than expected'. (2) Grafana evaluation engine: pkg/services/ngalert/eval/eval.go - the evaluator executes datasource queries and compares results against conditions. (3) Alertmanager dispatch: dispatch/dispatch.go - the Dispatcher receives alerts via the API, runs them through the routing tree (aggrGroups), and dispatches to notification integrations with configurable group_wait/group_interval/repeat_interval timers. (4) Alertmanager notification pipeline: notify/notify.go - the DedupStage, WaitStage, and NotifyStage form a pipeline that deduplicates, batches, and delivers notifications through configured receivers.",
+      "evaluation_criteria": [
+        "Must identify pkg/services/ngalert/schedule/schedule.go with specific details about the tick loop or Scheduler type",
+        "Must identify dispatch/dispatch.go in alertmanager with details about aggrGroups or routing tree dispatch",
+        "Must identify notify/notify.go in alertmanager with details about the pipeline stages (DedupStage, WaitStage, NotifyStage) or notification delivery",
+        "Must reference specific function or type names from the code, not just file paths"
+      ]
+    },
+    "ownership": {
+      "expected_solution": "Ownership: Grafana side - the ngalert/schedule subsystem (pkg/services/ngalert/schedule/) owns alert evaluation timing, with the Scheduler and its per-rule goroutines managing when rules are checked. Alertmanager side - the dispatch package (dispatch/dispatch.go Dispatcher type) owns alert routing through the tree, and the notify package (notify/notify.go) owns the notification delivery pipeline including deduplication via the nflog (notification log).",
+      "evaluation_criteria": [
+        "Must identify ngalert/schedule as the owning subsystem in Grafana (not just 'Grafana alerting')",
+        "Must identify dispatch and notify as the owning subsystems in Alertmanager",
+        "Must mention the Dispatcher type or routing tree from dispatch.go",
+        "Must mention the notification pipeline or nflog from Alertmanager"
+      ]
+    },
+    "related_issues": {
+      "expected_solution": "Related files: (1) pkg/services/ngalert/eval/eval.go - evaluation engine that runs datasource queries, controls evaluation timeout. (2) pkg/services/ngalert/schedule/registry.go - tracks active alert rules and their evaluation intervals. (3) pkg/services/ngalert/models/alert_rule.go - defines AlertRule model with IntervalSeconds field. (4) alertmanager api/v2/api.go - API endpoint that receives alerts from Grafana, entry point to the Alertmanager pipeline. (5) alertmanager silence/silence.go - silence management that can suppress notifications even without user-created silences (auto-silences from inhibition rules).",
+      "evaluation_criteria": [
+        "Must reference at least 2 files from EACH repo (grafana and alertmanager)",
+        "Must include files beyond the core code_paths (eval.go, registry.go, api.go, silence.go, or similar)",
+        "File paths must be accurate for the actual repo structure at the pinned version"
+      ]
+    },
+    "severity": {
+      "expected_solution": "Severity: HIGH. Two independent failure modes compound: (1) Grafana-side evaluation delays cause alerts to fire late (10-15 minutes) when complex rules exceed their evaluation interval, creating a backlog in the scheduler tick loop. (2) Alertmanager-side notification failures cause fired alerts to never reach operators, due to dispatch routing mismatches or notification integration timeouts. Together these create a silent alerting failure where critical conditions are detected late AND notifications are dropped.",
+      "evaluation_criteria": [
+        "Must assess as HIGH severity",
+        "Must identify both Grafana-side (evaluation timing) and Alertmanager-side (notification delivery) as separate failure modes",
+        "Must explain why the combination is worse than either alone"
+      ]
+    }
+  }
+}
