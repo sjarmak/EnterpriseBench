@@ -1,4 +1,4 @@
-# Incident Investigation: Docker Daemon Spurious Restart Warnings on Shutdown
+# Incident Investigation: Docker Save Produces Incomplete Image Archives with Missing Layer Blobs
 
 difficulty_stratum = "dual_repo"
 mcp_suite = "eb_v1"
@@ -13,33 +13,51 @@ task_type = "incident_investigation"
 difficulty = "hard"
 estimated_duration_minutes = 45
 session_type = "single"
-description = "Trace root cause of spurious ShouldRestart warnings during Docker daemon shutdown involving containerd shim lifecycle"
+description = "Trace root cause of docker save producing incomplete image archives when images share layers, involving containerd unpack and content store interaction"
 prompt = """
-Your operations team has flagged confusing warning messages during Docker
-daemon graceful shutdown. When the daemon receives a stop signal and begins
-shutting down, the following warnings appear in logs:
+Your operations team manages an air-gapped deployment pipeline. Images are
+pulled on an internet-connected staging host, exported with `docker save`,
+transferred to air-gapped production servers, and loaded with `docker load`.
 
-  WARN ShouldRestart failed, container will not be restarted
-    container=1ed1fcfd71c2 daemonShuttingDown=true
-    error="restart canceled" exitStatus="{0 2026-02-21 20:04:43 +0000 UTC}"
-    hasBeenManuallyStopped=false restartCount=0
+Recently, production deployments started failing. When operators load the
+exported archive and try to run the container, it fails:
 
-  INFO ignoring event container=1ed1fcfd71c2
-    namespace=moby
+  ERROR: failed to register layer: open /var/lib/docker/tmp/rootfs123/layer.tar: no such file or directory
 
-These warnings trigger PagerDuty alerts because the monitoring system
-interprets "ShouldRestart failed" as a container health issue. The second
-message suggests events are being dropped during shutdown.
+Investigation on the staging host shows that `docker save` produces archives
+with missing layer blobs. The issue only happens for images that share base
+layers with other images already present on the host. Specifically:
+
+  1. Pull image-A (e.g., python:3.11-slim) — docker save works fine
+  2. Pull image-B (e.g., python:3.12-slim, shares base layers with image-A) —
+     docker save produces an archive where shared layers have 0-byte or
+     missing blob entries
+
+The staging host uses Docker with the containerd image store (containerd
+snapshotter) enabled. Examining the content store directory shows that layer
+blobs for the shared layers are indeed absent:
+
+  $ ctr -n moby content ls | grep sha256:abc123
+  (no output — blob missing from content store)
+
+  $ ctr -n moby snapshots ls | grep sha256:abc123
+  sha256:abc123   Committed   ...
+  (snapshot exists — filesystem was extracted)
+
+The layer's snapshot (extracted filesystem) exists in the snapshotter, but
+the compressed layer blob is missing from the content store. This means
+operations that need the original blob (save, push) fail silently or produce
+incomplete results.
 
 The Docker daemon source is at /workspace/moby/ and the containerd source
 is at /workspace/containerd/.
 
 Your task:
-1. Identify the root cause: which file and function produces the spurious
-   warning, and why is it treated as a warning during normal shutdown?
-2. Trace the full error chain from the stop signal through the daemon
-   shutdown path, through the containerd interaction, to the misleading
-   log messages.
+1. Identify the root cause: why are layer blobs missing from the content
+   store when snapshots exist? Which code path skips fetching layer content?
+2. Trace the full flow: from the image pull request through the containerd
+   unpack logic to the content store, explaining where and why layer blobs
+   are skipped for already-unpacked layers.
 3. List all affected components across both repositories.
 4. Propose the correct remediation.
 
@@ -69,28 +87,28 @@ multi_repo_pattern = "investigate"
 name = "root_cause_identification"
 weight = 0.35
 verifier = "checks/check_root_cause.sh"
-description = "Agent identifies daemon/monitor.go handleContainerExit as the source of spurious warning"
+description = "Agent identifies the containerd unpacker early-return that skips layer content fetch when snapshot exists"
 timeout_seconds = 60
 
 [[checkpoints]]
 name = "error_chain_trace"
 weight = 0.30
 verifier = "checks/check_error_chain.sh"
-description = "Agent traces: SIGINT -> ExitOnNext -> containerd TaskDelete -> handleContainerExit -> ShouldRestart -> ErrRestartCanceled"
+description = "Agent traces: pullTag -> WithPullUnpack -> containerd unpacker -> snapshot Stat/Prepare early return -> content store missing blob -> ExportImage/WithSkipMissing"
 timeout_seconds = 60
 
 [[checkpoints]]
 name = "affected_services"
 weight = 0.15
 verifier = "checks/check_affected_services.sh"
-description = "Agent identifies daemon, restart manager, containerd shim, and libcontainerd client"
+description = "Agent identifies image_pull.go, image_exporter.go, unpacker.go, content store, and snapshotter"
 timeout_seconds = 60
 
 [[checkpoints]]
 name = "remediation_proposal"
 weight = 0.20
 verifier = "checks/check_remediation.sh"
-description = "Agent proposes suppressing ErrRestartCanceled warning during shutdown and improving log messages"
+description = "Agent proposes not using WithPullUnpack for local snapshotters, or ensuring content fetch even when snapshot exists"
 timeout_seconds = 60
 
 [artifacts]
@@ -100,47 +118,47 @@ optional = ["code_patch"]
 [tool_access]
 sourcegraph_mirror_config = "configs/sg_mirrors/incident-inv-docker-shutdown-004.json"
 expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Cross-repo tracing of Docker daemon shutdown through containerd shim lifecycle requires navigating moby's monitor/restart manager and containerd's shim/task service; MCP cross-repo search is critical for connecting the TaskDelete event flow between repos"
+mcp_benefit_rationale = "Cross-repo tracing from moby's image pull through containerd's unpack/content pipeline requires navigating the pull options, unpacker snapshot logic, and content store interaction; MCP cross-repo search is critical for connecting WithPullUnpack in moby to the snapshot-exists early return in containerd's unpacker"
 
 [ground_truth]
 tiers = ["deterministic"]
 
 [[ground_truth.required_files]]
-path = "daemon/monitor.go"
+path = "daemon/containerd/image_pull.go"
 repo = "moby"
 confidence = 0.98
 source = "deterministic"
 
 [[ground_truth.required_files]]
-path = "daemon/container/container.go"
-repo = "moby"
-confidence = 0.95
-source = "deterministic"
-
-[[ground_truth.required_files]]
-path = "daemon/internal/libcontainerd/remote/client.go"
+path = "daemon/containerd/image_exporter.go"
 repo = "moby"
 confidence = 0.90
 source = "deterministic"
 
 [[ground_truth.required_files]]
-path = "runtime/v2/shim.go"
+path = "pkg/unpack/unpacker.go"
+repo = "containerd"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "client/pull.go"
 repo = "containerd"
 confidence = 0.85
 source = "deterministic"
 
 [[ground_truth.required_files]]
-path = "pkg/process/exec.go"
+path = "client/client_opts.go"
 repo = "containerd"
 confidence = 0.80
 source = "deterministic"
 
 [[ground_truth.sufficient_files]]
-path = "container/container.go"
+path = "daemon/containerd/leases.go"
 repo = "moby"
-confidence = 0.75
+confidence = 0.70
 
 [[ground_truth.sufficient_files]]
-path = "services/tasks/local.go"
+path = "pkg/unpack/unpacker.go"
 repo = "containerd"
-confidence = 0.70
+confidence = 0.95

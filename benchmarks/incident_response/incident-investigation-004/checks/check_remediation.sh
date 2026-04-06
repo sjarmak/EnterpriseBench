@@ -11,13 +11,13 @@ fi
 FOUND=0
 TOTAL=2
 
-# Must mention suppressing or downgrading the warning for ErrRestartCanceled
-if grep -qiE 'suppress.*warn|downgrad.*warn|not.*log.*warn|skip.*warn|info.*instead.*warn|ErrRestartCanceled.*not.*warn|ignore.*ErrRestartCanceled' "$REPORT"; then
+# Must mention not using WithPullUnpack for local/overlayfs snapshotters, or only for remote snapshotters
+if grep -qiE '(WithPullUnpack).{0,60}(avoid|omit|skip|not.*use|remove|disable|only|conditional|restrict|overlayfs|local.*snap)|(avoid|omit|skip|not.*use|remove|disable|restrict).{0,40}(WithPullUnpack)|WithPullUnpack.*only.*remote|local.*snapshot.*not.*unpack' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention improving the "ignoring event" log message
-if grep -qiE 'ignoring.*event.*improv|better.*log.*message|descriptive.*message|received.*task.*delete|clarif.*log' "$REPORT"; then
+# Must mention ensuring content/blobs are always fetched/available regardless of snapshot state
+if grep -qiE '(content|blob|layer).{0,40}(always|even.*snap|regardless|independent|whether.*snap|not.*depend)|(decouple|separate).{0,40}(content|blob).{0,40}(snap)|always.*fetch.*content|always.*fetch.*blob|ensure.*content.*fetch|fetch.*regardless.*snapshot|blob.*always.*store' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 

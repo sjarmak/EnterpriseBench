@@ -2,39 +2,40 @@
   "task_id": "incident-inv-docker-shutdown-004",
   "checkpoints": {
     "root_cause_identification": {
-      "expected_solution": "The root cause is in daemon/monitor.go in the handleContainerExit function. When the daemon is shutting down (daemon.IsShuttingDown() returns true), containers with restart policies still go through the ShouldRestart check. The container's RestartManager returns ErrRestartCanceled (defined in container/container_unix.go or restartmanager package) because ExitOnNext was called during shutdown. This error is logged as a WARN even though it is the expected behavior during graceful shutdown.",
+      "expected_solution": "The root cause is in containerd's pkg/unpack/unpacker.go. When pulling with WithPullUnpack, the unpacker's doUnpackFn closure checks if a snapshot already exists for each layer by calling sn.Stat(ctx, chainID). If the snapshot exists (error is nil), it returns nil immediately — skipping both snapshot preparation and content fetch. The content fetch goroutine is only started after sn.Prepare succeeds, so it is never reached. On the moby side, daemon/containerd/image_pull.go unconditionally passes containerd.WithPullUnpack in the pullTag function (around line 196), enabling this buggy codepath for all pulls. When two images share base layers, the first pull creates snapshots and stores content. The second pull finds existing snapshots and skips content fetch entirely, leaving the content store without the layer blobs for the second image.",
       "evaluation_criteria": [
-        "Must identify daemon/monitor.go as the source file (not just 'the daemon' generically)",
-        "Must identify handleContainerExit as the function name",
-        "Must mention ErrRestartCanceled or the restart canceled error by its Go constant name",
-        "Must explain that ShouldRestart is called even during shutdown (the root cause mechanism)"
+        "Must identify containerd's unpacker (pkg/unpack/unpacker.go or the unpack package) as the location of the bug",
+        "Must explain the snapshot existence check (sn.Stat on chainID, or sn.Prepare returning AlreadyExists) causes early return",
+        "Must mention that content/blob fetch is skipped when snapshot exists",
+        "Must identify moby's daemon/containerd/image_pull.go as enabling this via WithPullUnpack"
       ]
     },
     "error_chain_trace": {
-      "expected_solution": "Error chain: (1) SIGINT/SIGTERM received by daemon, handled in cmd/dockerd/daemon.go or daemon/daemon.go shutdown path. (2) Daemon calls container.ExitOnNext() on each container's RestartManager, setting the cancel flag. (3) containerd shim (runtime/v2/shim.go) detects container exit via waitForExit/reap and publishes a TaskDelete event through containerd's event service. (4) The libcontainerd client in daemon/internal/libcontainerd/remote/client.go receives the TaskDelete event. (5) processEventStream routes the event to handleContainerExit in daemon/monitor.go. (6) handleContainerExit calls container.ShouldRestart() which calls RestartManager.ShouldRestart(), which returns ErrRestartCanceled because ExitOnNext was already called. (7) This is logged as WARN 'ShouldRestart failed'. (8) The 'ignoring event' message is logged in the libcontainerd client when it receives events for containers being cleaned up.",
+      "expected_solution": "Error chain: (1) docker pull invokes moby's pullTag in daemon/containerd/image_pull.go, which unconditionally appends containerd.WithPullUnpack. (2) containerd's client/pull.go creates an Unpacker when pullCtx.Unpack is true and attaches it to the handler chain. (3) The unpacker iterates over layers and calls doUnpackFn for each. (4) doUnpackFn first checks sn.Stat(ctx, chainID) — if the snapshot exists, it returns nil without proceeding to sn.Prepare or content fetch. (5) Even via the sn.Prepare path, if AlreadyExists is returned and chainID is found via sn.Stat, it returns nil. (6) Because the content fetch goroutine is only started after sn.Prepare succeeds, it is never initialized for already-existing snapshots. (7) The content store never receives the layer blob. (8) When docker save is called, moby's ExportImage in daemon/containerd/image_exporter.go uses archive.WithSkipMissing, which silently skips the missing blobs, producing an incomplete archive.",
       "evaluation_criteria": [
-        "Must trace through containerd-side code: runtime/v2/shim.go for shim lifecycle or pkg/process/exec.go for process reaping",
-        "Must identify the libcontainerd client (daemon/internal/libcontainerd/remote/client.go) as the bridge between containerd events and daemon handlers",
-        "Must mention ExitOnNext as the shutdown mechanism that causes the restart manager to cancel",
-        "Must connect TaskDelete event to handleContainerExit via processEventStream or similar dispatcher",
-        "Must reference specific containerd file paths, not just 'containerd' generically"
+        "Must trace through moby's image_pull.go showing WithPullUnpack usage",
+        "Must identify containerd's client/pull.go as the bridge that creates the Unpacker",
+        "Must identify pkg/unpack/unpacker.go as containing the snapshot existence check that skips content fetch",
+        "Must explain the content store gap (snapshot exists but blob missing)",
+        "Must mention the export/save path where missing content causes incomplete archives"
       ]
     },
     "affected_services": {
-      "expected_solution": "Affected components: (1) daemon/monitor.go - handleContainerExit log site. (2) container RestartManager (restartmanager/restartmanager.go or container/container.go) - ShouldRestart/ExitOnNext. (3) daemon/internal/libcontainerd/remote/client.go - event stream processing and 'ignoring event' log. (4) containerd runtime/v2/shim.go - shim lifecycle management, waitForExit. (5) containerd services/tasks/local.go or pkg/process/exec.go - task deletion event generation.",
+      "expected_solution": "Affected components: (1) moby daemon/containerd/image_pull.go — pullTag function that passes WithPullUnpack. (2) moby daemon/containerd/image_exporter.go — ExportImage that silently skips missing blobs. (3) containerd pkg/unpack/unpacker.go — doUnpackFn with the snapshot existence early return. (4) containerd client/pull.go — Pull function that creates the Unpacker. (5) containerd content store — missing layer blobs. (6) containerd snapshotter — has snapshots that mask the missing content.",
       "evaluation_criteria": [
-        "Must name at least 3 specific Go source files across both repos (not just package names)",
-        "Must include at least one containerd-side component with a file path",
-        "Must identify the libcontainerd client as a separate component from the daemon monitor"
+        "Must name at least 3 specific Go source files across both repos",
+        "Must include containerd pkg/unpack/unpacker.go (or equivalent path)",
+        "Must include moby daemon/containerd/image_pull.go",
+        "Must identify the content store and snapshotter as separate subsystems involved"
       ]
     },
     "remediation_proposal": {
-      "expected_solution": "Remediation: (1) In daemon/monitor.go handleContainerExit, check daemon.IsShuttingDown() before logging ErrRestartCanceled as a warning — during shutdown, this error is expected and should be logged at INFO or DEBUG level, not WARN. (2) In the libcontainerd client, improve the 'ignoring event' message to explain WHY the event is being ignored (daemon is shutting down, container cleanup in progress) rather than just saying events are dropped.",
+      "expected_solution": "Remediation: (1) In moby daemon/containerd/image_pull.go, do not use WithPullUnpack for local snapshotters like overlayfs — only use it for remote snapshotters where deferred layer download is actually needed. This ensures that for local snapshotters, all layer blobs are fetched to the content store during pull regardless of snapshot state. (2) Alternatively or additionally, fix containerd's unpacker to decouple content fetch from snapshot existence — even when a snapshot already exists, the layer blob should still be fetched into the content store so that save/push operations work correctly.",
       "evaluation_criteria": [
-        "Must reference daemon/monitor.go specifically as the place to add the shutdown check",
-        "Must mention checking daemon.IsShuttingDown() or equivalent shutdown state",
-        "Must propose changing log level (WARN to INFO/DEBUG) rather than suppressing the message entirely",
-        "Must address the 'ignoring event' message separately from the ShouldRestart warning"
+        "Must reference moby's image_pull.go as the place to change WithPullUnpack behavior",
+        "Must distinguish between local snapshotters (overlayfs) and remote snapshotters",
+        "Must propose ensuring layer content is always fetched to the content store",
+        "Must address the root cause rather than just the symptom (not just fixing the export path)"
       ]
     }
   }

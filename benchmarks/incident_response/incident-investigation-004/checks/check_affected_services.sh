@@ -11,23 +11,23 @@ fi
 FOUND=0
 TOTAL=4
 
-# Must mention daemon monitor
-if grep -qiE 'daemon.*monitor|monitor\.go' "$REPORT"; then
+# Must mention moby image pull (daemon/containerd/image_pull.go or pullTag)
+if grep -qiE 'image_pull\.go|daemon/containerd.*pull|pullTag' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention restart manager
-if grep -qiE 'restart.*manager|RestartManager' "$REPORT"; then
+# Must mention containerd unpacker (pkg/unpack/unpacker.go or unpack package)
+if grep -qiE 'unpacker\.go|pkg/unpack|unpack.*package' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention libcontainerd or containerd client
-if grep -qiE 'libcontainerd|containerd.*client|remote.*client' "$REPORT"; then
+# Must mention content store as affected subsystem
+if grep -qiE 'content.*store|content\.Store|content.*service' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention containerd shim runtime or task service components
-if grep -qiE 'containerd.*shim|runtime/v2|shim.*lifecycle|task.*service|services/tasks' "$REPORT"; then
+# Must mention the export/save path or snapshotter as separate component
+if grep -qiE 'image_exporter\.go|ExportImage|snapshotter|snapshot.*service' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 

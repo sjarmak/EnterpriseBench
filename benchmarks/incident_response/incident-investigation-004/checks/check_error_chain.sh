@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checkpoint 2: Verify agent traced the shutdown error chain
+# Checkpoint 2: Verify agent traced the pull-to-export error chain
 set -euo pipefail
 
 export REPORT="${WORKSPACE:-/workspace}/moby/INCIDENT_REPORT.md"
@@ -11,28 +11,28 @@ fi
 FOUND=0
 TOTAL=5
 
-# Must mention signal handling (SIGINT/SIGTERM)
-if grep -qiE 'SIGINT|SIGTERM|signal.*interrupt|signal.*handler' "$REPORT"; then
+# Must mention moby's pull path (image_pull.go or pullTag or WithPullUnpack)
+if grep -qiE 'image_pull\.go|pullTag|WithPullUnpack' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention ExitOnNext or restart manager being stopped
-if grep -qiE 'ExitOnNext|exit.*on.*next|restart.*manager.*stop' "$REPORT"; then
+# Must mention containerd's client/pull.go or the Unpacker creation
+if grep -qiE 'client/pull\.go|client\.Pull|Unpacker|pullCtx\.Unpack' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention containerd shim or TaskDelete event
-if grep -qiE 'containerd.*shim|TaskDelete|task.*delete|shim.*disconnect' "$REPORT"; then
+# Must mention the unpacker's snapshot check (sn.Stat, sn.Prepare, AlreadyExists, chainID)
+if grep -qiE 'sn\.Stat|sn\.Prepare|AlreadyExists|already.*exist.*snapshot|snapshot.*chain' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention containerd-side code (runtime/v2/shim, pkg/process, or services/tasks)
-if grep -qiE 'runtime/v2/shim|pkg/process|services/tasks|shim\.go|exec\.go|local\.go' "$REPORT"; then
+# Must mention content store missing blob / content not fetched
+if grep -qiE 'content.*store.*miss|content.*not.*fetch|blob.*miss|layer.*blob.*absent|content.*absent|fetch.*never|blob.*not.*in.*content|layer.*not.*store|content.*without.*blob|no.*blob.*content|layer.*never.*download|blob.*absent' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention the monitor or handleContainerExit
-if grep -qiE 'monitor|handleContainerExit|handle.*exit' "$REPORT"; then
+# Must mention the export/save path (image_exporter.go, ExportImage, WithSkipMissing, docker save)
+if grep -qiE 'image_exporter\.go|ExportImage|WithSkipMissing|docker.*save.*miss|export.*miss|archive.*skip' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 

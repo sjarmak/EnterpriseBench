@@ -1,58 +1,59 @@
 {
   "candidate_id": "incident-inv-004",
   "repos": ["moby/moby", "containerd/containerd"],
-  "issue_refs": [],
-  "fix_pr": "moby#52079",
-  "fix_merged": "2026-02-23",
+  "issue_refs": ["moby#49784", "containerd#8973"],
+  "fix_pr": "moby#49786",
+  "fix_status": "open_pr",
   "buggy_rev": "v28.0.0",
-  "description": "Docker daemon logs spurious 'ShouldRestart failed' warnings during graceful shutdown because handleContainerExit treats ErrRestartCanceled the same as genuine errors",
+  "description": "Docker save produces incomplete image archives with missing layer blobs because containerd's unpacker skips fetching layer content when a snapshot already exists, and moby unconditionally enables WithPullUnpack for all snapshotters",
   "root_cause": {
-    "file": "daemon/monitor.go",
-    "function": "handleContainerExit",
-    "summary": "When the daemon shuts down, it calls container.ExitOnNext() to stop the restart manager. When containerd sends the TaskDelete event, handleContainerExit calls RestartManager().ShouldRestart(), which returns ErrRestartCanceled. This error is logged as a WARN regardless of whether the daemon is shutting down. The 'ignoring event' message in libcontainerd/remote/client.go is also misleading.",
-    "mechanism": "handleContainerExit does not distinguish between ErrRestartCanceled (expected during shutdown) and other errors (genuine failures). Both are logged at WARN level."
+    "file": "pkg/unpack/unpacker.go",
+    "repo": "containerd",
+    "function": "doUnpackFn (closure in unpack method)",
+    "summary": "When pulling an image with WithPullUnpack, containerd's unpacker checks if a snapshot already exists for each layer (via sn.Stat on the chainID). If the snapshot exists, the unpacker returns nil immediately without ever initiating the layer content fetch. This means the compressed layer blob is never downloaded to the content store. On the moby side, daemon/containerd/image_pull.go unconditionally passes containerd.WithPullUnpack during pullTag, triggering this codepath for all pulls regardless of snapshotter type.",
+    "mechanism": "The unpacker's doUnpackFn checks sn.Stat(ctx, chainID) at the start. If the snapshot exists (err == nil), it returns nil — skipping both the snapshot preparation AND the content fetch goroutine (which is only started after sn.Prepare). The layer blob is never written to the content store. When docker save later tries to export the image, the missing blobs cause incomplete archives."
   },
   "error_chain": [
     {
-      "component": "Signal handler",
-      "action": "Receives SIGINT, initiates daemon shutdown"
+      "component": "moby daemon/containerd/image_pull.go pullTag",
+      "action": "Receives pull request, unconditionally appends containerd.WithPullUnpack to pull options (line 196)"
     },
     {
-      "component": "Daemon shutdown",
-      "action": "Calls container.ExitOnNext() to stop restart manager for each container"
+      "component": "containerd client/pull.go",
+      "action": "Pull method sees pullCtx.Unpack=true, creates an Unpacker, attaches it to the image handler chain"
     },
     {
-      "component": "containerd runtime/v2/shim.go",
-      "action": "Shim detects container process exit, initiates cleanup via runtime/v2 shim lifecycle"
+      "component": "containerd pkg/unpack/unpacker.go doUnpackFn",
+      "action": "BUG: For each layer, checks sn.Stat(ctx, chainID). If snapshot already exists (shared layer from another image), returns nil immediately. The content fetch goroutine is never started because it is only initialized after sn.Prepare succeeds."
     },
     {
-      "component": "containerd pkg/process/exec.go",
-      "action": "Process exit handler triggers exit status collection and event publication"
+      "component": "containerd pkg/unpack/unpacker.go doUnpackFn (Prepare path)",
+      "action": "Even if sn.Stat misses, sn.Prepare can return AlreadyExists. In that case, if sn.Stat(chainID) then succeeds, it also returns nil without fetching content."
     },
     {
-      "component": "containerd services/tasks/local.go",
-      "action": "Task service processes delete request and publishes TaskDelete event"
+      "component": "containerd content store",
+      "action": "Layer blob is never written — content store has no record of the layer's compressed data"
     },
     {
-      "component": "libcontainerd/remote/client.go",
-      "action": "Receives TaskDelete, logs confusing 'ignoring event' message"
+      "component": "moby daemon/containerd/image_exporter.go ExportImage",
+      "action": "Uses archive.WithSkipMissing to silently skip blobs not in the content store, producing an incomplete archive"
     },
     {
-      "component": "daemon/monitor.go handleContainerExit",
-      "action": "BUG: Calls ShouldRestart(), gets ErrRestartCanceled, logs as WARN"
+      "component": "Target host docker load",
+      "action": "Fails with missing layer error because the archive is incomplete"
     }
   ],
   "affected_services": [
-    "daemon/monitor.go (handleContainerExit)",
-    "daemon/container/container.go (ExitOnNext, RestartManager)",
-    "daemon/internal/libcontainerd/remote/client.go (event logging)",
-    "container restart manager",
-    "containerd runtime/v2/shim.go (shim lifecycle management)",
-    "containerd pkg/process/exec.go (process exit handling)",
-    "containerd services/tasks/local.go (task delete event service)"
+    "daemon/containerd/image_pull.go (pullTag, WithPullUnpack usage)",
+    "daemon/containerd/image_exporter.go (ExportImage, WithSkipMissing)",
+    "containerd pkg/unpack/unpacker.go (doUnpackFn, snapshot existence check)",
+    "containerd client/pull.go (Pull with Unpack flow)",
+    "containerd client/client_opts.go (WithPullUnpack option definition)",
+    "containerd content store (missing layer blobs)",
+    "containerd snapshotter (has snapshots but content not synced)"
   ],
-  "remediation": "In handleContainerExit: check if the error from ShouldRestart is ErrRestartCanceled; if so, do not log it as a warning (it's expected during shutdown). In libcontainerd/remote/client.go: change 'ignoring event' to a more descriptive message like 'received task-delete event from containerd'. Also split exitStatus into separate exitCode and exitedAt fields for readability.",
-  "fix_files": ["daemon/monitor.go", "daemon/container.go"],
+  "remediation": "In moby daemon/containerd/image_pull.go: do not use WithPullUnpack for local snapshotters like overlayfs. Only use it for remote snapshotters where deferred layer download is needed. This is the approach taken by the fix PR (moby#49786). Alternatively, fix containerd's unpacker to always fetch layer content into the content store even when snapshots already exist, decoupling content availability from snapshot existence.",
+  "fix_files": ["daemon/containerd/image_pull.go"],
   "difficulty": "hard",
-  "confidence": 0.96
+  "confidence": 0.95
 }

@@ -9,20 +9,25 @@ if [[ ! -f "$REPORT" ]]; then
 fi
 
 FOUND=0
-TOTAL=3
+TOTAL=4
 
-# Must identify monitor.go or handleContainerExit
-if grep -qiE 'monitor\.go|handleContainerExit|handle.*container.*exit' "$REPORT"; then
+# Must identify the unpacker in containerd (pkg/unpack/unpacker.go or unpack package)
+if grep -qiE 'unpacker\.go|pkg/unpack|unpack.*package|doUnpackFn' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention ErrRestartCanceled or restart canceled error
-if grep -qiE 'ErrRestartCanceled|restart.?canceled|restart.*cancel' "$REPORT"; then
+# Must mention snapshot existence check (Stat on chainID or snapshot already exists)
+if grep -qiE 'sn\.Stat|snapshot.*exist|snapshot.*already|chainID.*exist|Stat.*chainID|snapshot.*present|already.*unpack|snapshot.*found' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Must mention ShouldRestart being called during shutdown
-if grep -qiE 'ShouldRestart|should.*restart' "$REPORT"; then
+# Must mention content/blob fetch being skipped
+if grep -qiE 'skip.*fetch|content.*skip|blob.*not.*fetch|fetch.*skip|content.*miss|layer.*not.*download|skip.*content|skip.*blob' "$REPORT"; then
+  FOUND=$((FOUND + 1))
+fi
+
+# Must mention WithPullUnpack in moby's pull path
+if grep -qiE 'WithPullUnpack|image_pull\.go|pullTag' "$REPORT"; then
   FOUND=$((FOUND + 1))
 fi
 
@@ -31,7 +36,7 @@ if [ "$TOTAL" -gt 0 ]; then
 else
   SCORE="0.00"
 fi
-if [ "$FOUND" -ge 2 ]; then
+if [ "$FOUND" -ge 3 ]; then
   PASSED=true
 else
   PASSED=false
