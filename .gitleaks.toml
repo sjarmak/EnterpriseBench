@@ -1,0 +1,9 @@
+# EnterpriseBench gitleaks config
+# Exclude agent result logs that contain git commit SHAs
+# matching token patterns.
+
+[allowlist]
+  paths = [
+    '''results/''',
+    '''benchmarks/''',
+  ]
