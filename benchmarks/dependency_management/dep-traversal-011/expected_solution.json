@@ -1,0 +1,37 @@
+{
+  "task_id": "dep-traversal-011",
+  "checkpoints": {
+    "identify_cve": {
+      "expected_solution": "Agent must identify the CVE as CVE-2021-44228 (GHSA-jfh8-c2jp-5v3q) affecting the maven package `org.apache.logging.log4j:log4j-core` at versions 2.0-beta9 - 2.14.1, fixed in 2.15.0 (partial), 2.16.0 (full), backports: 2.3.1, 2.12.2. The BLAST_RADIUS.md report should name the CVE identifier explicitly and the vulnerable version range.",
+      "evaluation_criteria": [
+        "Names the CVE identifier CVE-2021-44228 verbatim",
+        "States the affected package as `org.apache.logging.log4j:log4j-core`",
+        "Cites the vulnerable version range 2.0-beta9 - 2.14.1 (and/or fixed version 2.15.0 (partial), 2.16.0 (full), backports: 2.3.1, 2.12.2)"
+      ]
+    },
+    "find_direct_deps": {
+      "expected_solution": "Agent must enumerate the direct dependents of `org.apache.logging.log4j:log4j-core` inside the workspace repos. Per ground_truth, these are: spring-boot-starter-log4j2, kafka, and elasticsearch. The answer must reference each by package name and cite the manifest file (e.g. package.json, go.mod, requirements.txt, pom.xml) where the dependency is declared.",
+      "evaluation_criteria": [
+        "Lists each ground-truth direct dependent: spring-boot-starter-log4j2, kafka, and elasticsearch",
+        "References the manifest file(s) where the dependency is declared (package.json / go.mod / requirements.txt / pom.xml / Cargo.toml as applicable)",
+        "Distinguishes runtime vs dev/test dependencies for `org.apache.logging.log4j:log4j-core` where the manifest type indicates it"
+      ]
+    },
+    "trace_transitive_paths": {
+      "expected_solution": "Agent must trace transitive dependency paths through intermediaries. Per ground_truth: log4j-core -> spring-boot-starter-log4j2 -> spring-boot-apps; log4j-core -> kafka-clients -> kafka-streams -> kafka-apps; pax-logging-log4j2 -> OSGi-applications. The dependency_chain detail is: log4j-core -> spring-boot (optional dependency (via spring-boot-starter-log4j2)) via pom.xml / build.gradle; affected_versions=2.0-beta9 - 2.14.1; log4j-core -> apache/kafka (dependency (logging framework)) via build.gradle; affected_versions=2.0-beta9 - 2.14.1; log4j-core -> apache/kafka (also: pax-logging-log4j2 (OSGi)) via pom.xml; affected_versions=shaded copy. The answer must show at least one A -> B -> C path that explains how a downstream consumer pulls in `org.apache.logging.log4j:log4j-core` indirectly.",
+      "evaluation_criteria": [
+        "Documents at least one transitive path of the form A -> B -> C through `org.apache.logging.log4j:log4j-core`",
+        "Names every intermediary package present in the ground_truth transitive_paths (kafka-clients, kafka-streams, and spring-boot-starter-log4j2)",
+        "Distinguishes direct from transitive dependents in the report"
+      ]
+    },
+    "version_analysis": {
+      "expected_solution": "Agent must classify each consumer as affected or unaffected based on the resolved/pinned `org.apache.logging.log4j:log4j-core` version. The vulnerable range is 2.0-beta9 - 2.14.1; the fix landed in 2.15.0 (partial), 2.16.0 (full), backports: 2.3.1, 2.12.2. The answer must explicitly call out the version each consumer pins (from package-lock.json / yarn.lock / go.sum / Pipfile.lock / Cargo.lock as applicable) and decide affected vs not.",
+      "evaluation_criteria": [
+        "States the vulnerable range 2.0-beta9 - 2.14.1 and the fixed version 2.15.0 (partial), 2.16.0 (full), backports: 2.3.1, 2.12.2",
+        "Classifies at least one consumer as affected or not affected based on its pinned/resolved version",
+        "References a lockfile or resolution manifest as the source of the pinned version"
+      ]
+    }
+  }
+}

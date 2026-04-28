@@ -1,0 +1,38 @@
+{
+  "task_id": "api-contract-grpc-balancer-002",
+  "checkpoints": {
+    "identify_breaking_api": {
+      "expected_solution": "Agent must identify the breaking change in producer `grpc/grpc-go` introduced by grpc/grpc-go#3309. The IMPACT_REPORT.md must name the legacy symbols (balancer.Picker, balancer.Builder, resolver.Builder, and resolver.Resolver) and their replacements ((none)), and point to producer-side artifacts (balancer/balancer.go and resolver/resolver.go).",
+      "evaluation_criteria": [
+        "Names the producer repository `grpc/grpc-go` and the breaking PR/commit (grpc/grpc-go#3309)",
+        "Lists the deprecated/removed symbols: balancer.Picker, balancer.Builder, resolver.Builder, and resolver.Resolver",
+        "Lists the replacement symbols: (none)",
+        "References at least one producer-side file (basename: balancer.go and resolver.go)"
+      ]
+    },
+    "find_direct_consumers": {
+      "expected_solution": "Agent must enumerate every consumer file in etcd-io/etcd that uses the deprecated symbols (balancer.Picker, balancer.Builder, resolver.Builder, and resolver.Resolver). Per ground_truth: etcd: clientv3/balancer/picker/err.go, clientv3/balancer/picker/roundrobin_balanced.go, clientv3/balancer/resolver/endpoint/endpoint.go. The report must cite each consumer file by name and indicate which deprecated symbol it depends on.",
+      "evaluation_criteria": [
+        "Cites each consumer file by name (basenames: err.go, roundrobin_balanced.go, and endpoint.go)",
+        "For each cited consumer, names which deprecated symbol from balancer.Picker, balancer.Builder, resolver.Builder, and resolver.Resolver it uses",
+        "Distinguishes files with compile-time dependencies from files that only forward/proxy the symbol"
+      ]
+    },
+    "trace_transitive_impact": {
+      "expected_solution": "Agent must trace transitive impact: which downstream code paths in etcd-io/etcd indirectly observe the producer change. The answer must identify forwarding/middleware/interceptor code that propagates the affected types and explain why the type or contract change cascades beyond the directly-importing files. Reference the consumer fix PR(s) (etcd-io/etcd#11564 and etcd-io/etcd#12671) where applicable.",
+      "evaluation_criteria": [
+        "Identifies at least one transitive code path beyond the direct importers (interceptor/middleware/wrapper)",
+        "Explains the propagation mechanism (type changes, signature changes, behavior drift) for balancer.Picker, balancer.Builder, resolver.Builder, and resolver.Resolver",
+        "Cross-references the consumer-side fix PR(s) (etcd-io/etcd#11564 and etcd-io/etcd#12671) or the migration pattern they encode"
+      ]
+    },
+    "classify_breakage": {
+      "expected_solution": "Agent must classify each affected file by failure mode. The ground-truth breakage type is `compile_error`. For `compile_and_runtime` cases the report must identify both compile-time breakage (undefined functions, signature mismatches) and runtime behavior changes (silent metadata loss, semantic shifts). For `compile_only` or `runtime_only` cases, justify why only one class applies.",
+      "evaluation_criteria": [
+        "States the canonical breakage classification: `compile_error`",
+        "Distinguishes compile-time failures (undefined functions, type errors) from runtime behavior changes (silent semantics drift)",
+        "Identifies at least one specific consumer file per failure class consistent with the classification"
+      ]
+    }
+  }
+}

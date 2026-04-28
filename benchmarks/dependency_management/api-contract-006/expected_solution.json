@@ -1,0 +1,38 @@
+{
+  "task_id": "api-contract-envoy-xds-v2-006",
+  "checkpoints": {
+    "identify_breaking_api": {
+      "expected_solution": "Agent must identify the breaking change in producer `envoyproxy/envoy` introduced by envoyproxy/envoy#14223 and envoyproxy/envoy#15481. The IMPACT_REPORT.md must name the legacy symbols ((none)) and their replacements ((none)), and point to producer-side artifacts (source/common/config/api_type_oracle.cc, test/integration/ads_integration_test.cc, and test/config_test/config_test.cc).",
+      "evaluation_criteria": [
+        "Names the producer repository `envoyproxy/envoy` and the breaking PR/commit (envoyproxy/envoy#14223 and envoyproxy/envoy#15481)",
+        "Lists the deprecated/removed symbols: (none)",
+        "Lists the replacement symbols: (none)",
+        "References at least one producer-side file (basename: api_type_oracle.cc, ads_integration_test.cc, and config_test.cc)"
+      ]
+    },
+    "find_direct_consumers": {
+      "expected_solution": "Agent must enumerate every consumer file in envoyproxy/go-control-plane and istio/istio that uses the deprecated symbols ((none)). Per ground_truth: go-control-plane: pkg/cache/v2/cache.go, pkg/cache/v2/resource.go, pkg/cache/v2/simple_test.go, pkg/server/v2/server.go; istio: pilot/pkg/networking/core/v1alpha3/cluster.go, pilot/pkg/networking/core/v1alpha3/cluster_builder.go, pilot/pkg/networking/core/v1alpha3/listener.go, pilot/pkg/networking/core/v1alpha3/route/route.go, pilot/pkg/proxy/envoy/v2/ads.go, pilot/pkg/proxy/envoy/v2/cds.go, pilot/pkg/proxy/envoy/v2/eds.go, pilot/pkg/networking/util/util.go. The report must cite each consumer file by name and indicate which deprecated symbol it depends on.",
+      "evaluation_criteria": [
+        "Cites each consumer file by name (basenames: cache.go, resource.go, simple_test.go, server.go, cluster.go, cluster_builder.go, listener.go, route.go, ads.go, cds.go, eds.go, and util.go)",
+        "For each cited consumer, names which deprecated symbol from (none) it uses",
+        "Distinguishes files with compile-time dependencies from files that only forward/proxy the symbol"
+      ]
+    },
+    "trace_transitive_impact": {
+      "expected_solution": "Agent must trace transitive impact: which downstream code paths in envoyproxy/go-control-plane and istio/istio indirectly observe the producer change. The answer must identify forwarding/middleware/interceptor code that propagates the affected types and explain why the type or contract change cascades beyond the directly-importing files. Reference the consumer fix PR(s) (envoyproxy/go-control-plane#415, istio/istio#22919, istio/istio#23962, and istio/istio#24588) where applicable.",
+      "evaluation_criteria": [
+        "Identifies at least one transitive code path beyond the direct importers (interceptor/middleware/wrapper)",
+        "Explains the propagation mechanism (type changes, signature changes, behavior drift) for (none)",
+        "Cross-references the consumer-side fix PR(s) (envoyproxy/go-control-plane#415, istio/istio#22919, istio/istio#23962, and istio/istio#24588) or the migration pattern they encode"
+      ]
+    },
+    "classify_breakage": {
+      "expected_solution": "Agent must classify each affected file by failure mode. The ground-truth breakage type is `runtime_fatal`. For `compile_and_runtime` cases the report must identify both compile-time breakage (undefined functions, signature mismatches) and runtime behavior changes (silent metadata loss, semantic shifts). For `compile_only` or `runtime_only` cases, justify why only one class applies.",
+      "evaluation_criteria": [
+        "States the canonical breakage classification: `runtime_fatal`",
+        "Distinguishes compile-time failures (undefined functions, type errors) from runtime behavior changes (silent semantics drift)",
+        "Identifies at least one specific consumer file per failure class consistent with the classification"
+      ]
+    }
+  }
+}

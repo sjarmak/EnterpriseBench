@@ -1,0 +1,37 @@
+{
+  "task_id": "dep-traversal-006",
+  "checkpoints": {
+    "identify_cve": {
+      "expected_solution": "Agent must identify the CVE as CVE-2024-24786 (GHSA-8r3f-844c-mc37) affecting the go package `google.golang.org/protobuf` at versions < 1.33.0, fixed in 1.33.0. The BLAST_RADIUS.md report should name the CVE identifier explicitly and the vulnerable version range.",
+      "evaluation_criteria": [
+        "Names the CVE identifier CVE-2024-24786 verbatim",
+        "States the affected package as `google.golang.org/protobuf`",
+        "Cites the vulnerable version range < 1.33.0 (and/or fixed version 1.33.0)"
+      ]
+    },
+    "find_direct_deps": {
+      "expected_solution": "Agent must enumerate the direct dependents of `google.golang.org/protobuf` inside the workspace repos. Per ground_truth, these are: grpc-go, istio, and go-control-plane. The answer must reference each by package name and cite the manifest file (e.g. package.json, go.mod, requirements.txt, pom.xml) where the dependency is declared.",
+      "evaluation_criteria": [
+        "Lists each ground-truth direct dependent: grpc-go, istio, and go-control-plane",
+        "References the manifest file(s) where the dependency is declared (package.json / go.mod / requirements.txt / pom.xml / Cargo.toml as applicable)",
+        "Distinguishes runtime vs dev/test dependencies for `google.golang.org/protobuf` where the manifest type indicates it"
+      ]
+    },
+    "trace_transitive_paths": {
+      "expected_solution": "Agent must trace transitive dependency paths through intermediaries. Per ground_truth: google.golang.org/protobuf -> grpc-go -> istio; google.golang.org/protobuf -> go-control-plane -> istio; google.golang.org/protobuf -> grpc-go. The dependency_chain detail is: google.golang.org/protobuf -> grpc/grpc-go (go module dependency (protobuf marshaling)) via go.mod; affected_versions=< 1.33.0; grpc/grpc-go -> istio/istio (go module dependency (gRPC transport)) via go.mod; affected_versions=all using protobuf < 1.33.0. The answer must show at least one A -> B -> C path that explains how a downstream consumer pulls in `google.golang.org/protobuf` indirectly.",
+      "evaluation_criteria": [
+        "Documents at least one transitive path of the form A -> B -> C through `google.golang.org/protobuf`",
+        "Names every intermediary package present in the ground_truth transitive_paths (go-control-plane and grpc-go)",
+        "Distinguishes direct from transitive dependents in the report"
+      ]
+    },
+    "version_analysis": {
+      "expected_solution": "Agent must classify each consumer as affected or unaffected based on the resolved/pinned `google.golang.org/protobuf` version. The vulnerable range is < 1.33.0; the fix landed in 1.33.0. The answer must explicitly call out the version each consumer pins (from package-lock.json / yarn.lock / go.sum / Pipfile.lock / Cargo.lock as applicable) and decide affected vs not.",
+      "evaluation_criteria": [
+        "States the vulnerable range < 1.33.0 and the fixed version 1.33.0",
+        "Classifies at least one consumer as affected or not affected based on its pinned/resolved version",
+        "References a lockfile or resolution manifest as the source of the pinned version"
+      ]
+    }
+  }
+}

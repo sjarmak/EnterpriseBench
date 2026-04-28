@@ -1,0 +1,38 @@
+{
+  "task_id": "api-contract-grpc-transport-003",
+  "checkpoints": {
+    "identify_breaking_api": {
+      "expected_solution": "Agent must identify the breaking change in producer `grpc/grpc-go` introduced by grpc/grpc-go#2212. The IMPACT_REPORT.md must name the legacy symbols (transport.ClientTransport, transport.ServerTransport, transport.Stream, and transport.NewClientTransport) and their replacements ((none)), and point to producer-side artifacts (internal/transport/transport.go, internal/transport/http2_client.go, internal/transport/http2_server.go, internal/transport/handler_server.go, internal/transport/controlbuf.go, internal/transport/flowcontrol.go, internal/transport/http_util.go, clientconn.go, server.go, stream.go, and rpc_util.go).",
+      "evaluation_criteria": [
+        "Names the producer repository `grpc/grpc-go` and the breaking PR/commit (grpc/grpc-go#2212)",
+        "Lists the deprecated/removed symbols: transport.ClientTransport, transport.ServerTransport, transport.Stream, and transport.NewClientTransport",
+        "Lists the replacement symbols: (none)",
+        "References at least one producer-side file (basename: transport.go, http2_client.go, http2_server.go, handler_server.go, controlbuf.go, flowcontrol.go, http_util.go, clientconn.go, server.go, stream.go, and rpc_util.go)"
+      ]
+    },
+    "find_direct_consumers": {
+      "expected_solution": "Agent must enumerate every consumer file in etcd-io/etcd and kubernetes/kubernetes that uses the deprecated symbols (transport.ClientTransport, transport.ServerTransport, transport.Stream, and transport.NewClientTransport). Per ground_truth: kubernetes: vendor/google.golang.org/grpc/clientconn.go, staging/src/k8s.io/apiserver/pkg/server/genericapiserver.go, pkg/kubelet/kubelet.go. The report must cite each consumer file by name and indicate which deprecated symbol it depends on.",
+      "evaluation_criteria": [
+        "Cites each consumer file by name (basenames: clientconn.go, genericapiserver.go, and kubelet.go)",
+        "For each cited consumer, names which deprecated symbol from transport.ClientTransport, transport.ServerTransport, transport.Stream, and transport.NewClientTransport it uses",
+        "Distinguishes files with compile-time dependencies from files that only forward/proxy the symbol"
+      ]
+    },
+    "trace_transitive_impact": {
+      "expected_solution": "Agent must trace transitive impact: which downstream code paths in etcd-io/etcd and kubernetes/kubernetes indirectly observe the producer change. The answer must identify forwarding/middleware/interceptor code that propagates the affected types and explain why the type or contract change cascades beyond the directly-importing files. Reference the consumer fix PR(s) (kubernetes/kubernetes#57160) where applicable.",
+      "evaluation_criteria": [
+        "Identifies at least one transitive code path beyond the direct importers (interceptor/middleware/wrapper)",
+        "Explains the propagation mechanism (type changes, signature changes, behavior drift) for transport.ClientTransport, transport.ServerTransport, transport.Stream, and transport.NewClientTransport",
+        "Cross-references the consumer-side fix PR(s) (kubernetes/kubernetes#57160) or the migration pattern they encode"
+      ]
+    },
+    "classify_breakage": {
+      "expected_solution": "Agent must classify each affected file by failure mode. The ground-truth breakage type is `compile_error`. For `compile_and_runtime` cases the report must identify both compile-time breakage (undefined functions, signature mismatches) and runtime behavior changes (silent metadata loss, semantic shifts). For `compile_only` or `runtime_only` cases, justify why only one class applies.",
+      "evaluation_criteria": [
+        "States the canonical breakage classification: `compile_error`",
+        "Distinguishes compile-time failures (undefined functions, type errors) from runtime behavior changes (silent semantics drift)",
+        "Identifies at least one specific consumer file per failure class consistent with the classification"
+      ]
+    }
+  }
+}

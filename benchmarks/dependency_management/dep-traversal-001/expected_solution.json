@@ -1,0 +1,37 @@
+{
+  "task_id": "dep-traversal-001",
+  "checkpoints": {
+    "identify_cve": {
+      "expected_solution": "Agent must identify the CVE as CVE-2021-23337 (GHSA-35jh-r3h4-6jhm) affecting the npm package `lodash` at versions < 4.17.21, fixed in 4.17.21. The BLAST_RADIUS.md report should name the CVE identifier explicitly and the vulnerable version range.",
+      "evaluation_criteria": [
+        "Names the CVE identifier CVE-2021-23337 verbatim",
+        "States the affected package as `lodash`",
+        "Cites the vulnerable version range < 4.17.21 (and/or fixed version 4.17.21)"
+      ]
+    },
+    "find_direct_deps": {
+      "expected_solution": "Agent must enumerate the direct dependents of `lodash` inside the workspace repos. Per ground_truth, these are: webpack, jest, and @babel/traverse. The answer must reference each by package name and cite the manifest file (e.g. package.json, go.mod, requirements.txt, pom.xml) where the dependency is declared.",
+      "evaluation_criteria": [
+        "Lists each ground-truth direct dependent: webpack, jest, and @babel/traverse",
+        "References the manifest file(s) where the dependency is declared (package.json / go.mod / requirements.txt / pom.xml / Cargo.toml as applicable)",
+        "Distinguishes runtime vs dev/test dependencies for `lodash` where the manifest type indicates it"
+      ]
+    },
+    "trace_transitive_paths": {
+      "expected_solution": "Agent must trace transitive dependency paths through intermediaries. Per ground_truth: lodash -> webpack -> create-react-app; lodash -> jest -> create-react-app; lodash -> @babel/traverse -> babel-loader -> webpack. The dependency_chain detail is: lodash -> webpack (devDependency) via package.json; affected_versions=< 4.17.21; lodash -> jest (dependency (via jest-haste-map)) via packages/jest-haste-map/package.json; affected_versions=< 4.17.21. The answer must show at least one A -> B -> C path that explains how a downstream consumer pulls in `lodash` indirectly.",
+      "evaluation_criteria": [
+        "Documents at least one transitive path of the form A -> B -> C through `lodash`",
+        "Names every intermediary package present in the ground_truth transitive_paths (@babel/traverse, babel-loader, jest, and webpack)",
+        "Distinguishes direct from transitive dependents in the report"
+      ]
+    },
+    "version_analysis": {
+      "expected_solution": "Agent must classify each consumer as affected or unaffected based on the resolved/pinned `lodash` version. The vulnerable range is < 4.17.21; the fix landed in 4.17.21. The answer must explicitly call out the version each consumer pins (from package-lock.json / yarn.lock / go.sum / Pipfile.lock / Cargo.lock as applicable) and decide affected vs not.",
+      "evaluation_criteria": [
+        "States the vulnerable range < 4.17.21 and the fixed version 4.17.21",
+        "Classifies at least one consumer as affected or not affected based on its pinned/resolved version",
+        "References a lockfile or resolution manifest as the source of the pinned version"
+      ]
+    }
+  }
+}

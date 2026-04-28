@@ -1,0 +1,28 @@
+{
+  "task_id": "dep-traversal-tri-jackson-001",
+  "checkpoints": {
+    "identify_packages": {
+      "expected_solution": "Agent identifies key packages and classes in all three repos The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: ObjectMapper.java, MappingJackson2HttpMessageConverter.java, JacksonAutoConfiguration.java, Jackson2ObjectMapperBuilder.java, and Module.java). The judge looks for the following concept tokens in the agent output: ObjectMapper, jackson-databind.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (ObjectMapper.java, MappingJackson2HttpMessageConverter.java, JacksonAutoConfiguration.java, Jackson2ObjectMapperBuilder.java, and Module.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: ObjectMapper and jackson-databind"
+      ]
+    },
+    "trace_integration_path": {
+      "expected_solution": "Agent traces the ObjectMapper configuration chain across repos The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: ObjectMapper.java, MappingJackson2HttpMessageConverter.java, JacksonAutoConfiguration.java, Jackson2ObjectMapperBuilder.java, and Module.java).",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (ObjectMapper.java, MappingJackson2HttpMessageConverter.java, JacksonAutoConfiguration.java, Jackson2ObjectMapperBuilder.java, and Module.java) in the agent output",
+        "References the checkpoint goal as described in task.toml: Agent traces the ObjectMapper configuration chain across repos",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "autoconfiguration_analysis": {
+      "expected_solution": "Agent maps Spring Boot autoconfiguration to Jackson module registration The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: ObjectMapper.java, MappingJackson2HttpMessageConverter.java, JacksonAutoConfiguration.java, Jackson2ObjectMapperBuilder.java, and Module.java). The judge looks for the following concept tokens in the agent output: @ConditionalOn, @AutoConfiguration, @Configuration.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (ObjectMapper.java, MappingJackson2HttpMessageConverter.java, JacksonAutoConfiguration.java, Jackson2ObjectMapperBuilder.java, and Module.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: @ConditionalOn, @AutoConfiguration, and @Configuration",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    }
+  }
+}

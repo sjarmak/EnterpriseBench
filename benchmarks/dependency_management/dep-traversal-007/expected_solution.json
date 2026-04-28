@@ -1,0 +1,37 @@
+{
+  "task_id": "dep-traversal-007",
+  "checkpoints": {
+    "identify_cve": {
+      "expected_solution": "Agent must identify the CVE as CVE-2022-25878 (GHSA-g954-5hwp-pp24) affecting the npm package `protobufjs` at versions 6.10.0-6.10.2, 6.11.0-6.11.2, fixed in 6.10.3 / 6.11.3. The BLAST_RADIUS.md report should name the CVE identifier explicitly and the vulnerable version range.",
+      "evaluation_criteria": [
+        "Names the CVE identifier CVE-2022-25878 verbatim",
+        "States the affected package as `protobufjs`",
+        "Cites the vulnerable version range 6.10.0-6.10.2, 6.11.0-6.11.2 (and/or fixed version 6.10.3 / 6.11.3)"
+      ]
+    },
+    "find_direct_deps": {
+      "expected_solution": "Agent must enumerate the direct dependents of `protobufjs` inside the workspace repos. Per ground_truth, these are: @grpc/grpc-js and @google-cloud/pubsub. The answer must reference each by package name and cite the manifest file (e.g. package.json, go.mod, requirements.txt, pom.xml) where the dependency is declared.",
+      "evaluation_criteria": [
+        "Lists each ground-truth direct dependent: @grpc/grpc-js and @google-cloud/pubsub",
+        "References the manifest file(s) where the dependency is declared (package.json / go.mod / requirements.txt / pom.xml / Cargo.toml as applicable)",
+        "Distinguishes runtime vs dev/test dependencies for `protobufjs` where the manifest type indicates it"
+      ]
+    },
+    "trace_transitive_paths": {
+      "expected_solution": "Agent must trace transitive dependency paths through intermediaries. Per ground_truth: protobufjs -> @grpc/grpc-js -> kubernetes-client-node; protobufjs -> @grpc/grpc-js -> @google-cloud/pubsub. The dependency_chain detail is: protobufjs -> @grpc/grpc-js (dependency (protobuf serialization)) via package.json; affected_versions=6.10.0-6.10.2, 6.11.0-6.11.2; @grpc/grpc-js -> kubernetes-client/javascript (dependency (gRPC transport for k8s API)) via package.json; affected_versions=transitive. The answer must show at least one A -> B -> C path that explains how a downstream consumer pulls in `protobufjs` indirectly.",
+      "evaluation_criteria": [
+        "Documents at least one transitive path of the form A -> B -> C through `protobufjs`",
+        "Names every intermediary package present in the ground_truth transitive_paths (@grpc/grpc-js)",
+        "Distinguishes direct from transitive dependents in the report"
+      ]
+    },
+    "version_analysis": {
+      "expected_solution": "Agent must classify each consumer as affected or unaffected based on the resolved/pinned `protobufjs` version. The vulnerable range is 6.10.0-6.10.2, 6.11.0-6.11.2; the fix landed in 6.10.3 / 6.11.3. The answer must explicitly call out the version each consumer pins (from package-lock.json / yarn.lock / go.sum / Pipfile.lock / Cargo.lock as applicable) and decide affected vs not.",
+      "evaluation_criteria": [
+        "States the vulnerable range 6.10.0-6.10.2, 6.11.0-6.11.2 and the fixed version 6.10.3 / 6.11.3",
+        "Classifies at least one consumer as affected or not affected based on its pinned/resolved version",
+        "References a lockfile or resolution manifest as the source of the pinned version"
+      ]
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "task_id": "dep-traversal-tri-openssl-001",
+  "checkpoints": {
+    "identify_tls_entry": {
+      "expected_solution": "Agent identifies git's HTTP/TLS configuration entry points The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: http.c, openssl.c, x509_vfy.c, http.h, and urldata.h). The judge looks for the following concept tokens in the agent output: http.c, http.sslCAInfo, sslCAInfo.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (http.c, openssl.c, x509_vfy.c, http.h, and urldata.h) in the agent output",
+        "Mentions at least three of the canonical concept tokens: http.c, http.sslCAInfo, and sslCAInfo"
+      ]
+    },
+    "trace_curl_integration": {
+      "expected_solution": "Agent traces curl's OpenSSL backend configuration path The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: openssl.c and urldata.h).",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (openssl.c and urldata.h) in the agent output",
+        "References the checkpoint goal as described in task.toml: Agent traces curl's OpenSSL backend configuration path",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "openssl_verification": {
+      "expected_solution": "Agent identifies OpenSSL X509 verification chain and error origin The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: x509_vfy.c). The judge looks for the following concept tokens in the agent output: x509_vfy, X509_verify_cert.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (x509_vfy.c) in the agent output",
+        "Mentions at least three of the canonical concept tokens: x509_vfy and X509_verify_cert",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    }
+  }
+}

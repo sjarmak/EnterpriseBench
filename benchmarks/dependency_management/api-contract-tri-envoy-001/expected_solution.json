@@ -1,0 +1,27 @@
+{
+  "task_id": "api-contract-tri-envoy-001",
+  "checkpoints": {
+    "contract_source": {
+      "expected_solution": "Agent identifies xDS API definitions in Envoy The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: grpc_subscription_impl.cc and subscription_base.h). The judge looks for the following concept tokens in the agent output: xds, discovery, subscription, grpc, ads, config.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (grpc_subscription_impl.cc and subscription_base.h) in the agent output",
+        "Mentions at least three of the canonical concept tokens: discovery, subscription, grpc, and config"
+      ]
+    },
+    "direct_consumers": {
+      "expected_solution": "Agent finds Istio and go-control-plane xDS implementations The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: ads.go, delta.go, server.go, and snapshot.go). The judge looks for the following concept tokens in the agent output: path.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (ads.go, delta.go, server.go, and snapshot.go) in the agent output",
+        "Mentions at least three of the canonical concept tokens: path",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "transitive_impact": {
+      "expected_solution": "Agent traces xDS contract divergence across all three repos The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: grpc_subscription_impl.cc, ads.go, server.go, subscription_base.h, delta.go, and snapshot.go). The judge looks for the following concept tokens in the agent output: version, nonce, type_url, incremental, state-of-the-world, sotw, delta, cds.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (grpc_subscription_impl.cc, ads.go, server.go, subscription_base.h, delta.go, and snapshot.go) in the agent output",
+        "Mentions at least three of the canonical concept tokens: version, nonce, type_url, incremental, and state-of-the-world"
+      ]
+    }
+  }
+}

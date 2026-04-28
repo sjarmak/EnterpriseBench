@@ -1,0 +1,37 @@
+{
+  "task_id": "dep-traversal-010",
+  "checkpoints": {
+    "identify_cve": {
+      "expected_solution": "Agent must identify the CVE as CVE-2020-36518 (GHSA-57j2-w4cx-62h2) affecting the maven package `com.fasterxml.jackson.core:jackson-databind` at versions <= 2.12.6.0 (fix 2.12.6.1), 2.13.0-2.13.2 (fix 2.13.2.1), fixed in 2.12.6.1 / 2.13.2.1. The BLAST_RADIUS.md report should name the CVE identifier explicitly and the vulnerable version range.",
+      "evaluation_criteria": [
+        "Names the CVE identifier CVE-2020-36518 verbatim",
+        "States the affected package as `com.fasterxml.jackson.core:jackson-databind`",
+        "Cites the vulnerable version range <= 2.12.6.0 (fix 2.12.6.1), 2.13.0-2.13.2 (fix 2.13.2.1) (and/or fixed version 2.12.6.1 / 2.13.2.1)"
+      ]
+    },
+    "find_direct_deps": {
+      "expected_solution": "Agent must enumerate the direct dependents of `com.fasterxml.jackson.core:jackson-databind` inside the workspace repos. Per ground_truth, these are: spring-boot and dropwizard. The answer must reference each by package name and cite the manifest file (e.g. package.json, go.mod, requirements.txt, pom.xml) where the dependency is declared.",
+      "evaluation_criteria": [
+        "Lists each ground-truth direct dependent: spring-boot and dropwizard",
+        "References the manifest file(s) where the dependency is declared (package.json / go.mod / requirements.txt / pom.xml / Cargo.toml as applicable)",
+        "Distinguishes runtime vs dev/test dependencies for `com.fasterxml.jackson.core:jackson-databind` where the manifest type indicates it"
+      ]
+    },
+    "trace_transitive_paths": {
+      "expected_solution": "Agent must trace transitive dependency paths through intermediaries. Per ground_truth: jackson-databind -> spring-boot-starter-web -> spring-boot-apps; jackson-databind -> dropwizard-jackson -> dropwizard-apps. The dependency_chain detail is: jackson-databind -> spring-boot (managed dependency (via spring-boot-starter-web BOM)) via pom.xml / build.gradle; affected_versions=<= 2.12.6.0, 2.13.0-2.13.2; spring-boot -> enterprise-apps (parent/starter dependency) via pom.xml; affected_versions=transitive. The answer must show at least one A -> B -> C path that explains how a downstream consumer pulls in `com.fasterxml.jackson.core:jackson-databind` indirectly.",
+      "evaluation_criteria": [
+        "Documents at least one transitive path of the form A -> B -> C through `com.fasterxml.jackson.core:jackson-databind`",
+        "Names every intermediary package present in the ground_truth transitive_paths (dropwizard-jackson and spring-boot-starter-web)",
+        "Distinguishes direct from transitive dependents in the report"
+      ]
+    },
+    "version_analysis": {
+      "expected_solution": "Agent must classify each consumer as affected or unaffected based on the resolved/pinned `com.fasterxml.jackson.core:jackson-databind` version. The vulnerable range is <= 2.12.6.0 (fix 2.12.6.1), 2.13.0-2.13.2 (fix 2.13.2.1); the fix landed in 2.12.6.1 / 2.13.2.1. The answer must explicitly call out the version each consumer pins (from package-lock.json / yarn.lock / go.sum / Pipfile.lock / Cargo.lock as applicable) and decide affected vs not.",
+      "evaluation_criteria": [
+        "States the vulnerable range <= 2.12.6.0 (fix 2.12.6.1), 2.13.0-2.13.2 (fix 2.13.2.1) and the fixed version 2.12.6.1 / 2.13.2.1",
+        "Classifies at least one consumer as affected or not affected based on its pinned/resolved version",
+        "References a lockfile or resolution manifest as the source of the pinned version"
+      ]
+    }
+  }
+}

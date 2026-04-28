@@ -1,0 +1,27 @@
+{
+  "task_id": "api-contract-tri-protobuf-001",
+  "checkpoints": {
+    "contract_source": {
+      "expected_solution": "Agent identifies well-known type definitions in protobuf The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: timestamp.proto, duration.proto, and struct.proto). The judge looks for the following concept tokens in the agent output: timestamp, duration, fieldmask, struct, any.proto.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (timestamp.proto, duration.proto, and struct.proto) in the agent output",
+        "Mentions at least three of the canonical concept tokens: timestamp, duration, fieldmask, struct, and any.proto"
+      ]
+    },
+    "direct_consumers": {
+      "expected_solution": "Agent finds gRPC and googleapis consumers of well-known types The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: message_size_filter.cc, httpbody.proto, and status.proto). The judge looks for the following concept tokens in the agent output: path.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (message_size_filter.cc, httpbody.proto, and status.proto) in the agent output",
+        "Mentions at least three of the canonical concept tokens: path",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "compliance_check": {
+      "expected_solution": "Agent identifies contract compliance issues The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: timestamp.proto, message_size_filter.cc, httpbody.proto, duration.proto, struct.proto, and status.proto). The judge looks for the following concept tokens in the agent output: serializ, json, contract, drift, mismatch, breaking, compat.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (timestamp.proto, message_size_filter.cc, httpbody.proto, duration.proto, struct.proto, and status.proto) in the agent output",
+        "Mentions at least three of the canonical concept tokens: serializ, json, contract, drift, and mismatch"
+      ]
+    }
+  }
+}

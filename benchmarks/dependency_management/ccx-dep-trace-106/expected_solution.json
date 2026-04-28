@@ -1,0 +1,21 @@
+{
+  "task_id": "ccx-dep-trace-106",
+  "checkpoints": {
+    "source_files_identified": {
+      "expected_solution": "Agent identifies the pass manager, pass definition, and concrete pass implementation files The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: passes.def, passes.cc, pass_manager.h, tree-ssa-dce.cc, and tree-pass.h). The judge looks for the following concept tokens in the agent output: path.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (passes.def, passes.cc, pass_manager.h, tree-ssa-dce.cc, and tree-pass.h) in the agent output",
+        "Mentions at least three of the canonical concept tokens: path",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "symbols_identified": {
+      "expected_solution": "Agent identifies key structs/functions in the pass registration chain The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: passes.def, passes.cc, pass_manager.h, tree-ssa-dce.cc, and tree-pass.h). The judge looks for the following concept tokens in the agent output: opt_pass, pass_manager, execute_pass_list, tree_ssa_dce, passes.def.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (passes.def, passes.cc, pass_manager.h, tree-ssa-dce.cc, and tree-pass.h) in the agent output",
+        "Mentions at least three of the canonical concept tokens: opt_pass, pass_manager, execute_pass_list, tree_ssa_dce, and passes.def",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    }
+  }
+}

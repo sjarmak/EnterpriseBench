@@ -1,0 +1,37 @@
+{
+  "task_id": "dep-traversal-004",
+  "checkpoints": {
+    "identify_cve": {
+      "expected_solution": "Agent must identify the CVE as CVE-2023-39325 (GHSA-4374-p667-p6c8) affecting the go package `golang.org/x/net` at versions < 0.17.0, fixed in 0.17.0. The BLAST_RADIUS.md report should name the CVE identifier explicitly and the vulnerable version range.",
+      "evaluation_criteria": [
+        "Names the CVE identifier CVE-2023-39325 verbatim",
+        "States the affected package as `golang.org/x/net`",
+        "Cites the vulnerable version range < 0.17.0 (and/or fixed version 0.17.0)"
+      ]
+    },
+    "find_direct_deps": {
+      "expected_solution": "Agent must enumerate the direct dependents of `golang.org/x/net` inside the workspace repos. Per ground_truth, these are: grpc-go, kubernetes, and etcd. The answer must reference each by package name and cite the manifest file (e.g. package.json, go.mod, requirements.txt, pom.xml) where the dependency is declared.",
+      "evaluation_criteria": [
+        "Lists each ground-truth direct dependent: grpc-go, kubernetes, and etcd",
+        "References the manifest file(s) where the dependency is declared (package.json / go.mod / requirements.txt / pom.xml / Cargo.toml as applicable)",
+        "Distinguishes runtime vs dev/test dependencies for `golang.org/x/net` where the manifest type indicates it"
+      ]
+    },
+    "trace_transitive_paths": {
+      "expected_solution": "Agent must trace transitive dependency paths through intermediaries. Per ground_truth: golang.org/x/net -> grpc-go -> etcd; golang.org/x/net -> kubernetes; golang.org/x/net -> grpc-go -> kubernetes. The dependency_chain detail is: golang.org/x/net -> grpc/grpc-go (go module dependency (http2 transport)) via go.mod; affected_versions=< 0.17.0; grpc/grpc-go -> etcd-io/etcd (go module dependency (gRPC client/server)) via go.mod; affected_versions=< 1.58.3; golang.org/x/net -> kubernetes/kubernetes (go module dependency (API server)) via go.mod; affected_versions=< 0.17.0. The answer must show at least one A -> B -> C path that explains how a downstream consumer pulls in `golang.org/x/net` indirectly.",
+      "evaluation_criteria": [
+        "Documents at least one transitive path of the form A -> B -> C through `golang.org/x/net`",
+        "Names every intermediary package present in the ground_truth transitive_paths (grpc-go)",
+        "Distinguishes direct from transitive dependents in the report"
+      ]
+    },
+    "version_analysis": {
+      "expected_solution": "Agent must classify each consumer as affected or unaffected based on the resolved/pinned `golang.org/x/net` version. The vulnerable range is < 0.17.0; the fix landed in 0.17.0. The answer must explicitly call out the version each consumer pins (from package-lock.json / yarn.lock / go.sum / Pipfile.lock / Cargo.lock as applicable) and decide affected vs not.",
+      "evaluation_criteria": [
+        "States the vulnerable range < 0.17.0 and the fixed version 0.17.0",
+        "Classifies at least one consumer as affected or not affected based on its pinned/resolved version",
+        "References a lockfile or resolution manifest as the source of the pinned version"
+      ]
+    }
+  }
+}

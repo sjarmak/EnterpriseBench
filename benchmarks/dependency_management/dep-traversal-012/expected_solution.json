@@ -1,0 +1,37 @@
+{
+  "task_id": "dep-traversal-012",
+  "checkpoints": {
+    "identify_cve": {
+      "expected_solution": "Agent must identify the CVE as CVE-2022-0778 (GHSA-x3mh-jvjw-3xwx) affecting the system package `openssl` at versions 1.0.2-1.0.2zc, 1.1.1-1.1.1m, 3.0.0-3.0.1, fixed in 1.0.2zd / 1.1.1n / 3.0.2. The BLAST_RADIUS.md report should name the CVE identifier explicitly and the vulnerable version range.",
+      "evaluation_criteria": [
+        "Names the CVE identifier CVE-2022-0778 verbatim",
+        "States the affected package as `openssl`",
+        "Cites the vulnerable version range 1.0.2-1.0.2zc, 1.1.1-1.1.1m, 3.0.0-3.0.1 (and/or fixed version 1.0.2zd / 1.1.1n / 3.0.2)"
+      ]
+    },
+    "find_direct_deps": {
+      "expected_solution": "Agent must enumerate the direct dependents of `openssl` inside the workspace repos. Per ground_truth, these are: curl, python-ssl, node-crypto, and nginx. The answer must reference each by package name and cite the manifest file (e.g. package.json, go.mod, requirements.txt, pom.xml) where the dependency is declared.",
+      "evaluation_criteria": [
+        "Lists each ground-truth direct dependent: curl, python-ssl, node-crypto, and nginx",
+        "References the manifest file(s) where the dependency is declared (package.json / go.mod / requirements.txt / pom.xml / Cargo.toml as applicable)",
+        "Distinguishes runtime vs dev/test dependencies for `openssl` where the manifest type indicates it"
+      ]
+    },
+    "trace_transitive_paths": {
+      "expected_solution": "Agent must trace transitive dependency paths through intermediaries. Per ground_truth: openssl -> curl -> git -> CI/CD pipelines; openssl -> python ssl -> pip -> requests -> boto3; openssl -> nodejs crypto -> npm -> JS ecosystem; openssl -> kubernetes (CGO). The dependency_chain detail is: openssl -> curl (system library (dynamic linking)) via configure / CMakeLists.txt; affected_versions=1.0.2-1.0.2zc, 1.1.1-1.1.1m, 3.0.0-3.0.1; curl -> git (dependency (HTTP transport)) via Makefile / configure; affected_versions=transitive; openssl -> kubernetes (system library (via Go crypto/tls when CGO_ENABLED=1)) via go.mod (indirect); affected_versions=conditional on CGO. The answer must show at least one A -> B -> C path that explains how a downstream consumer pulls in `openssl` indirectly.",
+      "evaluation_criteria": [
+        "Documents at least one transitive path of the form A -> B -> C through `openssl`",
+        "Names every intermediary package present in the ground_truth transitive_paths (curl, git, nodejs crypto, npm, pip, python ssl, and requests)",
+        "Distinguishes direct from transitive dependents in the report"
+      ]
+    },
+    "version_analysis": {
+      "expected_solution": "Agent must classify each consumer as affected or unaffected based on the resolved/pinned `openssl` version. The vulnerable range is 1.0.2-1.0.2zc, 1.1.1-1.1.1m, 3.0.0-3.0.1; the fix landed in 1.0.2zd / 1.1.1n / 3.0.2. The answer must explicitly call out the version each consumer pins (from package-lock.json / yarn.lock / go.sum / Pipfile.lock / Cargo.lock as applicable) and decide affected vs not.",
+      "evaluation_criteria": [
+        "States the vulnerable range 1.0.2-1.0.2zc, 1.1.1-1.1.1m, 3.0.0-3.0.1 and the fixed version 1.0.2zd / 1.1.1n / 3.0.2",
+        "Classifies at least one consumer as affected or not affected based on its pinned/resolved version",
+        "References a lockfile or resolution manifest as the source of the pinned version"
+      ]
+    }
+  }
+}
