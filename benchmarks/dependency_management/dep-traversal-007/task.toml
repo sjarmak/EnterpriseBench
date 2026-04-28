@@ -4,7 +4,7 @@ difficulty_stratum = "multi_repo"
 mcp_suite = "eb_v1"
 repo_set_id = "grpc-ecosystem"
 org_scale = true
-verification_modes = ["deterministic"]
+verification_modes = ["deterministic", "llm_curator"]
 
 [task]
 id = "dep-traversal-007"

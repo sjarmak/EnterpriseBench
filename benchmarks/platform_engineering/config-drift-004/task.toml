@@ -4,7 +4,7 @@ difficulty_stratum = "dual_repo"
 mcp_suite = "eb_v1"
 repo_set_id = "argocd-ecosystem"
 org_scale = true
-verification_modes = ["deterministic"]
+verification_modes = ["deterministic", "llm_curator"]
 
 [task]
 id = "config-drift-argocd-redis-ha-004"
@@ -69,7 +69,7 @@ path = "dandydeveloper-charts"
 role = "upstream"
 
 [metadata]
-languages = ["yaml", "go-template", "go"]
+languages = ["yaml", "go-template"]
 total_loc = 350_000
 dependency_depth = 2
 frameworks = ["helm", "kubernetes", "argocd"]
