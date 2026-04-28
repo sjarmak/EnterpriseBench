@@ -1,0 +1,37 @@
+{
+  "task_id": "incident-inv-watch-cache-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "When the watch event cache is empty, the watch cache incorrectly allows establishing a watch as if it can deliver events for its currently synced resourceVersion. This off-by-one error means it won't send the event that brought the cache to its current state, and the etcd listerwatcher starts watching from the current version, so that event is permanently lost. The oldest available resourceVersion was not adjusted for an empty watch event cache. The cache should return a 'too old resource version' error (410 Gone) to force the client to relist. Bug location: staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go :: GetAllEventsSinceThreadUnsafe.",
+      "evaluation_criteria": [
+        "Must identify staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go as the root cause file",
+        "Must reference function/method 'GetAllEventsSinceThreadUnsafe'",
+        "Must explain the mechanism: The oldest available resourceVersion was not adjusted for an empty watch event cache"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Error chain: (1) Controller (client-go informer): Lists resources at resourceVersion=N, then watches from resourceVersion=N (2) API Server watch handler: Routes watch request to storage layer (3) Watch Cache (cacher.go): Accepts watch, delegates to watch_cache for initial events (4) Watch Cache (watch_cache.go): BUG: Empty event cache allows watch at resourceVersion=N but cannot deliver event N+1 (5) etcd3 storage (watcher.go): Starts watching from current resourceVersion, missing the gap event",
+      "evaluation_criteria": [
+        "Must trace the error chain in correct order",
+        "Must identify the buggy step at Watch Cache (watch_cache.go)",
+        "Must include the entry point (Controller (client-go informer)) and the failing component (etcd3 storage (watcher.go))"
+      ]
+    },
+    "affected_services": {
+      "expected_solution": "Affected components: kube-apiserver (watch cache layer); etcd3 storage backend; All controllers using informers (client-go); CRD/TPR registration flow",
+      "evaluation_criteria": [
+        "Must list at least 3 of the affected components/services",
+        "Must cite specific source files (e.g. staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go)",
+        "Must cover both implementation and reference paths (e.g. staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go, staging/src/k8s.io/apiserver/pkg/storage/cacher.go)"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "When the watch event cache is empty, the watch cache should compare the requested resourceVersion against its synced resourceVersion. If the requested version is older than the synced version and there are no cached events to serve the gap, return a '410 Gone' error to force the client to relist and re-watch from the current version.",
+      "evaluation_criteria": [
+        "Must propose a fix that addresses the root cause, not just the symptom",
+        "Must locate the fix in staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go",
+        "Must touch both staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go and staging/src/k8s.io/apiserver/pkg/storage/tests/cacher_test.go (or equivalent)"
+      ]
+    }
+  }
+}

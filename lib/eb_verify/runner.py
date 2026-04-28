@@ -90,6 +90,7 @@ class CheckpointRunner:
         if "llm_curator" in task.verification_modes:
             self._expected_solution = _load_expected_solution(self.task_dir)
             if self._expected_solution:
+                self._warn_unmapped_checkpoints()
                 try:
                     from eb_verify.judge import LLMJudge
 
@@ -101,6 +102,25 @@ class CheckpointRunner:
                     )
                 except Exception as exc:
                     logger.warning("Failed to init LLM judge: %s", exc)
+
+    def _warn_unmapped_checkpoints(self) -> None:
+        """Log a WARNING for any task.toml checkpoint absent from expected_solution.
+
+        Without this, a partial expected_solution.json silently disables Tier 2
+        capping for unmapped checkpoints — they fall back to grep_score with no
+        operator-visible signal.
+        """
+        mapped = set((self._expected_solution.get("checkpoints") or {}).keys())
+        declared = {cp.name for cp in self.task.checkpoints}
+        missing = sorted(declared - mapped)
+        for name in missing:
+            logger.warning(
+                "expected_solution.json missing checkpoint %r — LLM judge will be "
+                "skipped for it, score falls back to grep_score (run "
+                "scripts/validation/validate_expected_solutions.py to catch this "
+                "before runtime)",
+                name,
+            )
 
     def sandbox_health_check(self) -> bool:
         """Check that all required repos exist under workspace."""

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnterpriseBench Expected Solution",
+  "description": "Curated ground truth consumed by the LLM judge in lib/eb_verify/runner.py. One file per task, alongside task.toml and ground_truth.json. Every checkpoint declared in the task's [[checkpoints]] table must have a corresponding entry here — see scripts/validation/validate_expected_solutions.py for the structural and coverage gates.",
+  "type": "object",
+  "required": ["task_id", "checkpoints"],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Must equal the `id` field in this task's task.toml [task] table.",
+      "minLength": 1
+    },
+    "checkpoints": {
+      "type": "object",
+      "description": "Map keyed by checkpoint name. Keys MUST exactly match the `name` of every [[checkpoints]] entry in task.toml — extra or missing keys are validation errors.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/Checkpoint"
+      }
+    }
+  },
+  "$defs": {
+    "Checkpoint": {
+      "type": "object",
+      "required": ["expected_solution", "evaluation_criteria"],
+      "additionalProperties": false,
+      "properties": {
+        "expected_solution": {
+          "type": "string",
+          "description": "Long-form prose describing the canonical solution. Function-level and file-path-specific. Used by the LLM judge as the reference against which the agent's submission is scored.",
+          "minLength": 1
+        },
+        "evaluation_criteria": {
+          "type": "array",
+          "description": "Concrete, machine-evaluable assertions about the agent's submission. Each criterion is a free-form string but should reference specific files, functions, or causal-chain steps. Minimum 2 entries; high-weight (>0.30) checkpoints want >=3.",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "_curation_required": {
+          "type": "boolean",
+          "description": "Set by scripts/validation/scaffold_expected_solution.py when it cannot mechanically populate this checkpoint. Files containing this flag fail validation — operators must hand-curate before shipping."
+        }
+      }
+    }
+  }
+}
