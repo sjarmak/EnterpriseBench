@@ -1,0 +1,33 @@
+{
+  "task_id": "ansible-galaxy-tar-regression-prove-001",
+  "checkpoints": {
+    "root_cause_identified": {
+      "expected_solution": "Agent must identify that the Galaxy collection installation path in lib/ansible/galaxy/collection/__init__.py and lib/ansible/galaxy/collection/concrete_artifact_manager.py performs tar extraction with a custom tar member cache that is fragile under malformed or specially-crafted collection tarballs (e.g. duplicate or out-of-order members, paths that escape the destination directory, or non-regular member types). The fragility lives in how members are filtered and re-emitted to the extractor rather than relying on Python's tarfile defaults.",
+      "evaluation_criteria": [
+        "Names lib/ansible/galaxy/collection/__init__.py as the install entry point",
+        "Names lib/ansible/galaxy/collection/concrete_artifact_manager.py as the artifact / tar handler",
+        "Identifies the custom tar member cache (or member-filter logic) as the fragile region",
+        "Explains the failure mode in concrete terms (e.g. duplicate or path-escaping tar members surviving the filter)"
+      ]
+    },
+    "regression_test_written": {
+      "expected_solution": "Agent writes a self-contained pytest module named regression_test.py under /workspace that constructs a deliberately-malformed Galaxy collection tarball (duplicate members, path-escaping members, or out-of-order entries) and invokes the affected installation/extraction code from lib/ansible/galaxy/collection/concrete_artifact_manager.py (or lib/ansible/galaxy/collection/__init__.py). The test asserts the precise behavior the fix is meant to enforce — extraction must reject or sanitize the malformed members rather than silently accept them.",
+      "evaluation_criteria": [
+        "Test file regression_test.py exists in the /workspace artifact directory",
+        "Test imports and exercises the real Galaxy collection install / artifact-manager code (no pure mocks)",
+        "Test constructs a malformed collection tarball as fixture input (duplicate members, path traversal, etc.)",
+        "Test contains at least one assertion that fails on the buggy code path",
+        "Test is runnable via pytest under /workspace without external fixtures"
+      ]
+    },
+    "test_fails_on_buggy_code": {
+      "expected_solution": "When pytest is executed against the unpatched ansible v2.16.0 source tree under /workspace/ansible, the regression_test.py file fails with a deterministic assertion error tied to the tar fragility — for example a duplicate member overwriting a sibling, a path-traversal member escaping the install directory, or the extractor accepting a non-regular tar member. The failure must point at the Galaxy collection install path, not at unrelated infrastructure.",
+      "evaluation_criteria": [
+        "pytest exits non-zero on the unpatched code",
+        "The failing assertion lives in regression_test.py under /workspace and names the Galaxy collection install/extract behavior",
+        "The failure trace touches lib/ansible/galaxy/collection/__init__.py or lib/ansible/galaxy/collection/concrete_artifact_manager.py",
+        "The failure is deterministic across reruns (no flakiness, no env-dependent assumptions)"
+      ]
+    }
+  }
+}

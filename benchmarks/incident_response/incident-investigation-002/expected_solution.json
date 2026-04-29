@@ -1,0 +1,37 @@
+{
+  "task_id": "incident-inv-watch-delete-002",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "In the switch statement that converts watch events based on filter matching, the case for DELETE events (!curObjPasses && oldObjPasses) uses event.PrevObject.DeepCopyObject() which retains the previous resourceVersion. The event's actual resourceVersion should be set on the returned object. The etcd3/watcher.go and etcd/etcd_watcher.go have the correct logic. The watch cache filtering logic: case !curObjPasses && oldObjPasses: watchEvent = watch.Event{Type: watch.Deleted, Object: event.PrevObject.DeepCopyObject()} -- this sends the old object's content with the old resourceVersion. It should set the event's resourceVersion on the copy. Bug location: staging/src/k8s.io/apiserver/pkg/storage/cacher.go :: processEvent (watch cache event filtering).",
+      "evaluation_criteria": [
+        "Must identify staging/src/k8s.io/apiserver/pkg/storage/cacher.go as the root cause file",
+        "Must reference function/method 'processEvent (watch cache event filtering)'",
+        "Must explain the mechanism: The watch cache filtering logic: case !curObjPasses && oldObjPasses: watchEvent = watch"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Error chain: (1) client-go informer: Establishes namespace-scoped watch, tracks resourceVersion from events (2) API Server watch handler: Routes watch to storage cacher (3) Watch Cache (cacher.go) - processEvent: BUG: Converts Modified->Deleted event using PrevObject with stale resourceVersion (4) etcd3 storage (watcher.go): Correctly handles resourceVersion on delete events (reference implementation)",
+      "evaluation_criteria": [
+        "Must trace the error chain in correct order",
+        "Must identify the buggy step at Watch Cache (cacher.go) - processEvent",
+        "Must include the entry point (client-go informer) and the failing component (etcd3 storage (watcher.go))"
+      ]
+    },
+    "affected_services": {
+      "expected_solution": "Affected components: kube-apiserver (watch cache cacher.go); client-go informers (all controllers); Any namespace-scoped or label-filtered watch",
+      "evaluation_criteria": [
+        "Must list at least 3 of the affected components/services",
+        "Must cite specific source files (e.g. staging/src/k8s.io/apiserver/pkg/storage/cacher.go)",
+        "Must cover both implementation and reference paths (e.g. staging/src/k8s.io/apiserver/pkg/storage/cacher.go, staging/src/k8s.io/apiserver/pkg/storage/etcd3/watcher.go)"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "After constructing the DELETE watch event from PrevObject.DeepCopyObject(), set the event's resourceVersion on the copied object using the versioner. This matches the existing logic in etcd3/watcher.go (lines 373-378) and etcd/etcd_watcher.go (lines 401-403).",
+      "evaluation_criteria": [
+        "Must propose a fix that addresses the root cause, not just the symptom",
+        "Must locate the fix in staging/src/k8s.io/apiserver/pkg/storage/cacher.go",
+        "Must touch both staging/src/k8s.io/apiserver/pkg/storage/cacher.go and staging/src/k8s.io/apiserver/pkg/storage/cacher_whitebox_test.go (or equivalent)"
+      ]
+    }
+  }
+}
