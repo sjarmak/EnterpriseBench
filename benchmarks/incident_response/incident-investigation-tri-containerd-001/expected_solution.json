@@ -1,0 +1,40 @@
+{
+  "task_id": "incident-investigation-tri-containerd-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify that when a container entrypoint is a shell script without a proper shebang, runc's libcontainer/process_linux.go invokes execve() and the kernel falls back to /bin/sh. On multi-arch images, /bin/sh inside the rootfs may be a binary of the wrong architecture for the host node (e.g. amd64 binary on an arm64 node), so the kernel returns ENOEXEC ('exec format error'). The error propagates from runc through the containerd shim (pkg/process/init.go) to the Docker daemon (daemon/start.go) without architecture-specific context, presenting only as 'OCI runtime create failed'.",
+      "evaluation_criteria": [
+        "Names libcontainer/process_linux.go (runc) as the execve() callsite",
+        "Names pkg/process/init.go (containerd) as the shim that propagates the error",
+        "Names daemon/start.go (moby) as the daemon entry point that surfaces the failure",
+        "Explains the missing-shebang + wrong-architecture /bin/sh interaction producing ENOEXEC"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Error chain: (1) Docker daemon daemon/start.go initiates container start over the containerd gRPC API. (2) containerd creates a shim process via pkg/process/init.go. (3) The containerd shim delegates process execution to runc. (4) runc libcontainer/process_linux.go calls execve() with the container entrypoint. (5) The kernel cannot execute the script directly because the shebang is missing and falls back to /bin/sh. (6) /bin/sh in the rootfs is a wrong-architecture binary, so the kernel returns ENOEXEC. (7) runc wraps the error and returns it to the containerd shim. (8) containerd propagates the error to the Docker daemon. (9) Docker daemon returns 'OCI runtime create failed' to the user with no architecture detail.",
+      "evaluation_criteria": [
+        "Starts at Docker daemon (daemon/start.go) initiating the start",
+        "Traces through containerd shim (pkg/process/init.go) to runc",
+        "Identifies runc's execve() call (libcontainer/process_linux.go) and the kernel /bin/sh fallback",
+        "Ends at the user-visible 'OCI runtime create failed' / ENOEXEC error"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Affected components: runc process execution (libcontainer/process_linux.go); containerd shim process management (pkg/process/init.go); Docker daemon container start (daemon/start.go, daemon/oci_linux.go); all multi-arch images with shell-script entrypoints that omit a shebang line.",
+      "evaluation_criteria": [
+        "Names libcontainer/process_linux.go (runc)",
+        "Names pkg/process/init.go (containerd)",
+        "Names daemon/start.go (moby)",
+        "Lists multi-arch images with missing-shebang entrypoint scripts as the affected workloads"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Ensure all container entrypoint scripts include a proper shebang line (e.g. #!/bin/sh). Add image-validation tooling that checks entrypoint executability and shebang presence before promotion. Improve the runc/containerd error path to distinguish between 'wrong architecture' and 'missing shebang' so platform operators can diagnose without strace.",
+      "evaluation_criteria": [
+        "Proposes adding shebang lines to entrypoint scripts as the immediate fix",
+        "Proposes image validation in the build/publish pipeline",
+        "Mentions improving runc / containerd error messages to distinguish architecture vs shebang failures"
+      ]
+    }
+  }
+}

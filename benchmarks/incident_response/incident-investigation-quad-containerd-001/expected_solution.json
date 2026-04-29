@@ -1,0 +1,49 @@
+{
+  "task_id": "incident-investigation-quad-containerd-001",
+  "checkpoints": {
+    "kubelet_seccomp_conversion": {
+      "expected_solution": "Agent must identify kubelet's CRI seccomp profile conversion in pkg/kubelet/kuberuntime/security_context.go and pkg/kubelet/kuberuntime/kuberuntime_container_linux.go. The pod spec's seccomp profile annotation/field is converted to a CRI LinuxContainerSecurityContext.SeccompProfilePath (or the structured Seccomp field in newer CRI versions) and forwarded to the runtime. kubelet does not parse the profile contents — it only points at the file or the field — so missing newer syscalls in the profile are not detected at this layer.",
+      "evaluation_criteria": [
+        "Names pkg/kubelet/kuberuntime/security_context.go (or the kuberuntime seccomp conversion file)",
+        "Identifies the conversion target as the CRI LinuxContainerSecurityContext / SeccompProfilePath field",
+        "Notes that kubelet forwards the profile path/contents but does not validate syscall coverage"
+      ]
+    },
+    "containerd_cri_seccomp_mapping": {
+      "expected_solution": "Agent must identify containerd's CRI plugin seccomp handling in pkg/cri/server/container_create_linux.go (with helpers in contrib/seccomp/seccomp_default.go). The CRI plugin reads the seccomp profile from the CRI request and maps it into the OCI runtime spec's linux.seccomp section. For custom profiles, containerd loads the JSON from disk and embeds the raw OCI seccomp spec (default action, syscall whitelist) into the runtime spec passed to runc. No syscall-coverage validation happens here either.",
+      "evaluation_criteria": [
+        "Names pkg/cri/server/container_create_linux.go (containerd CRI plugin)",
+        "Names contrib/seccomp/seccomp_default.go (or the seccomp helper used to materialize the spec)",
+        "Identifies the mapping from CRI seccomp request to OCI runtime spec linux.seccomp",
+        "Notes that custom profile contents are passed through to the OCI spec without validation"
+      ]
+    },
+    "runc_seccomp_filter": {
+      "expected_solution": "Agent must identify runc's BPF filter generation in libcontainer/seccomp/seccomp_linux.go (InitSeccomp / buildFilter). runc reads the OCI spec linux.seccomp section, resolves syscall names to numbers via libseccomp, and builds a BPF program. Syscalls not in the explicit whitelist fall through to the profile's default action — for custom profiles using SCMP_ACT_ERRNO this means EPERM. clone3 (kernel 5.3+), close_range, openat2, faccessat2, and pidfd_open are not in older custom profiles and therefore return EPERM under the default action, breaking glibc's modern fallback paths.",
+      "evaluation_criteria": [
+        "Names libcontainer/seccomp/seccomp_linux.go (runc) and InitSeccomp / buildFilter",
+        "Explains the BPF filter build from the OCI seccomp section and the default-action fall-through",
+        "Identifies SCMP_ACT_ERRNO (EPERM) as the default action used in the custom profile",
+        "Names at least one of the missing newer syscalls (clone3, close_range, openat2)"
+      ]
+    },
+    "moby_default_profile": {
+      "expected_solution": "Agent must identify moby's default seccomp profile in profiles/seccomp/default_linux.go (and the JSON serialization at profiles/seccomp/default.json). The default profile is the canonical reference — it is updated as the kernel adds new syscalls, currently covering clone3, close_range, openat2, faccessat2, and pidfd_open. Custom profiles that were forked from an older version of this file lag behind kernel evolution and miss these entries, which is the source of the EPERM failures under the new kernel.",
+      "evaluation_criteria": [
+        "Names profiles/seccomp/default_linux.go (moby) as the canonical default profile",
+        "Identifies that this profile is kept in sync with kernel syscall additions",
+        "Names at least two of clone3 / close_range / openat2 / faccessat2 / pidfd_open as syscalls the default profile includes that older custom profiles miss"
+      ]
+    },
+    "cross_repo_error_chain": {
+      "expected_solution": "Cross-repo error chain: (1) Pod is created with a custom seccomp profile annotation/field. (2) kubelet pkg/kubelet/kuberuntime/security_context.go converts it to CRI SeccompProfilePath. (3) kubelet sends the CreateContainer CRI request to containerd. (4) containerd pkg/cri/server/container_create_linux.go maps the profile into the OCI runtime spec linux.seccomp. (5) containerd invokes runc with the OCI spec. (6) runc libcontainer/seccomp/seccomp_linux.go builds a BPF filter from the spec; clone3 (or another newer syscall) is not whitelisted, so it hits the default SCMP_ACT_ERRNO action and returns EPERM at runtime. (7) The application observes 'operation not permitted' on a syscall it expects to succeed; runc's error surfaces through containerd back to kubelet and into Pod events. The discrepancy between the custom profile and moby's profiles/seccomp/default_linux.go is the root cause across the chain.",
+      "evaluation_criteria": [
+        "Traces the chain in order across all four repos (kubelet -> containerd -> runc -> moby)",
+        "Names a concrete file in each repo at the relevant hop",
+        "Identifies runc as the place where the BPF filter is generated and EPERM is decided",
+        "Explains the role of moby's default profile as the reference custom profiles drifted from",
+        "Ends at the user-visible 'operation not permitted' failure surfaced via Pod events"
+      ]
+    }
+  }
+}

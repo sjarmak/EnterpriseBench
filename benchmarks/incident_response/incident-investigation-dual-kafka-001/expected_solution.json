@@ -1,0 +1,40 @@
+{
+  "task_id": "incident-investigation-dual-kafka-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify that the JDBC Sink Connector (src/main/java/io/confluent/connect/jdbc/sink/JdbcSinkTask.java) processes a large batch of records inside a single JDBC transaction. When batch.size is large the transaction duration exceeds PostgreSQL's statement_timeout, the database rolls the transaction back, JdbcSinkTask raises a ConnectException, and Kafka Connect's WorkerSinkTask.java marks the task FAILED. The race between the JDBC transaction timeout and the Connect offset.flush.timeout.ms creates inconsistent offset/transaction state.",
+      "evaluation_criteria": [
+        "Names src/main/java/io/confluent/connect/jdbc/sink/JdbcSinkTask.java (kafka-connect-jdbc) as the transaction owner",
+        "Names connect/runtime/src/main/java/org/apache/kafka/connect/runtime/WorkerSinkTask.java (kafka) as the orchestrator that sees the failure",
+        "Explains the batch.size vs database statement_timeout mismatch",
+        "Mentions the offset flush timeout / transaction timeout interaction (race or inconsistent commit state)"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Error chain: (1) WorkerSinkTask.java polls a large batch of records from Kafka. (2) WorkerSinkTask calls SinkTask.put(), which delegates to JdbcSinkTask.put(). (3) JdbcSinkTask opens a JDBC transaction and hands records to BufferedRecords for batch insert. (4) BufferedRecords executes batch INSERT statements within the open transaction. (5) PostgreSQL statement_timeout fires and rolls the transaction back. (6) JdbcSinkTask receives a SQLException and throws a ConnectException. (7) WorkerSinkTask catches the exception and marks the task FAILED. (8) The task restarts and reprocesses the same large batch, producing a restart loop.",
+      "evaluation_criteria": [
+        "Starts at WorkerSinkTask polling a large batch from Kafka",
+        "Traces through SinkTask.put() -> JdbcSinkTask -> BufferedRecords batch insert",
+        "Identifies the PostgreSQL statement_timeout firing during the JDBC transaction",
+        "Ends at the task being marked FAILED and restart-looping on the same batch"
+      ]
+    },
+    "affected_connectors": {
+      "expected_solution": "Affected components: Kafka Connect WorkerSinkTask put/flush/commit cycle (connect/runtime/src/main/java/org/apache/kafka/connect/runtime/WorkerSinkTask.java); JDBC Sink Connector transaction management (JdbcSinkTask.java and BufferedRecords.java in kafka-connect-jdbc); any JDBC Sink Connector instance configured with a large batch.size against a database that enforces statement-level timeouts.",
+      "evaluation_criteria": [
+        "Names WorkerSinkTask.java (kafka)",
+        "Names JdbcSinkTask.java (kafka-connect-jdbc)",
+        "Mentions BufferedRecords.java or the batch-insert path",
+        "Identifies any JDBC Sink Connector with large batch.size and DB-side timeouts as at risk"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Reduce batch.size so JDBC transactions complete within the database statement_timeout. Alternatively, raise the database timeout, or configure the JDBC connector to sub-batch within a single transaction. Align Kafka Connect's offset.flush.timeout.ms with the maximum expected transaction duration to avoid the race between offset commit and transaction rollback.",
+      "evaluation_criteria": [
+        "Proposes reducing batch.size or sub-batching as the structural fix",
+        "Mentions the database statement_timeout / connector transaction duration relationship",
+        "Mentions aligning offset.flush.timeout.ms with transaction duration"
+      ]
+    }
+  }
+}
