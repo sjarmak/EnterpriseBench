@@ -1,0 +1,145 @@
+# Support Code Mapping: httpx ReadTimeout despite timeout=None across httpx -> httpcore boundary
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "encode-httpstack-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "support-mapping-dual-httpx-httpcore-001"
+suite = "customer_escalation"
+task_type = "support_code_mapping"
+difficulty = "hard"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Map customer httpx ReadTimeout-with-timeout=None complaint to the timeout marshaling path between httpx Timeout config and httpcore's connection pool / HTTP11 connection"
+prompt = """
+A customer reports that their httpx async streaming download still raises
+httpx.ReadTimeout even though they explicitly disable timeouts. Their code:
+
+    timeout = httpx.Timeout(timeout=None)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        async with client.stream("GET", "https://example.com/big.bin") as resp:
+            async for chunk in resp.aiter_bytes():
+                ...
+
+After roughly 5 seconds of an idle server they get:
+
+    httpx.ReadTimeout
+
+They expect timeout=None to mean wait indefinitely. They are confused that
+"None" is somehow being upgraded to a 5-second cap somewhere in the stack.
+
+Your task:
+
+1. Find where httpx defines its public Timeout configuration -- trace the
+   Timeout class fields (connect / read / write / pool), how None is normalized,
+   and the global default that applies when nothing is passed in.
+2. Find where httpx hands the timeout to httpcore -- trace the AsyncHTTPTransport
+   construction of httpcore.ConnectionPool and the per-request handle_async_request
+   path, and identify exactly how the four timeout dimensions are propagated
+   (note: they are NOT passed to the ConnectionPool constructor).
+3. Trace the full code path: httpx.AsyncClient.stream -> AsyncHTTPTransport
+   .handle_async_request -> httpcore.Request extensions -> httpcore connection
+   pool / AsyncHTTP11Connection -> per-operation timeout enforcement -> httpcore
+   ReadTimeout -> mapped back to httpx.ReadTimeout via HTTPCORE_EXC_MAP. Cite
+   each file and the function or attribute responsible at every step.
+4. Identify the *real* reason the customer still sees a ~5 second timeout when
+   timeout=None should disable it. The explanation must reference both repos and
+   the marshaling boundary between them.
+
+- Full code path from public Timeout config to httpcore per-op timeout
+- Why DEFAULT_TIMEOUT_CONFIG vs an explicit Timeout(None) differ in effect
+- The mapping that converts httpcore.ReadTimeout into httpx.ReadTimeout
+"""
+
+[[repos]]
+url = "https://github.com/encode/httpx"
+rev = "0.27.0"
+path = "httpx"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/encode/httpcore"
+rev = "1.0.5"
+path = "httpcore"
+role = "upstream"
+
+[metadata]
+languages = ["python"]
+total_loc = 50_000
+dependency_depth = 2
+frameworks = ["httpx", "httpcore", "asyncio"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.40
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the timeout config + pool/connection files across httpx and httpcore"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the full timeout marshaling chain from httpx public API to httpcore per-op enforcement"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.30
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies the conditions and semantics that cause ReadTimeout despite timeout=None"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Tracing the timeout flow from httpx public API into httpcore's connection pool and HTTP11 connection requires cross-repo navigation across the encode httpstack: httpx defines the four-dimensional Timeout config and the exception map, while httpcore enforces timeouts per-operation. The exception path (httpcore.ReadTimeout -> httpx.ReadTimeout) is opaque to single-repo search."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "httpx/httpx/_config.py"
+repo = "httpx"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "httpx/httpx/_transports/default.py"
+repo = "httpx"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "httpcore/httpcore/_async/connection_pool.py"
+repo = "httpcore"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "httpcore/httpcore/_async/http11.py"
+repo = "httpcore"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "httpx/httpx/_exceptions.py"
+repo = "httpx"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "httpcore/httpcore/_exceptions.py"
+repo = "httpcore"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "httpcore/httpcore/_async/connection.py"
+repo = "httpcore"
+confidence = 0.75
