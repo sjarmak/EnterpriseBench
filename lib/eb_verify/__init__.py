@@ -8,7 +8,13 @@ __version__ = "0.2.0"
 
 from eb_verify.task_parser import TaskDefinition, parse_task
 from eb_verify.runner import CheckpointRunner
-from eb_verify.scoring import compute_score, write_reward
+from eb_verify.scoring import (
+    ScoreDiagnostics,
+    ScoreResult,
+    compute_score,
+    write_reward,
+    write_score_result,
+)
 
 __all__ = [
     "TaskDefinition",
@@ -16,4 +22,7 @@ __all__ = [
     "CheckpointRunner",
     "compute_score",
     "write_reward",
+    "write_score_result",
+    "ScoreResult",
+    "ScoreDiagnostics",
 ]

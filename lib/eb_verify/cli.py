@@ -72,7 +72,11 @@ def cmd_validate(args: argparse.Namespace) -> int:
     results = []
 
     for task_file in args.task_files:
-        result = validate_task(task_file)
+        result = validate_task(
+            task_file,
+            qa_strict=getattr(args, "qa_strict", False),
+            workspace_root=getattr(args, "workspace", None),
+        )
         results.append((task_file, result))
         if not result.valid:
             any_errors = True
@@ -147,6 +151,23 @@ def main(argv: list[str] | None = None) -> int:
     val_parser = subparsers.add_parser("validate", help="Validate task.toml file(s) against schema")
     val_parser.add_argument("task_files", nargs="+", help="Path(s) to task.toml file(s)")
     val_parser.add_argument("--json", action="store_true", help="Output results as JSON")
+    val_parser.add_argument(
+        "--qa-strict",
+        action="store_true",
+        dest="qa_strict",
+        help=(
+            "Promote benchmark_qa_core error-severity findings to schema "
+            "errors (fails validation). Default is warn-only."
+        ),
+    )
+    val_parser.add_argument(
+        "--workspace",
+        default=None,
+        help=(
+            "Optional workspace root. When supplied, oracle file existence "
+            "checks (A1/B1/B2) run against $WORKSPACE/<repo.path>."
+        ),
+    )
 
     # validate-artifact
     va_parser = subparsers.add_parser("validate-artifact", help="Validate a single artifact")
