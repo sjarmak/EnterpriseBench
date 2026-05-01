@@ -150,13 +150,13 @@ consolidating them here is the deliverable for sub-task 3b.
 
 Discovered from `EnterpriseBench-1av`:
 
-* **`EnterpriseBench-3sk`** (bug, P2) — Fix `dep-traversal-007`
+* **`EnterpriseBench-046`** (bug, P2) — Fix `dep-traversal-007`
   difficulty_stratum/repo-count mismatch. Either drop to `dual_repo` or
   add a third repo.
-* **`EnterpriseBench-pyh`** (task, P3) — Triage F2 leakage warnings for
+* **`EnterpriseBench-1is`** (task, P3) — Triage F2 leakage warnings for
   the 11 tasks that name a specific repo-relative path in
   `instruction.md`. Per-task redact / accept / waive verdicts.
-* **`EnterpriseBench-7en`** (task, P3) — Add basename filter to
+* **`EnterpriseBench-zco`** (task, P3) — Add basename filter to
   `benchmark_qa_core.check_aux_file_leakage` (preferred) or the EB
   adapter, so generic build-manifest filenames (`go.mod`, `package.json`,
   `pom.xml`, `setup.cfg`, `requirements.txt`, `Cargo.toml`, …) don't
