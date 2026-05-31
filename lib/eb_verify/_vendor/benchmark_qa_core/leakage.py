@@ -13,6 +13,48 @@ from pathlib import Path
 
 from .types import Finding
 
+# Build-manifest basenames that exist in (almost) every repo of a given
+# language. Naming one of these in a prompt ("look at go.mod") is not a leak:
+# the basename is non-discriminative, so it tells the agent nothing about which
+# file holds the answer. A token *with* directory components (e.g.
+# ``envoy/go.mod``) is specific and is still treated as a potential leak.
+GENERIC_MANIFEST_BASENAMES = frozenset({
+    # Go
+    "go.mod",
+    "go.sum",
+    # Node / JS-TS
+    "package.json",
+    "package-lock.json",
+    "yarn.lock",
+    # Python
+    "setup.py",
+    "setup.cfg",
+    "requirements.txt",
+    "pyproject.toml",
+    "Pipfile",
+    "Pipfile.lock",
+    # Rust
+    "Cargo.toml",
+    "Cargo.lock",
+    # JVM
+    "pom.xml",
+    "build.gradle",
+    # Bazel
+    "BUILD",
+    "BUILD.bazel",
+})
+
+
+def _is_generic_manifest_token(token: str) -> bool:
+    """True when ``token`` is a bare generic build-manifest filename.
+
+    Only bare basenames are filtered. A token that carries any path separator
+    is a specific path and remains a leak candidate.
+    """
+    if "/" in token or "\\" in token:
+        return False
+    return token in GENERIC_MANIFEST_BASENAMES
+
 
 def check_aux_file_leakage(
     oracle_tokens: list[str],
@@ -31,7 +73,12 @@ def check_aux_file_leakage(
       (length < 3). Emitted at ``info`` severity, no location, so callers can
       decide whether to surface it.
     * **F2** — token appears in an aux file. Emitted once per (token, file)
-      pair at ``error`` severity.
+      pair at ``error`` severity. Tokens that are bare generic build-manifest
+      basenames (``go.mod``, ``package.json``, ... — see
+      :data:`GENERIC_MANIFEST_BASENAMES`) are skipped, since naming them in a
+      prompt does not reveal which file holds the answer. A token with
+      directory components (e.g. ``envoy/go.mod``) is specific and still
+      flagged.
     * **F3** — aux file path does not exist. Emitted at ``warning`` severity
       so the rig can prune its context list without failing the task.
 
@@ -70,6 +117,8 @@ def check_aux_file_leakage(
     file_cache: dict[Path, str | None] = {}
     for tok in oracle_tokens:
         if len(tok) < 3:
+            continue
+        if _is_generic_manifest_token(tok):
             continue
         pattern = re.compile(rf"\b{re.escape(tok)}\b")
         for aux in aux_files:

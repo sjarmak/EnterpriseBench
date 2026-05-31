@@ -245,6 +245,38 @@ class TestLeakageDetection:
         codes = {f.code for f in report.findings}
         assert "F2" not in codes
 
+    def test_generic_manifest_basename_does_not_emit_f2(self, tmp_path: Path):
+        # A bare ``go.mod`` is non-discriminative: naming it in the prompt does
+        # not leak which file holds the answer, so it must not raise F2.
+        task_toml = _write_task(
+            tmp_path,
+            ground_truth={
+                "tiers": ["deterministic"],
+                "required_files": [{"path": "go.mod", "repo": "r"}],
+            },
+            instruction="Trace the dependency starting from go.mod.",
+        )
+        report = run_qa_checks(load_task_inputs(task_toml))
+        codes = {f.code for f in report.findings}
+        assert "F2" not in codes
+
+    def test_specific_path_to_generic_manifest_still_emits_f2(
+        self, tmp_path: Path
+    ):
+        # ``envoy/go.mod`` carries directory components — it is a specific path
+        # that DOES reveal the file, so it must still raise F2.
+        task_toml = _write_task(
+            tmp_path,
+            ground_truth={
+                "tiers": ["deterministic"],
+                "required_files": [{"path": "envoy/go.mod", "repo": "r"}],
+            },
+            instruction="The relevant manifest is envoy/go.mod.",
+        )
+        report = run_qa_checks(load_task_inputs(task_toml))
+        codes = {f.code for f in report.findings}
+        assert "F2" in codes
+
 
 class TestSchemaValidatorIntegration:
     def test_warn_only_default_does_not_fail_on_qa_errors(self, tmp_path: Path):
@@ -308,3 +340,27 @@ class TestEbScoringTiers:
     def test_table_includes_basic_modes(self):
         for mode in ("deterministic", "llm_curator"):
             assert mode in EB_SCORING_METHOD_TIERS
+
+
+class TestGenericManifestFilter:
+    """Direct lib-level coverage of the generic-manifest skip in leakage.py."""
+
+    def test_bare_manifest_token_is_skipped(self, tmp_path: Path):
+        from eb_verify._vendor.benchmark_qa_core.leakage import (
+            check_aux_file_leakage,
+        )
+
+        aux = tmp_path / "instruction.md"
+        aux.write_text("Start from go.mod and package.json.", encoding="utf-8")
+        findings = check_aux_file_leakage(["go.mod", "package.json"], [aux])
+        assert not [f for f in findings if f.code == "F2"]
+
+    def test_specific_path_token_is_not_skipped(self, tmp_path: Path):
+        from eb_verify._vendor.benchmark_qa_core.leakage import (
+            check_aux_file_leakage,
+        )
+
+        aux = tmp_path / "instruction.md"
+        aux.write_text("See contrib/go.mod for the pin.", encoding="utf-8")
+        findings = check_aux_file_leakage(["contrib/go.mod"], [aux])
+        assert [f.code for f in findings if f.code == "F2"] == ["F2"]
