@@ -1,84 +1,97 @@
-# Agent Instructions
+# EnterpriseBench
 
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+Evolution of CodeScaleBench (CSB, 275 tasks, public on Sourcegraph, no published paper) into a benchmark measuring **codebase understanding and context gathering** — how well agents find and comprehend the right code across large, distributed codebases. Sourcegraph MCP is a first-class showcase, but tool access is a controlled independent variable (baseline / MCP-only / hybrid).
 
-## Quick Reference
+Standing collaboration rules: `~/.claude/rules/common/agent-collaboration.md`.
 
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
+## Key Files
 
-## Non-Interactive Shell Commands
+- `docs/internal/PRD.md` — product requirements document
+- `docs/CONVERGENCE_REPORT.md` — converged architecture from debate synthesis (detailed design decisions)
+- `docs/ARCHITECTURE.md` — system architecture and verification flow
+- `docs/TASK_TYPE_PRD.md` — 10 task type definitions with MCP signal ratings
+- `docs/TASK_AUTHORING_GUIDE.md` — step-by-step guide for adding new tasks
+- `schemas/task.schema.json` — task definition schema (includes tool_access, ground_truth, difficulty_stratum)
+- `lib/eb_verify/` — centralized verification library with plugin architecture
+- `lib/eb_verify/plugins/` — 9 artifact validators (answer, code_patch, config_validator, incident_report, runbook, security_assessment, reproduction_script, topological_order, call_graph)
+- `benchmarks/` — 112 active task definitions organized by suite
+- `benchmarks/_archived/` — 28 retired single-repo tasks (preserved for reference)
+- `benchmarks/mined/` — mining candidate lists and provenance data
+- `results/sample_runs/` — sample verification outputs by task type
+- `scripts/` — task mining, sandbox management, orchestration
+- `scripts/sandbox/templates/` — Dockerfile templates (Go, Java, Python multi-repo)
+- `configs/` — run configurations
+- `configs/repo_versions.json` — pinned SHA manifest for all task repos (staleness detection via `scripts/infra/check_repo_staleness.py`)
+- `scripts/validation/task_mix_validator.py` — validates PRD task mix targets
+- `scripts/validation/crnt_validator.py` — Cross-Repo Necessity Test for multi-repo tasks
 
-**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
+## CSB Foundation
 
-Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
+- 275 existing tasks (220 Org + 55 SDLC) carry forward — fix, extend, don't rebuild
+- 178 sg-evals mirrors from CSB, extended for multi-repo tasks
+- Primary measurement: context retrieval quality (not code generation)
+- Layered ground truth (deterministic + LLM curator + solve-verification) replaces single-source
 
-**Use these forms instead:**
-```bash
-# Force overwrite without prompting
-cp -f source dest           # NOT: cp source dest
-mv -f source dest           # NOT: mv source dest
-rm -f file                  # NOT: rm file
+## Task Suites (112 active tasks)
 
-# For recursive operations
-rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
-```
+Tasks are organized by enterprise workflow cluster (not artificial SDLC/Org splits):
 
-**Other commands that may prompt:**
-- `scp` - use `-o BatchMode=yes` for non-interactive
-- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
-- `apt-get` - use `-y` flag
-- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
+- `dependency_management` (27) — dep_traversal, api_contract tasks
+- `incident_response` (12) — incident_investigation tasks
+- `platform_engineering` (10) — config_drift tasks
+- `security_operations` (2) — vulnerability assessment, access control audit tasks
+- `customer_escalation` (24) — error_provenance, support_code_mapping tasks
+- `feature_delivery` (18) — monorepo_boundary, db_schema_evolution tasks
+- `technical_debt` (19) — refactor_orchestration, dead_code_necropsy tasks
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-## Beads Issue Tracker
+## Task Types (10)
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+api_contract, config_drift, db_schema_evolution, dead_code_necropsy, dependency_graph, error_provenance, incident_investigation, monorepo_boundary, refactor_orchestration, support_code_mapping
 
-### Quick Reference
+## Task Mix (actual)
 
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
+- 12.5% calibration (14 tasks)
+- 25.9% large single-repo (29 tasks)
+- 25.0% dual-repo (28 tasks)
+- 14.3% tri-repo (16 tasks)
+- 11.6% multi-repo (13 tasks)
+- 10.7% monorepo cross-package (12 tasks)
+- Strict multi-repo (dual+tri+multi): 50.9%
+- Validate with: `python scripts/validation/task_mix_validator.py`
 
-### Rules
+## Multi-Repo Design
 
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+- Tasks use 1-5 real OSS repos connected by actual dependency chains
+- Four atomic patterns: propagate, investigate, enforce, orchestrate
+- Repos cloned into `/workspace/{repo-name}/` in sandbox
+- Cross-repo integration tests via unified `test.sh`
 
-## Session Completion
+## Session Types
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+- `single` — standard one-shot task
+- `chain` — multi-session with git-branch state between sessions
+- `event_replay` — agent responds to timestamped event stream
+- `resume` — agent picks up partially completed work
 
-**MANDATORY WORKFLOW:**
+## Verification
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+- Single `eb_verify` library with plugin architecture — no per-task verifier copies, ever
+- 9 verifier plugins: answer, code_patch, config_validator, incident_report, runbook, security_assessment, reproduction_script, topological_order, call_graph
+- Checkpoint-based partial scoring (2-5 checkpoints per task)
+- Artifact-type-aware validation (code patches, configs, reports, scripts, etc.)
+- Layered ground truth: deterministic + LLM curator + solve-verification
+- 779+ tests across 19 test modules
 
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-<!-- END BEADS INTEGRATION -->
+## Skills
+
+- `/diverge` — multi-perspective research with independent agents
+- `/diverge-prototype` — independent prototyping in isolated worktrees
+- `/converge` — structured debate using Agent Teams
+
+## Conventions
+
+- All work on `main`
+- Run prototypes before committing to architectural decisions
+- **Always run benchmark tasks in parallel** — never sequentially. Use `&` + `wait` with different accounts (1-5). Mode-suffixed image tags (`eb-task-mcp_only`) prevent Docker build collisions. CSB uses `PairScheduler` for this; EB's `run_task.py` is single-task, so the caller must parallelize.
+- Real OSS repos only — no synthetic/toy repositories
+- Every task must be a realistic enterprise use case

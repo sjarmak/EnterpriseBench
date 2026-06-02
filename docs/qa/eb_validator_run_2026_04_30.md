@@ -2,7 +2,7 @@
 
 Bead: `EnterpriseBench-1av` (proxy of `dr-2vydrm.3`)
 Branch: `feature/eb-1av-unified-scoreresult`
-Vendored lib: `benchmark_qa_core` from codeprobe SHA `047df83` (see
+Vendored lib: `benchmark_qa_core` (first-party; see
 `lib/eb_verify/_vendor/benchmark_qa_core/VENDOR.md`).
 
 ## Scope

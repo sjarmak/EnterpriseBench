@@ -60,8 +60,8 @@ class OracleConstraints:
             warning. Default ``True``.
         language_extensions: Optional override mapping from extension (with
             leading dot, lower-cased) to language token. Defaults to a small
-            built-in table covering the common cases used by codeprobe / EB /
-            CSB. Callers can extend the table for niche languages.
+            built-in table covering the common cases used by EB / CSB.
+            Callers can extend the table for niche languages.
     """
 
     expected_languages: frozenset[str] = field(default_factory=frozenset)

@@ -17,7 +17,7 @@ def check_scoring_honesty(
     """Verify ``task_meta['scoring_method']`` maps to a sanctioned tier.
 
     A "sanctioned tier" is anything the rig has explicitly approved (e.g. the
-    classic codeprobe split: ``"strict"`` / ``"loose"`` / ``"calibrated"``).
+    classic split: ``"strict"`` / ``"loose"`` / ``"calibrated"``).
     A scoring method missing from the tier table is the canonical "honesty"
     smell — most often it means the task author wrote a custom method without
     declaring its tier, which silently breaks aggregate scoring.

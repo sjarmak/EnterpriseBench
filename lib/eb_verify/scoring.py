@@ -2,7 +2,7 @@
 Weighted score computation, reward.txt generation, and unified ScoreResult emission.
 
 The unified ScoreResult contract is the cross-benchmark JSON schema shared by
-EnterpriseBench, codeprobe, and CSB. It carries:
+EnterpriseBench and CSB. It carries:
 
 * ``reward`` (float): the weighted-average checkpoint score, identical to the
   legacy total_score.

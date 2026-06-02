@@ -1,6 +1,6 @@
 """Schema-agnostic QA library for benchmark task definitions.
 
-Consumed by codeprobe, EnterpriseBench (EB), and CodeScaleBench (CSB) adapters.
+Consumed by EnterpriseBench (EB) and CodeScaleBench (CSB) adapters.
 Each rig parses its own task-meta schema and feeds already-extracted inputs into
 these pure-functional checks. Findings come back as a flat ``list[Finding]``
 that the rig surfaces however it likes (CLI report, dolt write, etc.).

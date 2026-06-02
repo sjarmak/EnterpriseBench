@@ -6,8 +6,8 @@ into the lib's flat input shapes and returns the lib's flat ``list[Finding]``.
 
 Design notes:
 
-* The lib is imported from ``eb_verify._vendor.benchmark_qa_core`` (vendored
-  copy of codeprobe SHA ``047df83``; see ``_vendor/benchmark_qa_core/VENDOR.md``).
+* The lib is imported from ``eb_verify._vendor.benchmark_qa_core`` (a
+  first-party copy; see ``_vendor/benchmark_qa_core/VENDOR.md``).
 * Oracle file/symbol existence checks (``A1``/``B1``/``B2``) need access to the
   cloned repo. EB clones repos at runtime under ``$WORKSPACE/<repo.path>``;
   when no workspace is supplied or repos are missing, those checks are
