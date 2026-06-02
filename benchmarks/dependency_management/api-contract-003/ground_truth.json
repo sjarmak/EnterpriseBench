@@ -26,6 +26,9 @@
     "rpc_util.go"
   ],
   "consumer_affected_files": {
+    "etcd": [
+      "functional/tester/stresser_key.go"
+    ],
     "kubernetes": [
       "vendor/google.golang.org/grpc/clientconn.go",
       "staging/src/k8s.io/apiserver/pkg/server/genericapiserver.go",

@@ -147,10 +147,10 @@ confidence = 0.85
 source = "curator"
 
 [[ground_truth.required_files]]
-path = "go.mod"
+path = "functional/tester/stresser_key.go"
 repo = "etcd"
-confidence = 0.85
-source = "deterministic"
+confidence = 0.90
+source = "both"
 
 [[ground_truth.sufficient_files]]
 path = "stream.go"
