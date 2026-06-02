@@ -91,7 +91,7 @@ expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Interface implementation search across repos requires semantic understanding of Go interface satisfaction rules"
 
 [ground_truth]
-tiers = ["deterministic"]
+tiers = ["curator", "deterministic"]
 
 [[ground_truth.required_files]]
 path = "balancer/balancer.go"
@@ -110,6 +110,12 @@ path = "balancer_wrapper.go"
 repo = "grpc-go"
 confidence = 0.90
 source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "server/etcdserver/api/rafthttp/http.go"
+repo = "etcd"
+confidence = 0.90
+source = "curator"
 
 [[ground_truth.sufficient_files]]
 path = "internal/internal.go"

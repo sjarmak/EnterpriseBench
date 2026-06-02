@@ -112,3 +112,9 @@ path = "go.mod"
 repo = "kubernetes"
 confidence = 0.95
 source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "clientconn.go"
+repo = "grpc-go"
+confidence = 0.90
+source = "deterministic"

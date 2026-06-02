@@ -96,7 +96,7 @@ expected_mcp_benefit = "high"
 mcp_benefit_rationale = "Three-repo dependency chain (grpc-go → etcd → kubernetes) requires cross-repo import graph traversal. Transport types are re-exported and wrapped across package boundaries, so direct consumers are findable with text search but transitive impact through re-exports requires semantic navigation"
 
 [ground_truth]
-tiers = ["deterministic"]
+tiers = ["curator", "deterministic"]
 
 [[ground_truth.required_files]]
 path = "internal/transport/transport.go"
@@ -126,6 +126,30 @@ source = "deterministic"
 path = "server.go"
 repo = "grpc-go"
 confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "vendor/google.golang.org/grpc/clientconn.go"
+repo = "kubernetes"
+confidence = 0.90
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "staging/src/k8s.io/apiserver/pkg/server/genericapiserver.go"
+repo = "kubernetes"
+confidence = 0.90
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "pkg/kubelet/kubelet.go"
+repo = "kubernetes"
+confidence = 0.85
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "go.mod"
+repo = "etcd"
+confidence = 0.85
 source = "deterministic"
 
 [[ground_truth.sufficient_files]]
