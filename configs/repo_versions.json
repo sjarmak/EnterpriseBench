@@ -6,8 +6,18 @@
   },
   {
     "url": "https://github.com/FasterXML/jackson-databind",
+    "pinned_rev": "jackson-databind-2.15.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/FasterXML/jackson-databind",
     "pinned_rev": "jackson-databind-2.15.2",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/FasterXML/jackson-databind",
+    "pinned_rev": "jackson-databind-2.16.2",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/LibreOffice/core",
@@ -71,6 +81,11 @@
   },
   {
     "url": "https://github.com/apache/kafka",
+    "pinned_rev": "3.6.1",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/apache/kafka",
     "pinned_rev": "3.7.0",
     "last_verified": "2026-04-02"
   },
@@ -78,6 +93,16 @@
     "url": "https://github.com/apache/logging-log4j2",
     "pinned_rev": "rel/2.14.1",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/apache/logging-log4j2",
+    "pinned_rev": "rel/2.20.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/apache/logging-log4j2",
+    "pinned_rev": "rel/2.23.1",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/apache/tomcat",
@@ -183,6 +208,11 @@
     "url": "https://github.com/celery/kombu",
     "pinned_rev": "v5.3.4",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/celery/kombu",
+    "pinned_rev": "v5.3.5",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/ceph/ceph",
@@ -313,6 +343,11 @@
     "url": "https://github.com/encode/httpx",
     "pinned_rev": "0.26.0",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/encode/httpx",
+    "pinned_rev": "0.27.0",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/envoyproxy/envoy",
@@ -631,8 +666,18 @@
   },
   {
     "url": "https://github.com/hyperium/hyper",
+    "pinned_rev": "v1.0.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/hyperium/hyper",
     "pinned_rev": "v1.0.0-rc.4",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/hyperium/hyper",
+    "pinned_rev": "v1.2.0",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/istio/istio",
@@ -655,6 +700,11 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/jaegertracing/jaeger",
+    "pinned_rev": "v1.51.0",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/jestjs/jest",
     "pinned_rev": "v29.0.0",
     "last_verified": "2026-04-02"
@@ -662,6 +712,11 @@
   {
     "url": "https://github.com/jestjs/jest",
     "pinned_rev": "v29.7.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/junit-team/junit5",
+    "pinned_rev": "r5.10.0",
     "last_verified": "2026-06-04"
   },
   {
@@ -775,6 +830,11 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/mockito/mockito",
+    "pinned_rev": "v5.5.0",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/mozilla/gecko-dev",
     "pinned_rev": "1a843e2167f97a3789f9d8a7a9772586f0e1c16f",
     "last_verified": "2026-04-02"
@@ -787,6 +847,16 @@
   {
     "url": "https://github.com/open-policy-agent/opa",
     "pinned_rev": "v0.69.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/open-telemetry/opentelemetry-collector",
+    "pinned_rev": "v0.89.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/open-telemetry/opentelemetry-go",
+    "pinned_rev": "v1.21.0",
     "last_verified": "2026-06-04"
   },
   {
@@ -945,6 +1015,11 @@
     "last_verified": "2026-06-04"
   },
   {
+    "url": "https://github.com/qos-ch/slf4j",
+    "pinned_rev": "v_2.0.13",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/qutebrowser/qutebrowser",
     "pinned_rev": "v3.0.0",
     "last_verified": "2026-04-02"
@@ -958,6 +1033,11 @@
     "url": "https://github.com/rust-lang/rust",
     "pinned_rev": "1.83.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/seanmonstar/reqwest",
+    "pinned_rev": "v0.11.22",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/spf13/cobra",
@@ -990,6 +1070,11 @@
     "last_verified": "2026-04-03"
   },
   {
+    "url": "https://github.com/spring-projects/spring-boot",
+    "pinned_rev": "v3.2.4",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/spring-projects/spring-framework",
     "pinned_rev": "v6.0.11",
     "last_verified": "2026-04-03"
@@ -1003,6 +1088,11 @@
     "url": "https://github.com/spring-projects/spring-kafka",
     "pinned_rev": "v3.0.9",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/spring-projects/spring-kafka",
+    "pinned_rev": "v3.1.4",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/sqlalchemy/alembic",
@@ -1083,6 +1173,11 @@
     "url": "https://github.com/tokio-rs/tokio",
     "pinned_rev": "tokio-1.29.1",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/tokio-rs/tokio",
+    "pinned_rev": "tokio-1.36.0",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/tower-rs/tower",

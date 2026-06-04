@@ -98,3 +98,58 @@ Wave-3 resumes at the **25th distinct task** by first-appearance order in the
 truly-missing table — `support-mapping-dual-httpx-httpcore-001`
 (mirror `httpx--0.27.0`) — and continues through the remaining **27 tasks**
 (51 total truly-missing − 24 done) and their not-yet-created mirrors.
+
+---
+
+# Wave-3 (bead EnterpriseBench-768k.4) — next 12 tasks (#25–#36)
+
+Continues the 88-pin remediation. **Wave-3 = the 25th–36th distinct tasks** by
+first-appearance order in the truly-missing table of
+`results/analysis/mirror_resweep_corrected_2026_06.md`, resuming at
+`support-mapping-dual-httpx-httpcore-001` per wave-2's cutoff.
+
+- **Same decision rule as waves 1–2:** pin is intended ground truth → **CREATE** mirror as-is + register; pin unintended (incl. does-not-resolve-upstream) → **REPIN** task.toml + re-validate gold, then create under the corrected ref.
+- **Validation per pin:** (a) tag resolves upstream via anonymous `git ls-remote` (all 19 wave-3 pins are tags); (b) unregistered in `repo_versions.json` (matches the truly-missing set); (c) gold/checkpoint version references coherent with the pin (no contradicting version); (d) no conflicting same-task managed pin.
+- **Outcome of wave-3: 12/12 tasks → 12 CREATE-as-is, 0 REPIN.** Every pin resolved upstream on its first tag form (unlike wave-2's pydantic/hibernate `.Final` corrections). 19 unique new mirrors created (all public, anonymously cloneable, non-empty); 0 needed the push-protection private-toggle workaround.
+
+## Per-task decisions
+
+| # | task | mirror (pin) | decision | rationale |
+|---|------|--------------|----------|-----------|
+| 25 | support-mapping-dual-httpx-httpcore-001 | `httpx--0.27.0` (tag) | CREATE | tag resolves; gold references httpx 0.27 / httpcore 1.0; `httpcore--1.0.5` already registered (not in truly-missing set) |
+| 26 | api-contract-dual-hyper-reqwest-001 | `hyper--v1.0.0` (tag), `reqwest--v0.11.22` (tag) | CREATE | both resolve; gold references hyper 1.0 + reqwest 0.11 API contract |
+| 27 | support-mapping-dual-tokio-hyper-graceful-001 | `hyper--v1.2.0` (tag), `tokio--tokio-1.36.0` (tag) | CREATE | both resolve; gold references hyper 1.2 graceful shutdown + tokio 1.36 |
+| 28 | api-contract-dual-jackson-spring-001 | `jackson-databind--jackson-databind-2.15.0` (tag) | CREATE | jackson 2.15.0 resolves; gold references jackson 2.15 + Spring Boot 3.1; `spring-boot--v3.1.0` already created+registered in wave-2 (#23, skip-existing) |
+| 29 | support-mapping-dual-jackson-spring-deserializer-001 | `jackson-databind--jackson-databind-2.16.2` (tag), `spring-boot--v3.2.4` (tag) | CREATE | both resolve; gold references jackson 2.16 deserializer + Spring Boot 3.2 |
+| 30 | config-drift-dual-jaeger-otel-001 | `jaeger--v1.51.0` (tag), `opentelemetry-collector--v0.89.0` (tag) | CREATE | both resolve; gold references Jaeger 1.51 + otel-collector 0.89 config drift |
+| 31 | error-prov-dual-otel-jaeger-001 | `opentelemetry-go--v1.21.0` (tag) | CREATE | otel-go 1.21 resolves; gold references otel-go 1.21 + Jaeger 1.51; `jaeger--v1.51.0` created in #30 (shared, skip-existing) |
+| 32 | dep-graph-dual-junit-mockito-001 | `junit5--r5.10.0` (tag), `mockito--v5.5.0` (tag) | CREATE | both resolve (junit5 `r`-prefixed tag); gold references JUnit 5.10 + Mockito 5.5 dependency graph |
+| 33 | support-mapping-dual-spring-kafka-rebalance-002 | `kafka--3.6.1` (tag), `spring-kafka--v3.1.4` (tag) | CREATE | both resolve; gold references Kafka 3.6 rebalance + Spring Kafka 3.1 |
+| 34 | support-mapping-dual-celery-kombu-prefetch-001 | `kombu--v5.3.5` (tag) | CREATE | resolves; gold references kombu 5.3 prefetch; `celery--v5.3.6` already registered (not in truly-missing set) |
+| 35 | dep-graph-dual-log4j-spring-001 | `logging-log4j2--rel_2.20.0` (tag, rev `rel/2.20.0`) | CREATE | log4j2 `rel/2.20.0` resolves (slash tag → mirror `rel_2.20.0`); gold references log4j2 2.20 + Spring Boot 3.1; `spring-boot--v3.1.0` already done in wave-2 (skip-existing) |
+| 36 | support-mapping-dual-log4j-slf4j-async-001 | `logging-log4j2--rel_2.23.1` (tag, rev `rel/2.23.1`), `slf4j--v_2.0.13` (tag) | CREATE | both resolve (log4j2 slash tag → `rel_2.23.1`; slf4j underscore tag `v_2.0.13`); gold references log4j2 2.23 async + slf4j 2.0 |
+
+## Wave-3 tally
+
+- **Tasks processed:** 12 (CREATE: 12, REPIN: 0).
+- **Unique mirrors created:** 19 (all public, anonymously cloneable, non-empty).
+  - Shared/skip-existing within scope: `jaeger--v1.51.0` (#30, #31 — created once); `spring-boot--v3.1.0` (#28, #35 — already created+registered in wave-2 #23).
+  - Already-registered non-truly-missing repos (untouched): `httpcore--1.0.5` (#25), `celery--v5.3.6` (#34).
+  - Slash tags handled: `logging-log4j2` `rel/2.20.0`→`rel_2.20.0`, `rel/2.23.1`→`rel_2.23.1`. Underscore tag: `slf4j` `v_2.0.13`.
+  - **0** mirrors required the push-protection private-toggle workaround.
+- **REPINs:** 0 — every pin resolved upstream on its declared tag form; no `.Final`-style corrections needed this wave.
+- **Registered in `configs/repo_versions.json`:** 19 new `(url, pinned_rev)` entries, `last_verified=2026-06-04`. Count 230→249. No existing entries lost; canonical case-sensitive sort by `(url, pinned_rev)` preserved; 0 duplicate keys.
+- **Verification:** GitHub `visibility=PUBLIC` 19/19 + `isEmpty=false` 19/19; anonymous smart-HTTP `info/refs?service=git-upload-pack` returned HTTP 200 for 19/19; SG mirror naming correct by construction (full-tag, `/`→`_`).
+- **Not modified (out of scope / concurrent work):** `configs/sg_indexing_list.json`, `configs/runs/mirror_creation_manifest.json`. SG-side indexing of the sg-evals org happens out-of-band; `verify_sg_indexing.py --check-api` is a stub.
+
+## Cutoff for wave-4 resume
+
+**Last task processed: #36 `support-mapping-dual-log4j-slf4j-async-001`**
+(mirrors `logging-log4j2--rel_2.23.1`, `slf4j--v_2.0.13`).
+
+Wave-4 resumes at the **37th distinct task** by first-appearance order in the
+truly-missing table — `incident-investigation-dual-nats-001`
+(mirrors `nats-server--v2.10.22`, `nats.go--v1.37.0`) — and continues through the
+remaining **15 tasks** (51 total truly-missing − 36 done) and their not-yet-created mirrors.
+
+Running tally after wave-3: **36/51 tasks, 66/88 mirrors** (22 wave-1 + 25 wave-2 + 19 wave-3).
