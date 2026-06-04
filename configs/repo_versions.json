@@ -126,6 +126,11 @@
   },
   {
     "url": "https://github.com/babel/babel",
+    "pinned_rev": "v7.24.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/babel/babel",
     "pinned_rev": "v7.25.0",
     "last_verified": "2026-04-02"
   },
@@ -180,8 +185,33 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/cilium/cilium",
+    "pinned_rev": "v1.16.4",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/cilium/ebpf",
+    "pinned_rev": "v0.16.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/cockroachdb/cockroach",
+    "pinned_rev": "v24.2.5",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/cockroachdb/pebble",
+    "pinned_rev": "v1.1.2",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/confluentinc/kafka-connect-jdbc",
     "pinned_rev": "v10.7.4",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/containerd/containerd",
+    "pinned_rev": "v1.7.24",
     "last_verified": "2026-04-03"
   },
   {
@@ -190,9 +220,14 @@
     "last_verified": "2026-04-03"
   },
   {
-    "url": "https://github.com/containerd/containerd",
-    "pinned_rev": "v1.7.24",
-    "last_verified": "2026-04-03"
+    "url": "https://github.com/cortexproject/cortex",
+    "pinned_rev": "v1.16.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/cortexproject/cortex",
+    "pinned_rev": "v1.18.0",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/curl/curl",
@@ -203,6 +238,11 @@
     "url": "https://github.com/curl/curl",
     "pinned_rev": "curl-8_1_2",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/curl/curl",
+    "pinned_rev": "curl-8_6_0",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/dandydeveloper/charts",
@@ -255,14 +295,14 @@
     "last_verified": "2026-04-02"
   },
   {
-    "url": "https://github.com/encode/httpx",
-    "pinned_rev": "0.26.0",
-    "last_verified": "2026-04-03"
-  },
-  {
     "url": "https://github.com/encode/httpcore",
     "pinned_rev": "1.0.5",
     "last_verified": "2026-04-29"
+  },
+  {
+    "url": "https://github.com/encode/httpx",
+    "pinned_rev": "0.26.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/envoyproxy/envoy",
@@ -560,6 +600,11 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/jestjs/jest",
+    "pinned_rev": "v29.7.0",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/keycloak/keycloak",
     "pinned_rev": "6fd372cbe60dff025c30da9d69da00f74097b1b9",
     "last_verified": "2026-04-02"
@@ -686,6 +731,11 @@
   },
   {
     "url": "https://github.com/openssl/openssl",
+    "pinned_rev": "openssl-3.0.13",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/openssl/openssl",
     "pinned_rev": "openssl-3.1.1",
     "last_verified": "2026-04-03"
   },
@@ -720,6 +770,11 @@
     "last_verified": "2026-04-03"
   },
   {
+    "url": "https://github.com/paramiko/paramiko",
+    "pinned_rev": "3.2.0",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/pnpm/pnpm",
     "pinned_rev": "v8.15.9",
     "last_verified": "2026-04-02"
@@ -740,6 +795,11 @@
     "last_verified": "2026-04-03"
   },
   {
+    "url": "https://github.com/prometheus/alertmanager",
+    "pinned_rev": "v0.27.0",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/prometheus/prometheus",
     "pinned_rev": "v2.45.0",
     "last_verified": "2026-04-02"
@@ -748,6 +808,11 @@
     "url": "https://github.com/prometheus/prometheus",
     "pinned_rev": "v2.46.0",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/prometheus/prometheus",
+    "pinned_rev": "v2.47.0",
+    "last_verified": "2026-06-03"
   },
   {
     "url": "https://github.com/prometheus/prometheus",
@@ -778,6 +843,11 @@
     "url": "https://github.com/psf/requests",
     "pinned_rev": "v2.32.3",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/pyca/cryptography",
+    "pinned_rev": "41.0.0",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/qutebrowser/qutebrowser",
@@ -825,6 +895,26 @@
     "last_verified": "2026-04-03"
   },
   {
+    "url": "https://github.com/sqlalchemy/alembic",
+    "pinned_rev": "rel_1_12_0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/sqlalchemy/alembic",
+    "pinned_rev": "rel_1_13_1",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/sqlalchemy/sqlalchemy",
+    "pinned_rev": "rel_2_0_0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/sqlalchemy/sqlalchemy",
+    "pinned_rev": "rel_2_0_29",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/supabase/gotrue",
     "pinned_rev": "v2.143.0",
     "last_verified": "2026-04-03"
@@ -833,6 +923,16 @@
     "url": "https://github.com/supabase/supabase",
     "pinned_rev": "v0.24.03",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/swc-project/swc",
+    "pinned_rev": "v1.4.6",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/thanos-io/thanos",
+    "pinned_rev": "v0.32.0",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/thanos-io/thanos",
@@ -850,9 +950,24 @@
     "last_verified": "2026-04-03"
   },
   {
+    "url": "https://github.com/tokio-rs/axum",
+    "pinned_rev": "axum-v0.7.0",
+    "last_verified": "2026-06-04"
+  },
+  {
+    "url": "https://github.com/tokio-rs/axum",
+    "pinned_rev": "axum-v0.7.5",
+    "last_verified": "2026-06-04"
+  },
+  {
     "url": "https://github.com/tokio-rs/tokio",
     "pinned_rev": "tokio-1.29.1",
     "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/tower-rs/tower",
+    "pinned_rev": "tower-0.4.13",
+    "last_verified": "2026-06-04"
   },
   {
     "url": "https://github.com/urllib3/urllib3",
