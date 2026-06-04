@@ -153,3 +153,58 @@ truly-missing table — `incident-investigation-dual-nats-001`
 remaining **15 tasks** (51 total truly-missing − 36 done) and their not-yet-created mirrors.
 
 Running tally after wave-3: **36/51 tasks, 66/88 mirrors** (22 wave-1 + 25 wave-2 + 19 wave-3).
+
+---
+
+# Wave-4 (bead EnterpriseBench-768k.5) — FINAL: last 15 tasks (#37–#51)
+
+Closes the 88-pin remediation. **Wave-4 = the 37th–51st distinct tasks** by
+first-appearance order in the truly-missing table of
+`results/analysis/mirror_resweep_corrected_2026_06.md`, resuming at
+`incident-investigation-dual-nats-001` per wave-3's cutoff.
+
+- **Same decision rule as waves 1–3:** pin is intended ground truth → **CREATE** mirror as-is + register; pin unintended (incl. does-not-resolve-upstream) → **REPIN** task.toml + re-validate gold, then create under the corrected ref.
+- **Validation per pin:** (a) tag resolves upstream via anonymous `git ls-remote` (all 22 wave-4 pins are tags); (b) unregistered in `repo_versions.json` (matches the truly-missing set); (c) gold/checkpoint version references coherent with the pin (gold is version-generic or version-matching — no contradicting version); (d) no conflicting same-task managed pin.
+- **Outcome of wave-4: 15/15 tasks → 15 CREATE-as-is, 0 REPIN.** Every pin resolved upstream on its declared tag form (incl. the prefixed/`.Final` tags `netty-4.1.100.Final`, `tokio-1.35.0`). 22 unique new mirrors created (all public, anonymously cloneable, non-empty).
+
+## Per-task decisions
+
+| # | task | mirror (pin) | decision | rationale |
+|---|------|--------------|----------|-----------|
+| 37 | incident-investigation-dual-nats-001 | `nats-server--v2.10.22` (tag), `nats.go--v1.37.0` (tag) | CREATE | both resolve; gold references NATS server 2.10 + nats.go 1.37 |
+| 38 | incident-investigation-dual-nerdctl-001 | `nerdctl--v2.0.0` (tag) | CREATE | resolves; gold references nerdctl 2.0 + containerd 1.7.24; `containerd--v1.7.24` already registered (not truly-missing), untouched |
+| 39 | error-prov-dual-netty-spring-001 | `netty--netty-4.1.100.Final` (tag) | CREATE | prefixed `.Final` tag resolves upstream as-is (no repin needed); gold version-generic (Netty 4.1 / Spring 6.0); `spring-framework--v6.0.11` already registered, untouched |
+| 40 | support-mapping-dual-next-turbopack-resolve-001 | `next.js--v14.1.4` (tag), `turbo--v1.13.2` (tag) | CREATE | both resolve; gold references Next.js 14.1 + Turbo 1.13 resolve; `next.js--v14.1.4` needed the push-protection private-toggle workaround (test fixtures), restored **public** |
+| 41 | incident-investigation-dual-nomad-001 | `nomad--v1.9.3` (tag), `raft--v1.7.1` (tag) | CREATE | both resolve; gold references Nomad 1.9 + raft 1.7; `nomad--v1.9.3` needed the private-toggle workaround, restored **public** |
+| 42 | incident-investigation-dual-tikv-001 | `tikv--v8.5.0` (tag), `pd--v8.5.0` (tag) | CREATE | both resolve; gold references TiKV 8.5 + PD 8.5 (same version, two repos) |
+| 43 | config-drift-dual-setuptools-pip-001 | `setuptools--v67.0.0` (tag), `pip--23.0` (tag) | CREATE | both resolve; gold references setuptools 67.0 + pip 23.0 config drift |
+| 44 | support-mapping-dual-prisma-zod-codegen-001 | `prisma--5.12.0` (tag), `zod--v3.23.0` (tag) | CREATE | both resolve; gold version-generic (Prisma 5.12 + zod 3.23 codegen) |
+| 45 | incident-investigation-dual-vault-001 | `vault--v1.18.1` (tag); `raft--v1.7.1` (tag, shared w/ #41) | CREATE | vault resolves; `raft--v1.7.1` already created in #41 (skip-existing); `vault--v1.18.1` needed the private-toggle workaround, restored **public** |
+| 46 | support-mapping-dual-react-relay-suspense-001 | `relay--v16.2.0` (tag) | CREATE | resolves; gold references Relay 16.2 + React 18.2 suspense; `react--v18.2.0` already registered, untouched |
+| 47 | api-contract-dual-serde-csv-001 | `serde--v1.0.193` (tag), `rust-csv--1.3.0` (tag) | CREATE | both resolve; gold references serde 1.0 + csv 1.3 API contract |
+| 48 | dep-graph-dual-prometheus-thanos-001 | `thanos--v0.32.0` (tag, shared w/ wave-1 #10) | CREATE | **0 new mirrors this wave** — `thanos--v0.32.0` already created+registered in wave-1 (#10, skip-existing); `prometheus--v2.47.0` already registered (not truly-missing), untouched |
+| 49 | error-prov-dual-tokio-tower-001 | `tokio--tokio-1.35.0` (tag); `tower--tower-0.4.13` (tag, shared w/ wave-1) | CREATE | `tokio-1.35.0` prefixed tag resolves; `tower--tower-0.4.13` already created in wave-1 (#4, skip-existing) |
+| 50 | support-mapping-dual-tonic-tokio-streamcancel-001 | `tonic--v0.11.0` (tag); `tokio--tokio-1.36.0` (tag, shared w/ wave-3) | CREATE | tonic resolves; `tokio--tokio-1.36.0` already created in wave-3 (#27, skip-existing) |
+| 51 | support-mapping-dual-vitest-vite-optimize-001 | `vitest--v1.4.0` (tag), `vite--v5.2.6` (tag) | CREATE | both resolve; gold references Vitest 1.4 + Vite 5.2 optimize |
+
+## Wave-4 tally
+
+- **Tasks processed:** 15 (CREATE: 15, REPIN: 0). Closes the batch at **51/51 tasks**.
+- **Unique mirrors created:** 22 (all public, anonymously cloneable, non-empty).
+  - Shared/skip-existing within wave-4: `raft--v1.7.1` (#41, #45 — created once in #41).
+  - Skip-existing from earlier waves: `thanos--v0.32.0` (wave-1 #10, for #48), `tower--tower-0.4.13` (wave-1 #4, for #49), `tokio--tokio-1.36.0` (wave-3 #27, for #50).
+  - Already-registered non-truly-missing repos (untouched): `containerd--v1.7.24` (#38), `spring-framework--v6.0.11` (#39), `react--v18.2.0` (#46), `prometheus--v2.47.0` (#48).
+  - Prefixed/`.Final` tags handled as-is (no repin): `netty--netty-4.1.100.Final`, `tokio--tokio-1.35.0`.
+  - **3** mirrors required the push-protection private-toggle workaround, all restored to **public**: `next.js--v14.1.4`, `nomad--v1.9.3`, `vault--v1.18.1`.
+- **REPINs:** 0 — every pin resolved upstream on its declared tag form; no `.Final`-style corrections needed (unlike wave-2's pydantic/hibernate).
+- **Registered in `configs/repo_versions.json`:** 22 new `(url, pinned_rev)` entries, `last_verified=2026-06-04`. Count 249→271. No existing entries lost; canonical case-sensitive sort by `(url, pinned_rev)` preserved; 0 duplicate keys.
+- **Verification:** GitHub `visibility=PUBLIC` 22/22 + `isEmpty=false` 22/22; anonymous smart-HTTP `info/refs?service=git-upload-pack` returned HTTP 200 for 22/22 (no auth); SG mirror naming correct by construction (full-tag, `/`→`_`).
+- **Not modified (out of scope / concurrent work):** `configs/sg_indexing_list.json`, `configs/runs/mirror_creation_manifest.json` (wave-4 manifest written to a scratch path, not the tracked file). SG-side indexing of the sg-evals org happens out-of-band; `verify_sg_indexing.py --check-api` is a stub.
+
+## BATCH-COMPLETE
+
+**Final tally: 51/51 tasks, 88/88 mirrors** (22 wave-1 + 25 wave-2 + 19 wave-3 + 22 wave-4).
+The Stephanie-authorized 88-pin truly-missing remediation (parent EnterpriseBench-768k) is
+complete. The 5 dropped false-positives (`tokio--tokio-1.0.0`, `hyper--v0.14.0`, `tonic--v0.6.0`,
+`urllib3--2.0.0`, `requests--v2.28.2`) were never created, per the corrected re-sweep. All four
+waves committed branch-local on `fix/eb-lrm-python3-verifier-sweep` — **no push/PR** (held for Stephanie).
