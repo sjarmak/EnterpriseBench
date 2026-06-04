@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # check_drift_points.sh — verify agent identified drift points between Terraform core and AWS provider
+# Reimplemented in bash+jq+grep (no python3 in container). Weighted scoring
+# (repos 0.6 + concepts 0.4, round to 2dp) and pass logic identical to the
+# previous python implementation; detail uses python bool repr (True/False).
 set -euo pipefail
 
 export REPORT="${WORKSPACE:-/workspace}/DRIFT_REPORT.json"
@@ -10,25 +13,27 @@ if [[ ! -f "$REPORT" ]]; then
   exit 0
 fi
 
-python3 -c "
-import json, os
+# Lowercased JSON dump of drift_points (any(c in dumps(p)) over the array equals
+# substring search over the whole array dump for these short tokens).
+points_text=$(jq -c '.drift_points // []' "$REPORT" | tr '[:upper:]' '[:lower:]')
+has() { printf '%s' "$points_text" | grep -qF -- "$1"; }
 
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
+if has terraform_core || has eval_diff || has eval_refresh; then has_core=True; else has_core=False; fi
+if has provider || has aws; then has_provider=True; else has_provider=False; fi
 
-# Check that drift points reference both repos
-has_core = any('terraform_core' in json.dumps(p).lower() or 'eval_diff' in json.dumps(p).lower() or 'eval_refresh' in json.dumps(p).lower() for p in points)
-has_provider = any('provider' in json.dumps(p).lower() or 'aws' in json.dumps(p).lower() for p in points)
+matched=0
+for c in json normaliz policy security_group phantom set list ordering default; do
+  if has "$c"; then matched=$((matched + 1)); fi
+done
 
-# Check for key drift concepts
-concepts = ['json', 'normaliz', 'policy', 'security_group', 'phantom', 'set', 'list', 'ordering', 'default']
-matched = sum(1 for c in concepts if any(c in json.dumps(p).lower() for p in points))
+[[ "$has_core" == True ]] && core_v=1.0 || core_v=0.0
+[[ "$has_provider" == True ]] && prov_v=1.0 || prov_v=0.0
 
-repos_score = (1.0 if has_core else 0.0) * 0.5 + (1.0 if has_provider else 0.0) * 0.5
-concept_score = min(1.0, matched / 3.0)
-score = round(repos_score * 0.6 + concept_score * 0.4, 2)
-passed = has_core and has_provider and matched >= 2
+raw=$(awk "BEGIN {rs=$core_v*0.5+$prov_v*0.5; cs=$matched/3.0; if(cs>1.0)cs=1.0; printf \"%.10f\", rs*0.6+cs*0.4}")
+score=$(awk "BEGIN {printf \"%.2f\", $raw}")
+score=${score%0}; score=${score%.}; case "$score" in *.*) ;; *) score="$score.0";; esac
 
-detail = f'Core referenced: {has_core}, provider referenced: {has_provider}, concepts matched: {matched}/{len(concepts)}'
-print(json.dumps({'score': score, 'passed': passed, 'detail': detail}))
-"
+if [[ "$has_core" == True && "$has_provider" == True && "$matched" -ge 2 ]]; then passed=true; else passed=false; fi
+
+printf '{"score": %s, "passed": %s, "detail": "Core referenced: %s, provider referenced: %s, concepts matched: %d/9"}\n' \
+  "$score" "$passed" "$has_core" "$has_provider" "$matched"

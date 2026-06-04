@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # check_config_valid.sh — verify agent produced valid DRIFT_REPORT.json
+# Uses bash + jq + grep (no python3 in container). Scoring identical to the previous
+# python: invalid JSON -> 0.0; drift_points missing/empty/non-list -> 0.2; entries with
+# a config_key -> 1.0 ("Valid report with N drift points"); none -> 0.3.
 set -euo pipefail
 
 export REPORT="${WORKSPACE:-/workspace}/DRIFT_REPORT.json"
@@ -9,23 +12,23 @@ if [[ ! -f "$REPORT" ]]; then
   exit 0
 fi
 
-python3 -c "
-import json, os
+# Invalid JSON -> mirror python json.JSONDecodeError branch.
+if ! jq -e . "$REPORT" >/dev/null 2>&1; then
+  printf '{"score": 0.0, "passed": false, "detail": "Invalid JSON in DRIFT_REPORT.json"}\n'
+  exit 0
+fi
 
-try:
-    report = json.load(open(os.environ['REPORT']))
-    points = report.get('drift_points', [])
-    if not isinstance(points, list) or len(points) == 0:
-        print(json.dumps({'score': 0.2, 'passed': False, 'detail': 'drift_points array is empty or missing'}))
-    else:
-        valid = 0
-        for p in points:
-            if isinstance(p, dict) and 'config_key' in p:
-                valid += 1
-        if valid > 0:
-            print(json.dumps({'score': 1.0, 'passed': True, 'detail': f'Valid report with {valid} drift points'}))
-        else:
-            print(json.dumps({'score': 0.3, 'passed': False, 'detail': 'drift_points lack config_key field'}))
-except json.JSONDecodeError:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'Invalid JSON in DRIFT_REPORT.json'}))
-"
+# points = report.get('drift_points', []); empty/missing/non-list -> 0.2
+points_len=$(jq -r 'if type=="object" and (.drift_points|type=="array") then (.drift_points|length) else 0 end' "$REPORT")
+if [[ "$points_len" -eq 0 ]]; then
+  printf '{"score": 0.2, "passed": false, "detail": "drift_points array is empty or missing"}\n'
+  exit 0
+fi
+
+# valid = count of entries that are objects with a 'config_key' key
+valid=$(jq -r '[.drift_points[] | select(type=="object" and has("config_key"))] | length' "$REPORT")
+if [[ "$valid" -gt 0 ]]; then
+  printf '{"score": 1.0, "passed": true, "detail": "Valid report with %s drift points"}\n' "$valid"
+else
+  printf '{"score": 0.3, "passed": false, "detail": "drift_points lack config_key field"}\n'
+fi

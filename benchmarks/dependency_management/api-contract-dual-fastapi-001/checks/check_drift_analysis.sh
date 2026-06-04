@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # check_drift_analysis.sh — verify agent identifies contract drift between FastAPI and httpx
+# Implemented in bash+jq+grep (no python3 in container). Scoring identical to the
+# previous python3 implementation: count fixed drift concepts found in
+# json.dumps(answer).lower(), plus FastAPI/httpx repo mentions.
 set -euo pipefail
 
 export ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
@@ -10,27 +13,40 @@ if [[ ! -f "$ANSWER_FILE" ]]; then
   exit 0
 fi
 
-python3 -c "
-import json, os
+answer_text=$(jq -r '
+  def pyd:
+    if type=="object" then "{" + ([to_entries[] | (.key|tojson) + ": " + (.value|pyd)] | join(", ")) + "}"
+    elif type=="array" then "[" + ([.[]|pyd] | join(", ")) + "]"
+    else tojson end;
+  pyd' "$ANSWER_FILE" | tr '[:upper:]' '[:lower:]')
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+has_term() { printf '%s' "$answer_text" | grep -qF -- "$1"; }
 
-answer_text = json.dumps(answer).lower()
+matched=0
+for c in none missing optional default nested union serializ pydantic 422 content-type; do
+  if has_term "$c"; then matched=$((matched + 1)); fi
+done
+n_concepts=10
 
-# Check for drift-related concepts
-drift_concepts = ['none', 'missing', 'optional', 'default', 'nested', 'union', 'serializ', 'pydantic', '422', 'content-type']
-matched = sum(1 for c in drift_concepts if c in answer_text)
+has_fastapi=False; has_term fastapi && has_fastapi=True
+has_httpx=False;   has_term httpx   && has_httpx=True
 
-# Check both repos are referenced in drift analysis
-has_fastapi = 'fastapi' in answer_text
-has_httpx = 'httpx' in answer_text
+fa=0; [[ "$has_fastapi" == True ]] && fa=1
+hx=0; [[ "$has_httpx" == True ]] && hx=1
 
-concept_score = min(1.0, matched / 4.0)
-repo_score = (1.0 if has_fastapi else 0.0) * 0.5 + (1.0 if has_httpx else 0.0) * 0.5
-score = round(concept_score * 0.6 + repo_score * 0.4, 2)
-passed = matched >= 3 and has_fastapi and has_httpx
+# python round(x,2) as json.dumps(float): round-half-even (glibc awk) + float repr.
+round2() {
+  awk -v x="$1" 'BEGIN{ s=sprintf("%.2f", x); sub(/0+$/, "", s); if (s ~ /\.$/) s=s"0"; print s }'
+}
+raw=$(jq -n --argjson m "$matched" --argjson fa "$fa" --argjson hx "$hx" \
+  '([1.0, $m/4.0]|min)*0.6 + ($fa*0.5 + $hx*0.5)*0.4')
+score=$(round2 "$raw")
 
-detail = f'Drift concepts: {matched}/{len(drift_concepts)}, FastAPI: {has_fastapi}, httpx: {has_httpx}'
-print(json.dumps({'score': score, 'passed': passed, 'detail': detail}))
-"
+if [[ "$matched" -ge 3 && "$has_fastapi" == True && "$has_httpx" == True ]]; then
+  passed=true
+else
+  passed=false
+fi
+
+printf '{"score": %s, "passed": %s, "detail": "Drift concepts: %s/%s, FastAPI: %s, httpx: %s"}\n' \
+  "$score" "$passed" "$matched" "$n_concepts" "$has_fastapi" "$has_httpx"

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # check_indirect_refs.sh — verify agent traces indirect schema dependencies
+# bash+jq+grep (no python3 in container). Scoring semantics identical to the
+# previous python implementation.
 set -euo pipefail
 
 export ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
@@ -10,26 +12,57 @@ if [[ ! -f "$ANSWER_FILE" ]]; then
   exit 0
 fi
 
-python3 -c "
-import json, os
+# The original python loaded GT and answer with no try/except; a missing or
+# unparseable file aborts with a traceback (non-zero exit, no stdout). Mirror it.
+if [[ ! -f "$GT_FILE" ]] || ! jq -e . "$GT_FILE" >/dev/null 2>&1 || ! jq -e . "$ANSWER_FILE" >/dev/null 2>&1; then
+  exit 1
+fi
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+# answer_text = json.dumps(answer).lower()
+answer_text=$(jq -c . "$ANSWER_FILE" | tr '[:upper:]' '[:lower:]')
 
-# Check for impact chain concepts
-gt_chain = gt.get('impact_chain', [])
-answer_text = json.dumps(answer).lower()
+# gt_terms = set of lowercased words from impact_chain steps with len>4 and isalpha.
+n_steps=$(jq -r '(.impact_chain // []) | length' "$GT_FILE")
+set -f
+terms=$(
+  for ((i = 0; i < n_steps; i++)); do
+    step=$(jq -r ".impact_chain[$i]" "$GT_FILE" | tr '[:upper:]' '[:lower:]')
+    for w in $step; do
+      if [[ ${#w} -gt 4 && "$w" =~ ^[a-z]+$ ]]; then
+        printf '%s\n' "$w"
+      fi
+    done
+  done | sort -u
+)
+set +f
 
-gt_terms = set()
-for step in gt_chain:
-    for word in step.lower().split():
-        if len(word) > 4 and word.isalpha():
-            gt_terms.add(word)
+if [[ -z "$terms" ]]; then
+  n_terms=0
+else
+  n_terms=$(printf '%s\n' "$terms" | grep -c '')
+fi
 
-matched = sum(1 for term in gt_terms if term in answer_text)
-score = min(1.0, matched / max(len(gt_terms) * 0.4, 1))
-passed = score >= 0.3
+matched=0
+if [[ "$n_terms" -gt 0 ]]; then
+  while IFS= read -r term; do
+    [[ -n "$term" ]] || continue
+    if printf '%s' "$answer_text" | grep -qF -- "$term"; then
+      matched=$((matched + 1))
+    fi
+  done <<< "$terms"
+fi
 
-detail = f'Matched {matched}/{len(gt_terms)} impact chain concepts'
-print(json.dumps({'score': round(score, 2), 'passed': passed, 'detail': detail}))
-"
+# score = min(1.0, matched / max(len*0.4, 1)); round(.,2) with banker's rounding;
+# passed = score >= 0.3.
+score=$(jq -n --argjson m "$matched" --argjson n "$n_terms" '
+  ([($n * 0.4), 1] | max) as $den |
+  ([1.0, ($m / $den)] | min) as $s |
+  ($s * 100) as $v | ($v | floor) as $fl | ($v - $fl) as $fr |
+  ((if $fr < 0.5 then $fl elif $fr > 0.5 then $fl + 1
+    else (if ($fl % 2) == 0 then $fl else $fl + 1 end) end) / 100) | tostring' | tr -d '"')
+case "$score" in *.*) ;; *) score="${score}.0";; esac
+passed=$(jq -n --argjson m "$matched" --argjson n "$n_terms" '
+  ([($n * 0.4), 1] | max) as $den |
+  if ([1.0, ($m / $den)] | min) >= 0.3 then true else false end')
+printf '{"score": %s, "passed": %s, "detail": "Matched %s/%s impact chain concepts"}\n' \
+  "$score" "$passed" "$matched" "$n_terms"

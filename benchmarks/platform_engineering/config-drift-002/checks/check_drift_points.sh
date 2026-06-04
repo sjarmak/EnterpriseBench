@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Checkpoint 1: Verify agent identified drift points in external RabbitMQ config
+# Reimplemented in bash+jq+grep (no python3 in container); keyword membership
+# over the lowercased JSON dump of drift_points, scoring (FOUND/TOTAL, awk %.2f,
+# pass at FOUND>=2) identical to the previous python implementation.
 set -euo pipefail
 
 export REPORT="${WORKSPACE:-/workspace}/charts/DRIFT_REPORT.json"
@@ -11,42 +14,22 @@ fi
 export FOUND=0
 export TOTAL=3
 
-# Check 1: Agent identified missing secret key parameter
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
-text = json.dumps(points).lower()
-if 'secret' in text and ('key' in text or 'password' in text):
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+# text = json.dumps(report['drift_points']).lower()
+text=$(jq -c '.drift_points // []' "$REPORT" | tr '[:upper:]' '[:lower:]')
+has() { printf '%s' "$text" | grep -qF -- "$1"; }
+
+# Check 1: 'secret' and ('key' or 'password')
+if has secret && { has key || has password; }; then
   FOUND=$((FOUND + 1))
 fi
 
-# Check 2: Agent identified unnecessary password requirement for external RabbitMQ
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
-text = json.dumps(points).lower()
-if 'password' in text and ('optional' in text or 'required' in text or 'unnecessary' in text or 'external' in text):
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+# Check 2: 'password' and ('optional' or 'required' or 'unnecessary' or 'external')
+if has password && { has optional || has required || has unnecessary || has external; }; then
   FOUND=$((FOUND + 1))
 fi
 
-# Check 3: Agent identified erlangCookie or general inconsistency with external DB pattern
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
-text = json.dumps(points).lower()
-if 'erlang' in text or 'cookie' in text or ('inconsisten' in text and ('database' in text or 'db' in text or 'rabbitmq' in text)):
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+# Check 3: 'erlang' or 'cookie' or ('inconsisten' and ('database' or 'db' or 'rabbitmq'))
+if has erlang || has cookie || { has inconsisten && { has database || has db || has rabbitmq; }; }; then
   FOUND=$((FOUND + 1))
 fi
 

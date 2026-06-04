@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # check_error_chain.sh — verify agent traced the error propagation chain
+# Reimplemented in bash+jq+grep (no python3 in container); scoring semantics identical to the prior python3 implementation.
 set -euo pipefail
 
 export ANSWER_FILE="${WORKSPACE}/agent_output/answer.json"
@@ -15,26 +16,54 @@ if [[ ! -f "$GT_FILE" ]]; then
     exit 1
 fi
 
-python3 -c "
-import json, os
+facts=$(jq -rn --slurpfile gt "$GT_FILE" --slurpfile ans "$ANSWER_FILE" '
+  ($gt[0]) as $g | ($ans[0]) as $a |
+  (if ($g|type)=="object" then ($g.error_chain) else null end) as $gtc0 |
+  ($gtc0 // []) as $gtc |
+  (($gtc0==null) or ($gtc0==false) or ($gtc0==0) or ($gtc0=="") or ($gtc0==[]) or ($gtc0=={})) as $gt_empty |
+  if $gt_empty then "GTEMPTY"
+  elif ($a|type)!="object" then "NONOBJ"
+  else
+    (if ($a|has("error_chain")) then $a.error_chain
+     elif ($a|has("chain")) then $a.chain
+     elif ($a|has("propagation")) then $a.propagation
+     else [] end) as $ac |
+    (($ac==null) or ($ac==false) or ($ac==0) or ($ac=="") or ($ac==[]) or ($ac=={})) as $ac_empty |
+    if $ac_empty then "ACEMPTY"
+    else
+      ([ $gtc[] | tostring | ascii_downcase | splits("[ \t\n\r\f]+") | select(length>3) ] | unique) as $kw |
+      # python: " ".join(str(s) for s in agent_chain); iterating a string yields chars
+      ([ (if ($ac|type)=="string" then ($ac|explode|map([.]|implode)[])
+          elif ($ac|type)=="array" then $ac[]
+          else $ac end) | tostring ] | join(" ") | ascii_downcase) as $txt |
+      ([ $kw[] | select(. as $k | $txt | contains($k)) ] | length) as $m |
+      "OK \($m) \($kw|length)"
+    end
+  end')
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+case "$facts" in
+  GTEMPTY) echo '{"score": 0.0, "passed": false, "detail": "No error chain in GT"}'; exit 0 ;;
+  ACEMPTY) echo '{"score": 0.0, "passed": false, "detail": "Agent provided no error chain"}'; exit 0 ;;
+  NONOBJ)  exit 1 ;;
+esac
 
-gt_chain = gt.get('error_chain', [])
-agent_chain = answer.get('error_chain', answer.get('chain', answer.get('propagation', [])))
+read -r _ matched setlen <<<"$facts"
 
-if not gt_chain:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'No error chain in GT'}))
-elif not agent_chain:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'Agent provided no error chain'}))
-else:
-    # Check keyword overlap between GT chain steps and agent chain
-    gt_keywords = set()
-    for step in gt_chain:
-        gt_keywords.update(w.lower() for w in step.split() if len(w) > 3)
-    agent_text = ' '.join(str(s) for s in agent_chain).lower()
-    matched = sum(1 for kw in gt_keywords if kw in agent_text)
-    score = round(min(matched / max(len(gt_keywords) * 0.5, 1), 1.0), 2)
-    print(json.dumps({'score': score, 'passed': score >= 0.4, 'detail': f'Matched {matched} keywords from error chain'}))
-"
+# score = round(min(matched/max(setlen*0.5,1),1.0),2) as integer hundredths, banker's rounding
+if [[ $setlen -ge 2 ]]; then num=$((2*matched)); den=$setlen; else num=$matched; den=1; fi
+if [[ $num -ge $den ]]; then h=100; else
+  q=$((num*100/den)); r=$((num*100%den)); twice=$((2*r))
+  if   [[ $twice -lt $den ]]; then h=$q
+  elif [[ $twice -gt $den ]]; then h=$((q+1))
+  else if [[ $((q%2)) -eq 0 ]]; then h=$q; else h=$((q+1)); fi
+  fi
+fi
+intp=$((h/100)); frac=$((h%100))
+if   [[ $frac -eq 0 ]]; then score=$(printf '%d.0' "$intp")
+elif [[ $((frac%10)) -eq 0 ]]; then score=$(printf '%d.%d' "$intp" "$((frac/10))")
+else score=$(printf '%d.%02d' "$intp" "$frac")
+fi
+# passed: rounded score >= 0.4  (h >= 40)
+if [[ $h -ge 40 ]]; then passed=true; else passed=false; fi
+
+printf '{"score": %s, "passed": %s, "detail": "Matched %s keywords from error chain"}\n' "$score" "$passed" "$matched"

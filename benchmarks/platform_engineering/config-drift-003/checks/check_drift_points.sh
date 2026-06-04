@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Checkpoint 1: Verify agent identified password drift across template includes
+# Reimplemented in bash+jq+grep (no python3 in container); scoring identical to
+# the previous python implementation (FOUND/TOTAL, awk %.2f, pass at FOUND>=2).
 set -euo pipefail
 
 export REPORT="${WORKSPACE:-/workspace}/charts/DRIFT_REPORT.json"
@@ -11,45 +13,24 @@ fi
 export FOUND=0
 export TOTAL=3
 
-# Check 1: Agent identified that the password helper produces different values
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
-text = json.dumps(points).lower()
-if 'password' in text and ('different' in text or 'random' in text or 'regenerat' in text or 're-evaluat' in text or 'mismatch' in text):
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+points_text=$(jq -c '.drift_points // []' "$REPORT" | tr '[:upper:]' '[:lower:]')
+report_text=$(jq -c '.' "$REPORT" | tr '[:upper:]' '[:lower:]')
+hasp() { printf '%s' "$points_text" | grep -qF -- "$1"; }
+hasr() { printf '%s' "$report_text" | grep -qF -- "$1"; }
+
+# Check 1: 'password' and (different/random/regenerat/re-evaluat/mismatch)
+if hasp password && { hasp different || hasp random || hasp regenerat || hasp re-evaluat || hasp mismatch; }; then
   FOUND=$((FOUND + 1))
 fi
 
-# Check 2: Agent identified multiple consuming templates (at least 2 different files)
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
-files = set()
-for p in points:
-    f = p.get('file', '')
-    if f:
-        files.add(f)
-if len(files) >= 2:
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+# Check 2: at least 2 distinct non-empty 'file' values among drift points
+distinct_files=$(jq -r '[.drift_points // [] | .[] | .file // "" | select(. != "")] | unique | length' "$REPORT")
+if [[ "$distinct_files" -ge 2 ]]; then
   FOUND=$((FOUND + 1))
 fi
 
-# Check 3: Agent mentioned the _helpers.tpl redis.password helper
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-text = json.dumps(report).lower()
-if 'helper' in text or '_helpers' in text or 'redis.password' in text or 'include' in text:
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+# Check 3 (over full report dump): 'helper' or '_helpers' or 'redis.password' or 'include'
+if hasr helper || hasr _helpers || hasr redis.password || hasr include; then
   FOUND=$((FOUND + 1))
 fi
 

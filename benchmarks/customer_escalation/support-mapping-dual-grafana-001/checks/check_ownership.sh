@@ -2,6 +2,8 @@
 # check_ownership.sh — verify agent identified correct code owners or subsystem
 # Reads agent output from $WORKSPACE/agent_output/answer.json
 # Checks for implementation-specific ownership terms from the Envoy codebase
+# bash+jq+grep reimplementation (no python3 in container). Output JSON is
+# byte-identical to the previous python implementation.
 set -euo pipefail
 
 export ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
@@ -17,55 +19,73 @@ if [[ ! -f "$GT_FILE" ]]; then
     exit 1
 fi
 
-python3 -c "
-import json, sys, os, re
+n_kw=$(jq '(.ownership_keywords // []) | length' "$GT_FILE")
+if [[ "$n_kw" -eq 0 ]]; then
+    jq -cn '{score: 0.0, passed: false, detail: "No ownership keywords in ground truth"}'
+    exit 0
+fi
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+# ownership = answer.get('ownership', answer.get('owners', answer.get('subsystem','')))
+# dict -> ' '.join(str(v) for values); list -> ' '.join(str(v)); else -> str(ownership)
+ownership_text=$(jq -r '
+  def q: "\u0027";
+  def pyrepr_inner:
+    if type=="string" then q + . + q
+    elif type=="object" then "{" + ([to_entries[] | q + .key + q + ": " + (.value|pyrepr_inner)] | join(", ")) + "}"
+    elif type=="array" then "[" + ([.[]|pyrepr_inner] | join(", ")) + "]"
+    elif type=="boolean" then (if . then "True" else "False" end)
+    elif type=="null" then "None"
+    else tostring end;
+  def pystr:
+    if type=="string" then .
+    elif type=="object" then "{" + ([to_entries[] | q + .key + q + ": " + (.value|pyrepr_inner)] | join(", ")) + "}"
+    elif type=="array" then "[" + ([.[]|pyrepr_inner] | join(", ")) + "]"
+    elif type=="boolean" then (if . then "True" else "False" end)
+    elif type=="null" then "None"
+    else tostring end;
+  (if has("ownership") then .ownership elif has("owners") then .owners elif has("subsystem") then .subsystem else "" end) as $o
+  | (if ($o|type)=="object" then [$o[] | pystr] | join(" ")
+     elif ($o|type)=="array" then [$o[] | pystr] | join(" ")
+     else ($o|pystr) end) | ascii_downcase
+' "$ANSWER_FILE")
 
-# Implementation-specific ownership terms from the Envoy codebase.
-# Generic words like 'overflow' or 'upstream' are NOT sufficient —
-# the agent must reference actual file names or class names.
-ownership_kw = gt.get('ownership_keywords', [])
+# full_answer_text = json.dumps(answer).lower(); search_text = ownership_text + " " + full
+full_answer_text=$(jq -c . "$ANSWER_FILE" | sed 's/,/, /g; s/:/: /g' | tr '[:upper:]' '[:lower:]')
+search_text="${ownership_text} ${full_answer_text}"
 
-if not ownership_kw:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'No ownership keywords in ground truth'}))
-    sys.exit(0)
+if [[ -z "${ownership_text//[[:space:]]/}" ]]; then
+    jq -cn '{score: 0.0, passed: false, detail: "Agent provided no ownership info"}'
+    exit 0
+fi
 
-# Extract agent ownership text (flexible key names)
-ownership = answer.get('ownership', answer.get('owners', answer.get('subsystem', '')))
-if isinstance(ownership, dict):
-    ownership_text = ' '.join(str(v) for v in ownership.values()).lower()
-elif isinstance(ownership, list):
-    ownership_text = ' '.join(str(v) for v in ownership).lower()
-else:
-    ownership_text = str(ownership).lower()
+# keyword_present: kw.lower().replace('-','_') in search_text.replace('-','_')
+search_norm=$(printf '%s' "$search_text" | tr '-' '_')
+matched=0
+matched_kw=()
+while IFS= read -r kw; do
+  kw_norm=$(printf '%s' "$kw" | tr '[:upper:]' '[:lower:]' | tr '-' '_')
+  if grep -qF -- "$kw_norm" <<<"$search_norm"; then
+    matched=$((matched + 1))
+    matched_kw+=("$kw")
+  fi
+done < <(jq -r '.ownership_keywords[]' "$GT_FILE")
 
-# Also search the full answer text in case ownership is embedded elsewhere
-full_answer_text = json.dumps(answer).lower()
-search_text = ownership_text + ' ' + full_answer_text
+# score = round(min(1.0, matched/4.0), 2)
+case "$matched" in
+  0) score="0.0";;
+  1) score="0.25";;
+  2) score="0.5";;
+  3) score="0.75";;
+  *) score="1.0";;
+esac
+if [[ "$matched" -ge 2 ]]; then passed=true; else passed=false; fi
 
-if not ownership_text.strip():
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'Agent provided no ownership info'}))
-    sys.exit(0)
+# matched_kw python list repr
+if [[ ${#matched_kw[@]} -eq 0 ]]; then
+  matched_repr="[]"
+else
+  matched_repr=$(printf "%s\n" "${matched_kw[@]}" | jq -R . | jq -s -r 'def q: "\u0027"; "[" + (map(q + . + q) | join(", ")) + "]"')
+fi
 
-def keyword_present(kw, text):
-    # Match case-insensitively; treat underscores and hyphens as interchangeable
-    kw_norm = kw.lower().replace('-', '_')
-    text_norm = text.replace('-', '_')
-    return kw_norm in text_norm
-
-matched_kw = [kw for kw in ownership_kw if keyword_present(kw, search_text)]
-matched = len(matched_kw)
-
-# Need at least 2 implementation-specific keyword hits to pass.
-# Score is proportional to matches (full score at 4+ out of 8 keywords).
-score = round(min(1.0, matched / 4.0), 2)
-passed = matched >= 2
-
-detail = (
-    f'Matched {matched}/{len(ownership_kw)} implementation-specific ownership keywords: '
-    f'{matched_kw}'
-)
-print(json.dumps({'score': score, 'passed': passed, 'detail': detail}))
-"
+detail="Matched ${matched}/${n_kw} implementation-specific ownership keywords: ${matched_repr}"
+jq -cn --argjson s "$score" --argjson p "$passed" --arg d "$detail" '{score: $s, passed: $p, detail: $d}'

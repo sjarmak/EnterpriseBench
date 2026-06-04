@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # check_dead_code.sh — Verify dead code identification using precision-weighted scoring.
+# bash+jq+grep (no python3 in container). Scoring semantics identical to the prior python3.
 # Env: WORKSPACE, TASK_DIR, TASK_ID
 set -euo pipefail
 
@@ -16,59 +17,43 @@ if [[ ! -f "$GT_DIR" ]]; then
     exit 0
 fi
 
-python3 - "$REPORT" "$GT_DIR" <<'PYEOF'
-import json
-import sys
+# Normalize an array to unique (file,symbol) pairs serialized as compact JSON
+# (so null values and string values stay distinct, like python tuples). Python used
+# direct indexing e["file"]/e["symbol"], so an element missing either key raised
+# KeyError and aborted the whole script with no output — `error` reproduces that exit.
+NORM='map(if (has("file") and has("symbol")) then ([.file, .symbol] | @json)
+          else error("KeyError") end) | unique | .[]'
 
-report_path = sys.argv[1]
-gt_path = sys.argv[2]
+claimed=$(jq -r "$NORM" "$REPORT")
+dead=$(jq -r '(.dead_code // []) | '"$NORM" "$GT_DIR")
+live=$(jq -r '(.live_code // []) | '"$NORM" "$GT_DIR")
 
-with open(report_path) as f:
-    claimed = json.load(f)
+export LC_ALL=C  # comm checks sort order in the active locale; pin it to match the sorts.
+count_common() { comm -12 <(sort <<<"$1") <(sort <<<"$2") | grep -c . || true; }
+count_only_first() { comm -23 <(sort <<<"$1") <(sort <<<"$2") | grep -c . || true; }
 
-with open(gt_path) as f:
-    gt = json.load(f)
+tp_count=$(count_common "$claimed" "$dead")
+fp_count=$(count_common "$claimed" "$live")
+fn_count=$(count_only_first "$dead" "$claimed")
 
-gt_dead = gt.get("dead_code", [])
-gt_live = gt.get("live_code", [])
+read -r score precision recall < <(awk -v tp="$tp_count" -v fp="$fp_count" -v fn="$fn_count" 'BEGIN{
+  bs=0.25
+  p=(tp+fp>0)?tp/(tp+fp):0.0
+  r=(tp+fn>0)?tp/(tp+fn):0.0
+  if (p+r>0) f=(1+bs)*(p*r)/(bs*p+r); else f=0.0
+  if (p<0.9) s=f*0.7; else if (r<0.6) s=f*0.85; else s=f
+  printf "%.10f %.10f %.10f\n", s, p, r
+}')
 
-def normalize(items):
-    return {(e["file"], e["symbol"]) for e in items}
-
-claimed_set = normalize(claimed)
-dead_set = normalize(gt_dead)
-live_set = normalize(gt_live)
-
-tp = claimed_set & dead_set
-fp = claimed_set & live_set
-fn = dead_set - claimed_set
-
-tp_count = len(tp)
-fp_count = len(fp)
-fn_count = len(fn)
-
-beta = 0.5
-beta_sq = beta ** 2
-
-precision = tp_count / (tp_count + fp_count) if (tp_count + fp_count) > 0 else 0.0
-recall = tp_count / (tp_count + fn_count) if (tp_count + fn_count) > 0 else 0.0
-
-if precision + recall > 0:
-    f_score = (1 + beta_sq) * (precision * recall) / (beta_sq * precision + recall)
-else:
-    f_score = 0.0
-
-if precision < 0.9:
-    score = f_score * 0.7
-elif recall < 0.6:
-    score = f_score * 0.85
-else:
-    score = f_score
-
-detail = (
-    f"precision={precision:.3f} recall={recall:.3f} f0.5={f_score:.3f} "
-    f"TP={tp_count} FP={fp_count} FN={fn_count}"
-)
-
-print(json.dumps({"score": round(score, 4), "detail": detail}))
-PYEOF
+pyfloat() { printf '%.*f' "$2" "$1" | sed -e 's/0*$//' -e 's/\.$/.0/'; }
+score_r=$(pyfloat "$score" 4)
+f_str=$(awk -v tp="$tp_count" -v fp="$fp_count" -v fn="$fn_count" 'BEGIN{
+  bs=0.25
+  p=(tp+fp>0)?tp/(tp+fp):0.0
+  r=(tp+fn>0)?tp/(tp+fn):0.0
+  if (p+r>0) f=(1+bs)*(p*r)/(bs*p+r); else f=0.0
+  printf "%.3f", f
+}')
+detail=$(printf 'precision=%.3f recall=%.3f f0.5=%s TP=%s FP=%s FN=%s' \
+  "$precision" "$recall" "$f_str" "$tp_count" "$fp_count" "$fn_count")
+printf '{"score": %s, "detail": "%s"}\n' "$score_r" "$detail"

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # check_ownership.sh — verify agent identified responsible code area
+# bash+jq+grep reimplementation (no python3 in container). Output JSON is
+# byte-identical to the previous python implementation.
 set -euo pipefail
 
 export ANSWER_FILE="${WORKSPACE}/agent_output/answer.json"
@@ -15,19 +17,38 @@ if [[ ! -f "$GT_FILE" ]]; then
     exit 1
 fi
 
-python3 -c "
-import json, os
+n_kw=$(jq '(.ownership_keywords // []) | length' "$GT_FILE")
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+if [[ "$n_kw" -eq 0 ]]; then
+    jq -cn '{score: 1.0, passed: true, detail: "No ownership keywords to check"}'
+    exit 0
+fi
 
-keywords = gt.get('ownership_keywords', [])
-agent_text = json.dumps(answer.get('ownership', answer.get('responsible_area', ''))).lower()
+# agent_text = json.dumps(answer.get('ownership', answer.get('responsible_area',''))).lower()
+# Reproduce json.dumps (default separators ", " / ": ") then lowercase.
+agent_text=$(jq -c '
+  if has("ownership") then .ownership
+  elif has("responsible_area") then .responsible_area
+  else "" end
+' "$ANSWER_FILE" | sed 's/,/, /g; s/:/: /g' | tr '[:upper:]' '[:lower:]')
 
-if not keywords:
-    print(json.dumps({'score': 1.0, 'passed': True, 'detail': 'No ownership keywords to check'}))
-else:
-    matched = sum(1 for kw in keywords if kw.lower() in agent_text)
-    score = round(matched / len(keywords), 2)
-    print(json.dumps({'score': score, 'passed': score >= 0.3, 'detail': f'Matched {matched}/{len(keywords)} ownership keywords'}))
-"
+matched=0
+while IFS= read -r kw; do
+  kw_lc=$(printf '%s' "$kw" | tr '[:upper:]' '[:lower:]')
+  if grep -qF -- "$kw_lc" <<<"$agent_text"; then
+    matched=$((matched + 1))
+  fi
+done < <(jq -r '.ownership_keywords[]' "$GT_FILE")
+
+# score = round(matched / n_kw, 2); whole-number results need explicit .0 form
+if [[ "$matched" -eq 0 ]]; then
+  score="0.0"
+elif [[ "$matched" -eq "$n_kw" ]]; then
+  score="1.0"
+else
+  score=$(jq -n --argjson m "$matched" --argjson t "$n_kw" '(($m / $t)*100|round)/100')
+fi
+
+passed=$(jq -n --argjson s "$score" 'if $s >= 0.3 then true else false end')
+detail="Matched ${matched}/${n_kw} ownership keywords"
+jq -cn --argjson s "$score" --argjson p "$passed" --arg d "$detail" '{score: $s, passed: $p, detail: $d}'

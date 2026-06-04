@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # Checkpoint 2: Verify impact classification
+# Implemented in bash+jq+grep (no python3 in container). Scoring identical to the
+# previous python3 implementation: three regex signals over the lowercased report
+# (construct=TSPropertySignature|initializer, semver=\bpatch\b,
+# package=@babel/types|babel[/-]types); score=matched/3 (round 2dp), pass at >=2.
+# The reason string reproduces python's list repr (single quotes) of found/missing.
 set -euo pipefail
 
 REPORT="${WORKSPACE:-/workspace}/babel/IMPACT_REPORT.md"
@@ -8,37 +13,45 @@ if [[ ! -f "$REPORT" ]]; then
   exit 0
 fi
 
-python3 -c "
-import re, json, sys
+content=$(tr '[:upper:]' '[:lower:]' < "$REPORT")
 
-with open('${REPORT}') as f:
-    content = f.read().lower()
+sig() { printf '%s' "$content" | grep -Eq -- "$1"; }
 
-# Three required signals from the ground truth:
-#   1. Changed construct name: TSPropertySignature or initializer
-#   2. Semver level: patch
-#   3. Package reference: @babel/types (or babel/types or babel-types)
-signals = {
-    'construct': bool(re.search(r'tspropertysi[g]nature|initializer', content)),
-    'semver':    bool(re.search(r'\bpatch\b', content)),
-    'package':   bool(re.search(r'@babel/types|babel[/-]types', content)),
+construct=false; sig 'tspropertysignature|initializer' && construct=true
+semver=false;    sig '\bpatch\b'                       && semver=true
+package=false;   sig '@babel/types|babel[/-]types'     && package=true
+
+matched=0
+found_parts=()
+missing_parts=()
+# dict order: construct, semver, package
+for kv in "construct:$construct" "semver:$semver" "package:$package"; do
+  k="${kv%%:*}"; v="${kv#*:}"
+  if [[ "$v" == true ]]; then
+    matched=$((matched + 1))
+    found_parts+=("'$k'")
+  else
+    missing_parts+=("'$k'")
+  fi
+done
+
+# python list repr: [] when empty, ['a', 'b'] (elements joined by ", ") otherwise.
+join_list() {
+  if [[ $# -eq 0 ]]; then printf '[]'; return; fi
+  local out="$1"; shift
+  local e
+  for e in "$@"; do out="${out}, ${e}"; done
+  printf '[%s]' "$out"
 }
+found_repr=$(join_list "${found_parts[@]}")
+missing_repr=$(join_list "${missing_parts[@]}")
 
-matched = sum(signals.values())
+round2() {
+  awk -v x="$1" 'BEGIN{ s=sprintf("%.2f", x); sub(/0+$/, "", s); if (s ~ /\.$/) s=s"0"; print s }'
+}
+raw=$(jq -n --argjson m "$matched" '$m/3.0')
+score=$(round2 "$raw")
+passed=$([[ "$matched" -ge 2 ]] && echo true || echo false)
 
-# Score is proportional to how many signals are present (out of 3)
-score = round(matched / 3.0, 2)
-
-# Must have at least 2 of the 3 signals to pass
-passed = matched >= 2
-
-reason_parts = [k for k, v in signals.items() if v]
-missing_parts = [k for k, v in signals.items() if not v]
-
-reason = (
-    f'Matched {matched}/3 required signals '
-    f'(found: {reason_parts}; missing: {missing_parts})'
-)
-
-print(json.dumps({'score': score, 'passed': passed, 'reason': reason}))
-"
+reason="Matched ${matched}/3 required signals (found: ${found_repr}; missing: ${missing_repr})"
+printf '{"score": %s, "passed": %s, "reason": "%s"}\n' "$score" "$passed" "$reason"

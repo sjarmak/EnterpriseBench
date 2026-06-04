@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # check_direct_consumers.sh — verify agent finds gRPC and googleapis consumers
+# Reimplemented in bash+jq+grep (no python3 in container — the task image ships
+# bash/grep/jq but not python3, so the previous `python3 -c` body exited 127).
+# Scoring is identical: a repo is "covered" when any of its GT files (full path or
+# basename) appears in json.dumps(answer).lower(), or a repo-specific keyword does;
+# score = covered-repos / 2, pass only when BOTH repos are covered.
 set -euo pipefail
 
 export ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
@@ -10,28 +15,50 @@ if [[ ! -f "$ANSWER_FILE" ]]; then
   exit 0
 fi
 
-python3 -c "
-import json, os
+# Missing ground_truth.json crashed the original python (FileNotFoundError, rc=1,
+# no score line) — preserve that infra-failure signal rather than emit a fake score.
+if [[ ! -f "$GT_FILE" ]]; then
+  echo "ground_truth.json not found: $GT_FILE" >&2
+  exit 1
+fi
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+# json.dumps(answer).lower() — python default separators ", " / ": " (with spaces).
+answer_text=$(jq -c . "$ANSWER_FILE" | sed 's/,/, /g; s/:/: /g' | tr '[:upper:]' '[:lower:]')
 
-answer_text = json.dumps(answer).lower()
+count_repo_files() {  # $1 = repo name -> echoes count of matching GT files
+  local repo="$1" n=0 f fl bl
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    fl=$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')
+    bl=$(printf '%s' "${f##*/}" | tr '[:upper:]' '[:lower:]')
+    if [[ "$answer_text" == *"$fl"* || "$answer_text" == *"$bl"* ]]; then
+      n=$((n + 1))
+    fi
+  done < <(jq -r --arg r "$repo" '
+    ((.required_files // []) + (.sufficient_files // []))
+    | .[] | select(.repo == $r) | .path' "$GT_FILE")
+  echo "$n"
+}
 
-# Check for gRPC consumer references
-grpc_files = [f['path'] for f in gt.get('required_files', []) + gt.get('sufficient_files', []) if f.get('repo') == 'grpc']
-grpc_found = sum(1 for f in grpc_files if f.lower() in answer_text or f.split('/')[-1].lower() in answer_text)
-has_grpc = grpc_found > 0 or 'grpc' in answer_text
+has_term() { [[ "$answer_text" == *"$1"* ]]; }
 
-# Check for googleapis consumer references
-gapi_files = [f['path'] for f in gt.get('required_files', []) + gt.get('sufficient_files', []) if f.get('repo') == 'googleapis']
-gapi_found = sum(1 for f in gapi_files if f.lower() in answer_text or f.split('/')[-1].lower() in answer_text)
-has_gapi = gapi_found > 0 or 'googleapis' in answer_text
+grpc_found=$(count_repo_files grpc)
+if [[ "$grpc_found" -gt 0 ]] || has_term grpc; then has_grpc=true; else has_grpc=false; fi
 
-repos_covered = sum([has_grpc, has_gapi])
-score = round(repos_covered / 2.0, 2)
-passed = has_grpc and has_gapi
+gapi_found=$(count_repo_files googleapis)
+if [[ "$gapi_found" -gt 0 ]] || has_term googleapis; then has_gapi=true; else has_gapi=false; fi
 
-detail = f'gRPC refs: {has_grpc} ({grpc_found} files), googleapis refs: {has_gapi} ({gapi_found} files)'
-print(json.dumps({'score': score, 'passed': passed, 'detail': detail}))
-"
+covered=0
+$has_grpc && covered=$((covered + 1))
+$has_gapi && covered=$((covered + 1))
+case "$covered" in
+  0) score="0.0" ;;
+  1) score="0.5" ;;
+  2) score="1.0" ;;
+esac
+if $has_grpc && $has_gapi; then passed=true; else passed=false; fi
+
+pg=$($has_grpc && echo True || echo False)
+pa=$($has_gapi && echo True || echo False)
+printf '{"score": %s, "passed": %s, "detail": "gRPC refs: %s (%s files), googleapis refs: %s (%s files)"}\n' \
+    "$score" "$passed" "$pg" "$grpc_found" "$pa" "$gapi_found"

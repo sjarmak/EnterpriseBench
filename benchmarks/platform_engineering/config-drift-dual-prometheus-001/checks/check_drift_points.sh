@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Checkpoint 1: Verify agent identified drift points (set precision/recall)
+# Reimplemented in bash+jq+grep (no python3 in container); scoring semantics
+# (FOUND/TOTAL with awk %.2f, pass at FOUND>=2) are identical to the previous
+# python implementation.
 set -euo pipefail
 
 export REPORT="${WORKSPACE:-/workspace}/charts/DRIFT_REPORT.json"
@@ -12,31 +15,27 @@ fi
 export FOUND=0
 export TOTAL=2
 
-# Check if agent identified the serflan-udp port drift (serfLAN value used where serfWAN should be, or vice versa)
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
-for p in points:
-    f = p.get('file', '') + p.get('key', '')
-    if 'serflan' in f.lower() or 'serf_lan' in f.lower() or 'serfLAN' in f:
-        exit(0)
-exit(1)
-" 2>/dev/null; then
+# Check if agent identified the serflan-udp port drift. For each drift point,
+# f = file + key; matches when lowercased f contains 'serflan'/'serf_lan' or
+# raw f contains 'serfLAN' (last clause is case-sensitive — preserved).
+if jq -e '
+  (.drift_points // []) | any(
+    ((.file // "") + (.key // "")) as $f
+    | ($f | ascii_downcase | contains("serflan"))
+      or ($f | ascii_downcase | contains("serf_lan"))
+      or ($f | contains("serfLAN"))
+  )' "$REPORT" >/dev/null 2>&1; then
   FOUND=$((FOUND + 1))
 fi
 
-# Check if agent identified the serfwan-udp port drift
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
-for p in points:
-    f = p.get('file', '') + p.get('key', '')
-    if 'serfwan' in f.lower() or 'serf_wan' in f.lower() or 'serfWAN' in f:
-        exit(0)
-exit(1)
-" 2>/dev/null; then
+# Check if agent identified the serfwan-udp port drift.
+if jq -e '
+  (.drift_points // []) | any(
+    ((.file // "") + (.key // "")) as $f
+    | ($f | ascii_downcase | contains("serfwan"))
+      or ($f | ascii_downcase | contains("serf_wan"))
+      or ($f | contains("serfWAN"))
+  )' "$REPORT" >/dev/null 2>&1; then
   FOUND=$((FOUND + 1))
 fi
 
