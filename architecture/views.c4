@@ -1,0 +1,163 @@
+// Views over the EnterpriseBench model. Evolving (#evolving) work is amber;
+// planned (#planned) / research (#research) would render dashed + dimmed.
+// (No planned/research tracks exist yet — delivery is built/evolving only,
+// so there is no `planned` lens; see README.)
+
+views {
+
+  // Landscape — the whole system in context of its externals.
+  view index {
+    title 'EnterpriseBench — system landscape'
+    include *
+
+    style * {
+      opacity 25%
+    }
+    style element.tag == #built, element.tag == #evolving {
+      opacity 100%
+    }
+    style element.tag == #evolving {
+      color amber
+    }
+  }
+
+  // The EnterpriseBench system, decomposed into its containers.
+  view ebSystem of eb {
+    title 'EnterpriseBench — containers'
+    include *
+
+    style element.tag == #evolving {
+      color amber
+    }
+  }
+
+  // ── Per-container component views ─────────────────────────────────────────
+
+  view corpusContainer of eb.corpus {
+    title 'Task corpus — definitions, schema & layered ground truth'
+    include *
+  }
+
+  view miningContainer of eb.mining {
+    title 'Task mining pipeline — sourcing tasks from OSS history'
+    include *
+  }
+
+  view sandboxContainer of eb.sandbox {
+    title 'Sandbox builder — multi-repo Docker images per mode'
+    include *
+  }
+
+  view mcpContainer of eb.mcp {
+    title 'MCP integration — Sourcegraph mirrors & preamble'
+    include *
+  }
+
+  view orchestrationContainer of eb.orchestration {
+    title 'Orchestration — session-type runners & dispatch'
+    include *
+  }
+
+  view verifyContainer of eb.verify {
+    title 'eb_verify — checkpoint runner, 9 validators, judge & scoring'
+    include *
+  }
+
+  view qaContainer of eb.qa {
+    title 'QA & soundness gates'
+    include *
+
+    style element.tag == #evolving {
+      color amber
+    }
+  }
+
+  view analysisContainer of eb.analysis {
+    title 'Analysis & reporting — runs → figures'
+    include *
+
+    style element.tag == #evolving {
+      color amber
+    }
+  }
+
+  // ── Risk lens ─────────────────────────────────────────────────────────────
+  // The #risk-flagged elements with each open question stated in-box.
+  view risks {
+    title 'Risks & open questions'
+    include
+      eb,
+      element.tag == #risk,
+      eb.corpus,
+      eb.qa,
+      eb.analysis
+
+    style * {
+      opacity 30%
+    }
+    style element.tag == #risk {
+      opacity 100%
+      color red
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Walkthrough flows (dynamic views) — the narrative spine of the review.
+  // ───────────────────────────────────────────────────────────────────────
+
+  // Flow 1 — mining a task into the corpus.
+  dynamic view mineTask {
+    title 'Walkthrough — mining a task from OSS history'
+    description 'Discover a real breaking change, prove it needs every repo (CRNT), and only then admit it to the corpus under the mix + diversity gates.'
+
+    eb.mining.pipeline -> oss 'parse changelogs → link commits → analyze impact'
+    eb.mining.pipeline -> eb.corpus.tasks 'generate draft task.toml skeleton'
+    eb.mining.crnt -> eb.corpus.tasks 'Cross-Repo Necessity Test'
+    eb.mining.mixGate -> eb.corpus.tasks 'mix + ecosystem-diversity gate'
+    eb.corpus.schema -> eb.corpus.tasks 'preflight schema validation'
+  }
+
+  // Flow 2 — one benchmark run, end to end.
+  dynamic view benchmarkRun {
+    title 'Walkthrough — a benchmark run end-to-end'
+    description 'One task in one tool-access mode (baseline / mcp_only / hybrid). The sweep runner repeats this across all three modes; callers fan out across accounts 1-5.'
+
+    eb.orchestration.dispatcher -> eb.corpus.tasks 'select task + route by session_type'
+    eb.orchestration.dispatcher -> eb.orchestration.runTask 'single session'
+    eb.orchestration.runTask -> eb.sandbox.builder 'build sandbox (mode-suffixed tag)'
+    eb.sandbox.builder -> docker 'docker build + run; clone repos into /workspace/'
+    eb.orchestration.runTask -> eb.mcp.preamble 'inject MCP preamble (mcp_only / hybrid)'
+    eb.orchestration.runTask -> agent 'run agent in sandbox'
+    agent -> sourcegraph.sgMcp 'search / nav (when MCP enabled)'
+    agent -> eb.results 'write answer.json / artifacts'
+    eb.orchestration.runTask -> eb.verify.cli 'score completed task'
+  }
+
+  // Flow 3 — checkpoint verification of a completed task.
+  dynamic view verifyFlow {
+    title 'Walkthrough — checkpoint verification'
+    description 'Checkpoints run in order; per-artifact validators do structural + GT matching, the LLM judge does semantics. When both grep and judge fire, the final score is min(grep, judge).'
+
+    eb.verify.cli -> eb.verify.runner 'parse task.toml + ordered checkpoints'
+    eb.verify.runner -> eb.verify.validators 'route by artifact type (9 plugins)'
+    eb.verify.validators -> eb.verify.parsers 'AST / manifest structural match'
+    eb.verify.validators -> eb.corpus.groundTruth 'match vs expected_solution'
+    eb.verify.runner -> eb.verify.judge 'semantic checkpoint judging'
+    eb.verify.judge -> models 'LLM-judge rubric (different family)'
+    eb.verify.runner -> eb.verify.scoring 'weighted partial credit'
+    eb.verify.scoring -> eb.results 'write reward.txt / score_result.json'
+  }
+
+  // Flow 4 — runs to the headline figures.
+  dynamic view analysisFlow {
+    title 'Walkthrough — runs → MCP-benefit figures'
+    description 'After a sweep, the analysis layer re-scans every run, checks the calibration-bias floor, runs the mode-discrimination + power gates, and regenerates the paper figures.'
+
+    eb.analysis.scoreEngine -> eb.results 're-scan all runs across modes'
+    eb.analysis.triage -> eb.results 'aggregate + fingerprint failures'
+    eb.analysis.modeGate -> eb.analysis.scoreEngine 'mode-delta + power analysis'
+    eb.analysis.ablationJudge -> eb.results 'judge rescore + masked reverify'
+    eb.analysis.cost -> eb.results 'token / $ + reproducibility check'
+    eb.analysis.report -> eb.analysis.scoreEngine 'charts + report + paper figures'
+  }
+}

@@ -1,0 +1,410 @@
+// EnterpriseBench — a benchmark for codebase understanding & context gathering
+// across large, distributed (multi-repo) enterprise codebases.
+//
+// Four halves: a shell+Python orchestration layer (scripts/) that builds Docker
+// sandboxes and drives the agent under test, the eb_verify checkpoint-scoring
+// library (lib/eb_verify/), a task-mining pipeline (scripts/mining/) that sources
+// tasks from real OSS history, and an analysis layer (scripts/, scripts/analysis/)
+// that aggregates raw runs into the paper figures. Tool access (baseline /
+// mcp_only / hybrid) is the controlled independent variable; Sourcegraph MCP is
+// the showcased — but not privileged — search substrate.
+//
+// Elements carry `link`s to their source and to the architecture / decision
+// docs, so a reviewer can jump from any box to the code and the rationale.
+
+model {
+
+  agent = actor 'Agent under test' {
+    description 'Coding agent (e.g. Claude Code) run inside a sandbox under one of three tool-access modes'
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // External systems — code substrate, search service, inference, isolation.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  oss = externalSystem 'OSS repositories (GitHub)' {
+    description 'Real open-source repos + their version history — the task source and the sandbox code substrate (grpc-go → etcd → kubernetes, etc.)'
+  }
+
+  sourcegraph = externalSystem 'Sourcegraph' {
+    description 'Code-search service; MCP endpoint (/.api/mcp/all) is the showcased search tool, plus sg-evals mirrors per task'
+
+    sgMcp = externalSystem 'Sourcegraph MCP' {
+      description 'HTTP MCP tool surface (search / nav / deepsearch) the agent calls in mcp_only / hybrid modes'
+    }
+    sgMirrors = datastore 'sg-evals mirrors' {
+      description 'configs/sg_mirrors/ — per-task indexed mirror manifests carried forward from CSB'
+    }
+  }
+
+  docker = externalSystem 'Docker engine' {
+    description 'Builds and runs per-task sandbox images; repos cloned into /workspace/{repo}/'
+  }
+
+  models = externalSystem 'Inference models' {
+    description 'LLM-curator, LLM-judge, and solve-verifier models — a different family than the agent to avoid self-eval bias'
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // The EnterpriseBench system.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  eb = system 'EnterpriseBench' {
+    description 'Sources tasks from OSS history, runs agents in multi-repo sandboxes under 3 tool modes, scores via checkpoints, and reports context-retrieval quality'
+    link ../docs/ARCHITECTURE.md 'Architecture overview'
+    link ../docs/CONVERGENCE_REPORT.md 'Converged design (debate synthesis)'
+    link ../README.md 'Project README'
+
+    // ── Task corpus: TOML task defs + schema + ground truth ─────────────────
+    corpus = container 'Task corpus' {
+      #built
+      description 'benchmarks/ — 112 active task.toml across 7 suites, schema-validated, each with checkpoints + ground truth'
+      technology 'TOML / JSON'
+      link ../benchmarks 'benchmarks/'
+
+      tasks = datastore 'task.toml definitions' {
+        #built
+        description '112 active tasks (7 suites, 10 task types) + _archived/ + mined/ candidates; 1-5 real OSS repos each with role + pinned rev'
+        link ../benchmarks 'benchmarks/'
+        link ../benchmarks/EXAMPLE_TASK.toml 'EXAMPLE_TASK.toml'
+      }
+      schema = component 'task schema + preflight' {
+        #built
+        description 'task.schema.json (tool_access, ground_truth, difficulty_stratum, checkpoints) enforced by the preflight validator'
+        link ../schemas/task.schema.json 'task.schema.json'
+        link ../scripts/validate_tasks_preflight.py 'validate_tasks_preflight.py'
+      }
+      groundTruth = datastore 'expected_solution.json (layered GT)' {
+        #built
+        #risk
+        description '3-tier ground truth: deterministic (AST/import graphs) + LLM-curator + solve-verification. RISK: curated GT contamination — the recurring fix class is cross-task copy-paste / foreign-path verifier blocks (see verifier_contamination_scan)'
+        link ../schemas/expected_solution.schema.json 'expected_solution.schema.json'
+      }
+      pins = datastore 'repo version pins' {
+        #built
+        description 'configs/repo_versions.json + sandbox_pins.json — pinned SHA manifest; staleness detected by check_repo_staleness.py'
+        link ../configs/repo_versions.json 'repo_versions.json'
+        link ../configs/sandbox_pins.json 'sandbox_pins.json'
+      }
+    }
+
+    // ── Mining: source tasks from real OSS breaking-change history ──────────
+    mining = container 'Task mining pipeline' {
+      #built
+      description 'scripts/mining/ — discovers breaking changes in OSS history, links commits, analyzes cross-repo impact, emits draft task skeletons'
+      technology 'Python'
+      link ../scripts/mining 'scripts/mining/'
+
+      pipeline = component 'mining pipeline' {
+        #built
+        description '4 stages: parse_changelogs → link_commits → analyze_impact → generate_skeleton (gh CLI / curated DB / local clone)'
+        link ../scripts/mining/pipeline.py 'pipeline.py'
+        link ../scripts/mining/mine_breaking_changes.py 'mine_breaking_changes.py'
+      }
+      crnt = component 'CRNT validator' {
+        #built
+        description 'Cross-Repo Necessity Test — proves a multi-repo task genuinely requires every repo (rejects fake cross-repo tasks)'
+        link ../scripts/validation/crnt_validator.py 'crnt_validator.py'
+      }
+      mixGate = component 'task-mix + diversity gates' {
+        #built
+        description 'Validates the corpus against PRD stratum targets and ecosystem-cap diversity'
+        link ../scripts/validation/task_mix_validator.py 'task_mix_validator.py'
+        link ../scripts/validation/ecosystem_cap_gate.py 'ecosystem_cap_gate.py'
+      }
+    }
+
+    // ── Sandbox: generate + build multi-repo Docker images ──────────────────
+    sandbox = container 'Sandbox builder' {
+      #built
+      description 'scripts/sandbox/ — turns a task.toml into a multi-repo Docker image (1-5 repos under /workspace/), per tool-access mode'
+      technology 'Python + Bash + Docker'
+      link ../scripts/sandbox 'scripts/sandbox/'
+
+      dockerGen = component 'dockerfile generator' {
+        #built
+        description 'Emits a Dockerfile from task repos + pinned revs; mode-suffixed image tags (eb-task-mcp_only) avoid build collisions'
+        link ../scripts/sandbox/dockerfile_generator.py 'dockerfile_generator.py'
+        link ../scripts/sandbox/templates 'templates/ (go/java/python multi-repo)'
+      }
+      builder = component 'sandbox builder + measure' {
+        #built
+        description 'Builds the image, optionally runs it, reports disk/time (2-repo 11-33MB, images <1GB)'
+        link ../scripts/sandbox/sandbox_builder.py 'sandbox_builder.py'
+        link ../scripts/sandbox/build_all.sh 'build_all.sh'
+      }
+      health = component 'health + test runner' {
+        #built
+        description 'Pre-flight: all repos present, no clone failures; unified cross-repo test.sh runner'
+        link ../scripts/sandbox/health_check.sh 'health_check.sh'
+        link ../scripts/sandbox/test_runner.sh 'test_runner.sh'
+      }
+    }
+
+    // ── MCP integration: Sourcegraph mirrors + preamble ─────────────────────
+    mcp = container 'MCP integration' {
+      #built
+      description 'agents/ + scripts/infra/ — Sourcegraph MCP preamble, sg-evals mirror creation, indexing verification'
+      technology 'Python'
+      link ../agents/harnesses/claude/mcp 'agents/.../mcp/'
+
+      preamble = component 'MCP preamble builder' {
+        #built
+        description 'Builds the Sourcegraph system prompt (search/nav/deepsearch tools, efficiency + if-stuck recovery rules) for mcp_only / hybrid'
+        link ../agents/harnesses/claude/mcp/sourcegraph.py 'sourcegraph.py'
+        link ../agents/harnesses/claude/mcp/preamble_variants.py 'preamble_variants.py'
+      }
+      mirrors = component 'sg mirror creation + indexing' {
+        #built
+        description 'Creates per-task sg-evals mirrors and verifies Sourcegraph indexing before a run'
+        link ../scripts/infra/create_sg_mirrors.py 'create_sg_mirrors.py'
+        link ../scripts/infra/verify_sg_indexing.py 'verify_sg_indexing.py'
+      }
+      staleness = component 'repo staleness check' {
+        #built
+        description 'Detects drift between pinned SHAs and upstream; regenerates the version manifest'
+        link ../scripts/infra/check_repo_staleness.py 'check_repo_staleness.py'
+        link ../scripts/infra/generate_repo_versions.py 'generate_repo_versions.py'
+      }
+    }
+
+    // ── Orchestration: dispatch tasks by session type, run agent, score ─────
+    orchestration = container 'Orchestration' {
+      #built
+      description 'scripts/orchestration/ + run_benchmark.py — routes each task to its session-type runner, runs the agent in-sandbox, then scores'
+      technology 'Python'
+      link ../scripts/orchestration 'scripts/orchestration/'
+
+      dispatcher = component 'run_benchmark dispatcher' {
+        #built
+        description 'Unified CLI: filters tasks, routes by session_type, parallelizes across accounts 1-5 (callers must fan out — no PairScheduler yet)'
+        link ../scripts/run_benchmark.py 'run_benchmark.py'
+      }
+      sweep = component 'three-mode sweep runner' {
+        #built
+        description 'Runs every task in baseline / mcp_only / hybrid, skips already-scored combos, emits a sweep manifest'
+        link ../scripts/run_sweep.py 'run_sweep.py'
+      }
+      runTask = component 'single-session runner' {
+        #built
+        description 'Builds the sandbox, injects MCP preamble per mode, runs the agent, then invokes eb_verify'
+        link ../scripts/orchestration/run_task.py 'run_task.py'
+      }
+      chain = component 'session-chain runner' {
+        #built
+        description 'N sequential sessions with git-branch handoff + milestone verification between sessions'
+        link ../scripts/orchestration/chain_runner.py 'chain_runner.py'
+        link ../scripts/orchestration/branch_manager.py 'branch_manager.py'
+      }
+      eventReplay = component 'event-replay runner' {
+        #built
+        description 'File-based: writes events.jsonl, agent emits actions.jsonl; 4-dimension action scorer (correctness/completeness/timeliness/ordering)'
+        link ../scripts/orchestration/event_replay.py 'event_replay.py'
+        link ../scripts/orchestration/action_scorer.py 'action_scorer.py'
+      }
+      promotion = component 'run-promotion orchestrator' {
+        #built
+        description 'Promotes raw runs to official_runs/ under gates; supports resume session type'
+        link ../scripts/orchestration/run_promotion_orchestrator.py 'run_promotion_orchestrator.py'
+      }
+    }
+
+    // ── Verification: the centralized eb_verify checkpoint scorer ───────────
+    verify = container 'eb_verify checkpoint scorer' {
+      #built
+      description 'lib/eb_verify/ — single verification library installed in every sandbox; parses task.toml, runs checkpoints in order, scores. No per-task verifier copies, ever'
+      technology 'Python'
+      link ../lib/eb_verify 'lib/eb_verify/'
+
+      runner = component 'checkpoint runner' {
+        #built
+        description 'Parses task.toml, executes verifiers in order, collects per-checkpoint score; when grep + judge both active, final = min(grep, judge)'
+        link ../lib/eb_verify/runner.py 'runner.py'
+        link ../lib/eb_verify/task_parser.py 'task_parser.py'
+      }
+      validators = component 'plugins/ — 9 artifact validators' {
+        #built
+        description 'answer, code_patch, config_validator, incident_report, runbook, security_assessment, reproduction_script, topological_order, call_graph + file_extraction'
+        link ../lib/eb_verify/plugins 'plugins/'
+      }
+      parsers = component 'deterministic parsers' {
+        #built
+        description 'AST + dependency-manifest parsers (go_ast, python_ast, manifests) — Tier-1 structural ground truth, no LLM'
+        link ../lib/eb_verify/parsers 'parsers/'
+      }
+      judge = component 'LLM judge' {
+        #built
+        description 'Per-checkpoint semantic judge vs curated expected_solution; uses a different model family / Haiku to avoid self-eval bias'
+        link ../lib/eb_verify/judge/engine.py 'judge/engine.py'
+        link ../lib/eb_verify/judge/backends.py 'judge/backends.py'
+      }
+      scoring = component 'scoring + reward' {
+        #built
+        description 'Checkpoint-weighted partial credit; clamps + writes reward.txt / score_result.json (path-traversal & symlink hardened)'
+        link ../lib/eb_verify/scoring.py 'scoring.py'
+      }
+      cli = component 'eb_verify CLI' {
+        #built
+        description 'eb-verify entrypoint installed in the sandbox; schema validation + checkpoint scoring'
+        link ../lib/eb_verify/cli.py 'cli.py'
+        link ../lib/eb_verify/schema_validator.py 'schema_validator.py'
+      }
+    }
+
+    // ── QA: gates that keep the corpus + verifiers honest ───────────────────
+    qa = container 'QA & soundness gates' {
+      #built
+      description 'scripts/validation/ + solve_verify.py — mutation-tests verifiers, scans for contamination, solve-verifies ground truth'
+      technology 'Python'
+      link ../scripts/validation 'scripts/validation/'
+
+      mutation = component 'verifier mutation test' {
+        #built
+        description 'FP/FN sweep: empty / garbage / gold submissions through every checkpoint verifier (make verify-verifiers)'
+        link ../scripts/validation/verifier_mutation_test.py 'verifier_mutation_test.py'
+      }
+      contamination = component 'contamination scan' {
+        #built
+        #risk
+        description 'Scans multi-repo verifiers for cross-task copy-paste / foreign-path blocks. RISK: the active fix class — recent commits repaired contaminated multi-repo verifiers + GT'
+        link ../scripts/validation/verifier_contamination_scan.py 'verifier_contamination_scan.py'
+      }
+      solveVerify = component 'solve-verification' {
+        #built
+        description 'Tier-3 GT check: deterministic parsers vs bash verifier scores; classifies tasks by parser applicability'
+        link ../scripts/solve_verify.py 'solve_verify.py'
+        link ../scripts/validation/validate_expected_solutions.py 'validate_expected_solutions.py'
+      }
+      curator = component 'LLM curator enable + consensus' {
+        #evolving
+        description 'Tier-2 GT: enables llm_curator mode, emits oracle consensus across backends (>80% F1 = high confidence)'
+        link ../scripts/validation/enable_llm_curator.py 'enable_llm_curator.py'
+        link ../scripts/validation/emit_oracle_consensus.py 'emit_oracle_consensus.py'
+      }
+    }
+
+    // ── Analysis: turn raw runs into the headline figures ───────────────────
+    analysis = container 'Analysis & reporting' {
+      #evolving
+      description 'scripts/ + scripts/analysis/ — aggregates raw runs into score distributions, the MCP-benefit delta, calibration-bias check, charts, and paper figures'
+      technology 'Python'
+      link ../scripts/analysis 'scripts/analysis/'
+
+      scoreEngine = component 'score analysis engine' {
+        #built
+        description 'Loads all results across modes; score distributions, MCP-benefit delta, calibration bias, statistical tests'
+        link ../scripts/analyze_scores.py 'analyze_scores.py'
+      }
+      triage = component 'triage + aggregate' {
+        #built
+        description 'Aggregates per-run results, fingerprints status, triages failures'
+        link ../scripts/triage/triage_run.py 'triage_run.py'
+        link ../scripts/triage/aggregate_results.py 'aggregate_results.py'
+      }
+      modeGate = component 'mode-discrimination + power' {
+        #evolving
+        #risk
+        description 'Mode-discrimination gate + statistical power analysis. RISK: small N per stratum (e.g. security_operations = 2 tasks) limits the power of mode-delta claims'
+        link ../scripts/analysis/mode_discrimination_gate.py 'mode_discrimination_gate.py'
+        link ../scripts/analysis/power_analysis.py 'power_analysis.py'
+      }
+      ablationJudge = component 'ablation + rescore-with-judge' {
+        #evolving
+        description 'LLM-judge rescoring + ablation aggregation + masked re-verification — the judge-based headline is still being pinned'
+        link ../scripts/analysis/aggregate_ablation_judge.py 'aggregate_ablation_judge.py'
+        link ../scripts/analysis/rescore_with_judge.py 'rescore_with_judge.py'
+      }
+      cost = component 'cost + reproducibility' {
+        #built
+        description 'Per-run token/$ tracking and reproducibility re-run check'
+        link ../scripts/cost_tracker.py 'cost_tracker.py'
+        link ../scripts/reproducibility_check.py 'reproducibility_check.py'
+      }
+      report = component 'charts + report + paper figures' {
+        #evolving
+        description 'Renders PNG charts + markdown report; make paper-figures regenerates every figure in paper/paper.md'
+        link ../scripts/generate_charts.py 'generate_charts.py'
+        link ../scripts/generate_report.py 'generate_report.py'
+      }
+      qualityMetrics = component 'eb_metrics quality adapter' {
+        #evolving
+        description 'Projects each EB run record into the shared quality_metrics schema (codeprobe TraceQualityReporter)'
+        link ../lib/eb_metrics/aggregate_quality.py 'eb_metrics/aggregate_quality.py'
+      }
+    }
+
+    // ── Generated artifacts ─────────────────────────────────────────────────
+    results = datastore 'results/ — raw + scored runs' {
+      #built
+      description 'Per-run dirs (results/runs, mcp_batch_*, official_runs) with reward.txt / score_result.json; analysis re-scans them'
+      link ../results 'results/'
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Relationships.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Mining → corpus
+  eb.mining.pipeline -> oss 'mines breaking-change history (gh CLI / clones)'
+  eb.mining.pipeline -> eb.corpus.tasks 'emits draft task.toml skeletons'
+  eb.mining.crnt -> eb.corpus.tasks 'cross-repo necessity gate'
+  eb.mining.mixGate -> eb.corpus.tasks 'mix + diversity gate'
+
+  // Sandbox build (from corpus, via Docker)
+  eb.sandbox.dockerGen -> eb.corpus.tasks 'reads repos + pinned revs'
+  eb.sandbox.dockerGen -> eb.corpus.pins 'resolves pinned SHAs'
+  eb.sandbox.builder -> eb.sandbox.dockerGen 'generates Dockerfile'
+  eb.sandbox.builder -> docker 'builds + runs sandbox image'
+  eb.sandbox.builder -> oss 'clones repos into /workspace/'
+
+  // MCP integration
+  eb.mcp.mirrors -> sourcegraph.sgMirrors 'creates per-task mirrors'
+  eb.mcp.mirrors -> sourcegraph 'creates + indexes mirrors'
+  eb.mcp.staleness -> eb.corpus.pins 'detects + regenerates pinned revs'
+
+  // Orchestration core
+  eb.orchestration.dispatcher -> eb.corpus.tasks 'filter + route by session_type'
+  eb.orchestration.dispatcher -> eb.orchestration.runTask 'single session'
+  eb.orchestration.dispatcher -> eb.orchestration.chain 'chain session'
+  eb.orchestration.dispatcher -> eb.orchestration.eventReplay 'event_replay session'
+  eb.orchestration.sweep -> eb.orchestration.runTask 'baseline / mcp_only / hybrid'
+  eb.orchestration.runTask -> eb.sandbox.builder 'build sandbox for this task+mode'
+  eb.orchestration.runTask -> eb.mcp.preamble 'inject MCP system prompt (mcp_only / hybrid)'
+  eb.orchestration.runTask -> agent 'run agent in sandbox'
+  eb.orchestration.runTask -> eb.verify.cli 'score the completed task'
+  eb.orchestration.chain -> eb.verify.cli 'milestone + end checkpoints'
+  eb.orchestration.eventReplay -> eb.verify.cli 'action scoring'
+  eb.orchestration.promotion -> eb.results 'promote runs → official_runs/'
+
+  // Agent behavior in-sandbox
+  agent -> sourcegraph.sgMcp 'search / nav (mcp_only / hybrid)'
+  agent -> eb.results 'writes answer.json / artifacts'
+
+  // Verification
+  eb.verify.cli -> eb.verify.runner 'parse task + run checkpoints'
+  eb.verify.runner -> eb.verify.validators 'per-artifact validation'
+  eb.verify.runner -> eb.verify.judge 'semantic checkpoint judging'
+  eb.verify.validators -> eb.verify.parsers 'AST / manifest structural match'
+  eb.verify.validators -> eb.corpus.groundTruth 'match against expected_solution'
+  eb.verify.judge -> models 'LLM-judge rubric (different family)'
+  eb.verify.runner -> eb.verify.scoring 'weighted checkpoint score'
+  eb.verify.scoring -> eb.results 'reward.txt / score_result.json'
+
+  // QA gates
+  eb.qa.mutation -> eb.corpus.tasks 'FP/FN sweep over checkpoint verifiers'
+  eb.qa.contamination -> eb.corpus.tasks 'foreign-path / copy-paste scan'
+  eb.qa.solveVerify -> eb.corpus.groundTruth 'deterministic vs scored comparison'
+  eb.qa.curator -> eb.corpus.groundTruth 'curator + consensus annotations'
+  eb.qa.curator -> models 'tool-independent curator'
+
+  // Analysis
+  eb.analysis.scoreEngine -> eb.results 're-scan all runs'
+  eb.analysis.triage -> eb.results 'aggregate + fingerprint'
+  eb.analysis.modeGate -> eb.analysis.scoreEngine 'mode-delta + power'
+  eb.analysis.ablationJudge -> eb.results 'judge rescore + masked reverify'
+  eb.analysis.ablationJudge -> models 'LLM-judge rescore'
+  eb.analysis.cost -> eb.results 'token / $ + repro check'
+  eb.analysis.report -> eb.analysis.scoreEngine 'charts + report from analysis JSON'
+  eb.analysis.qualityMetrics -> eb.results 'project to quality_metrics schema'
+}

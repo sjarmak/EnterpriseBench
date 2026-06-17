@@ -1,0 +1,80 @@
+// Deployment model — where each piece runs at review time.
+//
+// EnterpriseBench is a local toolchain: the orchestration + verification +
+// analysis layers are ordinary Python/shell processes on a developer/CI host.
+// Each task run spins up an isolated Docker sandbox (repos cloned into
+// /workspace/) where the agent under test executes and eb_verify scores. Code
+// search (Sourcegraph MCP) and the curator/judge models run on separate
+// substrates. This is the "what runs where / process & data boundary" view.
+
+deployment {
+
+  devHost = host 'Developer / CI host' {
+    description 'Local toolchain — mines tasks, builds sandboxes, drives runs, scores, and analyzes'
+
+    orchestratorProc = proc 'Python — orchestration (run_benchmark / sweep / runners)' {
+      instanceOf eb.orchestration
+    }
+    miningProc = proc 'Python — task mining + QA gates' {
+      instanceOf eb.mining
+    }
+    analysisProc = proc 'Python — analysis & reporting' {
+      instanceOf eb.analysis
+    }
+    corpusVol = proc 'benchmarks/ + configs/ — task corpus (git)' {
+      instanceOf eb.corpus
+    }
+    resultsVol = proc 'results/ — raw + scored runs (gitignored)' {
+      instanceOf eb.results
+    }
+  }
+
+  dockerHost = host 'Docker engine' {
+    description 'Builds per-task images and runs each sandbox in isolation'
+    instanceOf docker
+
+    sandboxImg = proc 'Sandbox image build (per task + mode)' {
+      instanceOf eb.sandbox
+    }
+    sandboxContainer = proc 'Sandbox container — /workspace/{repo}/ + eb_verify' {
+      description 'Agent under test runs here; eb_verify is installed in-container and scores at the end'
+      instanceOf agent
+      instanceOf eb.verify
+    }
+  }
+
+  sgHost = host 'Sourcegraph instance' {
+    description 'Code-search service + MCP endpoint; holds per-task sg-evals mirrors'
+    instanceOf sourcegraph
+  }
+
+  ossHost = host 'GitHub / OSS hosting' {
+    description 'Source of task history and the cloned repo substrate — read-only to EB'
+    instanceOf oss
+  }
+
+  inferenceHost = host 'Inference host' {
+    description 'LLM-curator / LLM-judge / solve-verifier models (different family than the agent)'
+    instanceOf models
+  }
+
+  // Runtime data & control flow between processes/hosts.
+  miningProc -> ossHost 'mines breaking-change history'
+  miningProc -> corpusVol 'writes draft + validated task.toml'
+  orchestratorProc -> corpusVol 'reads tasks + pins'
+  orchestratorProc -> dockerHost 'builds + runs sandbox per task+mode'
+  sandboxImg -> ossHost 'clones repos into /workspace/'
+  sandboxContainer -> sgHost 'agent: search / nav (mcp_only / hybrid)'
+  sandboxContainer -> inferenceHost 'eb_verify LLM-judge'
+  sandboxContainer -> resultsVol 'reward.txt / score_result.json + artifacts'
+  analysisProc -> resultsVol 'reads runs → charts + paper figures'
+  analysisProc -> inferenceHost 'judge rescore'
+}
+
+views {
+
+  deployment view deployment {
+    title 'Deployment — where each piece runs'
+    include *
+  }
+}
