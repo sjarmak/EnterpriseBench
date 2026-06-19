@@ -1,0 +1,103 @@
+# api_contract: Trace pydantic v2 BaseModel API rewrites breaking FastAPI mo
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "python-packaging-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "api-contract-dual-pydantic-fastapi-001"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace pydantic v2 BaseModel API rewrites breaking FastAPI model handling"
+prompt = """
+Pydantic v2 rewrote BaseModel internals: `.dict()` → `.model_dump()`,
+`.json()` → `.model_dump_json()`, `__fields__` → `model_fields`,
+`@validator` → `@field_validator`. FastAPI depends on pydantic for
+request/response model handling.
+
+Your task:
+1. Find where pydantic v2 defines the new BaseModel API
+2. Find where FastAPI uses pydantic BaseModel methods for serialization
+3. Identify all pydantic v1 API calls in FastAPI that break with v2
+4. Document the migration path for each affected FastAPI module
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/pydantic/pydantic"
+rev = "v2.0"
+path = "pydantic"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/tiangolo/fastapi"
+rev = "0.99.1"
+path = "fastapi"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+total_loc = 200_000
+dependency_depth = 2
+frameworks = ["pydantic", "fastapi"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "pydantic_v2_api"
+weight = 0.30
+verifier = "checks/check_pydantic_v2_api.sh"
+description = "Agent identifies pydantic v2 API changes"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "fastapi_usage"
+weight = 0.40
+verifier = "checks/check_fastapi_usage.sh"
+description = "Agent finds FastAPI's pydantic v1 API usage"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "migration_plan"
+weight = 0.30
+verifier = "checks/check_migration_plan.sh"
+description = "Agent documents migration path"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Cross-repo search helps find all pydantic v1 API calls in FastAPI"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pydantic/pydantic/main.py"
+repo = "pydantic"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "fastapi/fastapi/encoders.py"
+repo = "fastapi"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "fastapi/fastapi/routing.py"
+repo = "fastapi"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "pydantic/pydantic/fields.py"
+repo = "pydantic"
+confidence = 0.8

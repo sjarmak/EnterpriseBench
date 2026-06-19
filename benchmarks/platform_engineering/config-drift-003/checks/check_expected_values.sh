@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Checkpoint 2: Verify agent correctly identified root cause as Helm include re-evaluation
+# Reimplemented in bash+jq+grep (no python3 in container); keyword membership and
+# scoring (FOUND/TOTAL, awk %.2f, pass at FOUND>=1) identical to the previous
+# python implementation.
 set -euo pipefail
 
 export REPORT="${WORKSPACE:-/workspace}/charts/DRIFT_REPORT.json"
@@ -11,29 +14,20 @@ fi
 export FOUND=0
 export TOTAL=2
 
-# Check 1: Agent identified Helm include re-evaluation as root cause
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-root_cause = report.get('root_cause', '')
-text = (root_cause + json.dumps(report.get('drift_points', []))).lower()
-# Must mention that include/template re-evaluates or generates new values each time
-if ('re-evaluat' in text or 'regenerat' in text or 're-run' in text or 'each time' in text or 'every call' in text or 'each call' in text or 'non-idempotent' in text or 'not idempotent' in text):
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+# Check 1 text: root_cause (string) concatenated with compact dump of drift_points.
+text1=$( { jq -r '.root_cause // ""' "$REPORT"; jq -c '.drift_points // []' "$REPORT"; } | tr -d '\n' | tr '[:upper:]' '[:lower:]')
+# Check 2 text: compact dump of the whole report.
+text2=$(jq -c '.' "$REPORT" | tr '[:upper:]' '[:lower:]')
+h1() { printf '%s' "$text1" | grep -qF -- "$1"; }
+h2() { printf '%s' "$text2" | grep -qF -- "$1"; }
+
+# Check 1: include/template re-evaluation language
+if h1 re-evaluat || h1 regenerat || h1 re-run || h1 "each time" || h1 "every call" || h1 "each call" || h1 non-idempotent || h1 "not idempotent"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Check 2: Agent identified that password should be consistent/stored/reused
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-text = json.dumps(report).lower()
-if ('consistent' in text or 'store' in text or 'reuse' in text or 'single' in text or 'same password' in text or 'once' in text):
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+# Check 2: password should be consistent/stored/reused
+if h2 consistent || h2 store || h2 reuse || h2 single || h2 "same password" || h2 once; then
   FOUND=$((FOUND + 1))
 fi
 

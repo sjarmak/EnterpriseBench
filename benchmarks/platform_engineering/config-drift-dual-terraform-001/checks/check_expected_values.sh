@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # check_expected_values.sh — verify agent documents correct root cause for phantom diffs
+# Reimplemented in bash+jq+grep (no python3 in container). Weighted scoring
+# (files 0.7 + impact 0.3, round to 2dp) and pass logic identical to the previous
+# python implementation; detail uses python bool repr (True/False). 'impact'
+# length uses python str() length for strings (the realistic case); non-string
+# impact values would follow python str() repr length (an unreproduced corner).
 set -euo pipefail
 
 export REPORT="${WORKSPACE:-/workspace}/DRIFT_REPORT.json"
@@ -9,21 +14,28 @@ if [[ ! -f "$REPORT" ]]; then
   exit 0
 fi
 
-python3 -c "
-import json, os
+# python truthiness: present key with a value that is not null/false/0/""/[]/{}.
+truthy='(. != null and . != false and . != 0 and . != "" and . != [] and . != {})'
 
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
+has_core_file=$(jq "any(.drift_points // [] | .[]; has(\"terraform_core_file\") and (.terraform_core_file | $truthy))" "$REPORT")
+has_provider_file=$(jq "any(.drift_points // [] | .[]; has(\"provider_file\") and (.provider_file | $truthy))" "$REPORT")
+# len(str(impact)) > 10, computed for string impacts (realistic); coded via utf-8 length.
+has_impact=$(jq "any(.drift_points // [] | .[]; has(\"impact\") and ((.impact | tostring | length) > 10))" "$REPORT")
 
-# Check that agent provides file paths from both repos
-has_core_file = any('terraform_core_file' in p and p['terraform_core_file'] for p in points)
-has_provider_file = any('provider_file' in p and p['provider_file'] for p in points)
-has_impact = any('impact' in p and len(str(p['impact'])) > 10 for p in points)
+# Python bool repr for detail.
+[[ "$has_core_file" == true ]] && cf=True || cf=False
+[[ "$has_provider_file" == true ]] && pf=True || pf=False
+[[ "$has_impact" == true ]] && im=True || im=False
 
-file_score = (1.0 if has_core_file else 0.0) * 0.5 + (1.0 if has_provider_file else 0.0) * 0.5
-score = round(file_score * 0.7 + (0.3 if has_impact else 0.0), 2)
-passed = has_core_file and has_provider_file and has_impact
+[[ "$has_core_file" == true ]] && core_v=1.0 || core_v=0.0
+[[ "$has_provider_file" == true ]] && prov_v=1.0 || prov_v=0.0
+[[ "$has_impact" == true ]] && imp_v=0.3 || imp_v=0.0
 
-detail = f'Core file: {has_core_file}, provider file: {has_provider_file}, impact: {has_impact}'
-print(json.dumps({'score': score, 'passed': passed, 'detail': detail}))
-"
+raw=$(awk "BEGIN {fs=$core_v*0.5+$prov_v*0.5; printf \"%.10f\", fs*0.7+$imp_v}")
+score=$(awk "BEGIN {printf \"%.2f\", $raw}")
+score=${score%0}; score=${score%.}; case "$score" in *.*) ;; *) score="$score.0";; esac
+
+if [[ "$has_core_file" == true && "$has_provider_file" == true && "$has_impact" == true ]]; then passed=true; else passed=false; fi
+
+printf '{"score": %s, "passed": %s, "detail": "Core file: %s, provider file: %s, impact: %s"}\n' \
+  "$score" "$passed" "$cf" "$pf" "$im"

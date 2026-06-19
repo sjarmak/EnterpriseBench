@@ -1,0 +1,39 @@
+{
+  "task_id": "incident-investigation-dual-prometheus-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify that a Prometheus recording rule drops the 'condition' label during aggregation, so the derived metric (e.g. node:ready:condition) always evaluates to 1. This causes a NodeNotReady alert to fire perpetually. Alertmanager's inhibition pipeline in inhibit/inhibit.go matches NodeNotReady as a source alert and silently suppresses other critical alerts (e.g. DiskUsageCritical) that share severity=critical, so they are never dispatched.",
+      "evaluation_criteria": [
+        "Names rules/manager.go (prometheus) as the rule evaluator producing the always-firing metric",
+        "Names inhibit/inhibit.go (alertmanager) as the suppressor of downstream alerts",
+        "Identifies the dropped 'condition' label in the recording rule aggregation as the structural bug",
+        "Connects the always-firing source alert to inhibition of other critical alerts"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Error chain: (1) The recording rule node:ready:condition aggregates kube_node_status_condition but drops the 'condition' label, so the result always equals 1. (2) Prometheus rules/manager.go evaluates the recording rule and produces the constant-true metric. (3) The NodeNotReady alert rule fires based on this incorrect value. (4) Prometheus sends NodeNotReady to Alertmanager. (5) Alertmanager's inhibit/inhibit.go matches NodeNotReady as the source of an inhibition rule. (6) The inhibition rule suppresses DiskUsageCritical because both have severity=critical. (7) DiskUsageCritical is never dispatched to notification receivers, so the on-call team never sees disk-pressure pages.",
+      "evaluation_criteria": [
+        "Begins with the recording rule dropping the 'condition' label",
+        "Traces through Prometheus rules/manager.go evaluation producing the always-true metric",
+        "Identifies Alertmanager inhibit/inhibit.go as the matcher applying the inhibition rule",
+        "Ends with critical alerts (e.g. DiskUsageCritical) being silently suppressed"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Affected components: Prometheus recording-rule evaluation (rules/manager.go); Alertmanager inhibition pipeline (inhibit/inhibit.go); all critical-severity alerts that share the inhibition rule's target matcher (e.g. DiskUsageCritical and any other severity=critical alert).",
+      "evaluation_criteria": [
+        "Names rules/manager.go (prometheus)",
+        "Names inhibit/inhibit.go (alertmanager)",
+        "Lists all critical-severity alerts sharing the target matcher as affected"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Fix the recording rule to preserve the 'condition' label during aggregation so the derived metric is no longer constant-true. Scope the inhibition rule more narrowly (additional matchers beyond severity=critical) so a single source alert cannot suppress unrelated targets. Add monitoring on inhibition match counts to detect over-broad suppression.",
+      "evaluation_criteria": [
+        "Proposes preserving the 'condition' label in the recording rule",
+        "Proposes narrowing the inhibition rule's matchers beyond severity",
+        "Mentions adding observability on inhibition match counts"
+      ]
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "task_id": "support-mapping-dual-httpx-httpcore-001",
+  "task_type": "support_code_mapping",
+  "repos": [
+    {
+      "url": "https://github.com/encode/httpx",
+      "rev": "0.27.0",
+      "path": "httpx"
+    },
+    {
+      "url": "https://github.com/encode/httpcore",
+      "rev": "1.0.5",
+      "path": "httpcore"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "httpx/httpx/_config.py",
+      "repo": "httpx",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "httpx/httpx/_transports/default.py",
+      "repo": "httpx",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "httpcore/httpcore/_async/connection_pool.py",
+      "repo": "httpcore",
+      "confidence": 0.90,
+      "source": "deterministic"
+    },
+    {
+      "path": "httpcore/httpcore/_async/http11.py",
+      "repo": "httpcore",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "httpx/httpx/_exceptions.py",
+      "repo": "httpx",
+      "confidence": 0.80
+    },
+    {
+      "path": "httpcore/httpcore/_exceptions.py",
+      "repo": "httpcore",
+      "confidence": 0.80
+    },
+    {
+      "path": "httpcore/httpcore/_async/connection.py",
+      "repo": "httpcore",
+      "confidence": 0.75
+    }
+  ],
+  "error_chain": [
+    "httpx.AsyncClient is constructed with a Timeout instance from httpx/_config.py whose connect, read, write, and pool dimensions can each be a number or None where None means disabled at the public API level",
+    "When no timeout argument is passed httpx falls back to DEFAULT_TIMEOUT_CONFIG which is Timeout(timeout=5.0) defined in httpx/_config.py and applied uniformly across all four timeout dimensions",
+    "httpx.AsyncClient.stream eventually dispatches the request through AsyncHTTPTransport.handle_async_request in httpx/_transports/default.py which constructs an httpcore.Request and passes the per-request timeout via the extensions dict not via the ConnectionPool constructor",
+    "httpcore.AsyncConnectionPool in httpcore/_async/connection_pool.py reads timeout values out of the request extensions and applies the pool dimension when calling wait_for_connection and the read or write dimension on the underlying AsyncHTTP11Connection in httpcore/_async/http11.py during _receive_response_headers and _receive_response_body",
+    "If httpcore enforces a read timeout it raises httpcore.ReadTimeout which is then re-raised as httpx.ReadTimeout by the map_httpcore_exceptions context manager in httpx/_transports/default.py using the HTTPCORE_EXC_MAP table"
+  ],
+  "trigger_conditions": [
+    "An explicit Timeout(timeout=None) at the httpx public API marshals as None per dimension into httpcore extensions and disables per-operation timeouts at the httpcore HTTP11 connection level",
+    "Omitting the timeout argument or passing a positional number falls through to DEFAULT_TIMEOUT_CONFIG = Timeout(timeout=5.0) in httpx/_config.py which produces a 5 second cap on every dimension including read",
+    "The exception surfaced to user code is always an httpx subclass because httpx/_transports/default.py wraps every call into httpcore inside map_httpcore_exceptions which uses HTTPCORE_EXC_MAP to translate httpcore.ReadTimeout into httpx.ReadTimeout"
+  ],
+  "expected_answer": {
+    "error_origin": "httpcore AsyncHTTP11Connection per-operation read enforcement in httpcore/_async/http11.py raising httpcore.ReadTimeout when the read dimension of the timeout extension is exceeded during response body iteration",
+    "bypass_reason": "Customer code most likely passes a single positional argument or omits timeout entirely so httpx falls back to DEFAULT_TIMEOUT_CONFIG = Timeout(timeout=5.0) defined in httpx/_config.py rather than the Timeout(timeout=None) they intend; the 5 second value is then forwarded into httpcore via the request extensions and enforced on read",
+    "correct_config": "Construct timeout explicitly as httpx.Timeout(connect=None, read=None, write=None, pool=None) or pass timeout=None to AsyncClient; verify by checking that AsyncHTTPTransport.handle_async_request in httpx/_transports/default.py forwards None values through the httpcore.Request extensions dict and that httpcore stops enforcing per-op read timeouts in httpcore/_async/http11.py"
+  }
+}

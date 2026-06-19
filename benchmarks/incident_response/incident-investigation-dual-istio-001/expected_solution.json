@@ -1,0 +1,39 @@
+{
+  "task_id": "incident-investigation-dual-istio-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify that Istio 1.20 changed the default regex engine configuration in Pilot's route translation (pilot/pkg/networking/core/v1alpha3/route/route.go). VirtualServices with regex header matchers now produce Envoy route configs whose safe_regex engine settings are incompatible with Envoy v1.28's RouteMatch consumer in source/common/router/config_impl.cc, so regex header matches that previously worked silently fail and no upstream is selected.",
+      "evaluation_criteria": [
+        "Names pilot/pkg/networking/core/v1alpha3/route/route.go on the Istio side as the route translator",
+        "Names source/common/router/config_impl.cc on the Envoy side as the RouteMatch consumer",
+        "Explains that the Istio 1.20 default regex engine change is the root cause, not a user config error",
+        "Connects the regex engine mismatch to header-match failures and 503 responses"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Error chain: (1) A VirtualService with regex header matching is configured. (2) Istio Pilot translates the HTTPRoute to Envoy route config in pilot/pkg/networking/core/v1alpha3/route/route.go. (3) Pilot generates a safe_regex matcher with the Istio 1.20 default regex engine. (4) Envoy receives the route config and attempts header matching in source/common/router/config_impl.cc. (5) The regex match fails because the engine setting is incompatible with previously-authored patterns, so no upstream is selected. (6) Envoy returns 503 UC (Upstream Connection) to the client.",
+      "evaluation_criteria": [
+        "Mentions VirtualService regex header matching as the entry point",
+        "Traces through Istio Pilot route translation (route.go) generating the safe_regex matcher",
+        "Traces through Envoy RouteMatch / config_impl.cc rejecting or failing the match",
+        "Ends in a 503 (UC / no upstream) response"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Affected components: Istio Pilot route translation that converts VirtualService HTTPRoute to Envoy config (pilot/pkg/networking/core/v1alpha3/route/route.go); Envoy HTTP router filter chain that performs regex header matching (source/common/router/config_impl.cc, source/common/http/header_utility.cc); all VirtualServices using regex-based header matching after upgrading to Istio 1.20.",
+      "evaluation_criteria": [
+        "Names Istio Pilot route translation (route.go or pilot/pkg/networking/core/v1alpha3)",
+        "Names Envoy HTTP router / RouteMatch (source/common/router/config_impl.cc)",
+        "Lists VirtualServices using regex header matchers as the affected workloads"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Update VirtualService regex header matchers to syntax compatible with the Istio 1.20 default regex engine, or override Istio's mesh configuration to use the legacy regex engine setting until VirtualServices are migrated. Document the regex engine change in the upgrade notes and add validation that exercises representative regex header matchers post-upgrade.",
+      "evaluation_criteria": [
+        "Proposes either updating VirtualService regex syntax or overriding Istio's regex engine setting",
+        "Identifies that the fix lives at the Istio mesh-config layer (or VirtualService spec), not at Envoy",
+        "Acknowledges this as a 1.20 default change that affects all regex header users"
+      ]
+    }
+  }
+}

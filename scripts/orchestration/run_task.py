@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -98,6 +99,50 @@ class TaskRunConfig:
     min_disk_gb: float = 10.0
 
 
+# Run-validity classification (bead EnterpriseBench-s58f).
+# These distinguish a real, scoreable run from a container/setup no-op that
+# must never masquerade as a real 0.0 score.
+RUN_STATUS_VALID = "VALID"  # baseline run, or MCP run that made >=1 MCP call
+RUN_STATUS_FALLBACK = "FALLBACK"  # MCP run with real turns but 0 MCP calls (fs fallback)
+RUN_STATUS_INVALID = "INVALID"  # never started / EACCES / mcp_only never handshaked
+
+
+def classify_run_validity(
+    *,
+    mode: str,
+    num_turns: int,
+    mcp_calls: int,
+    mcp_handshake_ok: Optional[bool],
+    config_error: bool,
+) -> str:
+    """Classify a run's validity for the MCP-vs-baseline comparison.
+
+    INVALID  — the agent never produced a real, scoreable run:
+                 * an MCP-config parse / EACCES / unreadable-file error occurred, OR
+                 * the agent recorded zero turns (never started), OR
+                 * an mcp_only run whose MCP transport never handshaked and made
+                   no MCP calls.
+               INVALID runs must be recorded success=False so a fake 0.0 score
+               cannot masquerade as a real scored run.
+    FALLBACK — an MCP-mode run that DID execute real turns but made zero MCP
+               tool calls (e.g. a hybrid run that fell back to filesystem tools,
+               or an mcp_only run that connected but chose not to call a tool).
+               This is a real, scoreable run — preserved as distinct from INVALID.
+    VALID    — any other run (baseline, or an MCP run that made >=1 MCP call).
+    """
+    if config_error:
+        return RUN_STATUS_INVALID
+    if num_turns <= 0:
+        return RUN_STATUS_INVALID
+    if mode in ("mcp_only", "hybrid") and mcp_calls == 0:
+        # mcp_only with no working transport is an invalid measurement; hybrid
+        # (and a connected-but-unused mcp_only run) is a legitimate fs fallback.
+        if mode == "mcp_only" and not mcp_handshake_ok:
+            return RUN_STATUS_INVALID
+        return RUN_STATUS_FALLBACK
+    return RUN_STATUS_VALID
+
+
 @dataclass
 class TaskRunResult:
     """Result of running a single task."""
@@ -113,6 +158,8 @@ class TaskRunResult:
     output_dir: str = ""
     tool_usage: dict = field(default_factory=dict)
     failure_class: Optional[str] = None
+    status: str = RUN_STATUS_VALID
+    mcp_handshake_ok: Optional[bool] = None
 
 
 def _load_oauth_token(account: int) -> str:
@@ -384,6 +431,79 @@ def _build_instruction_text(
     return instruction_text + output_appendix
 
 
+def _chown_to_agent(container_id: str, paths: list[str]) -> None:
+    """chown the given container paths to agent:agent (recursively), as root.
+
+    Only paths that exist are chowned (missing ones are skipped, not treated as
+    errors — some are created by later steps). A genuine chown failure is logged
+    loudly, never silently swallowed: a swallowed failure is what produced
+    unreadable instruction.md / .mcp.json files and fake-0 no-op runs
+    (bead EnterpriseBench-s58f).
+    """
+    quoted = " ".join(shlex.quote(p) for p in paths)
+    script = (
+        f"rc=0; for f in {quoted}; do "
+        'if [ -e "$f" ]; then chown -R agent:agent "$f" || rc=1; fi; '
+        "done; exit $rc"
+    )
+    result = subprocess.run(
+        ["docker", "exec", "-u", "root", container_id, "bash", "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        logger.error(
+            "chown to agent FAILED for one or more of %s: %s",
+            paths,
+            result.stderr.strip(),
+        )
+
+
+def _assert_agent_readable(
+    container_id: str, paths: list[str]
+) -> tuple[bool, str]:
+    """Verify the AGENT user can read each path inside the container.
+
+    Returns (ok, error_message). This is the pre-agent gate that converts a
+    silent container EACCES into a loud, recorded failure instead of letting the
+    agent fail to start and the run record a fake 0.0 score
+    (bead EnterpriseBench-s58f).
+    """
+    for path in paths:
+        check = subprocess.run(
+            ["docker", "exec", "-u", "agent", container_id, "test", "-r", path],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if check.returncode != 0:
+            return (
+                False,
+                f"agent user cannot read {path} "
+                f"(EACCES or missing) — run is INVALID, not a real 0.0 score",
+            )
+    return True, ""
+
+
+# Stderr signatures of a container EACCES / MCP-config parse failure. These are
+# the audited no-op markers (validity audit uu8z): the agent could not load its
+# instruction file or MCP config, so the run is INVALID, not a real 0.0 score.
+def _scan_mcp_config_error(output_dir: Path) -> bool:
+    """Scan the agent stderr log for an MCP-config parse / EACCES / perms error."""
+    stderr_log = output_dir / "agent_stderr.log"
+    if not stderr_log.exists():
+        return False
+    content = stderr_log.read_text(errors="replace")
+    if "Invalid MCP configuration" in content:
+        return True
+    if "instruction.md: Permission denied" in content:
+        return True
+    if "EACCES" in content and ".mcp.json" in content:
+        return True
+    return False
+
+
 def _setup_container(
     container_id: str,
     task_dir: Path,
@@ -460,29 +580,20 @@ def _setup_container(
     # Fix ownership of copied files only — docker cp preserves host UID which
     # may not match the agent user inside the container.
     # Never chown -R /workspace (too slow for large repos like K8s, Terraform).
-    # Must run as root since the container default user may be non-root.
-    subprocess.run(
+    # A silent chown failure here is exactly what produced unreadable
+    # instruction.md and fake-0 no-op runs (bead EnterpriseBench-s58f), so this
+    # is fail-loud — errors are logged, not swallowed. The agent .mcp.json files
+    # are written and chowned later by _configure_mcp; agent_output is created by
+    # the agent step — both are intentionally omitted here.
+    _chown_to_agent(
+        container_id,
         [
-            "docker",
-            "exec",
-            "-u",
-            "root",
-            container_id,
-            "bash",
-            "-c",
-            "chown -R agent:agent "
-            "/workspace/instruction.md "
-            "/workspace/.verifiers "
-            "/workspace/.task "
-            "/workspace/.eb_verify "
-            "/workspace/test.sh "
-            "/workspace/agent_output "
-            "/workspace/.mcp.json "
-            "2>/dev/null; true",
+            "/workspace/instruction.md",
+            "/workspace/.verifiers",
+            "/workspace/.task",
+            "/workspace/.eb_verify",
+            "/workspace/test.sh",
         ],
-        capture_output=True,
-        text=True,
-        timeout=60,
     )
 
 
@@ -838,9 +949,16 @@ def _save_results(
     payload = {
         "task_id": result.task_id,
         "success": result.success,
+        # Run-validity status (bead EnterpriseBench-s58f): VALID / FALLBACK /
+        # INVALID. INVALID runs carry success=False so a no-op cannot masquerade
+        # as a real 0.0 score.
+        "status": result.status,
         "phase": result.phase,
         "error": result.error,
         "failure_class": result.failure_class,
+        # Attribution + self-classification fields.
+        "account": config.account,
+        "mcp_handshake_ok": result.mcp_handshake_ok,
         "image_tag": result.image_tag,
         "scores": result.scores,
         "timing": result.timing,
@@ -880,9 +998,12 @@ def _save_results(
     metrics_payload = {
         "task_id": result.task_id,
         "success": result.success,
+        "status": result.status,
         "phase": result.phase,
         "error": result.error,
         "failure_class": result.failure_class,
+        "account": config.account,
+        "mcp_handshake_ok": result.mcp_handshake_ok,
         "timing": result.timing,
         "tool_usage": result.tool_usage,
     }
@@ -989,7 +1110,7 @@ def _verify_mcp_endpoint(container_id: str, sg_token: str) -> bool:
     return False
 
 
-def _configure_mcp(container_id: str, mode: str) -> None:
+def _configure_mcp(container_id: str, mode: str) -> Optional[bool]:
     """Configure Sourcegraph MCP endpoint with pre-flight verification.
 
     Strategy for 100% reliability:
@@ -1001,9 +1122,13 @@ def _configure_mcp(container_id: str, mode: str) -> None:
     Uses ONLY config files (no `claude mcp add` which has race conditions).
     Both project-level and user-level configs are written so Claude Code finds
     auth headers regardless of which config path it resolves first.
+
+    Returns the MCP handshake result so the run can self-classify
+    (bead EnterpriseBench-s58f): True if the sourcegraph server reported
+    Connected, False if pre-flight never succeeded, None for non-MCP modes.
     """
     if mode not in ("mcp_only", "hybrid"):
-        return
+        return None
 
     sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
     if not sg_token:
@@ -1081,6 +1206,7 @@ def _configure_mcp(container_id: str, mode: str) -> None:
         os.unlink(tmp_user)
 
     # Step 3: Verify Claude Code sees the MCP server with retries
+    handshake_ok = False
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         check = _mcp_exec(container_id, ["claude", "mcp", "list"])
@@ -1091,6 +1217,7 @@ def _configure_mcp(container_id: str, mode: str) -> None:
                     "MCP pre-flight OK (attempt %d): sourcegraph connected",
                     attempt,
                 )
+                handshake_ok = True
                 break
             if "needs-auth" in stdout:
                 # Server is registered but auth failed — likely a timing issue
@@ -1126,6 +1253,7 @@ def _configure_mcp(container_id: str, mode: str) -> None:
         )
 
     logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
+    return handshake_ok
 
 
 def _sum_model_usage(model_usage: dict) -> tuple[int, int, float]:
@@ -1412,8 +1540,10 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             logger.warning("Health check reported issues (continuing anyway)")
 
         # --- Configure MCP if needed ---
+        mcp_handshake_ok: Optional[bool] = None
         if config.mode in ("mcp_only", "hybrid"):
-            _configure_mcp(container_id, config.mode)
+            mcp_handshake_ok = _configure_mcp(container_id, config.mode)
+            result.mcp_handshake_ok = mcp_handshake_ok
 
         # --- Dry run stops here ---
         if config.dry_run:
@@ -1477,6 +1607,33 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 return result
 
         if agent_command:
+            # --- Pre-agent readability gate (fail loud, never fake-0) ---
+            # Re-assert ownership then verify the AGENT user can actually read the
+            # files it needs. A silent EACCES here previously let the agent fail to
+            # start while the run still recorded success=True, num_turns=0,
+            # task_score=0.0 — a fake 0 that corrupted the MCP-vs-baseline
+            # comparison (bead EnterpriseBench-s58f).
+            readability_targets = ["/workspace/instruction.md"]
+            if config.mode in ("mcp_only", "hybrid"):
+                readability_targets += [
+                    "/workspace/.mcp.json",
+                    "/home/agent/.mcp.json",
+                ]
+            _chown_to_agent(container_id, readability_targets)
+            readable, read_err = _assert_agent_readable(
+                container_id, readability_targets
+            )
+            if not readable:
+                logger.error("Pre-agent readability gate FAILED: %s", read_err)
+                result.phase = "agent_preflight_failed"
+                result.status = RUN_STATUS_INVALID
+                result.success = False
+                result.failure_class = "infra_perms"
+                result.error = read_err
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
+
             t0 = time.monotonic()
             agent_exit, agent_duration = _run_agent(
                 container_id,
@@ -1502,19 +1659,40 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # Extract tool-usage metadata from agent output
             result.tool_usage = _extract_tool_usage(output_dir)
 
-            # Flag hybrid runs where MCP wasn't used — these don't count
-            # as valid MCP comparison data
+            # Classify run validity (bead EnterpriseBench-s58f): an agent that
+            # never started (num_turns==0) or hit an MCP-config / EACCES error is
+            # INVALID and must NOT be recorded as a real 0.0 score; an MCP-mode
+            # run with real turns but 0 MCP calls is a legitimate FALLBACK.
             mcp_calls = result.tool_usage.get("mcp_tool_calls", 0)
-            if config.mode in ("mcp_only", "hybrid") and mcp_calls == 0:
-                logger.warning(
-                    "MCP mode=%s but agent made 0 MCP tool calls — "
-                    "run is not a valid MCP comparison",
-                    config.mode,
+            num_turns = result.tool_usage.get("num_turns", 0)
+            config_error = _scan_mcp_config_error(output_dir)
+            result.status = classify_run_validity(
+                mode=config.mode,
+                num_turns=num_turns,
+                mcp_calls=mcp_calls,
+                mcp_handshake_ok=mcp_handshake_ok,
+                config_error=config_error,
+            )
+            if config.mode in ("mcp_only", "hybrid"):
+                result.tool_usage["mcp_used"] = mcp_calls > 0
+                if mcp_calls == 0:
+                    logger.warning(
+                        "MCP mode=%s but agent made 0 MCP tool calls "
+                        "(num_turns=%d, status=%s)",
+                        config.mode,
+                        num_turns,
+                        result.status,
+                    )
+                else:
+                    logger.info("Agent made %d MCP tool calls", mcp_calls)
+            if result.status == RUN_STATUS_INVALID:
+                logger.error(
+                    "Run classified INVALID (num_turns=%d, mcp_calls=%d, "
+                    "config_error=%s) — recording success=False, not a 0.0 score",
+                    num_turns,
+                    mcp_calls,
+                    config_error,
                 )
-                result.tool_usage["mcp_used"] = False
-            elif config.mode in ("mcp_only", "hybrid"):
-                result.tool_usage["mcp_used"] = True
-                logger.info("Agent made %d MCP tool calls", mcp_calls)
 
             # Copy full conversation trace from container
             _copy_agent_trace(container_id, output_dir)
@@ -1536,7 +1714,10 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         # --- Save ---
         if result.phase != "agent_infra_error":
             result.phase = "complete"
-            result.success = True
+            # An INVALID run (no-op / EACCES) must never be recorded as a real
+            # scored success (bead EnterpriseBench-s58f); FALLBACK and VALID are
+            # genuine scoreable runs.
+            result.success = result.status != RUN_STATUS_INVALID
         result.timing = timings
         _save_results(result, task_data, output_dir, config)
 

@@ -1,0 +1,35 @@
+{
+  "task_id": "support-mapping-dual-httpx-httpcore-001",
+  "checkpoints": {
+    "error_source": {
+      "expected_solution": "Primary timeout config in httpx: httpx/httpx/_config.py (class Timeout, DEFAULT_TIMEOUT_CONFIG = Timeout(timeout=5.0)). Cross-repo handoff in httpx: httpx/httpx/_transports/default.py (AsyncHTTPTransport.handle_async_request, map_httpcore_exceptions, HTTPCORE_EXC_MAP). Per-operation enforcement in httpcore: httpcore/httpcore/_async/connection_pool.py (AsyncConnectionPool, AsyncPoolRequest.wait_for_connection) and httpcore/httpcore/_async/http11.py (AsyncHTTP11Connection._receive_response_headers, _receive_response_body).",
+      "evaluation_criteria": [
+        "Must identify httpx/httpx/_config.py as the location of the Timeout class and DEFAULT_TIMEOUT_CONFIG",
+        "Must identify httpx/httpx/_transports/default.py as the cross-repo boundary that constructs httpcore.ConnectionPool and maps exceptions",
+        "Must identify httpcore/httpcore/_async/connection_pool.py as the connection pool that consumes timeout values from the request extensions",
+        "Must identify httpcore/httpcore/_async/http11.py as the per-operation enforcement point that raises ReadTimeout",
+        "Must reference a specific class or function (Timeout, DEFAULT_TIMEOUT_CONFIG, AsyncHTTPTransport, HTTPCORE_EXC_MAP, AsyncConnectionPool, AsyncHTTP11Connection) not just the file path"
+      ]
+    },
+    "error_chain": {
+      "expected_solution": "Timeout marshaling chain: (1) httpx.AsyncClient is constructed with a Timeout instance from httpx/_config.py whose four dimensions (connect, read, write, pool) accept a number or None -> (2) When no timeout is passed httpx falls back to DEFAULT_TIMEOUT_CONFIG = Timeout(timeout=5.0) -> (3) AsyncHTTPTransport.handle_async_request in httpx/_transports/default.py constructs an httpcore.Request and passes timeouts via the request extensions dict, NOT the ConnectionPool constructor -> (4) httpcore AsyncConnectionPool.handle_async_request reads timeout out of extensions, calls wait_for_connection(timeout=pool) and forwards read/write to AsyncHTTP11Connection -> (5) AsyncHTTP11Connection._receive_response_headers / _receive_response_body raises httpcore.ReadTimeout when the read dimension is exceeded -> (6) map_httpcore_exceptions in httpx/_transports/default.py uses HTTPCORE_EXC_MAP to re-raise as httpx.ReadTimeout.",
+      "evaluation_criteria": [
+        "Must describe the source step starting at the Timeout class in httpx/_config.py",
+        "Must describe the propagation step where timeouts are passed via request extensions, not ConnectionPool constructor",
+        "Must describe the enforcement step in httpcore _async/http11.py raising httpcore.ReadTimeout",
+        "Must describe the exception remap step via map_httpcore_exceptions and HTTPCORE_EXC_MAP",
+        "Must reference the chain in causal order from httpx public API down to httpcore enforcement and back up via the exception map",
+        "Must cite at least one file from each repo in the propagation path"
+      ]
+    },
+    "trigger_conditions": {
+      "expected_solution": "Trigger conditions: (1) An explicit Timeout(timeout=None) marshals as None for each of connect/read/write/pool and disables per-operation timeouts at the httpcore HTTP11 connection level; (2) Omitting timeout or passing a positional number falls through to DEFAULT_TIMEOUT_CONFIG = Timeout(timeout=5.0) which yields a 5 second read cap; (3) Every exception path returning to user code goes through map_httpcore_exceptions -> HTTPCORE_EXC_MAP, so even when the underlying error is httpcore.ReadTimeout the user sees httpx.ReadTimeout, which obscures the cross-repo origin.",
+      "evaluation_criteria": [
+        "Must identify the condition: explicit Timeout(None) disables per-op timeouts only when each dimension is None",
+        "Must identify the condition: DEFAULT_TIMEOUT_CONFIG = Timeout(timeout=5.0) is the silent default the customer is most likely hitting",
+        "Must identify the condition: HTTPCORE_EXC_MAP rewrites httpcore.ReadTimeout to httpx.ReadTimeout, hiding the cross-repo boundary in the traceback",
+        "Must explain the combined conditions necessary to reproduce the customer's reported behavior"
+      ]
+    }
+  }
+}

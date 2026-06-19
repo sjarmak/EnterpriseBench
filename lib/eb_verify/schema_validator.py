@@ -1,9 +1,13 @@
 """
 Schema and semantic validation for eb_verify task.toml files.
 
-Two-layer validation:
+Three-layer validation:
   Layer 1: JSON Schema validation against schemas/task.schema.json
   Layer 2: Semantic rules (weights, session-type consistency, repo refs, etc.)
+  Layer 3: benchmark_qa_core checks (oracle coherence, scoring honesty,
+           aux-file leakage). Layer 3 findings are emitted as warnings by
+           default; pass ``qa_strict=True`` to promote ``error``-severity
+           findings to schema errors that fail validation.
 """
 from __future__ import annotations
 
@@ -210,11 +214,81 @@ def _validate_semantic_layer(
     return errors, warnings
 
 
-def validate_task(path: str) -> ValidationResult:
+def _run_qa_layer(
+    task_path: Path,
+    *,
+    strict: bool,
+    workspace_root: Path | None,
+) -> tuple[list[ValidationError], list[ValidationError]]:
+    """Layer 3: run benchmark_qa_core checks via the EB adapter.
+
+    Returns ``(errors, warnings)``. In non-strict mode, all findings are
+    warnings regardless of underlying severity. In strict mode, ``error``-
+    severity findings become validation errors and ``warning``/``info``
+    findings stay as validation warnings.
+    """
+    try:
+        from eb_verify.qa_adapter import load_task_inputs, run_qa_checks
+    except Exception as exc:  # pragma: no cover — import-time failure
+        return (
+            [],
+            [
+                ValidationError(
+                    field="(qa)",
+                    message=f"Layer 3 QA skipped — adapter import failed: {exc}",
+                    severity="warning",
+                )
+            ],
+        )
+
+    try:
+        inputs = load_task_inputs(task_path, workspace_root=workspace_root)
+        report = run_qa_checks(inputs)
+    except Exception as exc:
+        return (
+            [],
+            [
+                ValidationError(
+                    field="(qa)",
+                    message=f"Layer 3 QA skipped — adapter raised: {exc}",
+                    severity="warning",
+                )
+            ],
+        )
+
+    errors: list[ValidationError] = []
+    warnings: list[ValidationError] = []
+    for f in report.findings:
+        target = errors if (strict and f.severity == "error") else warnings
+        target.append(
+            ValidationError(
+                field=f"qa.{f.code}{f' [' + f.location + ']' if f.location else ''}",
+                message=f.message,
+                severity="error" if (strict and f.severity == "error") else f.severity,
+            )
+        )
+    return errors, warnings
+
+
+def validate_task(
+    path: str,
+    *,
+    qa_strict: bool = False,
+    workspace_root: str | Path | None = None,
+) -> ValidationResult:
     """Validate a task.toml file against the JSON Schema and semantic rules.
 
     Args:
         path: Path to the task.toml file.
+        qa_strict: When ``True``, ``error``-severity findings from the
+            ``benchmark_qa_core`` Layer 3 checks become validation errors
+            and fail the result. When ``False`` (the default), all Layer 3
+            findings are emitted as warnings only.
+        workspace_root: Optional absolute path to the runtime workspace
+            (typically ``/workspace``). When supplied and the cloned repo
+            exists at ``workspace_root/<repo.path>``, oracle file/symbol
+            existence checks (A1/B1/B2) run against the live tree;
+            otherwise those checks are skipped with an info finding.
 
     Returns:
         ValidationResult with valid flag, errors, and warnings.
@@ -261,6 +335,18 @@ def validate_task(path: str) -> ValidationResult:
     sem_errors, sem_warnings = _validate_semantic_layer(data)
     all_errors.extend(sem_errors)
     all_warnings.extend(sem_warnings)
+
+    # Layer 3: benchmark_qa_core checks (warn-only by default)
+    workspace = (
+        Path(workspace_root) if isinstance(workspace_root, (str, Path)) else None
+    )
+    qa_errors, qa_warnings = _run_qa_layer(
+        task_path,
+        strict=qa_strict,
+        workspace_root=workspace,
+    )
+    all_errors.extend(qa_errors)
+    all_warnings.extend(qa_warnings)
 
     return ValidationResult(
         valid=len(all_errors) == 0,

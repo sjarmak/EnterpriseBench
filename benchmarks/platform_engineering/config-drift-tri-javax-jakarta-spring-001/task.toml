@@ -1,0 +1,112 @@
+# config_drift: Trace javax → jakarta namespace migration across Spring Boot
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "java-enterprise-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "config-drift-tri-javax-jakarta-spring-001"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "expert"
+estimated_duration_minutes = 60
+session_type = "single"
+description = "Trace javax → jakarta namespace migration across Spring Boot, Hibernate, and Tomcat"
+prompt = """
+The Jakarta EE migration changed the namespace from javax.* to jakarta.*
+across the entire Java ecosystem. Spring Boot 3.0 adopted jakarta, requiring
+all dependencies to also migrate.
+
+Your task:
+1. Find where Spring Boot 3.0 switched from javax to jakarta imports
+2. Find where Hibernate 6 made the jakarta migration
+3. Find where Tomcat 10 adopted the jakarta namespace
+4. Identify any configuration drift where one component uses javax
+   while another expects jakarta, causing ClassNotFoundException
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/spring-projects/spring-boot"
+rev = "v3.0.0"
+path = "spring-boot"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/hibernate/hibernate-orm"
+rev = "6.0.0"
+path = "hibernate-orm"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/apache/tomcat"
+rev = "10.1.0"
+path = "tomcat"
+role = "dependency"
+
+[metadata]
+languages = ["java"]
+total_loc = 200_000
+dependency_depth = 3
+frameworks = ["spring-boot", "hibernate", "tomcat"]
+multi_repo_pattern = "enforce"
+
+[[checkpoints]]
+name = "spring_jakarta"
+weight = 0.25
+verifier = "checks/check_spring_jakarta.sh"
+description = "Agent identifies Spring Boot jakarta migration"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "hibernate_jakarta"
+weight = 0.25
+verifier = "checks/check_hibernate_jakarta.sh"
+description = "Agent identifies Hibernate jakarta migration"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "tomcat_jakarta"
+weight = 0.25
+verifier = "checks/check_tomcat_jakarta.sh"
+description = "Agent identifies Tomcat jakarta adoption"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "drift_analysis"
+weight = 0.25
+verifier = "checks/check_drift_analysis.sh"
+description = "Agent identifies cross-component namespace drift"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Three-repo namespace migration analysis benefits greatly from cross-repo search"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "spring-boot/spring-boot-project/spring-boot/src/main/java/org/springframework/boot/SpringApplication.java"
+repo = "spring-boot"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "hibernate-orm/hibernate-core/src/main/java/org/hibernate/cfg/Configuration.java"
+repo = "hibernate-orm"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "tomcat/java/org/apache/catalina/startup/Tomcat.java"
+repo = "tomcat"
+confidence = 0.85
+source = "deterministic"

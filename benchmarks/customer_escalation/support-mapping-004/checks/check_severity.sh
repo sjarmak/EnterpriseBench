@@ -2,6 +2,8 @@
 # check_severity.sh — verify agent correctly assessed severity
 # Reads agent output from $WORKSPACE/agent_output/answer.json
 # Checks severity assessment against expected severity level
+# bash+jq+grep reimplementation (no python3 in container). Output JSON is
+# byte-identical to the previous python implementation.
 set -euo pipefail
 
 export ANSWER_FILE="$WORKSPACE/agent_output/answer.json"
@@ -17,56 +19,71 @@ if [[ ! -f "$GT_FILE" ]]; then
     exit 1
 fi
 
-python3 -c "
-import json, sys, os
+expected_severity=$(jq -r '(.expected_severity // "") | ascii_downcase' "$GT_FILE")
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+if [[ -z "$expected_severity" ]]; then
+    jq -cn '{score: 0.0, passed: false, detail: "No expected severity in ground truth"}'
+    exit 0
+fi
 
-expected_severity = gt.get('expected_severity', '').lower()
+# sev = answer.get('severity', answer.get('impact', answer.get('priority','')))
+# Branch on type: dict -> level/severity/rating ; str -> itself ; else -> str(sev)
+agent_severity=$(jq -r '
+  def pick: if has("severity") then .severity
+            elif has("impact") then .impact
+            elif has("priority") then .priority
+            else "" end;
+  pick as $sev
+  | (if ($sev|type)=="object" then
+       ($sev.level // $sev.severity // $sev.rating // "")
+     elif ($sev|type)=="string" then $sev
+     elif ($sev|type)=="boolean" then (if $sev then "True" else "False" end)
+     elif ($sev|type)=="null" then "None"
+     elif ($sev|type)=="array" then ($sev|tostring)
+     else ($sev|tostring) end)
+  | ascii_downcase
+' "$ANSWER_FILE")
 
-if not expected_severity:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'No expected severity in ground truth'}))
-    sys.exit(0)
+# strip() check: empty after stripping whitespace -> no assessment
+if [[ -z "${agent_severity//[[:space:]]/}" ]]; then
+    jq -cn '{score: 0.0, passed: false, detail: "Agent provided no severity assessment"}'
+    exit 0
+fi
 
-# Extract agent severity (flexible key names)
-sev = answer.get('severity', answer.get('impact', answer.get('priority', '')))
-if isinstance(sev, dict):
-    agent_severity = sev.get('level', sev.get('severity', sev.get('rating', ''))).lower()
-    agent_rationale = sev.get('rationale', sev.get('reason', '')).lower()
-elif isinstance(sev, str):
-    agent_severity = sev.lower()
-    agent_rationale = ''
-else:
-    agent_severity = str(sev).lower()
-    agent_rationale = ''
+# LEVELS = {low:0, medium:1, high:2, critical:3}
+level_idx() {
+  case "$1" in
+    low) echo 0;; medium) echo 1;; high) echo 2;; critical) echo 3;; *) echo -1;;
+  esac
+}
+expected_idx=$(level_idx "$expected_severity")
 
-if not agent_severity.strip():
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'Agent provided no severity assessment'}))
-    sys.exit(0)
+# agent_idx: first LEVELS key (in iteration order low,medium,high,critical) that is a substring
+agent_idx=-1
+for level in low medium high critical; do
+  if grep -qF -- "$level" <<<"$agent_severity"; then
+    agent_idx=$(level_idx "$level")
+    break
+  fi
+done
 
-# Severity level mapping for distance scoring
-LEVELS = {'low': 0, 'medium': 1, 'high': 2, 'critical': 3}
-expected_idx = LEVELS.get(expected_severity, -1)
+if [[ "$expected_idx" -lt 0 || "$agent_idx" -lt 0 ]]; then
+  if grep -qF -- "$expected_severity" <<<"$agent_severity"; then
+    score_str="1.0"
+  else
+    score_str="0.0"
+  fi
+else
+  distance=$(( expected_idx - agent_idx )); distance=${distance#-}
+  case "$distance" in
+    0) score_str="1.0";;
+    1) score_str="0.6";;
+    2) score_str="0.2";;
+    *) score_str="0.0";;   # distance>=3 -> max(0, 1-1.2)=0.0
+  esac
+fi
 
-# Find agent severity level
-agent_idx = -1
-for level, idx in LEVELS.items():
-    if level in agent_severity:
-        agent_idx = idx
-        break
-
-if expected_idx < 0 or agent_idx < 0:
-    # Can't parse — check for keyword overlap
-    if expected_severity in agent_severity:
-        score = 1.0
-    else:
-        score = 0.0
-else:
-    distance = abs(expected_idx - agent_idx)
-    score = max(0.0, 1.0 - distance * 0.4)
-
-score = round(score, 2)
-detail = f'Expected: {expected_severity}, Agent: {agent_severity} (score={score})'
-print(json.dumps({'score': score, 'passed': score >= 0.3, 'detail': detail}))
-"
+passed=$(jq -n --argjson s "$score_str" 'if $s >= 0.3 then true else false end')
+detail="Expected: ${expected_severity}, Agent: ${agent_severity} (score=${score_str})"
+jq -cn --argjson s "$score_str" --argjson p "$passed" --arg d "$detail" \
+  '{score: $s, passed: $p, detail: $d}'

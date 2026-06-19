@@ -203,6 +203,10 @@ class TestMcpEnvVars:
         ), patch(
             "run_task._configure_mcp"
         ), patch(
+            "run_task._chown_to_agent"
+        ), patch(
+            "run_task._assert_agent_readable", return_value=(True, "")
+        ), patch(
             "run_task._run_agent", side_effect=mock_run_agent
         ) as mock_agent, patch(
             "run_task._run_scoring", return_value={"task_score": 0.0}

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Checkpoint 1: Verify agent identified null securityContext overrides as drift points
+# Reimplemented in bash+jq+grep (no python3 in container); keyword membership over
+# the lowercased JSON dump of drift_points, scoring identical to the previous
+# python implementation (FOUND/TOTAL, awk %.2f, pass at FOUND>=2).
 set -euo pipefail
 
 export REPORT="${WORKSPACE:-/workspace}/argo-cd/DRIFT_REPORT.json"
@@ -11,29 +14,16 @@ fi
 export FOUND=0
 export TOTAL=2
 
-# Check 1: Agent identified securityContext as a drift point
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
-text = json.dumps(points).lower()
-if 'securitycontext' in text or 'security_context' in text or 'security context' in text:
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+text=$(jq -c '.drift_points // []' "$REPORT" | tr '[:upper:]' '[:lower:]')
+has() { printf '%s' "$text" | grep -qF -- "$1"; }
+
+# Check 1: securitycontext / security_context / security context
+if has securitycontext || has security_context || has "security context"; then
   FOUND=$((FOUND + 1))
 fi
 
-# Check 2: Agent identified null/empty value as the problematic override
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-points = report.get('drift_points', [])
-text = json.dumps(points).lower()
-if 'null' in text or 'empty' in text or 'nil' in text or 'unset' in text:
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+# Check 2: null / empty / nil / unset
+if has null || has empty || has nil || has unset; then
   FOUND=$((FOUND + 1))
 fi
 

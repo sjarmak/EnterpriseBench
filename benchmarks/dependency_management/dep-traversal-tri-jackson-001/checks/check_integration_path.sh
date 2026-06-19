@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Checkpoint 2: Verify agent traced the ObjectMapper configuration chain across repos
-set -euo pipefail
+# Uses bash + jq + grep (no python3 dependency — the task container ships neither
+# python nor python3, only bash/grep/jq). Scoring semantics are identical to the
+# previous python implementation: for each integration_path step, take its words
+# longer than 4 chars (lowercased) as keywords; the step counts as matched when at
+# least 40% of those keywords appear as substrings in the lowercased report. The
+# checkpoint score is matched/total (rounded to 2dp) and passes at >= 0.4.
+set -euf -o pipefail
 
 REPORT="${WORKSPACE:-/workspace}/DEPENDENCY_TRACE.md"
 GT="${TASK_DIR:-$(dirname "$(dirname "$0")")}/ground_truth.json"
@@ -15,28 +21,35 @@ if [[ ! -f "$GT" ]]; then
   exit 0
 fi
 
-export REPORT_FILE="$REPORT"
-export GT_FILE="$GT"
+report_lc=$(tr '[:upper:]' '[:lower:]' < "$REPORT")
 
-python3 -c "
-import json, os
+total=$(jq '.integration_path | length' "$GT")
+if [[ "$total" -eq 0 ]]; then
+  printf '{"score": 0.0, "passed": false, "reason": "No integration path in GT"}\n'
+  exit 0
+fi
 
-with open(os.environ['GT_FILE']) as f:
-    gt = json.load(f)
-with open(os.environ['REPORT_FILE']) as f:
-    report_text = f.read().lower()
+matched=0
+for ((i = 0; i < total; i++)); do
+  step=$(jq -r ".integration_path[$i]" "$GT")
+  kw_total=0
+  kw_hit=0
+  for word in $step; do
+    if [[ ${#word} -gt 4 ]]; then
+      kw=$(printf '%s' "$word" | tr '[:upper:]' '[:lower:]')
+      kw_total=$((kw_total + 1))
+      if printf '%s' "$report_lc" | grep -qF -- "$kw"; then
+        kw_hit=$((kw_hit + 1))
+      fi
+    fi
+  done
+  # step matched when kw_hit >= kw_total * 0.4  (integer-safe: *10 >= *4)
+  if [[ $((kw_hit * 10)) -ge $((kw_total * 4)) ]]; then
+    matched=$((matched + 1))
+  fi
+done
 
-integration_path = gt.get('integration_path', [])
-if not integration_path:
-    print(json.dumps({'score': 0.0, 'passed': False, 'reason': 'No integration path in GT'}))
-else:
-    matched = 0
-    for step in integration_path:
-        keywords = [w.lower() for w in step.split() if len(w) > 4]
-        if sum(1 for kw in keywords if kw in report_text) >= len(keywords) * 0.4:
-            matched += 1
-    score = round(matched / len(integration_path), 2)
-    passed = score >= 0.4
-    detail = f'Matched {matched}/{len(integration_path)} integration path steps'
-    print(json.dumps({'score': score, 'passed': passed, 'reason': detail}))
-"
+score=$(jq -n --argjson m "$matched" --argjson t "$total" '((($m / $t) * 100) | round) / 100')
+passed=$(jq -n --argjson m "$matched" --argjson t "$total" 'if ($m / $t) >= 0.4 then true else false end')
+printf '{"score": %s, "passed": %s, "reason": "Matched %s/%s integration path steps"}\n' \
+  "$score" "$passed" "$matched" "$total"

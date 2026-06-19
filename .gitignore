@@ -53,3 +53,6 @@ scripts/infra/accounts_config.json
 .dolt/
 *.db
 .beads-credential-key
+
+# Beads workspace — internal issue tracker / orchestration (synced via Dolt, not git)
+.beads/

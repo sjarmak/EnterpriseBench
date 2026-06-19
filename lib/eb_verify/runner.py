@@ -25,6 +25,7 @@ from eb_verify.scoring import (
     VerificationResult,
     compute_score,
     write_reward,
+    write_score_result,
 )
 from eb_verify.plugins import get_validator
 
@@ -279,13 +280,31 @@ class CheckpointRunner:
             )
         return results
 
-    def run_all(self, output_path: str | Path = "reward.txt") -> VerificationResult:
+    def run_all(
+        self,
+        output_path: str | Path = "reward.txt",
+        *,
+        score_result_path: str | Path | None = "score_result.json",
+        task_time_seconds: float | None = None,
+        token_cost_usd: float | None = None,
+    ) -> VerificationResult:
         """Run full verification: health check, checkpoints, artifacts, scoring.
 
         When llm_curator is active, each checkpoint gets two scores:
           - Tier 1 (grep): from the shell script verifier
           - Tier 2 (judge): from the LLM judge against expected_solution.json
         Final score = min(grep, judge) — the judge caps inflated grep scores.
+
+        Args:
+            output_path: Path to write the legacy human-readable
+                ``reward.txt`` summary.
+            score_result_path: Path to write the unified ScoreResult JSON.
+                Set to ``None`` to skip emission. Defaults to
+                ``score_result.json`` next to ``reward.txt``.
+            task_time_seconds: Optional wall-clock duration plumbed in from
+                the harness; flows into ``diagnostics.task_time_seconds``.
+            token_cost_usd: Optional per-task token cost in USD plumbed in
+                from the harness; flows into ``diagnostics.token_cost_usd``.
         """
         # Health check (non-fatal in prototype — repos may not be cloned)
         healthy = self.sandbox_health_check()
@@ -345,9 +364,23 @@ class CheckpointRunner:
             total_score=total,
         )
 
-        # Write reward.txt
+        # Write reward.txt (legacy human-readable summary)
         reward_path = write_reward(verification, output_path)
         print(f"[runner] Wrote {reward_path} — total_score={total:.4f}")
+
+        # Write the unified ScoreResult JSON next to reward.txt unless
+        # explicitly suppressed by the caller.
+        if score_result_path is not None:
+            sr_path = Path(score_result_path)
+            if not sr_path.is_absolute():
+                sr_path = Path(reward_path).resolve().parent / sr_path
+            written = write_score_result(
+                verification,
+                sr_path,
+                task_time_seconds=task_time_seconds,
+                token_cost_usd=token_cost_usd,
+            )
+            print(f"[runner] Wrote {written} — unified ScoreResult")
 
         return verification
 

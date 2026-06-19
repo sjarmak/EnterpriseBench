@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # check_direct_refs.sh — verify agent finds direct references in PostgREST and GoTrue
+# Implemented in bash+jq+grep (no python3 in container). Scoring identical to the
+# previous python3 implementation: count PostgREST and GoTrue GT file paths (full
+# path or basename, lowercased) appearing in json.dumps(answer).lower();
+# score = total_found/max(total_expected,1) (round 2dp); passes when both repos hit.
 set -euo pipefail
 
 export ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
@@ -10,26 +14,49 @@ if [[ ! -f "$ANSWER_FILE" ]]; then
   exit 0
 fi
 
-python3 -c "
-import json, os
+answer_text=$(jq -r '
+  def pyd:
+    if type=="object" then "{" + ([to_entries[] | (.key|tojson) + ": " + (.value|pyd)] | join(", ")) + "}"
+    elif type=="array" then "[" + ([.[]|pyd] | join(", ")) + "]"
+    else tojson end;
+  pyd' "$ANSWER_FILE" | tr '[:upper:]' '[:lower:]')
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+# Count GT paths for a repo matched by full path or basename; sets COUNT and N_FILES.
+COUNT=0
+N_FILES=0
+count_repo() {  # $1 = repo name
+  local repo="$1" f fl basel
+  local files
+  COUNT=0
+  mapfile -t files < <(jq -r --arg r "$repo" '((.required_files // []) + (.sufficient_files // []))[] | select(.repo==$r) | .path' "$GT_FILE")
+  N_FILES=${#files[@]}
+  for f in "${files[@]}"; do
+    fl=$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')
+    basel=$(printf '%s' "${f##*/}" | tr '[:upper:]' '[:lower:]')
+    if printf '%s' "$answer_text" | grep -qF -- "$fl" || printf '%s' "$answer_text" | grep -qF -- "$basel"; then
+      COUNT=$((COUNT + 1))
+    fi
+  done
+}
 
-gt_files = gt.get('required_files', []) + gt.get('sufficient_files', [])
-postgrest_files = [f['path'] for f in gt_files if f.get('repo') == 'postgrest']
-gotrue_files = [f['path'] for f in gt_files if f.get('repo') == 'gotrue']
+count_repo postgrest; postgrest_found=$COUNT; n_postgrest=$N_FILES
+count_repo gotrue;    gotrue_found=$COUNT;    n_gotrue=$N_FILES
 
-answer_text = json.dumps(answer).lower()
+total_expected=$((n_postgrest + n_gotrue))
+total_found=$((postgrest_found + gotrue_found))
 
-postgrest_found = sum(1 for f in postgrest_files if f.lower() in answer_text or f.split('/')[-1].lower() in answer_text)
-gotrue_found = sum(1 for f in gotrue_files if f.lower() in answer_text or f.split('/')[-1].lower() in answer_text)
+denom=$total_expected; [[ "$denom" -lt 1 ]] && denom=1
+round2() {
+  awk -v x="$1" 'BEGIN{ s=sprintf("%.2f", x); sub(/0+$/, "", s); if (s ~ /\.$/) s=s"0"; print s }'
+}
+raw=$(jq -n --argjson f "$total_found" --argjson d "$denom" '$f/$d')
+score=$(round2 "$raw")
 
-total_expected = len(postgrest_files) + len(gotrue_files)
-total_found = postgrest_found + gotrue_found
-score = round(total_found / max(total_expected, 1), 2)
-passed = postgrest_found >= 1 and gotrue_found >= 1
+if [[ "$postgrest_found" -ge 1 && "$gotrue_found" -ge 1 ]]; then
+  passed=true
+else
+  passed=false
+fi
 
-detail = f'PostgREST: {postgrest_found}/{len(postgrest_files)}, GoTrue: {gotrue_found}/{len(gotrue_files)}'
-print(json.dumps({'score': score, 'passed': passed, 'detail': detail}))
-"
+printf '{"score": %s, "passed": %s, "detail": "PostgREST: %s/%s, GoTrue: %s/%s"}\n' \
+  "$score" "$passed" "$postgrest_found" "$n_postgrest" "$gotrue_found" "$n_gotrue"

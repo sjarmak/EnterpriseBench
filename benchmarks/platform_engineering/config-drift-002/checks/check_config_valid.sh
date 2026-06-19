@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Checkpoint 3: Validate corrected configuration if provided
+# No-helm fallback uses bash + jq + grep (no python3 in container). Identical to the
+# previous python: pass when values.yaml exists and contains one of the literal,
+# case-sensitive substrings existingSecretPasswordKey / existingPasswordSecretKey / secretKey.
 set -euo pipefail
 
 export WORKSPACE="${WORKSPACE:-/workspace}"
@@ -34,17 +37,12 @@ if command -v helm &>/dev/null; then
   fi
 else
   # No helm — check that values.yaml has the expected new parameters
-  if python3 -c "
-import os
-values_file = os.path.join(os.environ['CHART_DIR'], 'values.yaml')
-if not os.path.exists(values_file):
-    exit(1)
-content = open(values_file).read()
-# Check for existence of secret key configuration parameter
-if 'existingSecretPasswordKey' in content or 'existingPasswordSecretKey' in content or 'secretKey' in content:
-    exit(0)
-exit(1)
-" 2>/dev/null; then
+  check_secret_key_param() {
+    local values_file="$CHART_DIR/values.yaml"
+    [[ -f "$values_file" ]] || return 1
+    grep -qF -e 'existingSecretPasswordKey' -e 'existingPasswordSecretKey' -e 'secretKey' -- "$values_file"
+  }
+  if check_secret_key_param 2>/dev/null; then
     printf '{"score": 1.0, "passed": true, "reason": "Corrected values.yaml includes secret key parameter"}\n'
   else
     printf '{"score": 0.25, "passed": false, "reason": "Corrected config missing expected parameters"}\n'

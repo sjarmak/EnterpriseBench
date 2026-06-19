@@ -17,55 +17,89 @@ if [[ ! -f "$GT_FILE" ]]; then
     exit 1
 fi
 
-python3 -c "
-import json, sys, os
+# bash+jq+grep (no python3 in container). Semantics identical to the prior python3:
+# related_refs = gt.related_references else (gt.ground_truth // gt).sufficient_files[].path;
+# agent_refs extracted from answer.related_issues//references//related//docs (dict items use
+# .reference//.path//.url//.title, key-present-wins); a gt ref counts as matched when, for some
+# agent ref, the fraction of gt's significant tokens (split on / and ., lowercased, stopwords
+# removed) that also appear in the agent ref's significant tokens is >= 0.5. score =
+# round(found/len(related_refs), 2), passed at >= 0.3.
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+# related_refs (newline-delimited). Fallback to sufficient_files[].path when empty/absent.
+related_refs=$(jq -r '
+  (if has("related_references") then .related_references else [] end) as $rr
+  | (if ($rr|length) > 0 then $rr
+     else ((.ground_truth // .) | .sufficient_files // [] | map(.path)) end)
+  | .[]' "$GT_FILE")
 
-# Get related references from ground truth
-related_refs = gt.get('related_references', [])
+if [[ -z "$related_refs" ]]; then
+    echo '{"score": 0.0, "passed": false, "detail": "No related references in ground truth"}'
+    exit 0
+fi
+total=$(printf '%s\n' "$related_refs" | grep -c . || true)
 
-# Fallback: use sufficient_files paths as references
-if not related_refs:
-    sufficient = gt.get('ground_truth', gt).get('sufficient_files', [])
-    related_refs = [sf['path'] for sf in sufficient]
+# agent_refs raw value (first present key among related_issues/references/related/docs).
+# agent_n = number of refs python would collect; refs themselves emitted one per line.
+AGENT_PICK='(if has("related_issues") then .related_issues
+   elif has("references") then .references
+   elif has("related") then .related
+   elif has("docs") then .docs else [] end)'
+agent_n=$(jq -r "$AGENT_PICK"' as $raw
+  | if ($raw|type)=="array" then ([ $raw[] | select(type=="object" or type=="string") ] | length)
+    elif ($raw|type)=="string" then 1 else 0 end' "$ANSWER_FILE")
 
-if not related_refs:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'No related references in ground truth'}))
-    sys.exit(0)
+if [[ "$agent_n" -eq 0 ]]; then
+    echo '{"score": 0.0, "passed": false, "detail": "Agent provided no related references"}'
+    exit 0
+fi
 
-# Extract agent references (flexible key names)
-refs_raw = answer.get('related_issues', answer.get('references', answer.get('related', answer.get('docs', []))))
-agent_refs = []
-if isinstance(refs_raw, list):
-    for r in refs_raw:
-        if isinstance(r, dict):
-            agent_refs.append(r.get('reference', r.get('path', r.get('url', r.get('title', '')))))
-        elif isinstance(r, str):
-            agent_refs.append(r)
-elif isinstance(refs_raw, str):
-    agent_refs.append(refs_raw)
+agent_refs=$(jq -r "$AGENT_PICK"' as $raw
+  | if ($raw|type)=="array" then
+      $raw[] | if type=="object" then
+                 (if has("reference") then .reference elif has("path") then .path
+                  elif has("url") then .url elif has("title") then .title else "" end)
+               elif type=="string" then . else empty end
+    elif ($raw|type)=="string" then $raw
+    else empty end' "$ANSWER_FILE")
 
-if not agent_refs:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'Agent provided no related references'}))
-    sys.exit(0)
+# Count gt refs matched by any agent ref via significant-token overlap >= 0.5.
+# Tokenization: lowercase, replace "/" and "." with spaces, split on whitespace, drop
+# stopwords, dedup. A gt ref matches when |gt_sig & ag_sig| / |gt_sig| >= 0.5.
+found=$(awk '
+  BEGIN{
+    split("src lib the and for main java py go ts js rs cpp h", s, " ")
+    for (i in s) stop[s[i]]=1
+  }
+  NR==FNR { gtref[FNR]=$0; gtn=FNR; next }
+  { agref[FNR]=$0; agn=FNR }
+  END{
+    for (a=1; a<=agn; a++){
+      line=tolower(agref[a]); gsub(/[\/.]/, " ", line)
+      nA=split(line, w, /[ \t\n]+/)
+      for (i=1;i<=nA;i++){ if (w[i]!="" && !(w[i] in stop)) AGset[a SUBSEP w[i]]=1 }
+    }
+    matched=0
+    for (g=1; g<=gtn; g++){
+      gl=tolower(gtref[g]); gsub(/[\/.]/, " ", gl)
+      nG=split(gl, gw, /[ \t\n]+/); delete G; gsig=0
+      for (i=1;i<=nG;i++){ if (gw[i]!="" && !(gw[i] in stop) && !(gw[i] in G)){ G[gw[i]]=1; gsig++ } }
+      hit=0
+      if (gsig>0){
+        for (a=1; a<=agn; a++){
+          inter=0
+          for (k in G){ if ((a SUBSEP k) in AGset) inter++ }
+          if (inter/gsig >= 0.5){ hit=1; break }
+        }
+      }
+      if (hit) matched++
+    }
+    print matched
+  }
+' <(printf '%s\n' "$related_refs") <(printf '%s\n' "$agent_refs"))
 
-def ref_match(gt_ref, agent_ref):
-    \"\"\"Fuzzy match: basename or key segments overlap.\"\"\"
-    gt_parts = set(gt_ref.lower().replace('/', ' ').replace('.', ' ').split())
-    ag_parts = set(agent_ref.lower().replace('/', ' ').replace('.', ' ').split())
-    # Remove very common words
-    stop = {'src', 'lib', 'the', 'and', 'for', 'main', 'java', 'py', 'go', 'ts', 'js', 'rs', 'cpp', 'h'}
-    gt_sig = gt_parts - stop
-    ag_sig = ag_parts - stop
-    if not gt_sig:
-        return False
-    overlap = len(gt_sig & ag_sig) / len(gt_sig)
-    return overlap >= 0.5
-
-found = sum(1 for ref in related_refs if any(ref_match(ref, ar) for ar in agent_refs))
-score = round(found / len(related_refs), 2)
-detail = f'Matched {found}/{len(related_refs)} related references'
-print(json.dumps({'score': score, 'passed': score >= 0.3, 'detail': detail}))
-"
+score=$(awk -v f="$found" -v t="$total" 'BEGIN{printf "%.10f", f/t}')
+pyfloat() { printf '%.*f' "$2" "$1" | sed -e 's/0*$//' -e 's/\.$/.0/'; }
+score_r=$(pyfloat "$score" 2)
+passed=$(awk -v s="$score" 'BEGIN{print (s>=0.3)?"true":"false"}')
+printf '{"score": %s, "passed": %s, "detail": "Matched %s/%s related references"}\n' \
+  "$score_r" "$passed" "$found" "$total"

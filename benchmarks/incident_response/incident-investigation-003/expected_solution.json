@@ -1,0 +1,36 @@
+{
+  "task_id": "incident-inv-prom-parse-003",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "The Prometheus response parser in Grafana uses json-iterator/go to parse responses. jsoniter's Iterator methods do not return errors; they set iter.Error. The converter code never checks iter.Error after parsing operations. When the response body is truncated (by dataproxy response_limit) or malformed, jsoniter stops parsing and sets iter.Error, but the converter ignores this and returns whatever partial data was extracted. jsoniter iter.Error is never checked. Truncated JSON from response_limit causes jsoniter to stop mid-parse. Partial data frames are returned as if they were complete. Bug location: pkg/util/converter/prom.go :: Multiple parsing functions in the Prometheus response converter.",
+      "evaluation_criteria": [
+        "Must identify pkg/util/converter/prom.go as the root cause file",
+        "Must reference function/method 'Multiple parsing functions in the Prometheus response converter'",
+        "Must explain the mechanism: jsoniter iter"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Error chain: (1) Prometheus HTTP API (web/api/v1/api.go): Returns complete, valid JSON response (2) Grafana data proxy (response_limit setting): Truncates response body if it exceeds configured limit (3) Grafana Prometheus datasource plugin: Passes truncated body to converter (4) Grafana converter (pkg/util/converter/prom.go): BUG: Parses JSON with jsoniter, never checks iter.Error, returns partial data",
+      "evaluation_criteria": [
+        "Must trace the error chain in correct order",
+        "Must identify the buggy step at Grafana converter (pkg/util/converter/prom.go)",
+        "Must include the entry point (Prometheus HTTP API (web/api/v1/api.go)) and the failing component (Grafana converter (pkg/util/converter/prom.go))"
+      ]
+    },
+    "affected_services": {
+      "expected_solution": "Affected components: Grafana Prometheus datasource; Grafana Loki datasource (shares the converter code path); Any Grafana deployment with response_limit configured",
+      "evaluation_criteria": [
+        "Must list at least 3 of the affected components/services",
+        "Must cite specific source files (e.g. pkg/util/converter/prom.go)",
+        "Must cover both implementation and reference paths (e.g. pkg/util/converter/prom.go, pkg/util/converter/prom_test.go)"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Check iter.Error after every jsoniter parsing operation in prom.go. When an error is detected (including truncation/EOF errors), return the error instead of partial data. Consider wrapping jsoniter Iterator methods to return errors directly (the PR introduces a jsonitere package for this purpose).",
+      "evaluation_criteria": [
+        "Must propose a fix that addresses the root cause, not just the symptom",
+        "Must explain why the proposed fix prevents the failure mode"
+      ]
+    }
+  }
+}

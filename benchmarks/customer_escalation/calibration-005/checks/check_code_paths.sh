@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # check_code_paths.sh — verify agent identified correct code paths
+# bash+jq+grep reimplementation (no python3 in container). Output JSON is
+# byte-identical to the previous python implementation.
 set -euo pipefail
 
 export ANSWER_FILE="${WORKSPACE}/agent_output/answer.json"
@@ -15,35 +17,58 @@ if [[ ! -f "$GT_FILE" ]]; then
     exit 1
 fi
 
-python3 -c "
-import json, os
+# required = gt.get('ground_truth', gt).get('required_files', gt.get('required_files', []))
+# sufficient = ... same shape
+n_req=$(jq '((.ground_truth.required_files) // .required_files // []) | length' "$GT_FILE")
+n_suf=$(jq '((.ground_truth.sufficient_files) // .sufficient_files // []) | length' "$GT_FILE")
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+# agent_files: from code_paths/files/source_files; dict->path/file, str->itself
+n_agent=$(jq '
+  (.code_paths // .files // .source_files // []) as $raw
+  | (if ($raw|type)=="array" then $raw else [] end)
+  | map(if type=="object" then (.path // .file // "") elif type=="string" then . else empty end)
+  | length
+' "$ANSWER_FILE")
 
-required = gt.get('ground_truth', gt).get('required_files', gt.get('required_files', []))
-sufficient = gt.get('ground_truth', gt).get('sufficient_files', gt.get('sufficient_files', []))
+if [[ "$n_req" -eq 0 ]]; then
+    jq -cn '{score: 0.0, passed: false, detail: "No required files in GT"}'
+    exit 0
+fi
 
-agent_files_raw = answer.get('code_paths', answer.get('files', answer.get('source_files', [])))
-agent_files = []
-for f in (agent_files_raw if isinstance(agent_files_raw, list) else []):
-    if isinstance(f, dict):
-        agent_files.append(f.get('path', f.get('file', '')))
-    elif isinstance(f, str):
-        agent_files.append(f)
+if [[ "$n_agent" -eq 0 ]]; then
+    jq -cn '{score: 0.0, passed: false, detail: "Agent provided no code paths"}'
+    exit 0
+fi
 
-if not required:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'No required files in GT'}))
-elif not agent_files:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'Agent provided no code paths'}))
-else:
-    def path_match(gt_path, agent_path):
-        return gt_path.strip('/') == agent_path.strip('/') or agent_path.endswith(gt_path) or gt_path.endswith(agent_path)
+# req_found / suf_found via shared path_match logic:
+#   gt.strip('/')==ag.strip('/') OR ag.endswith(gt) OR gt.endswith(ag)
+counts=$(jq -rn \
+  --slurpfile gt "$GT_FILE" \
+  --slurpfile ans "$ANSWER_FILE" '
+  def strip_slash: sub("^/+";"") | sub("/+$";"");
+  def pmatch($gt;$ag): ($gt|strip_slash)==($ag|strip_slash) or ($ag|endswith($gt)) or ($gt|endswith($ag));
+  ($gt[0]) as $g | ($ans[0]) as $a
+  | (($g.ground_truth.required_files) // $g.required_files // []) as $required
+  | (($g.ground_truth.sufficient_files) // $g.sufficient_files // []) as $sufficient
+  | (($a.code_paths // $a.files // $a.source_files // []) as $raw
+     | (if ($raw|type)=="array" then $raw else [] end)
+     | map(if type=="object" then (.path // .file // "") elif type=="string" then . else empty end)) as $agent
+  | ([ $required[] | .path as $gp | (any($agent[]; pmatch($gp; .))) ] | map(select(.)) | length) as $reqf
+  | ([ $sufficient[] | .path as $gp | (any($agent[]; pmatch($gp; .))) ] | map(select(.)) | length) as $suff
+  | "\($reqf) \($suff)"
+')
+req_found=${counts% *}
+suf_found=${counts#* }
 
-    req_found = sum(1 for rf in required if any(path_match(rf['path'], af) for af in agent_files))
-    suf_found = sum(1 for sf in sufficient if any(path_match(sf['path'], af) for af in agent_files))
-    req_score = req_found / len(required)
-    suf_score = suf_found / max(len(sufficient), 1)
-    score = round(0.70 * req_score + 0.30 * suf_score, 2)
-    print(json.dumps({'score': score, 'passed': score >= 0.3, 'detail': f'Found {req_found}/{len(required)} required, {suf_found}/{len(sufficient)} sufficient'}))
-"
+# req_score = req_found/n_req ; suf_score = suf_found/max(n_suf,1)
+# score = round(0.70*req_score + 0.30*suf_score, 2)
+# Use the raw float from jq, then printf '%.2f' (glibc round-half-to-even on the
+# exact double — matches python round(x,2)); finally normalize to python
+# json.dumps text form (drop a single trailing zero: 0.70 -> 0.7, 1.00 -> 1.0).
+raw=$(jq -n --argjson rf "$req_found" --argjson rt "$n_req" --argjson sf "$suf_found" --argjson st "$n_suf" '
+  ($rf/$rt) as $rs | ($sf/([$st,1]|max)) as $ss | (0.70*$rs + 0.30*$ss)')
+score=$(printf '%.2f' "$raw" | sed 's/\(\.[0-9]\)0$/\1/')
+
+passed=$(jq -n --argjson s "$score" 'if $s >= 0.3 then true else false end')
+detail="Found ${req_found}/${n_req} required, ${suf_found}/${n_suf} sufficient"
+jq -cn --argjson s "$score" --argjson p "$passed" --arg d "$detail" '{score: $s, passed: $p, detail: $d}'

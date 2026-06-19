@@ -2,6 +2,8 @@
 # check_ownership.sh — verify agent identified correct code owners or subsystem
 # Reads agent output from $WORKSPACE/agent_output/answer.json
 # Checks for correct ownership attribution against ground truth keywords
+# bash+jq+grep reimplementation (no python3 in container). Output JSON is
+# byte-identical to the previous python implementation.
 set -euo pipefail
 
 export ANSWER_FILE="$WORKSPACE/agent_output/answer.json"
@@ -17,45 +19,86 @@ if [[ ! -f "$GT_FILE" ]]; then
     exit 1
 fi
 
-python3 -c "
-import json, sys, os
+# ownership_kw = gt.get('ownership_keywords', [])
+# Fallback (only when empty): derive from required_files rationale words
+# (len>4, isalpha), dedup, first 10. Reproduced for fidelity though GT always
+# supplies ownership_keywords here.
+n_kw=$(jq '(.ownership_keywords // []) | length' "$GT_FILE")
+kw_file=$(mktemp)
+if [[ "$n_kw" -ne 0 ]]; then
+  jq -r '.ownership_keywords[]' "$GT_FILE" > "$kw_file"
+else
+  # python: words from each rationale split, len>4 and isalpha (ASCII letters),
+  # then list(set(...))[:10]. set() order is non-deterministic in CPython, but
+  # this branch never fires for the real GT (ownership_keywords present).
+  jq -r '(.ground_truth // .).required_files // [] | .[] | (.rationale // "")' "$GT_FILE" \
+    | tr ' ' '\n' \
+    | awk '{ if (length($0) > 4 && $0 ~ /^[A-Za-z]+$/) print tolower($0) }' \
+    | awk '!seen[$0]++' | head -n 10 > "$kw_file"
+fi
+n_kw=$(wc -l < "$kw_file" | tr -d ' ')
 
-gt = json.load(open(os.environ['GT_FILE']))
-answer = json.load(open(os.environ['ANSWER_FILE']))
+if [[ "$n_kw" -eq 0 ]]; then
+    rm -f "$kw_file"
+    jq -cn '{score: 0.0, passed: false, detail: "No ownership keywords in ground truth"}'
+    exit 0
+fi
 
-# Get ownership keywords from ground truth
-ownership_kw = gt.get('ownership_keywords', [])
+# ownership = answer.get('ownership', answer.get('owners', answer.get('subsystem','')))
+ownership_text=$(jq -r '
+  def q: "\u0027";
+  def pyrepr_inner:
+    if type=="string" then q + . + q
+    elif type=="object" then "{" + ([to_entries[] | q + .key + q + ": " + (.value|pyrepr_inner)] | join(", ")) + "}"
+    elif type=="array" then "[" + ([.[]|pyrepr_inner] | join(", ")) + "]"
+    elif type=="boolean" then (if . then "True" else "False" end)
+    elif type=="null" then "None"
+    else tostring end;
+  def pystr:
+    if type=="string" then .
+    elif type=="object" then "{" + ([to_entries[] | q + .key + q + ": " + (.value|pyrepr_inner)] | join(", ")) + "}"
+    elif type=="array" then "[" + ([.[]|pyrepr_inner] | join(", ")) + "]"
+    elif type=="boolean" then (if . then "True" else "False" end)
+    elif type=="null" then "None"
+    else tostring end;
+  (if has("ownership") then .ownership elif has("owners") then .owners elif has("subsystem") then .subsystem else "" end) as $o
+  | (if ($o|type)=="object" then [$o[] | pystr] | join(" ")
+     elif ($o|type)=="array" then [$o[] | pystr] | join(" ")
+     else ($o|pystr) end) | ascii_downcase
+' "$ANSWER_FILE")
 
-if not ownership_kw:
-    # Fallback: extract from required_files rationale
-    required = gt.get('ground_truth', gt).get('required_files', [])
-    for rf in required:
-        rat = rf.get('rationale', '').lower()
-        for word in rat.split():
-            if len(word) > 4 and word.isalpha():
-                ownership_kw.append(word)
-    ownership_kw = list(set(ownership_kw))[:10]
+if [[ -z "${ownership_text//[[:space:]]/}" ]]; then
+    rm -f "$kw_file"
+    jq -cn '{score: 0.0, passed: false, detail: "Agent provided no ownership info"}'
+    exit 0
+fi
 
-if not ownership_kw:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'No ownership keywords in ground truth'}))
-    sys.exit(0)
+# matched: kw.lower().replace('-',' ') in ownership_text
+#       OR kw.lower().replace('-','')  in ownership_text.replace(' ','')
+ownership_nospace=$(printf '%s' "$ownership_text" | tr -d ' ')
+matched=0
+while IFS= read -r kw; do
+  kw_lc=$(printf '%s' "$kw" | tr '[:upper:]' '[:lower:]')
+  form1=$(printf '%s' "$kw_lc" | tr '-' ' ')
+  form2=$(printf '%s' "$kw_lc" | tr -d '-')
+  if grep -qF -- "$form1" <<<"$ownership_text" || grep -qF -- "$form2" <<<"$ownership_nospace"; then
+    matched=$((matched + 1))
+  fi
+done < "$kw_file"
+rm -f "$kw_file"
 
-# Extract agent ownership text (flexible key names)
-ownership = answer.get('ownership', answer.get('owners', answer.get('subsystem', '')))
-if isinstance(ownership, dict):
-    ownership_text = ' '.join(str(v) for v in ownership.values()).lower()
-elif isinstance(ownership, list):
-    ownership_text = ' '.join(str(v) for v in ownership).lower()
-else:
-    ownership_text = str(ownership).lower()
+# score = round(min(1.0, matched / max(n_kw*0.4, 1)), 2)
+score=$(jq -n --argjson m "$matched" --argjson n "$n_kw" '
+  ([$n*0.4, 1] | max) as $den
+  | ([1.0, ($m/$den)] | min) as $v
+  | (($v*100|round)/100)')
+# whole-number results need explicit float form (1.0 / 0.0), jq drops trailing .0
+if jq -n --argjson s "$score" 'if $s == 1 then true else false end' | grep -q true; then
+  score="1.0"
+elif jq -n --argjson s "$score" 'if $s == 0 then true else false end' | grep -q true; then
+  score="0.0"
+fi
 
-if not ownership_text.strip():
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'Agent provided no ownership info'}))
-    sys.exit(0)
-
-# Score based on keyword matches
-matched = sum(1 for kw in ownership_kw if kw.lower().replace('-', ' ') in ownership_text or kw.lower().replace('-', '') in ownership_text.replace(' ', ''))
-score = round(min(1.0, matched / max(len(ownership_kw) * 0.4, 1)), 2)
-detail = f'Matched {matched}/{len(ownership_kw)} ownership keywords'
-print(json.dumps({'score': score, 'passed': score >= 0.3, 'detail': detail}))
-"
+passed=$(jq -n --argjson s "$score" 'if $s >= 0.3 then true else false end')
+detail="Matched ${matched}/${n_kw} ownership keywords"
+jq -cn --argjson s "$score" --argjson p "$passed" --arg d "$detail" '{score: $s, passed: $p, detail: $d}'

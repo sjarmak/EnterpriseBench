@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Checkpoint 3: Validate corrected configuration if provided
+# Password-storage check uses bash + jq + grep (no python3 in container). Identical to
+# the previous python: pass when the helpers file contains literal '.Values' AND one of
+# 'set'/'store'/'global' AND one of 'redis.password'/'redis-password' (all case-sensitive).
 set -euo pipefail
 
 export WORKSPACE="${WORKSPACE:-/workspace}"
@@ -19,17 +22,19 @@ if [[ ! -f "$HELPERS" ]]; then
 fi
 
 # Verify the fix stores generated password for reuse
-if python3 -c "
-import os
-helpers = open(os.environ['HELPERS']).read()
-# The fix should store the password in .Values for reuse
-# Look for patterns like: \$_ := set .Values or global.redis.password
-if '.Values' in helpers and ('set' in helpers or 'store' in helpers or 'global' in helpers):
+check_password_reuse() {
+  local helpers="$HELPERS"
+  # The fix should store the password in .Values for reuse
+  # Look for patterns like: $_ := set .Values or global.redis.password
+  if grep -qF -- '.Values' "$helpers" && grep -qF -e 'set' -e 'store' -e 'global' -- "$helpers"; then
     # Check it still has the redis.password define
-    if 'redis.password' in helpers or 'redis-password' in helpers:
-        exit(0)
-exit(1)
-" 2>/dev/null; then
+    if grep -qF -e 'redis.password' -e 'redis-password' -- "$helpers"; then
+      return 0
+    fi
+  fi
+  return 1
+}
+if check_password_reuse 2>/dev/null; then
   printf '{"score": 1.0, "passed": true, "reason": "Corrected helper stores password for reuse"}\n'
 else
   # If helm is available, try template rendering

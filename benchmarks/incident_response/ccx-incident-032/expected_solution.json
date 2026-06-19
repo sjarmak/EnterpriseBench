@@ -1,0 +1,31 @@
+{
+  "task_id": "ccx-incident-032",
+  "checkpoints": {
+    "source_files_identified": {
+      "expected_solution": "Agent must name the source files that define the overflow reset reason and the connection pool overflow logic. The overflow reset reason string is mapped in source/common/http/utility.cc and declared via envoy/http/stream_reset_handler.h. The connection pool that triggers overflow on circuit-breaker exhaustion lives in source/common/conn_pool/conn_pool_base.cc / conn_pool_base.h. The overflow surfaces to the downstream client through source/common/router/upstream_request.cc.",
+      "evaluation_criteria": [
+        "Names source/common/http/utility.cc (overflow reset reason mapping)",
+        "Names envoy/http/stream_reset_handler.h (stream reset handler interface including overflow reason)",
+        "Names source/common/conn_pool/conn_pool_base.cc and/or conn_pool_base.h (pool overflow logic)",
+        "Names source/common/router/upstream_request.cc (downstream surface)"
+      ]
+    },
+    "error_chain_traced": {
+      "expected_solution": "Error chain: (1) Connection pool receives a new stream request. (2) source/common/conn_pool/conn_pool_base.cc checks circuit breaker limits (max_connections, max_pending_requests, max_requests). (3) When the limit is exceeded, the pool returns the overflow reset reason. (4) source/common/router/upstream_request.cc propagates the reset to the downstream stream. (5) The downstream client observes 'upstream connect error or disconnect/reset before headers. reset reason: overflow'.",
+      "evaluation_criteria": [
+        "Starts at the connection pool receiving a new stream request",
+        "Identifies conn_pool_base.cc enforcing circuit breaker limits as the trigger for overflow",
+        "Traces overflow propagation through source/common/router/upstream_request.cc",
+        "Ends at the user-visible 'reset reason: overflow' / upstream connect error"
+      ]
+    },
+    "config_identified": {
+      "expected_solution": "The behavior is controlled by the cluster-level circuit breaker thresholds in the Envoy cluster config — specifically max_connections, max_pending_requests, and max_requests (and max_retries) under cluster.circuit_breakers.thresholds. These are loaded by the cluster manager (source/common/upstream/cluster_manager_impl.cc) and consulted by conn_pool_base.cc when admitting new streams.",
+      "evaluation_criteria": [
+        "Names the cluster circuit_breakers configuration block (cluster.circuit_breakers.thresholds)",
+        "Lists max_connections and max_pending_requests as the relevant knobs",
+        "Connects the circuit breaker config to the conn_pool overflow path"
+      ]
+    }
+  }
+}

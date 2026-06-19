@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # check_dead_code.sh — verify dead code identification
+# bash+jq+grep (no python3 in container). Scoring semantics identical to the prior
+# python3 implementation: normalize claimed/dead/live to (file,symbol) pairs, compute
+# F-score (1.25*p*r/(0.25*p+r)), apply 0.7x penalty when precision<0.9.
 set -euo pipefail
 
 REPORT="${WORKSPACE}/agent_output/answer.json"
@@ -15,47 +18,39 @@ if [[ ! -f "$GT" ]]; then
     exit 0
 fi
 
-python3 -c "
-import json, sys
+# Normalize an array to unique sep-joined "filesymbol" pairs (python normalize()):
+#   dict -> (.file//"", .symbol//"") ; string -> ("", str) ; else dropped.
+NORM='map(if type=="object" then ((.file // "") + "" + (.symbol // ""))
+          elif type=="string" then ("" + .)
+          else empty end) | unique | .[]'
 
-with open('${REPORT}') as f:
-    answer = json.load(f)
-with open('${GT}') as f:
-    gt = json.load(f)
+# python answer.get("dead_code", answer.get("dead_exports", [])): key-present wins even if null.
+claimed=$(jq -r '(if has("dead_code") then .dead_code
+                  elif has("dead_exports") then .dead_exports
+                  else [] end) | '"$NORM" "$REPORT")
+dead=$(jq -r '(if has("dead_code") then .dead_code else [] end) | '"$NORM" "$GT")
+live=$(jq -r '(if has("live_code") then .live_code else [] end) | '"$NORM" "$GT")
 
-claimed = answer.get('dead_code', answer.get('dead_exports', []))
-gt_dead = gt.get('dead_code', [])
-gt_live = gt.get('live_code', [])
+export LC_ALL=C  # comm checks sort order in the active locale; pin it to match the sorts.
+count_common() { comm -12 <(sort <<<"$1") <(sort <<<"$2") | grep -c . || true; }
+count_only_first() { comm -23 <(sort <<<"$1") <(sort <<<"$2") | grep -c . || true; }
 
-def normalize(items):
-    result = set()
-    for e in items:
-        if isinstance(e, dict):
-            result.add((e.get('file', ''), e.get('symbol', '')))
-        elif isinstance(e, str):
-            result.add(('', e))
-    return result
+tp=$(count_common "$claimed" "$dead")
+fp=$(count_common "$claimed" "$live")
+fn=$(count_only_first "$dead" "$claimed")
 
-claimed_set = normalize(claimed)
-dead_set = normalize(gt_dead)
-live_set = normalize(gt_live)
+read -r score precision recall < <(awk -v tp="$tp" -v fp="$fp" -v fn="$fn" 'BEGIN{
+  p=(tp+fp>0)?tp/(tp+fp):0.0
+  r=(tp+fn>0)?tp/(tp+fn):0.0
+  if (p+r>0) f=(1.25*p*r)/(0.25*p+r); else f=0.0
+  s=f; if (p<0.9) s*=0.7
+  printf "%.10f %.10f %.10f\n", s, p, r
+}')
 
-tp = len(claimed_set & dead_set)
-fp = len(claimed_set & live_set)
-fn = len(dead_set - claimed_set)
-
-precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-
-if precision + recall > 0:
-    f_score = (1.25 * precision * recall) / (0.25 * precision + recall)
-else:
-    f_score = 0.0
-
-score = f_score
-if precision < 0.9:
-    score *= 0.7
-
-detail = f'precision={precision:.2f} recall={recall:.2f} TP={tp} FP={fp} FN={fn}'
-print(json.dumps({'score': round(score, 4), 'passed': score >= 0.3, 'detail': detail}))
-"
+# pyfloat: render like python repr(round(x,N)) — fixed-N decimals, strip trailing zeros
+# (keeping one), so 1.0/0.0/0.625/0.4375 match json.dumps exactly.
+pyfloat() { printf '%.*f' "$2" "$1" | sed -e 's/0*$//' -e 's/\.$/.0/'; }
+score_r=$(pyfloat "$score" 4)
+passed=$(awk -v s="$score" 'BEGIN{print (s>=0.3)?"true":"false"}')
+detail=$(printf 'precision=%.2f recall=%.2f TP=%s FP=%s FN=%s' "$precision" "$recall" "$tp" "$fp" "$fn")
+printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$score_r" "$passed" "$detail"
