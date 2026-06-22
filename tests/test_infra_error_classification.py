@@ -143,4 +143,8 @@ class TestRunTaskSourceLogic:
         assert '"agent_infra_error"' in self.source
 
     def test_phase_guard_prevents_complete_override(self) -> None:
-        assert 'result.phase != "agent_infra_error"' in self.source
+        # The success/complete override must be skipped for any infra-error
+        # phase (agent- or verifier-side), so infra errors route to re-run.
+        assert 'result.phase not in ("agent_infra_error", "verifier_infra_error")' in (
+            self.source
+        )

@@ -711,6 +711,32 @@ def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
     return scores
 
 
+# Canonical answer-artifact location appended to every task instruction by
+# _build_instruction_text(); always a candidate for the LLM judge.
+ANSWER_ARTIFACT_PATH = "/workspace/agent_output/answer.json"
+
+# Matches a /workspace/... artifact path a task's instruction.md tells the agent
+# to write to (e.g. /workspace/BLAST_RADIUS.md, /workspace/analysis/IMPACT_REPORT.md).
+_WORKSPACE_ARTIFACT_RE = re.compile(r"/workspace/[A-Za-z0-9_./-]+\.(?:json|md|txt|ya?ml)")
+
+
+def _derive_artifact_candidates(task_dir: Path) -> list[str]:
+    """Candidate in-container paths where the agent's answer artifact may live.
+
+    Derived from task metadata, not baked-in repo names. Always includes the
+    canonical answer.json location (appended to every instruction by
+    _build_instruction_text), then any /workspace/... artifact path the task's
+    instruction.md instructs the agent to write to. Order preserved, deduped.
+    """
+    candidates: list[str] = [ANSWER_ARTIFACT_PATH]
+    instruction = task_dir / "instruction.md"
+    if instruction.exists():
+        for match in _WORKSPACE_ARTIFACT_RE.findall(instruction.read_text()):
+            if match not in candidates:
+                candidates.append(match)
+    return candidates
+
+
 def _apply_llm_judge(
     scores: dict,
     task_dir: Path,
@@ -721,6 +747,12 @@ def _apply_llm_judge(
 
     For each checkpoint with a curated expected_solution, runs the LLM judge
     and takes min(grep_score, judge_score). Returns updated scores dict.
+
+    If the task declares an expected_solution but no agent artifact is found in
+    the container, the Tier-2 ceiling cannot be applied — rather than silently
+    returning the un-capped grep scores (which records inflated grep as the real
+    measurement), the scores dict is tagged with a ``verifier_infra_error`` so
+    the caller routes the run to the re-run channel.
     """
     expected_path = task_dir / "expected_solution.json"
     if not expected_path.exists():
@@ -737,22 +769,37 @@ def _apply_llm_judge(
     if not checkpoints_gt:
         return scores
 
-    # Extract agent output from container
+    # Extract agent output from container — candidate paths derived from task
+    # metadata (canonical answer.json + instruction.md output paths), not from
+    # baked-in repo names.
+    candidates = _derive_artifact_candidates(task_dir)
     agent_output = ""
-    for path in [
-        "/workspace/agent_output/answer.json",
-        "/workspace/moby/INCIDENT_REPORT.md",
-        "/workspace/grafana/SUPPORT_MAPPING.md",
-        "/workspace/SUPPORT_MAPPING.md",
-        "/workspace/ERROR_PROVENANCE.md",
-    ]:
+    for path in candidates:
         result = _docker_exec(container_id, ["cat", path], timeout=5)
         if result.returncode == 0 and result.stdout.strip():
             agent_output = result.stdout.strip()
             break
 
     if not agent_output:
-        logger.warning("LLM judge: no agent output found in container")
+        # llm_curator + expected_solution present but no agent artifact found:
+        # the Tier-2 cap cannot be applied. Do NOT pass through un-capped grep
+        # scores as a real measurement — route to the re-run channel instead.
+        logger.warning(
+            "LLM judge: no agent output found for llm_curator task with "
+            "expected_solution (candidates: %s) — routing to verifier_infra_error",
+            ", ".join(candidates),
+        )
+        scores["verifier_infra_error"] = {
+            "reason": "no_agent_output",
+            "stage": "llm_judge",
+            "detail": (
+                "llm_curator task declares expected_solution but no agent "
+                "artifact was found in the container; Tier-2 cap could not be "
+                "applied, so the deterministic grep scores are un-capped and "
+                "must not be recorded as the final measurement"
+            ),
+            "candidates": candidates,
+        }
         return scores
 
     try:
@@ -1530,11 +1577,20 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         verification_modes = task_data.get("verification_modes", ["deterministic"])
         if "llm_curator" in verification_modes:
             scores = _apply_llm_judge(scores, task_dir, container_id, task_data)
+            infra_err = scores.get("verifier_infra_error")
+            if infra_err:
+                result.failure_class = "verifier_infra_error"
+                result.phase = "verifier_infra_error"
+                logger.warning(
+                    "Verifier infra error (%s): %s",
+                    infra_err["reason"],
+                    infra_err["detail"],
+                )
 
         result.scores = scores
 
         # --- Save ---
-        if result.phase != "agent_infra_error":
+        if result.phase not in ("agent_infra_error", "verifier_infra_error"):
             result.phase = "complete"
             result.success = True
         result.timing = timings
