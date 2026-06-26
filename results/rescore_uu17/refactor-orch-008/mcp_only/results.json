@@ -1,0 +1,71 @@
+{
+  "task_id": "refactor-orch-008",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-refactor-orch-008-mcp_only",
+  "scores": {
+    "task_score": 1.8,
+    "checkpoints": [
+      {
+        "name": "parallelism",
+        "weight": 1.0,
+        "score": 0.8,
+        "passed": true,
+        "duration_ms": 14,
+        "exit_code": 0
+      },
+      {
+        "name": "repo_set",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "topo_order",
+        "weight": 1.0,
+        "score": 0.0,
+        "passed": false,
+        "duration_ms": 12,
+        "exit_code": 1
+      }
+    ],
+    "all_passed": false,
+    "checkpoints_passed": 2,
+    "checkpoints_total": 3
+  },
+  "timing": {
+    "parse": 0.0004296730039641261,
+    "build": 0.2191317779943347,
+    "setup": 0.411277238978073,
+    "agent": 250.60080006497446,
+    "scoring": 0.07777178997639567
+  },
+  "tool_usage": {
+    "total_input_tokens": 17,
+    "total_output_tokens": 14980,
+    "cost_usd": 0.57583095,
+    "num_turns": 28,
+    "mcp_tool_calls": 52,
+    "mcp_used": true
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "technical_debt",
+    "task_type": "refactor_orchestration",
+    "difficulty": "expert",
+    "languages": [
+      "go"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-uu17)"
+}

@@ -1,0 +1,71 @@
+{
+  "task_id": "error-trace-k8s-nftables-sync-001",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-error-trace-k8s-nftables-sync-001-mcp_only",
+  "scores": {
+    "task_score": 3.0,
+    "checkpoints": [
+      {
+        "name": "error_chain",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 12,
+        "exit_code": 0
+      },
+      {
+        "name": "error_source",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 26,
+        "exit_code": 0
+      },
+      {
+        "name": "trigger_conditions",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 10,
+        "exit_code": 0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 3,
+    "checkpoints_total": 3
+  },
+  "timing": {
+    "parse": 0.0003743559936992824,
+    "build": 0.19650723098311573,
+    "setup": 0.40021860296837986,
+    "agent": 200.239754181006,
+    "scoring": 0.09456248302012682
+  },
+  "tool_usage": {
+    "total_input_tokens": 132,
+    "total_output_tokens": 12067,
+    "cost_usd": 0.51312315,
+    "num_turns": 27,
+    "mcp_tool_calls": 60,
+    "mcp_used": true
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "customer_escalation",
+    "task_type": "error_provenance",
+    "difficulty": "hard",
+    "languages": [
+      "go"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-uu17)"
+}

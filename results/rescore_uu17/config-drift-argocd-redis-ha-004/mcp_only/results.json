@@ -1,0 +1,73 @@
+{
+  "task_id": "config-drift-argocd-redis-ha-004",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-config-drift-argocd-redis-ha-004-mcp_only",
+  "scores": {
+    "task_score": 2.25,
+    "checkpoints": [
+      {
+        "name": "config_valid",
+        "weight": 1.0,
+        "score": 0.25,
+        "passed": false,
+        "duration_ms": 10,
+        "exit_code": 0
+      },
+      {
+        "name": "drift_points",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 19,
+        "exit_code": 0
+      },
+      {
+        "name": "expected_values",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 18,
+        "exit_code": 0
+      }
+    ],
+    "all_passed": false,
+    "checkpoints_passed": 2,
+    "checkpoints_total": 3
+  },
+  "timing": {
+    "parse": 0.00041819096077233553,
+    "build": 0.28001213702373207,
+    "setup": 0.35993889794917777,
+    "agent": 190.3690588779864,
+    "scoring": 0.08495045400923118
+  },
+  "tool_usage": {
+    "total_input_tokens": 319,
+    "total_output_tokens": 11668,
+    "cost_usd": 0.42182774999999995,
+    "num_turns": 19,
+    "mcp_tool_calls": 79,
+    "mcp_used": true
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "platform_engineering",
+    "task_type": "config_drift",
+    "difficulty": "medium",
+    "languages": [
+      "yaml",
+      "go-template",
+      "go"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-uu17)"
+}

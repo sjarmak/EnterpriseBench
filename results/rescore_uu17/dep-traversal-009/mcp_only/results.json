@@ -1,0 +1,81 @@
+{
+  "task_id": "dep-traversal-009",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-dep-traversal-009-mcp_only",
+  "scores": {
+    "task_score": 3.5,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "direct_deps",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "transitive_paths",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 5,
+        "exit_code": 0
+      },
+      {
+        "name": "version_analysis",
+        "weight": 1.0,
+        "score": 0.5,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0,
+        "judge_score": 0.5,
+        "grep_score": 1.0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 4,
+    "checkpoints_total": 4
+  },
+  "timing": {
+    "parse": 0.0004534969921223819,
+    "build": 2.1314284870168194,
+    "setup": 8.70906471501803,
+    "agent": 162.46835140301846,
+    "scoring": 0.07020727399503812
+  },
+  "tool_usage": {
+    "total_input_tokens": 16,
+    "total_output_tokens": 9396,
+    "cost_usd": 0.3671001,
+    "num_turns": 23,
+    "mcp_tool_calls": 43,
+    "mcp_used": true
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "dependency_graph",
+    "difficulty": "hard",
+    "languages": [
+      "python"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-uu17)"
+}

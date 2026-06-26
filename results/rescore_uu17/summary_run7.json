@@ -1,0 +1,1009 @@
+[
+  {
+    "task": "api-contract-envoy-xds-v2-006",
+    "old_mcp_score": 3.67,
+    "new_mcp_score": 3.67,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "classification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_consumers",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "source_identification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_impact",
+        "score": 0.67,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "api-contract-gocp-module-007",
+    "old_mcp_score": 3.67,
+    "new_mcp_score": 3.67,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "classification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_consumers",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "source_identification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_impact",
+        "score": 0.67,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "api-contract-grpc-balancer-002",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 4.0,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "classification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_consumers",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "source_identification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_impact",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "api-contract-grpc-clientconn-004",
+    "old_mcp_score": 3.67,
+    "new_mcp_score": 3.67,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "classification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_consumers",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "source_identification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_impact",
+        "score": 0.67,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "api-contract-grpc-metadata-001",
+    "old_mcp_score": 3.75,
+    "new_mcp_score": 3.75,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "classification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_consumers",
+        "score": 0.75,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "source_identification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_impact",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "api-contract-grpc-transport-003",
+    "old_mcp_score": 3.17,
+    "new_mcp_score": 3.17,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "classification",
+        "score": 0.5,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_consumers",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "source_identification",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_impact",
+        "score": 0.67,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "config-drift-argocd-redis-ha-004",
+    "old_mcp_score": 2.25,
+    "new_mcp_score": 2.25,
+    "moved": false,
+    "has_expected_solution": false,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "config_valid",
+        "score": 0.25,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "drift_points",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "expected_values",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-003",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 4.0,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 1.0,
+        "grep_score": 1.0,
+        "judge_score": 1.0
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-004",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 3.0,
+    "moved": true,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 0.0,
+        "grep_score": 1.0,
+        "judge_score": 0.0
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-005",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 4.0,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 1.0,
+        "grep_score": 1.0,
+        "judge_score": 1.0
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-006",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 4.0,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 1.0,
+        "grep_score": 1.0,
+        "judge_score": 1.0
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-007",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 4.0,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 1.0,
+        "grep_score": 1.0,
+        "judge_score": 1.0
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-008",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 3.5,
+    "moved": true,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 0.5,
+        "grep_score": 1.0,
+        "judge_score": 0.5
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-009",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 3.5,
+    "moved": true,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 0.5,
+        "grep_score": 1.0,
+        "judge_score": 0.5
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-010",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 4.0,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 1.0,
+        "grep_score": 1.0,
+        "judge_score": 1.0
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-011",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 4.0,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 1.0,
+        "grep_score": 1.0,
+        "judge_score": 1.0
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-012",
+    "old_mcp_score": 3.67,
+    "new_mcp_score": 3.17,
+    "moved": true,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "direct_deps",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transitive_paths",
+        "score": 0.67,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "version_analysis",
+        "score": 0.5,
+        "grep_score": 1.0,
+        "judge_score": 0.5
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-tri-boto3-001",
+    "old_mcp_score": 3.0,
+    "new_mcp_score": 3.0,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "api_surface",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "botocore",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "transfer_path",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-tri-jackson-001",
+    "old_mcp_score": 3.0,
+    "new_mcp_score": 3.0,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "autoconfig",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "integration_path",
+        "score": 1,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "packages",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "dep-traversal-tri-openssl-001",
+    "old_mcp_score": 2.75,
+    "new_mcp_score": 2.75,
+    "moved": false,
+    "has_expected_solution": true,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "curl_integration",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "openssl_verify",
+        "score": 0.75,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "tls_entry",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "error-trace-k8s-nftables-sync-001",
+    "old_mcp_score": 3.0,
+    "new_mcp_score": 3.0,
+    "moved": false,
+    "has_expected_solution": false,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 1,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "error_chain",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "error_source",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "trigger_conditions",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "incident-inv-docker-shutdown-004",
+    "old_mcp_score": 4.0,
+    "new_mcp_score": 3.0,
+    "moved": true,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "affected_services",
+        "score": 0.0,
+        "grep_score": 1.0,
+        "judge_score": 0.0
+      },
+      {
+        "name": "error_chain",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "remediation",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "root_cause",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "refactor-orch-001",
+    "old_mcp_score": 1.8,
+    "new_mcp_score": 1.8,
+    "moved": false,
+    "has_expected_solution": false,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "parallelism",
+        "score": 0.8,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "repo_set",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "topo_order",
+        "score": 0.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "refactor-orch-002",
+    "old_mcp_score": 1.8,
+    "new_mcp_score": 1.8,
+    "moved": false,
+    "has_expected_solution": false,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "parallelism",
+        "score": 0.8,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "repo_set",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "topo_order",
+        "score": 0.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "refactor-orch-003",
+    "old_mcp_score": 1.8,
+    "new_mcp_score": 1.8,
+    "moved": false,
+    "has_expected_solution": false,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "parallelism",
+        "score": 0.8,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "repo_set",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "topo_order",
+        "score": 0.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "refactor-orch-004",
+    "old_mcp_score": 1.8,
+    "new_mcp_score": 1.8,
+    "moved": false,
+    "has_expected_solution": false,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "parallelism",
+        "score": 0.8,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "repo_set",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "topo_order",
+        "score": 0.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "refactor-orch-007",
+    "old_mcp_score": 1.8,
+    "new_mcp_score": 1.8,
+    "moved": false,
+    "has_expected_solution": false,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "parallelism",
+        "score": 0.8,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "repo_set",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "topo_order",
+        "score": 0.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "refactor-orch-008",
+    "old_mcp_score": 1.8,
+    "new_mcp_score": 1.8,
+    "moved": false,
+    "has_expected_solution": false,
+    "judged": false,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 2,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "parallelism",
+        "score": 0.8,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "repo_set",
+        "score": 1.0,
+        "grep_score": null,
+        "judge_score": null
+      },
+      {
+        "name": "topo_order",
+        "score": 0.0,
+        "grep_score": null,
+        "judge_score": null
+      }
+    ]
+  },
+  {
+    "task": "support-map-grafana-alerts-004",
+    "old_mcp_score": 1.9,
+    "new_mcp_score": 0.0,
+    "moved": true,
+    "has_expected_solution": true,
+    "judged": true,
+    "artifact_path": "/workspace/agent_output/answer.json",
+    "n_writes": 1,
+    "verifier_infra_error": null,
+    "checkpoints": [
+      {
+        "name": "code_paths",
+        "score": 0.0,
+        "grep_score": 0.9,
+        "judge_score": 0.0
+      },
+      {
+        "name": "ownership",
+        "score": 0.0,
+        "grep_score": 0.0,
+        "judge_score": 0.0
+      },
+      {
+        "name": "related_issues",
+        "score": 0.0,
+        "grep_score": 0.0,
+        "judge_score": 0.0
+      },
+      {
+        "name": "severity",
+        "score": 0.0,
+        "grep_score": 1.0,
+        "judge_score": 0.0
+      }
+    ]
+  }
+]

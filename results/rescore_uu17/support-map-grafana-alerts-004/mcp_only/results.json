@@ -1,0 +1,87 @@
+{
+  "task_id": "support-map-grafana-alerts-004",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-support-map-grafana-alerts-004-mcp_only",
+  "scores": {
+    "task_score": 0.0,
+    "checkpoints": [
+      {
+        "name": "code_paths",
+        "weight": 1.0,
+        "score": 0.0,
+        "passed": false,
+        "duration_ms": 12,
+        "exit_code": 0,
+        "judge_score": 0.0,
+        "grep_score": 0.9
+      },
+      {
+        "name": "ownership",
+        "weight": 1.0,
+        "score": 0.0,
+        "passed": false,
+        "duration_ms": 12,
+        "exit_code": 0,
+        "judge_score": 0.0,
+        "grep_score": 0.0
+      },
+      {
+        "name": "related_issues",
+        "weight": 1.0,
+        "score": 0.0,
+        "passed": false,
+        "duration_ms": 12,
+        "exit_code": 0,
+        "judge_score": 0.0,
+        "grep_score": 0.0
+      },
+      {
+        "name": "severity",
+        "weight": 1.0,
+        "score": 0.0,
+        "passed": false,
+        "duration_ms": 12,
+        "exit_code": 0,
+        "judge_score": 0.0,
+        "grep_score": 1.0
+      }
+    ],
+    "all_passed": false,
+    "checkpoints_passed": 2,
+    "checkpoints_total": 4
+  },
+  "timing": {
+    "parse": 0.0006724799750372767,
+    "build": 2.7418862429913133,
+    "setup": 0.40190083597553894,
+    "agent": 195.54212321795058,
+    "scoring": 0.08997159398859367
+  },
+  "tool_usage": {
+    "total_input_tokens": 19,
+    "total_output_tokens": 8780,
+    "cost_usd": 0.55175175,
+    "num_turns": 25,
+    "mcp_tool_calls": 62,
+    "mcp_used": true
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "customer_escalation",
+    "task_type": "support_code_mapping",
+    "difficulty": "hard",
+    "languages": [
+      "go"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-uu17)"
+}

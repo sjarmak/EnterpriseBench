@@ -1,0 +1,79 @@
+{
+  "task_id": "api-contract-grpc-metadata-001",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-api-contract-grpc-metadata-001-mcp_only",
+  "scores": {
+    "task_score": 3.75,
+    "checkpoints": [
+      {
+        "name": "classification",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "direct_consumers",
+        "weight": 1.0,
+        "score": 0.75,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "source_identification",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 3,
+        "exit_code": 0
+      },
+      {
+        "name": "transitive_impact",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 3,
+        "exit_code": 0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 4,
+    "checkpoints_total": 4
+  },
+  "timing": {
+    "parse": 0.0004508920246735215,
+    "build": 0.31876215402735397,
+    "setup": 12.301575454999693,
+    "agent": 185.1449995120056,
+    "scoring": 0.06044914503581822
+  },
+  "tool_usage": {
+    "total_input_tokens": 16,
+    "total_output_tokens": 11339,
+    "cost_usd": 0.42083610000000005,
+    "num_turns": 21,
+    "mcp_tool_calls": 45,
+    "mcp_used": true
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "api_contract",
+    "difficulty": "hard",
+    "languages": [
+      "go"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-uu17)"
+}

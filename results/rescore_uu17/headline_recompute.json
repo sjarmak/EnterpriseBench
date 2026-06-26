@@ -1,0 +1,196 @@
+{
+  "locked_clean_n": 105,
+  "affected_in_clean": 29,
+  "old": {
+    "n": 105,
+    "mean": -0.09254380952380953,
+    "median": 0.0,
+    "better": 24,
+    "tie": 52,
+    "worse": 29
+  },
+  "new": {
+    "n": 105,
+    "mean": -0.10406761904761905,
+    "median": 0.0,
+    "better": 23,
+    "tie": 49,
+    "worse": 33
+  },
+  "band_mcp_max": {
+    "n": 105,
+    "mean": -0.07073428571428572,
+    "median": 0.0,
+    "better": 24,
+    "tie": 50,
+    "worse": 31
+  },
+  "band_mcp_min": {
+    "n": 105,
+    "mean": -0.11359142857142858,
+    "median": 0.0,
+    "better": 23,
+    "tie": 48,
+    "worse": 34
+  },
+  "variant_A_reselected": {
+    "n": 104,
+    "mean": -0.13151057692307694,
+    "median": 0.0,
+    "better": 22,
+    "tie": 49,
+    "worse": 33
+  },
+  "dropped_baseline_dead": [
+    "dep-traversal-tri-openssl-001"
+  ],
+  "baseline_infra_fallback": [
+    "api-contract-gocp-module-007"
+  ],
+  "moves": [
+    {
+      "task": "api-contract-grpc-balancer-002",
+      "b_old": 4.0,
+      "m_old": 4.0,
+      "b_new": 3.67,
+      "m_new": 4.0,
+      "delta_old": 0.0,
+      "delta_new": 0.33000000000000007
+    },
+    {
+      "task": "api-contract-grpc-metadata-001",
+      "b_old": 3.17,
+      "m_old": 3.75,
+      "b_new": 3.5,
+      "m_new": 3.75,
+      "delta_old": 0.5800000000000001,
+      "delta_new": 0.25
+    },
+    {
+      "task": "api-contract-grpc-transport-003",
+      "b_old": 2.67,
+      "m_old": 3.17,
+      "b_new": 3.42,
+      "m_new": 3.17,
+      "delta_old": 0.5,
+      "delta_new": -0.25
+    },
+    {
+      "task": "config-drift-argocd-redis-ha-004",
+      "b_old": 2.25,
+      "m_old": 2.25,
+      "b_new": 0.25,
+      "m_new": 2.25,
+      "delta_old": 0.0,
+      "delta_new": 2.0
+    },
+    {
+      "task": "dep-traversal-003",
+      "b_old": 4.0,
+      "m_old": 4.0,
+      "b_new": 4.0,
+      "m_new": 3.0,
+      "delta_old": 0.0,
+      "delta_new": -1.0
+    },
+    {
+      "task": "dep-traversal-004",
+      "b_old": 4.0,
+      "m_old": 4.0,
+      "b_new": 4.0,
+      "m_new": 3.0,
+      "delta_old": 0.0,
+      "delta_new": -1.0
+    },
+    {
+      "task": "dep-traversal-006",
+      "b_old": 3.67,
+      "m_old": 4.0,
+      "b_new": 4.0,
+      "m_new": 4.0,
+      "delta_old": 0.33000000000000007,
+      "delta_new": 0.0
+    },
+    {
+      "task": "dep-traversal-009",
+      "b_old": 4.0,
+      "m_old": 4.0,
+      "b_new": 3.5,
+      "m_new": 3.5,
+      "delta_old": 0.0,
+      "delta_new": 0.0
+    },
+    {
+      "task": "dep-traversal-010",
+      "b_old": 3.5,
+      "m_old": 4.0,
+      "b_new": 3.5,
+      "m_new": 3.5,
+      "delta_old": 0.5,
+      "delta_new": 0.0
+    },
+    {
+      "task": "dep-traversal-012",
+      "b_old": 4.0,
+      "m_old": 3.67,
+      "b_new": 3.5,
+      "m_new": 3.17,
+      "delta_old": -0.33000000000000007,
+      "delta_new": -0.33000000000000007
+    },
+    {
+      "task": "dep-traversal-tri-jackson-001",
+      "b_old": 3.0,
+      "m_old": 3.0,
+      "b_new": 2.0,
+      "m_new": 3.0,
+      "delta_old": 0.0,
+      "delta_new": 1.0
+    },
+    {
+      "task": "dep-traversal-tri-openssl-001",
+      "b_old": 2.75,
+      "m_old": 2.75,
+      "b_new": 0.0,
+      "m_new": 2.75,
+      "delta_old": 0.0,
+      "delta_new": 2.75
+    },
+    {
+      "task": "incident-inv-docker-shutdown-004",
+      "b_old": 4.0,
+      "m_old": 4.0,
+      "b_new": 3.5,
+      "m_new": 3.0,
+      "delta_old": 0.0,
+      "delta_new": -0.5
+    },
+    {
+      "task": "refactor-orch-001",
+      "b_old": 1.0,
+      "m_old": 1.8,
+      "b_new": 1.8,
+      "m_new": 1.8,
+      "delta_old": 0.8,
+      "delta_new": 0.0
+    },
+    {
+      "task": "refactor-orch-003",
+      "b_old": 1.5,
+      "m_old": 1.8,
+      "b_new": 1.8,
+      "m_new": 1.8,
+      "delta_old": 0.30000000000000004,
+      "delta_new": 0.0
+    },
+    {
+      "task": "support-map-grafana-alerts-004",
+      "b_old": 2.94,
+      "m_old": 1.9,
+      "b_new": 2.82,
+      "m_new": 0.0,
+      "delta_old": -1.04,
+      "delta_new": -2.82
+    }
+  ]
+}

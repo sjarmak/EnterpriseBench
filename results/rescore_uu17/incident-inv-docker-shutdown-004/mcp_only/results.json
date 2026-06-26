@@ -1,0 +1,81 @@
+{
+  "task_id": "incident-inv-docker-shutdown-004",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-incident-inv-docker-shutdown-004-mcp_only",
+  "scores": {
+    "task_score": 3.0,
+    "checkpoints": [
+      {
+        "name": "affected_services",
+        "weight": 1.0,
+        "score": 0.0,
+        "passed": false,
+        "duration_ms": 4,
+        "exit_code": 0,
+        "judge_score": 0.0,
+        "grep_score": 1.0
+      },
+      {
+        "name": "error_chain",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "remediation",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "root_cause",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 3,
+        "exit_code": 0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 4,
+    "checkpoints_total": 4
+  },
+  "timing": {
+    "parse": 0.0004650999908335507,
+    "build": 0.2158659480046481,
+    "setup": 0.38605661696055904,
+    "agent": 410.5300345380092,
+    "scoring": 0.0603495980030857
+  },
+  "tool_usage": {
+    "total_input_tokens": 28,
+    "total_output_tokens": 23163,
+    "cost_usd": 0.9701452499999998,
+    "num_turns": 42,
+    "mcp_tool_calls": 74,
+    "mcp_used": true
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "incident_response",
+    "task_type": "incident_investigation",
+    "difficulty": "hard",
+    "languages": [
+      "go"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-uu17)"
+}

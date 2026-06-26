@@ -1,0 +1,85 @@
+{
+  "task_id": "dep-traversal-007",
+  "success": true,
+  "status": "VALID",
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "account": 1,
+  "mcp_handshake_ok": false,
+  "image_tag": "eb-dep-traversal-007-mcp_only",
+  "scores": {
+    "task_score": 4.0,
+    "checkpoints": [
+      {
+        "name": "cve_id",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "direct_deps",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "transitive_paths",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 3,
+        "exit_code": 0
+      },
+      {
+        "name": "version_analysis",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 3,
+        "exit_code": 0,
+        "judge_score": 1.0,
+        "grep_score": 1.0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 4,
+    "checkpoints_total": 4
+  },
+  "timing": {
+    "parse": 0.0007082298398017883,
+    "build": 2.4762260979041457,
+    "setup": 0.608992868103087,
+    "agent": 139.8158688712865,
+    "scoring": 0.06676585879176855
+  },
+  "tool_usage": {
+    "total_input_tokens": 1884,
+    "total_output_tokens": 8427,
+    "cost_usd": 0.353211,
+    "num_turns": 25,
+    "mcp_tool_calls": 32,
+    "mcp_used": true
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json -p",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "dependency_graph",
+    "difficulty": "hard",
+    "languages": [
+      "javascript",
+      "typescript"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-uu17)"
+}
