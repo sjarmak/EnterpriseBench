@@ -1,0 +1,70 @@
+{
+  "task_id": "dep-traversal-tri-boto3-001",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-dep-traversal-tri-boto3-001",
+  "scores": {
+    "task_score": 3.0,
+    "checkpoints": [
+      {
+        "name": "api_surface",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 9,
+        "exit_code": 0
+      },
+      {
+        "name": "botocore",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 6,
+        "exit_code": 0
+      },
+      {
+        "name": "transfer_path",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 57,
+        "exit_code": 0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 3,
+    "checkpoints_total": 3
+  },
+  "timing": {
+    "parse": 0.0007437858730554581,
+    "build": 7.461496805772185,
+    "setup": 0.5945646110922098,
+    "agent": 260.73263722099364,
+    "scoring": 0.13610525336116552
+  },
+  "tool_usage": {
+    "total_input_tokens": 10751,
+    "total_output_tokens": 26498,
+    "cost_usd": 0.7698768,
+    "num_turns": 7,
+    "mcp_tool_calls": 0
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json -p",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "baseline"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "dependency_graph",
+    "difficulty": "hard",
+    "languages": [
+      "python"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-aq8e)"
+}

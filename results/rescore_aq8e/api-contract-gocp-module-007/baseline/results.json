@@ -1,0 +1,81 @@
+{
+  "task_id": "api-contract-gocp-module-007",
+  "success": true,
+  "status": "VALID",
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "account": 4,
+  "mcp_handshake_ok": null,
+  "image_tag": "eb-api-contract-gocp-module-007",
+  "scores": {
+    "task_score": 4.0,
+    "checkpoints": [
+      {
+        "name": "classification",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 8,
+        "exit_code": 0
+      },
+      {
+        "name": "direct_consumers",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 5,
+        "exit_code": 0
+      },
+      {
+        "name": "source_identification",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 5,
+        "exit_code": 0
+      },
+      {
+        "name": "transitive_impact",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 5,
+        "exit_code": 0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 4,
+    "checkpoints_total": 4
+  },
+  "timing": {
+    "parse": 0.0007041813805699348,
+    "build": 101.70201916154474,
+    "setup": 1.3422541692852974,
+    "agent": 751.571021582,
+    "scoring": 0.08151516877114773
+  },
+  "tool_usage": {
+    "total_input_tokens": 10062802,
+    "total_output_tokens": 427215,
+    "cost_usd": 24.710103550000014,
+    "num_turns": 5,
+    "mcp_tool_calls": 0
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "baseline"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "api_contract",
+    "difficulty": "hard",
+    "languages": [
+      "go"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-aq8e)"
+}

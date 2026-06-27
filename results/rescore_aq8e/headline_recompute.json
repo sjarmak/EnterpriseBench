@@ -1,0 +1,254 @@
+{
+  "locked_clean_n": 105,
+  "affected_in_clean": 29,
+  "old_locked": {
+    "n": 105,
+    "mean": -0.09254380952380953,
+    "median": 0.0,
+    "better": 24,
+    "tie": 52,
+    "worse": 29
+  },
+  "uu17_mixed": {
+    "n": 105,
+    "mean": -0.10406761904761905,
+    "median": 0.0,
+    "better": 23,
+    "tie": 49,
+    "worse": 33
+  },
+  "aq8e_symmetric": {
+    "n": 105,
+    "mean": -0.08263904761904763,
+    "median": 0.0,
+    "better": 25,
+    "tie": 52,
+    "worse": 28
+  },
+  "symmetric_band_pro_mcp": {
+    "n": 105,
+    "mean": -0.03025809523809524,
+    "median": 0.0,
+    "better": 30,
+    "tie": 48,
+    "worse": 27
+  },
+  "symmetric_band_anti_mcp": {
+    "n": 105,
+    "mean": -0.12968666666666667,
+    "median": 0.0,
+    "better": 23,
+    "tie": 51,
+    "worse": 31
+  },
+  "symmetric_variant_A_reselected": {
+    "n": 104,
+    "mean": -0.08343365384615385,
+    "median": 0.0,
+    "better": 25,
+    "tie": 51,
+    "worse": 28
+  },
+  "dropped_baseline_dead": [
+    "support-map-grafana-alerts-004"
+  ],
+  "baseline_rescore_infra_fallback": [],
+  "baseline_rerun_infra_fallback": [
+    "api-contract-gocp-module-007"
+  ],
+  "conclusion_changed_vs_mixed": false,
+  "direction": {
+    "old": "MCP_worse",
+    "mixed": "MCP_worse",
+    "symmetric": "MCP_worse"
+  },
+  "moves": [
+    {
+      "task": "api-contract-grpc-balancer-002",
+      "b_locked": 4.0,
+      "m_locked": 4.0,
+      "b_rerun_9awn": 3.67,
+      "b_rescore_aq8e": 4.0,
+      "m_rescore_uu17": 4.0,
+      "d_locked": 0.0,
+      "d_mixed_uu17": 0.33,
+      "d_symmetric": 0.0
+    },
+    {
+      "task": "api-contract-grpc-metadata-001",
+      "b_locked": 3.17,
+      "m_locked": 3.75,
+      "b_rerun_9awn": 3.5,
+      "b_rescore_aq8e": 3.17,
+      "m_rescore_uu17": 3.75,
+      "d_locked": 0.58,
+      "d_mixed_uu17": 0.25,
+      "d_symmetric": 0.58
+    },
+    {
+      "task": "api-contract-grpc-transport-003",
+      "b_locked": 2.67,
+      "m_locked": 3.17,
+      "b_rerun_9awn": 3.42,
+      "b_rescore_aq8e": 2.67,
+      "m_rescore_uu17": 3.17,
+      "d_locked": 0.5,
+      "d_mixed_uu17": -0.25,
+      "d_symmetric": 0.5
+    },
+    {
+      "task": "config-drift-argocd-redis-ha-004",
+      "b_locked": 2.25,
+      "m_locked": 2.25,
+      "b_rerun_9awn": 0.25,
+      "b_rescore_aq8e": 2.25,
+      "m_rescore_uu17": 2.25,
+      "d_locked": 0.0,
+      "d_mixed_uu17": 2.0,
+      "d_symmetric": 0.0
+    },
+    {
+      "task": "dep-traversal-003",
+      "b_locked": 4.0,
+      "m_locked": 4.0,
+      "b_rerun_9awn": 4.0,
+      "b_rescore_aq8e": 3.0,
+      "m_rescore_uu17": 3.0,
+      "d_locked": 0.0,
+      "d_mixed_uu17": -1.0,
+      "d_symmetric": 0.0
+    },
+    {
+      "task": "dep-traversal-004",
+      "b_locked": 4.0,
+      "m_locked": 4.0,
+      "b_rerun_9awn": 4.0,
+      "b_rescore_aq8e": 4.0,
+      "m_rescore_uu17": 3.0,
+      "d_locked": 0.0,
+      "d_mixed_uu17": -1.0,
+      "d_symmetric": -1.0
+    },
+    {
+      "task": "dep-traversal-005",
+      "b_locked": 4.0,
+      "m_locked": 4.0,
+      "b_rerun_9awn": 4.0,
+      "b_rescore_aq8e": 3.0,
+      "m_rescore_uu17": 4.0,
+      "d_locked": 0.0,
+      "d_mixed_uu17": 0.0,
+      "d_symmetric": 1.0
+    },
+    {
+      "task": "dep-traversal-006",
+      "b_locked": 3.67,
+      "m_locked": 4.0,
+      "b_rerun_9awn": 4.0,
+      "b_rescore_aq8e": 3.67,
+      "m_rescore_uu17": 4.0,
+      "d_locked": 0.33,
+      "d_mixed_uu17": 0.0,
+      "d_symmetric": 0.33
+    },
+    {
+      "task": "dep-traversal-009",
+      "b_locked": 4.0,
+      "m_locked": 4.0,
+      "b_rerun_9awn": 3.5,
+      "b_rescore_aq8e": 3.5,
+      "m_rescore_uu17": 3.5,
+      "d_locked": 0.0,
+      "d_mixed_uu17": 0.0,
+      "d_symmetric": 0.0
+    },
+    {
+      "task": "dep-traversal-010",
+      "b_locked": 3.5,
+      "m_locked": 4.0,
+      "b_rerun_9awn": 3.5,
+      "b_rescore_aq8e": 3.5,
+      "m_rescore_uu17": 3.5,
+      "d_locked": 0.5,
+      "d_mixed_uu17": 0.0,
+      "d_symmetric": 0.0
+    },
+    {
+      "task": "dep-traversal-012",
+      "b_locked": 4.0,
+      "m_locked": 3.67,
+      "b_rerun_9awn": 3.5,
+      "b_rescore_aq8e": 3.0,
+      "m_rescore_uu17": 3.17,
+      "d_locked": -0.33,
+      "d_mixed_uu17": -0.33,
+      "d_symmetric": 0.17
+    },
+    {
+      "task": "dep-traversal-tri-jackson-001",
+      "b_locked": 3.0,
+      "m_locked": 3.0,
+      "b_rerun_9awn": 2.0,
+      "b_rescore_aq8e": 3.0,
+      "m_rescore_uu17": 3.0,
+      "d_locked": 0.0,
+      "d_mixed_uu17": 1.0,
+      "d_symmetric": 0.0
+    },
+    {
+      "task": "dep-traversal-tri-openssl-001",
+      "b_locked": 2.75,
+      "m_locked": 2.75,
+      "b_rerun_9awn": 0.0,
+      "b_rescore_aq8e": 2.75,
+      "m_rescore_uu17": 2.75,
+      "d_locked": 0.0,
+      "d_mixed_uu17": 2.75,
+      "d_symmetric": 0.0
+    },
+    {
+      "task": "incident-inv-docker-shutdown-004",
+      "b_locked": 4.0,
+      "m_locked": 4.0,
+      "b_rerun_9awn": 3.5,
+      "b_rescore_aq8e": 3.0,
+      "m_rescore_uu17": 3.0,
+      "d_locked": 0.0,
+      "d_mixed_uu17": -0.5,
+      "d_symmetric": 0.0
+    },
+    {
+      "task": "refactor-orch-001",
+      "b_locked": 1.0,
+      "m_locked": 1.8,
+      "b_rerun_9awn": 1.8,
+      "b_rescore_aq8e": 1.0,
+      "m_rescore_uu17": 1.8,
+      "d_locked": 0.8,
+      "d_mixed_uu17": 0.0,
+      "d_symmetric": 0.8
+    },
+    {
+      "task": "refactor-orch-003",
+      "b_locked": 1.5,
+      "m_locked": 1.8,
+      "b_rerun_9awn": 1.8,
+      "b_rescore_aq8e": 1.5,
+      "m_rescore_uu17": 1.8,
+      "d_locked": 0.3,
+      "d_mixed_uu17": 0.0,
+      "d_symmetric": 0.3
+    },
+    {
+      "task": "support-map-grafana-alerts-004",
+      "b_locked": 2.94,
+      "m_locked": 1.9,
+      "b_rerun_9awn": 2.82,
+      "b_rescore_aq8e": 0.0,
+      "m_rescore_uu17": 0.0,
+      "d_locked": -1.04,
+      "d_mixed_uu17": -2.82,
+      "d_symmetric": 0.0
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "task_id": "api-contract-grpc-balancer-002",
+  "success": true,
+  "status": "VALID",
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "account": 4,
+  "mcp_handshake_ok": null,
+  "image_tag": "eb-api-contract-grpc-balancer-002",
+  "scores": {
+    "task_score": 4.0,
+    "checkpoints": [
+      {
+        "name": "classification",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 7,
+        "exit_code": 0
+      },
+      {
+        "name": "direct_consumers",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "source_identification",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "transitive_impact",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 3,
+        "exit_code": 0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 4,
+    "checkpoints_total": 4
+  },
+  "timing": {
+    "parse": 0.007855242118239403,
+    "build": 61.726786421611905,
+    "setup": 1.4354872843250632,
+    "agent": 178.7264455119148,
+    "scoring": 0.07474924810230732
+  },
+  "tool_usage": {
+    "total_input_tokens": 1021,
+    "total_output_tokens": 11584,
+    "cost_usd": 0.4896223,
+    "num_turns": 25,
+    "mcp_tool_calls": 0
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "baseline"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "api_contract",
+    "difficulty": "hard",
+    "languages": [
+      "go"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-aq8e)"
+}

@@ -1,0 +1,70 @@
+{
+  "task_id": "error-trace-k8s-nftables-sync-001",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-error-trace-k8s-nftables-sync-001",
+  "scores": {
+    "task_score": 3.0,
+    "checkpoints": [
+      {
+        "name": "error_chain",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 11,
+        "exit_code": 0
+      },
+      {
+        "name": "error_source",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 27,
+        "exit_code": 0
+      },
+      {
+        "name": "trigger_conditions",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 11,
+        "exit_code": 0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 3,
+    "checkpoints_total": 3
+  },
+  "timing": {
+    "parse": 0.0005463049747049809,
+    "build": 4.421698119957,
+    "setup": 0.6623777250060812,
+    "agent": 190.4672286870191,
+    "scoring": 0.08857680205255747
+  },
+  "tool_usage": {
+    "total_input_tokens": 824,
+    "total_output_tokens": 12634,
+    "cost_usd": 0.6285598,
+    "num_turns": 22,
+    "mcp_tool_calls": 0
+  },
+  "config": {
+    "source": "upstream",
+    "agent_command": "",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "baseline"
+  },
+  "task_metadata": {
+    "suite": "customer_escalation",
+    "task_type": "error_provenance",
+    "difficulty": "hard",
+    "languages": [
+      "go"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-aq8e)"
+}

@@ -1,0 +1,70 @@
+{
+  "task_id": "dep-traversal-tri-openssl-001",
+  "success": true,
+  "phase": "complete",
+  "error": "",
+  "failure_class": null,
+  "image_tag": "eb-dep-traversal-tri-openssl-001",
+  "scores": {
+    "task_score": 2.75,
+    "checkpoints": [
+      {
+        "name": "curl_integration",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 25,
+        "exit_code": 0
+      },
+      {
+        "name": "openssl_verify",
+        "weight": 1.0,
+        "score": 0.75,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      },
+      {
+        "name": "tls_entry",
+        "weight": 1.0,
+        "score": 1.0,
+        "passed": true,
+        "duration_ms": 4,
+        "exit_code": 0
+      }
+    ],
+    "all_passed": true,
+    "checkpoints_passed": 3,
+    "checkpoints_total": 3
+  },
+  "timing": {
+    "parse": 0.0006349403411149979,
+    "build": 5.35300762578845,
+    "setup": 0.5058943973854184,
+    "agent": 386.90145009197295,
+    "scoring": 0.07798026129603386
+  },
+  "tool_usage": {
+    "total_input_tokens": 1345,
+    "total_output_tokens": 47100,
+    "cost_usd": 1.13741885,
+    "num_turns": 7,
+    "mcp_tool_calls": 0
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json -p",
+    "timeout": 1800,
+    "dry_run": false,
+    "mode": "baseline"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "dependency_graph",
+    "difficulty": "hard",
+    "languages": [
+      "c"
+    ]
+  },
+  "rescored_under": "origin/main@94e0e0d (EnterpriseBench-aq8e)"
+}
