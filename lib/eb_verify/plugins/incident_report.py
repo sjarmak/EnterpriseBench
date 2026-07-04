@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from eb_verify.groundedness import CitationParseError, ground_citations
 from eb_verify.plugins import ValidationResult, safe_read
 
 
@@ -134,6 +135,7 @@ class IncidentReportValidator:
         workspace: Path,
         known_services: Optional[list[str]] = None,
         known_files: Optional[list[str]] = None,
+        require_grounded_citations: bool = False,
     ) -> ValidationResult:
         """
         Look for incident report artifacts and validate structure + semantics.
@@ -143,6 +145,9 @@ class IncidentReportValidator:
         2. Required sections have non-empty content
         3. Timeline events are in chronological order
         4. Cross-references (services, files) are plausible when known lists provided
+        5. Optional groundedness gate (require_grounded_citations=True): every
+           citation's evidence_span must appear verbatim in the cited workspace
+           file; missing/malformed citations or any ungrounded span fail validation
         """
         candidates = list(workspace.glob("**/incident_report.json")) + \
                      list(workspace.glob("**/incident-report.json")) + \
@@ -202,6 +207,19 @@ class IncidentReportValidator:
         # Cross-reference validation
         xref_issues = check_cross_references(data, known_services, known_files)
         warnings.extend(xref_issues)
+
+        # Optional groundedness gate (task ground truth: require_grounded_citations)
+        if require_grounded_citations:
+            try:
+                grounded = ground_citations(data, workspace)
+            except CitationParseError as e:
+                # Malformed/missing citations surface as explicit issues -> invalid.
+                issues.extend(e.issues)
+                return ValidationResult(valid=False, detail="; ".join(issues))
+            if not grounded.all_grounded:
+                return ValidationResult(
+                    valid=False, detail=f"ungrounded citations: {grounded.summary()}"
+                )
 
         detail = (
             f"Valid incident report at {report_path.name} "

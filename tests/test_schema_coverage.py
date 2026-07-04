@@ -292,6 +292,32 @@ class TestDifficultyStratumCoverage:
         assert not missing, f"No fixture covers strata: {missing}"
 
 
+class TestGroundedCitationsProperty:
+    """ground_truth.require_grounded_citations is a declared optional boolean."""
+
+    def test_property_declared_as_boolean(self) -> None:
+        schema = _load_schema()
+        gt_props = schema["properties"]["ground_truth"]["properties"]
+        assert "require_grounded_citations" in gt_props
+        assert gt_props["require_grounded_citations"]["type"] == "boolean"
+
+    def test_property_not_required(self) -> None:
+        schema = _load_schema()
+        gt = schema["properties"]["ground_truth"]
+        assert "require_grounded_citations" not in gt.get("required", [])
+
+    def test_task_with_flag_validates(self) -> None:
+        task = _base(
+            "grounded-cite-001",
+            "incident_response",
+            "incident_investigation",
+            artifacts_required=["incident_report"],
+        )
+        task["ground_truth"]["require_grounded_citations"] = True
+        errors = _validate(task)
+        assert errors == [], errors
+
+
 class TestExistingFixturesStillValid:
     """Ensure schema extension doesn't break existing fixtures."""
 

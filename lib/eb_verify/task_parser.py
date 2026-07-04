@@ -55,6 +55,7 @@ class GroundTruth:
     tiers: List[str] = field(default_factory=list)
     required_files: List[GroundTruthFile] = field(default_factory=list)
     sufficient_files: List[GroundTruthFile] = field(default_factory=list)
+    require_grounded_citations: bool = False
 
 
 @dataclass(frozen=True)
@@ -151,6 +152,9 @@ def _parse_ground_truth(raw_gt: Dict[str, Any]) -> GroundTruth:
         sufficient_files=[
             _parse_ground_truth_file(f) for f in raw_gt.get("sufficient_files", [])
         ],
+        require_grounded_citations=bool(
+            raw_gt.get("require_grounded_citations", False)
+        ),
     )
 
 

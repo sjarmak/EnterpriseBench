@@ -195,7 +195,9 @@
               "security_assessment",
               "migration_guide",
               "answer",
-              "topological_order"
+              "topological_order",
+              "call_graph",
+              "fact_triples"
             ]
           }
         },
@@ -349,6 +351,10 @@
             "required": ["path", "repo"]
           },
           "description": "Files that help but are not essential — missing = small penalty"
+        },
+        "require_grounded_citations": {
+          "type": "boolean",
+          "description": "When true, artifact validators must verify that each citation's evidence_span appears verbatim in the cited workspace file (groundedness gate)"
         }
       }
     },

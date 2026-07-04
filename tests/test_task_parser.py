@@ -245,6 +245,13 @@ class TestDataclassConstruction:
         assert gt.tiers == []
         assert gt.required_files == []
         assert gt.sufficient_files == []
+        assert gt.require_grounded_citations is False
+
+    def test_ground_truth_require_grounded_citations_parsed(self):
+        from eb_verify.task_parser import _parse_ground_truth
+
+        gt = _parse_ground_truth({"require_grounded_citations": True})
+        assert gt.require_grounded_citations is True
 
     def test_tool_access_defaults(self):
         ta = ToolAccess()

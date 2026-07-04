@@ -12,12 +12,13 @@ LLM judge acts as a ceiling on the grep score.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Protocol, cast
 
 from eb_verify.task_parser import TaskDefinition, Checkpoint
 from eb_verify.scoring import (
@@ -26,9 +27,22 @@ from eb_verify.scoring import (
     compute_score,
     write_reward,
 )
-from eb_verify.plugins import get_validator
+from eb_verify.plugins import ValidationResult, get_validator
 
 logger = logging.getLogger(__name__)
+
+
+class _GroundednessCapableValidator(Protocol):
+    """An artifact validator whose validate() accepts the groundedness flag.
+
+    Membership is established at runtime by validate_artifacts()'s
+    inspect.signature probe, not statically — this Protocol exists so the
+    probed call site is typed instead of an untyped reflection call.
+    """
+
+    def validate(
+        self, workspace: Path, require_grounded_citations: bool = ...
+    ) -> ValidationResult: ...
 
 
 def _load_expected_solution(task_dir: Path) -> dict[str, Any]:
@@ -255,8 +269,24 @@ class CheckpointRunner:
         )
         return result.score
 
+    def _grounding_required(self) -> bool:
+        """True when the task's ground truth demands grounded citations."""
+        return bool(
+            self.task.ground_truth is not None
+            and self.task.ground_truth.require_grounded_citations
+        )
+
     def validate_artifacts(self) -> list[dict]:
-        """Validate all required artifacts using plugin validators."""
+        """Validate all required artifacts using plugin validators.
+
+        When the task's ground truth sets require_grounded_citations, the flag
+        is forwarded to validators whose validate() declares that keyword.
+        The ArtifactValidator protocol is validate(workspace) only, so
+        inspect.signature is the capability check: a validator that cannot
+        enforce groundedness must fail the artifact explicitly rather than
+        run without the gate the task demands.
+        """
+        require_grounded = self._grounding_required()
         results = []
         for artifact_type in self.task.artifacts.required:
             validator = get_validator(artifact_type)
@@ -269,7 +299,30 @@ class CheckpointRunner:
                     }
                 )
                 continue
-            result = validator.validate(self.workspace)
+            if require_grounded:
+                params = inspect.signature(validator.validate).parameters
+                if "require_grounded_citations" not in params:
+                    results.append(
+                        {
+                            "type": artifact_type,
+                            "valid": False,
+                            "detail": (
+                                "require_grounded_citations is set but the "
+                                f"'{artifact_type}' validator does not support "
+                                "grounded citations"
+                            ),
+                        }
+                    )
+                    continue
+                # The signature probe above verified the kwarg exists; the
+                # cast records that runtime fact for the type checker (the
+                # base ArtifactValidator protocol is validate(workspace) only).
+                capable = cast(_GroundednessCapableValidator, validator)
+                result = capable.validate(
+                    self.workspace, require_grounded_citations=True
+                )
+            else:
+                result = validator.validate(self.workspace)
             results.append(
                 {
                     "type": artifact_type,
@@ -338,11 +391,31 @@ class CheckpointRunner:
         # Compute score
         total = compute_score(checkpoint_results)
 
+        # Grounded-citations gate: when the task demands grounded citations,
+        # a required artifact failing validation zeroes the total — otherwise
+        # the flag would be a side channel with no effect on the score or
+        # exit code. Tasks without the flag keep legacy scoring untouched.
+        score_gates: list[str] = []
+        if self._grounding_required():
+            failed_types = [
+                ar["type"] for ar in artifact_results if not ar["valid"]
+            ]
+            if failed_types:
+                gate_msg = (
+                    "require_grounded_citations: required artifact(s) failed "
+                    f"validation ({', '.join(failed_types)}); total_score "
+                    "forced to 0.0"
+                )
+                score_gates.append(gate_msg)
+                print(f"[runner] SCORE GATE: {gate_msg}")
+                total = 0.0
+
         verification = VerificationResult(
             task_id=self.task.id,
             checkpoint_results=checkpoint_results,
             artifact_results=artifact_results,
             total_score=total,
+            score_gates=score_gates,
         )
 
         # Write reward.txt

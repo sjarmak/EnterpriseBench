@@ -24,9 +24,16 @@ class VerificationResult:
     checkpoint_results: List[CheckpointResult] = field(default_factory=list)
     artifact_results: List[dict] = field(default_factory=list)
     total_score: float = 0.0
+    # Gates that forced total_score down (e.g. a required artifact failing
+    # the groundedness check a task demands). Empty when no gate fired.
+    score_gates: List[str] = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [f"task: {self.task_id}", f"total_score: {self.total_score:.4f}", ""]
+        for gate in self.score_gates:
+            lines.append(f"score_gate: {gate}")
+        if self.score_gates:
+            lines.append("")
         lines.append("checkpoints:")
         for cr in self.checkpoint_results:
             status = "PASS" if cr.passed else "FAIL"

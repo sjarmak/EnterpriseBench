@@ -42,14 +42,29 @@ def list_validators() -> list[str]:
     return list(_registry.keys())
 
 
-def safe_read(path: Path, workspace: Path) -> str:
-    """Read a file, asserting the resolved path stays within workspace (symlink-safe)."""
+class FileTooLargeError(ValueError):
+    """Raised by safe_read when a file exceeds the caller's max_bytes cap."""
+
+
+def safe_read(path: Path, workspace: Path, max_bytes: Optional[int] = None) -> str:
+    """Read a file, asserting the resolved path stays within workspace (symlink-safe).
+
+    When max_bytes is set, files larger than the cap raise FileTooLargeError
+    without being read. Containment is checked FIRST: an escaping path always
+    reports the escape and is never stat'd for a size verdict.
+    """
     resolved = path.resolve()
     workspace_resolved = workspace.resolve()
     if not str(resolved).startswith(str(workspace_resolved) + "/") and resolved != workspace_resolved:
         raise ValueError(
             f"Path escapes workspace: {path} -> {resolved}"
         )
+    if max_bytes is not None:
+        size = resolved.stat().st_size
+        if size > max_bytes:
+            raise FileTooLargeError(
+                f"File too large to read: {path} is {size} bytes (max {max_bytes})"
+            )
     return resolved.read_text()
 
 
@@ -63,6 +78,7 @@ from eb_verify.plugins.security_assessment import SecurityAssessmentValidator
 from eb_verify.plugins.answer import AnswerValidator
 from eb_verify.plugins.call_graph import CallGraphValidator
 from eb_verify.plugins.topological_order import TopologicalOrderValidator
+from eb_verify.plugins.fact_triples import FactTriplesValidator
 
 register(CodePatchValidator())
 register(ConfigValidator())
@@ -73,3 +89,4 @@ register(SecurityAssessmentValidator())
 register(AnswerValidator())
 register(CallGraphValidator())
 register(TopologicalOrderValidator())
+register(FactTriplesValidator())
