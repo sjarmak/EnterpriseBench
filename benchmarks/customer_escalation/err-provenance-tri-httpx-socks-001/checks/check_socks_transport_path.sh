@@ -23,7 +23,7 @@ groups = {
     'socks_module': ['socks_proxy.py'],
     'socks_connection': ['asyncsocks5connection', '_init_socks5_connection'],
     'http11_handoff': ['asynchttp11connection'],
-    'h11_parser': ['h11.connection'],
+    'h11_parser': ['h11.connection', '_h11_state', 'h11 parser', 'h11 state machine'],
 }
 
 matched = [name for name, alts in groups.items()

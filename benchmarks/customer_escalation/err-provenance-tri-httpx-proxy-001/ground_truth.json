@@ -62,7 +62,7 @@
     }
   ],
   "error_chain": [
-    "AsyncHTTPTransport httpx/_transports/default.py AsyncHTTPProxy is constructed as the connection pool when the client is configured with an http or https proxy URL",
+    "httpx/_transports/default.py AsyncHTTPProxy connection pool is constructed for http and https proxy URLs (AsyncHTTPTransport branch)",
     "AsyncTunnelHTTPConnection httpcore/_async/http_proxy.py CONNECT request establishes the tunnel through the corporate proxy before any origin bytes flow",
     "AsyncHTTP11Connection httpcore/_async/http11.py h11.Connection is instantiated as the state machine that parses response bytes read from the tunneled stream",
     "next_event h11/_connection.py RemoteProtocolError with the message peer unexpectedly closed connection is raised when the receive buffer is closed while an event is still incomplete",
