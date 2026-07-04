@@ -78,7 +78,6 @@ from eb_verify.plugins.security_assessment import SecurityAssessmentValidator
 from eb_verify.plugins.answer import AnswerValidator
 from eb_verify.plugins.call_graph import CallGraphValidator
 from eb_verify.plugins.topological_order import TopologicalOrderValidator
-from eb_verify.plugins.fact_triples import FactTriplesValidator
 
 register(CodePatchValidator())
 register(ConfigValidator())
@@ -89,4 +88,23 @@ register(SecurityAssessmentValidator())
 register(AnswerValidator())
 register(CallGraphValidator())
 register(TopologicalOrderValidator())
-register(FactTriplesValidator())
+
+# fact_triples needs numpy/scikit-learn/jsonschema, which minimal task
+# sandboxes do not ship. Register it only when its deps are importable so
+# dependency-free scorers (e.g. plugins.file_extraction run via `python -m`
+# inside the sandbox) can import this package without the heavy stack.
+# get_validator("fact_triples") returns None in that case and the runner
+# reports the unknown artifact type explicitly.
+try:
+    from eb_verify.plugins.fact_triples import FactTriplesValidator
+except ImportError as _fact_triples_exc:  # numpy/sklearn/jsonschema absent
+    import warnings
+
+    warnings.warn(
+        f"fact_triples validator unavailable (missing dependency: "
+        f"{_fact_triples_exc}); it will not be registered",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+else:
+    register(FactTriplesValidator())
