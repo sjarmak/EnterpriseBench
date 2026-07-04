@@ -9,10 +9,12 @@ from pathlib import Path
 import pytest
 
 from eb_verify.plugins import (
+    FileTooLargeError,
     ValidationResult,
     get_validator,
     list_validators,
     register,
+    safe_read,
 )
 from eb_verify.plugins.answer import (
     AnswerValidator,
@@ -359,6 +361,15 @@ class TestSecurityAssessmentValidator:
         result = v.validate(tmp_path)
         assert result.valid is False
         assert "Invalid JSON" in result.detail
+
+    def test_non_object_json_fails_cleanly(self, tmp_path):
+        # A scalar/array at the top level must be an explicit failure, not a
+        # TypeError from the required-fields membership check.
+        (tmp_path / "security_assessment.json").write_text("42")
+        v = SecurityAssessmentValidator()
+        result = v.validate(tmp_path)
+        assert result.valid is False
+        assert "JSON object" in result.detail
 
     def test_hyphen_filename_found(self, tmp_path):
         data = {
@@ -983,3 +994,328 @@ class TestIncidentReportSemantics:
         result = v.validate(tmp_path)
         assert result.valid is True
         assert "incident_report.json" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# safe_read max_bytes guard
+# ---------------------------------------------------------------------------
+
+
+class TestSafeReadMaxBytes:
+    def test_within_limit_reads_normally(self, tmp_path):
+        f = tmp_path / "small.txt"
+        f.write_text("hello")
+        assert safe_read(f, tmp_path, max_bytes=1024) == "hello"
+
+    def test_at_exact_limit_reads(self, tmp_path):
+        f = tmp_path / "exact.txt"
+        f.write_text("12345")
+        assert safe_read(f, tmp_path, max_bytes=5) == "12345"
+
+    def test_over_limit_raises_file_too_large(self, tmp_path):
+        f = tmp_path / "big.txt"
+        f.write_text("123456")
+        with pytest.raises(FileTooLargeError):
+            safe_read(f, tmp_path, max_bytes=5)
+
+    def test_file_too_large_is_a_value_error(self):
+        assert issubclass(FileTooLargeError, ValueError)
+
+    def test_default_none_is_unlimited(self, tmp_path):
+        f = tmp_path / "any.txt"
+        f.write_text("x" * 4096)
+        assert len(safe_read(f, tmp_path)) == 4096
+
+    def test_containment_checked_before_size(self, tmp_path):
+        # A path escaping the workspace must raise the escape error, never
+        # FileTooLargeError — the file outside must not be stat'd for size.
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        outside = tmp_path / "huge_outside.txt"
+        outside.write_text("x" * 100)
+        with pytest.raises(ValueError, match="escapes workspace") as exc_info:
+            safe_read(ws / ".." / "huge_outside.txt", ws, max_bytes=5)
+        assert not isinstance(exc_info.value, FileTooLargeError)
+
+
+# ---------------------------------------------------------------------------
+# AnswerValidator grounded-citations gate
+# ---------------------------------------------------------------------------
+
+# Verbatim source line, comfortably over the 20-normalized-char minimum.
+CITED_SPAN = "raise RemoteProtocolError(msg) from exc  # translate h11 event"
+
+
+@pytest.fixture
+def cited_ws(tmp_path):
+    """Workspace with one repo-style source file to cite against."""
+    ws = tmp_path / "ws"
+    src = ws / "httpcore" / "core" / "http11.py"
+    src.parent.mkdir(parents=True)
+    src.write_text(f"# connection layer\n{CITED_SPAN}\n")
+    return ws
+
+
+def _write_answer(ws, citations=None, extra=None):
+    data = {"source_files": [{"path": "httpcore/core/http11.py"}]}
+    if citations is not None:
+        data["citations"] = citations
+    if extra:
+        data.update(extra)
+    (ws / "answer.json").write_text(json.dumps(data))
+
+
+class TestAnswerGroundedCitations:
+    def test_grounded_citations_pass(self, cited_ws):
+        _write_answer(
+            cited_ws,
+            citations=[
+                {"repo": "httpcore", "file": "core/http11.py", "evidence_span": CITED_SPAN}
+            ],
+        )
+        result = AnswerValidator().validate(cited_ws, require_grounded_citations=True)
+        assert result.valid is True, result.detail
+
+    def test_fabricated_citation_fails_with_reason(self, cited_ws):
+        _write_answer(
+            cited_ws,
+            citations=[
+                {
+                    "repo": "httpcore",
+                    "file": "core/http11.py",
+                    "evidence_span": "this span was fabricated and appears nowhere",
+                }
+            ],
+        )
+        result = AnswerValidator().validate(cited_ws, require_grounded_citations=True)
+        assert result.valid is False
+        assert "span_not_found" in result.detail
+        assert "core/http11.py" in result.detail
+
+    def test_missing_citations_field_fails_when_required(self, cited_ws):
+        _write_answer(cited_ws, citations=None)
+        result = AnswerValidator().validate(cited_ws, require_grounded_citations=True)
+        assert result.valid is False
+        assert "citations" in result.detail
+
+    def test_malformed_citation_entry_fails_with_explicit_issue(self, cited_ws):
+        _write_answer(cited_ws, citations=[{"file": "core/http11.py"}])
+        result = AnswerValidator().validate(cited_ws, require_grounded_citations=True)
+        assert result.valid is False
+        assert "evidence_span" in result.detail
+
+    def test_citations_not_a_list_fails(self, cited_ws):
+        _write_answer(cited_ws, citations="see core/http11.py")
+        result = AnswerValidator().validate(cited_ws, require_grounded_citations=True)
+        assert result.valid is False
+        assert "list" in result.detail
+
+    def test_answer_txt_cannot_satisfy_gate(self, cited_ws):
+        (cited_ws / "answer.txt").write_text("the error comes from http11.py")
+        result = AnswerValidator().validate(cited_ws, require_grounded_citations=True)
+        assert result.valid is False
+        assert "answer.json" in result.detail
+
+    def test_gate_runs_before_oracle_scoring(self, cited_ws):
+        # Even with a ground_truth oracle that would score well, fabricated
+        # citations must fail the artifact when the gate is on.
+        _write_answer(
+            cited_ws,
+            citations=[
+                {
+                    "repo": "httpcore",
+                    "file": "core/http11.py",
+                    "evidence_span": "fabricated span long enough to be checked",
+                }
+            ],
+        )
+        result = AnswerValidator().validate(
+            cited_ws,
+            ground_truth={"expected_files": ["httpcore/core/http11.py"]},
+            require_grounded_citations=True,
+        )
+        assert result.valid is False
+        assert "span_not_found" in result.detail
+
+    def test_default_off_ignores_fabricated_citations(self, cited_ws):
+        """Without the flag, behavior is unchanged (least-invasive integration)."""
+        _write_answer(
+            cited_ws,
+            citations=[
+                {
+                    "repo": "httpcore",
+                    "file": "core/http11.py",
+                    "evidence_span": "fabricated but ignored because the gate is off",
+                }
+            ],
+        )
+        result = AnswerValidator().validate(cited_ws)
+        assert result.valid is True
+
+
+# ---------------------------------------------------------------------------
+# SecurityAssessmentValidator grounded-citations gate (per-finding)
+# ---------------------------------------------------------------------------
+
+
+def _write_assessment(ws, vulnerabilities):
+    data = {
+        "vulnerabilities": vulnerabilities,
+        "severity_summary": {"high": len(vulnerabilities)},
+        "recommendations": ["patch the parser"],
+    }
+    (ws / "security_assessment.json").write_text(json.dumps(data))
+
+
+def _finding(citations=..., **extra):
+    finding = {"id": "VULN-1", "severity": "high", "description": "header parser flaw"}
+    if citations is not ...:
+        finding["citations"] = citations
+    finding.update(extra)
+    return finding
+
+
+class TestSecurityAssessmentGroundedCitations:
+    def test_grounded_per_finding_citations_pass(self, cited_ws):
+        _write_assessment(
+            cited_ws,
+            [
+                _finding(
+                    citations=[
+                        {
+                            "repo": "httpcore",
+                            "file": "core/http11.py",
+                            "evidence_span": CITED_SPAN,
+                        }
+                    ]
+                )
+            ],
+        )
+        result = SecurityAssessmentValidator().validate(
+            cited_ws, require_grounded_citations=True
+        )
+        assert result.valid is True, result.detail
+
+    def test_fabricated_finding_citation_fails_with_finding_index(self, cited_ws):
+        _write_assessment(
+            cited_ws,
+            [
+                _finding(
+                    citations=[
+                        {
+                            "repo": "httpcore",
+                            "file": "core/http11.py",
+                            "evidence_span": "fabricated evidence that appears nowhere",
+                        }
+                    ]
+                )
+            ],
+        )
+        result = SecurityAssessmentValidator().validate(
+            cited_ws, require_grounded_citations=True
+        )
+        assert result.valid is False
+        assert "vulnerabilities[0]" in result.detail
+        assert "span_not_found" in result.detail
+
+    def test_finding_missing_citations_fails(self, cited_ws):
+        _write_assessment(cited_ws, [_finding()])
+        result = SecurityAssessmentValidator().validate(
+            cited_ws, require_grounded_citations=True
+        )
+        assert result.valid is False
+        assert "vulnerabilities[0]" in result.detail
+        assert "citations" in result.detail
+
+    def test_finding_empty_citations_fails(self, cited_ws):
+        # Per-finding gate: the finding IS the claim, so an empty citations
+        # list (claim with zero evidence) must not pass.
+        _write_assessment(cited_ws, [_finding(citations=[])])
+        result = SecurityAssessmentValidator().validate(
+            cited_ws, require_grounded_citations=True
+        )
+        assert result.valid is False
+        assert "vulnerabilities[0]" in result.detail
+
+    def test_malformed_finding_citation_fails_with_explicit_issue(self, cited_ws):
+        _write_assessment(
+            cited_ws, [_finding(citations=[{"file": "core/http11.py"}])]
+        )
+        result = SecurityAssessmentValidator().validate(
+            cited_ws, require_grounded_citations=True
+        )
+        assert result.valid is False
+        assert "vulnerabilities[0]" in result.detail
+        assert "evidence_span" in result.detail
+
+    def test_non_object_finding_fails(self, cited_ws):
+        _write_assessment(cited_ws, ["sql injection in login form"])
+        result = SecurityAssessmentValidator().validate(
+            cited_ws, require_grounded_citations=True
+        )
+        assert result.valid is False
+        assert "vulnerabilities[0]" in result.detail
+
+    def test_vulnerabilities_not_a_list_fails_when_gated(self, cited_ws):
+        data = {
+            "vulnerabilities": "header parser flaw",
+            "severity_summary": {},
+            "recommendations": [],
+        }
+        (cited_ws / "security_assessment.json").write_text(json.dumps(data))
+        result = SecurityAssessmentValidator().validate(
+            cited_ws, require_grounded_citations=True
+        )
+        assert result.valid is False
+        assert "vulnerabilities" in result.detail
+
+    def test_no_findings_nothing_to_ground_passes(self, cited_ws):
+        _write_assessment(cited_ws, [])
+        result = SecurityAssessmentValidator().validate(
+            cited_ws, require_grounded_citations=True
+        )
+        assert result.valid is True
+
+    def test_second_finding_failure_reported_by_index(self, cited_ws):
+        good = _finding(
+            citations=[
+                {"repo": "httpcore", "file": "core/http11.py", "evidence_span": CITED_SPAN}
+            ]
+        )
+        bad = _finding(
+            citations=[
+                {
+                    "repo": "httpcore",
+                    "file": "core/missing.py",
+                    "evidence_span": "span in a file that does not even exist",
+                }
+            ],
+            id="VULN-2",
+        )
+        _write_assessment(cited_ws, [good, bad])
+        result = SecurityAssessmentValidator().validate(
+            cited_ws, require_grounded_citations=True
+        )
+        assert result.valid is False
+        assert "vulnerabilities[1]" in result.detail
+        assert "file_missing" in result.detail
+        assert "vulnerabilities[0]" not in result.detail
+
+    def test_default_off_ignores_fabricated_citations(self, cited_ws):
+        """Without the flag, behavior is unchanged (least-invasive integration)."""
+        _write_assessment(
+            cited_ws,
+            [
+                _finding(
+                    citations=[
+                        {
+                            "repo": "httpcore",
+                            "file": "core/http11.py",
+                            "evidence_span": "fabricated but ignored because the gate is off",
+                        }
+                    ]
+                )
+            ],
+        )
+        result = SecurityAssessmentValidator().validate(cited_ws)
+        assert result.valid is True

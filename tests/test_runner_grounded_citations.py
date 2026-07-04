@@ -101,6 +101,46 @@ class TestGroundedCitationsEnforced:
         assert results[0]["valid"] is True, results[0]["detail"]
 
 
+class TestAnswerArtifactEnforced:
+    """The err-provenance-tri-httpx-* tasks use artifacts.required=["answer"]."""
+
+    def _write_answer_workspace(self, tmp_path: Path, evidence_span: str) -> Path:
+        workspace = tmp_path / "ws"
+        src = workspace / "repo-a" / "src" / "pool.py"
+        src.parent.mkdir(parents=True)
+        src.write_text(f"# db pool\n{SOURCE_LINE}\n")
+        answer = {
+            "source_files": [{"path": "repo-a/src/pool.py"}],
+            "citations": [
+                {"repo": "repo-a", "file": "src/pool.py", "evidence_span": evidence_span}
+            ],
+        }
+        (workspace / "answer.json").write_text(json.dumps(answer))
+        return workspace
+
+    def test_grounded_answer_passes(self, tmp_path):
+        workspace = self._write_answer_workspace(tmp_path, evidence_span=SOURCE_LINE)
+        task = make_task(["answer"], GroundTruth(require_grounded_citations=True))
+        runner = CheckpointRunner(task=task, workspace=workspace)
+
+        results = runner.validate_artifacts()
+
+        assert len(results) == 1
+        assert results[0]["valid"] is True, results[0]["detail"]
+
+    def test_fabricated_answer_citation_fails_with_reason(self, tmp_path):
+        workspace = self._write_answer_workspace(
+            tmp_path, evidence_span="this span was fabricated and appears in no file"
+        )
+        task = make_task(["answer"], GroundTruth(require_grounded_citations=True))
+        runner = CheckpointRunner(task=task, workspace=workspace)
+
+        results = runner.validate_artifacts()
+
+        assert results[0]["valid"] is False
+        assert "span_not_found" in results[0]["detail"]
+
+
 # ---------------------------------------------------------------------------
 # Flag set — validator does NOT support the kwarg
 # ---------------------------------------------------------------------------

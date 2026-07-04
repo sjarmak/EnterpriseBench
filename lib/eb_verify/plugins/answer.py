@@ -1,5 +1,14 @@
 """
 answer validator — oracle matching (keywords, files, symbols).
+
+Citations convention (require_grounded_citations=True):
+    Citations live in a top-level ``citations`` list in answer.json, each
+    entry ``{"repo": ..., "file": ..., "evidence_span": ...}`` — the same
+    schema and seam as incident_report, so agents learn one format. The
+    answer artifact is otherwise free-form JSON (there is no guaranteed
+    per-claim structure to attach evidence to), which makes the top level
+    the only stable seam. answer.txt cannot carry a structured list, so a
+    txt-only workspace fails the gate with an explicit reason.
 """
 
 from __future__ import annotations
@@ -10,6 +19,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Optional
 
+from eb_verify.groundedness import CitationParseError, ground_citations
 from eb_verify.plugins import ValidationResult, safe_read
 
 
@@ -136,6 +146,7 @@ class AnswerValidator:
         workspace: Path,
         ground_truth: Optional[dict[str, Any]] = None,
         thresholds: Optional[dict[str, float]] = None,
+        require_grounded_citations: bool = False,
     ) -> ValidationResult:
         """
         Validate an answer artifact exists, has valid structure, and optionally
@@ -146,11 +157,18 @@ class AnswerValidator:
         - symbol matching (function/class names)
         - file path matching
         - fuzzy string matching for near-matches
+
+        When *require_grounded_citations* is True, answer.json must carry a
+        top-level ``citations`` list (see module docstring) and every
+        evidence_span must appear verbatim in the cited workspace file; the
+        gate runs before oracle matching, and missing/malformed citations or
+        any ungrounded span fail validation with per-citation reasons.
         """
         json_candidates = list(workspace.glob("**/answer.json"))
         txt_candidates = list(workspace.glob("**/answer.txt"))
 
         answer_text: Optional[str] = None
+        data: Optional[dict[str, Any]] = None
 
         if json_candidates:
             try:
@@ -170,6 +188,26 @@ class AnswerValidator:
             answer_text = content
         else:
             return ValidationResult(valid=False, detail="No answer file found")
+
+        # Optional groundedness gate (task ground truth: require_grounded_citations)
+        if require_grounded_citations:
+            if data is None:
+                return ValidationResult(
+                    valid=False,
+                    detail=(
+                        "grounded citations require answer.json with a top-level "
+                        "'citations' list; answer.txt cannot carry structured citations"
+                    ),
+                )
+            try:
+                grounded = ground_citations(data, workspace)
+            except CitationParseError as e:
+                # Malformed/missing citations surface as explicit issues -> invalid.
+                return ValidationResult(valid=False, detail="; ".join(e.issues))
+            if not grounded.all_grounded:
+                return ValidationResult(
+                    valid=False, detail=f"ungrounded citations: {grounded.summary()}"
+                )
 
         # Structure-only validation (no oracle)
         if ground_truth is None:

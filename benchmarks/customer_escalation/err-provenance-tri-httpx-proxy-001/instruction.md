@@ -47,3 +47,11 @@ Your task:
 - The full error chain from the public httpx API down to the origin of the
   message text and back up through both translation layers
 - Trigger conditions distinguishing the two disconnect messages
+
+In answer.json, alongside your analysis fields, include a top-level
+"citations" list with one entry per cited file:
+{"repo": ..., "file": ..., "evidence_span": ...} -- where "repo" is the
+repository directory (httpx, httpcore, or h11), "file" is the path inside
+that repository, and "evidence_span" is a verbatim excerpt copied from the
+cited file (at least 20 characters). Paraphrased or fabricated spans fail
+verification.
