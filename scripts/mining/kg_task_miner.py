@@ -95,12 +95,15 @@ def generate_task(
     repo_meta: dict[str, dict[str, str]],
     task_number: int = 1,
     graph: RepoGraph | None = None,
+    languages: list[str] | None = None,
 ) -> dict[str, Any]:
     """Emit a candidate task dict conforming to schemas/task.schema.json.
 
     repo_meta: {repo_name: {"url": ..., "rev": ...}} for every repo on the path.
     graph: when given, glue modules and the terminal defining module are mapped
     to files for ground_truth (sufficient_files / terminal required_file).
+    languages: metadata languages for the repo set; defaults to ["python"]
+    (paths mined by kg_graph_go.py pass ["go"]).
     """
     repos_on_path = path.repo_chain()
     missing = [r for r in repos_on_path if r not in repo_meta]
@@ -164,7 +167,7 @@ def generate_task(
         },
         "repos": repos,
         "metadata": {
-            "languages": ["python"],
+            "languages": languages or ["python"],
             "dependency_depth": n_repos,
             "multi_repo_pattern": "investigate",
         },
