@@ -98,6 +98,11 @@ class TaskRunConfig:
     min_disk_gb: float = 10.0
 
 
+# Status marker for runs that must not be scored (e.g. MCP pre-flight
+# failure): the run is routed to the infra-error re-run channel.
+RUN_STATUS_INVALID = "invalid"
+
+
 @dataclass
 class TaskRunResult:
     """Result of running a single task."""
@@ -113,6 +118,9 @@ class TaskRunResult:
     output_dir: str = ""
     tool_usage: dict = field(default_factory=dict)
     failure_class: Optional[str] = None
+    # "" for normal runs; RUN_STATUS_INVALID for runs that must be re-run,
+    # never scored (see the MCP pre-flight gate).
+    status: str = ""
 
 
 def _load_oauth_token(account: int) -> str:
@@ -1041,7 +1049,7 @@ def _verify_mcp_endpoint(container_id: str, sg_token: str) -> bool:
     return False
 
 
-def _configure_mcp(container_id: str, mode: str) -> None:
+def _configure_mcp(container_id: str, mode: str) -> bool:
     """Configure Sourcegraph MCP endpoint with pre-flight verification.
 
     Strategy for 100% reliability:
@@ -1053,9 +1061,13 @@ def _configure_mcp(container_id: str, mode: str) -> None:
     Uses ONLY config files (no `claude mcp add` which has race conditions).
     Both project-level and user-level configs are written so Claude Code finds
     auth headers regardless of which config path it resolves first.
+
+    Returns True when the handshake succeeded (or the mode has no MCP);
+    False when the pre-flight failed — the caller must treat that as a hard
+    gate and route the run to the infra-error re-run channel, never score it.
     """
     if mode not in ("mcp_only", "hybrid"):
-        return
+        return True
 
     sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
     if not sg_token:
@@ -1142,6 +1154,7 @@ def _configure_mcp(container_id: str, mode: str) -> None:
         os.unlink(tmp_user)
 
     # Step 3: Verify Claude Code sees the MCP server with retries
+    handshake_ok = False
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         check = _mcp_exec(container_id, ["claude", "mcp", "list"])
@@ -1152,6 +1165,7 @@ def _configure_mcp(container_id: str, mode: str) -> None:
                     "MCP pre-flight OK (attempt %d): sourcegraph connected",
                     attempt,
                 )
+                handshake_ok = True
                 break
             if "needs-auth" in stdout:
                 # Server is registered but auth failed — likely a timing issue
@@ -1187,7 +1201,9 @@ def _configure_mcp(container_id: str, mode: str) -> None:
             max_retries,
         )
 
-    logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
+    if handshake_ok:
+        logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
+    return handshake_ok
 
 
 def _sum_model_usage(model_usage: dict) -> tuple[int, int, float]:
@@ -1475,7 +1491,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
 
         # --- Configure MCP if needed ---
         if config.mode in ("mcp_only", "hybrid"):
-            _configure_mcp(container_id, config.mode)
+            mcp_handshake_ok = _configure_mcp(container_id, config.mode)
 
             # MCP pre-flight is a HARD gate for the MCP arms. If the endpoint
             # never handshaked (unreachable / expired or rejected token), the
