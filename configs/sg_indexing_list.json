@@ -7,23 +7,470 @@
     "customer_escalation": {
       "_status": "pending_verification",
       "_indexed_count": 0,
-      "_repo_count": 3,
-      "_task_count": 3,
-      "_note": "Partial: encode httpstack repos only (support-mapping-dual-httpx-httpcore-001 + tri-repo proxy/socks tasks). Remaining customer_escalation repos need backfill.",
+      "_repo_count": 77,
+      "_task_count": 54,
+      "_note": "Backfilled 2026-07-04 from task.toml repos[] (url+rev) across all 54 customer_escalation tasks. rev is the task-pinned tag/commit; _indexed flips only after Sourcegraph indexing is verified.",
       "repos": [
         {
-          "name": "encode/httpx",
-          "url": "https://github.com/encode/httpx",
+          "name": "ansible/ansible",
+          "url": "https://github.com/ansible/ansible",
+          "rev": "v2.16.0",
+          "_indexed": false
+        },
+        {
+          "name": "apache/kafka",
+          "url": "https://github.com/apache/kafka",
+          "rev": "3.6.1",
+          "_indexed": false
+        },
+        {
+          "name": "apache/logging-log4j2",
+          "url": "https://github.com/apache/logging-log4j2",
+          "rev": "rel/2.23.1",
+          "_indexed": false
+        },
+        {
+          "name": "babel/babel",
+          "url": "https://github.com/babel/babel",
+          "rev": "v7.24.0",
+          "_indexed": false
+        },
+        {
+          "name": "celery/celery",
+          "url": "https://github.com/celery/celery",
+          "rev": "v5.3.6",
+          "_indexed": false
+        },
+        {
+          "name": "celery/kombu",
+          "url": "https://github.com/celery/kombu",
+          "rev": "v5.3.4",
+          "_indexed": false
+        },
+        {
+          "name": "celery/kombu",
+          "url": "https://github.com/celery/kombu",
+          "rev": "v5.3.5",
+          "_indexed": false
+        },
+        {
+          "name": "colinhacks/zod",
+          "url": "https://github.com/colinhacks/zod",
+          "rev": "v3.23.0",
+          "_indexed": false
+        },
+        {
+          "name": "curl/curl",
+          "url": "https://github.com/curl/curl",
+          "rev": "curl-8_6_0",
+          "_indexed": false
+        },
+        {
+          "name": "django/django",
+          "url": "https://github.com/django/django",
+          "rev": "4.2.10",
+          "_indexed": false
+        },
+        {
+          "name": "docker/cli",
+          "url": "https://github.com/docker/cli",
+          "rev": "v24.0.7",
           "_indexed": false
         },
         {
           "name": "encode/httpcore",
           "url": "https://github.com/encode/httpcore",
+          "rev": "1.0.5",
+          "_indexed": false
+        },
+        {
+          "name": "encode/httpx",
+          "url": "https://github.com/encode/httpx",
+          "rev": "0.27.0",
+          "_indexed": false
+        },
+        {
+          "name": "envoyproxy/envoy",
+          "url": "https://github.com/envoyproxy/envoy",
+          "rev": "v1.29.4",
+          "_indexed": false
+        },
+        {
+          "name": "envoyproxy/envoy",
+          "url": "https://github.com/envoyproxy/envoy",
+          "rev": "v1.31.2",
+          "_indexed": false
+        },
+        {
+          "name": "facebook/react",
+          "url": "https://github.com/facebook/react",
+          "rev": "v18.2.0",
+          "_indexed": false
+        },
+        {
+          "name": "facebook/relay",
+          "url": "https://github.com/facebook/relay",
+          "rev": "v16.2.0",
+          "_indexed": false
+        },
+        {
+          "name": "FasterXML/jackson-databind",
+          "url": "https://github.com/FasterXML/jackson-databind",
+          "rev": "jackson-databind-2.16.2",
+          "_indexed": false
+        },
+        {
+          "name": "grafana/grafana",
+          "url": "https://github.com/grafana/grafana",
+          "rev": "v10.2.0",
+          "_indexed": false
+        },
+        {
+          "name": "grpc/grpc",
+          "url": "https://github.com/grpc/grpc",
+          "rev": "v1.62.0",
+          "_indexed": false
+        },
+        {
+          "name": "hashicorp/terraform",
+          "url": "https://github.com/hashicorp/terraform",
+          "rev": "v1.6.0",
+          "_indexed": false
+        },
+        {
+          "name": "hashicorp/terraform-provider-aws",
+          "url": "https://github.com/hashicorp/terraform-provider-aws",
+          "rev": "v5.30.0",
+          "_indexed": false
+        },
+        {
+          "name": "hibernate/hibernate-orm",
+          "url": "https://github.com/hibernate/hibernate-orm",
+          "rev": "6.4.4",
+          "_indexed": false
+        },
+        {
+          "name": "hyperium/hyper",
+          "url": "https://github.com/hyperium/hyper",
+          "rev": "v1.2.0",
+          "_indexed": false
+        },
+        {
+          "name": "hyperium/tonic",
+          "url": "https://github.com/hyperium/tonic",
+          "rev": "v0.11.0",
+          "_indexed": false
+        },
+        {
+          "name": "istio/istio",
+          "url": "https://github.com/istio/istio",
+          "rev": "1.21.1",
+          "_indexed": false
+        },
+        {
+          "name": "jaegertracing/jaeger",
+          "url": "https://github.com/jaegertracing/jaeger",
+          "rev": "v1.51.0",
+          "_indexed": false
+        },
+        {
+          "name": "jestjs/jest",
+          "url": "https://github.com/jestjs/jest",
+          "rev": "v29.7.0",
+          "_indexed": false
+        },
+        {
+          "name": "kubernetes-sigs/knftables",
+          "url": "https://github.com/kubernetes-sigs/knftables",
+          "rev": "v0.0.17",
+          "_indexed": false
+        },
+        {
+          "name": "kubernetes/kubernetes",
+          "url": "https://github.com/kubernetes/kubernetes",
+          "rev": "v1.32.0",
+          "_indexed": false
+        },
+        {
+          "name": "kubernetes/kubernetes",
+          "url": "https://github.com/kubernetes/kubernetes",
+          "rev": "v1.33.0-alpha.1",
+          "_indexed": false
+        },
+        {
+          "name": "kubernetes/kubernetes",
+          "url": "https://github.com/kubernetes/kubernetes",
+          "rev": "v1.33.0-alpha.2",
+          "_indexed": false
+        },
+        {
+          "name": "llvm/llvm-project",
+          "url": "https://github.com/llvm/llvm-project",
+          "rev": "llvmorg-18.1.0",
+          "_indexed": false
+        },
+        {
+          "name": "moby/moby",
+          "url": "https://github.com/moby/moby",
+          "rev": "v24.0.7",
+          "_indexed": false
+        },
+        {
+          "name": "netty/netty",
+          "url": "https://github.com/netty/netty",
+          "rev": "netty-4.1.100.Final",
+          "_indexed": false
+        },
+        {
+          "name": "open-telemetry/opentelemetry-go",
+          "url": "https://github.com/open-telemetry/opentelemetry-go",
+          "rev": "v1.21.0",
+          "_indexed": false
+        },
+        {
+          "name": "openssl/openssl",
+          "url": "https://github.com/openssl/openssl",
+          "rev": "openssl-3.0.13",
+          "_indexed": false
+        },
+        {
+          "name": "pallets/click",
+          "url": "https://github.com/pallets/click",
+          "rev": "8.2.1",
+          "_indexed": false
+        },
+        {
+          "name": "pallets/flask",
+          "url": "https://github.com/pallets/flask",
+          "rev": "2.3.3",
+          "_indexed": false
+        },
+        {
+          "name": "pallets/flask",
+          "url": "https://github.com/pallets/flask",
+          "rev": "3.0.0",
+          "_indexed": false
+        },
+        {
+          "name": "pallets/flask",
+          "url": "https://github.com/pallets/flask",
+          "rev": "3.1.0",
+          "_indexed": false
+        },
+        {
+          "name": "pallets/jinja",
+          "url": "https://github.com/pallets/jinja",
+          "rev": "3.1.3",
+          "_indexed": false
+        },
+        {
+          "name": "pallets/werkzeug",
+          "url": "https://github.com/pallets/werkzeug",
+          "rev": "2.3.7",
+          "_indexed": false
+        },
+        {
+          "name": "pallets/werkzeug",
+          "url": "https://github.com/pallets/werkzeug",
+          "rev": "3.0.1",
+          "_indexed": false
+        },
+        {
+          "name": "prisma/prisma",
+          "url": "https://github.com/prisma/prisma",
+          "rev": "5.12.0",
+          "_indexed": false
+        },
+        {
+          "name": "prometheus/alertmanager",
+          "url": "https://github.com/prometheus/alertmanager",
+          "rev": "v0.26.0",
+          "_indexed": false
+        },
+        {
+          "name": "prometheus/prometheus",
+          "url": "https://github.com/prometheus/prometheus",
+          "rev": "v2.48.0",
+          "_indexed": false
+        },
+        {
+          "name": "protocolbuffers/protobuf",
+          "url": "https://github.com/protocolbuffers/protobuf",
+          "rev": "v25.2",
+          "_indexed": false
+        },
+        {
+          "name": "psf/requests",
+          "url": "https://github.com/psf/requests",
+          "rev": "v2.28.2",
+          "_indexed": false
+        },
+        {
+          "name": "psf/requests",
+          "url": "https://github.com/psf/requests",
+          "rev": "v2.31.0",
+          "_indexed": false
+        },
+        {
+          "name": "psf/requests",
+          "url": "https://github.com/psf/requests",
+          "rev": "v2.32.3",
+          "_indexed": false
+        },
+        {
+          "name": "pydantic/pydantic",
+          "url": "https://github.com/pydantic/pydantic",
+          "rev": "v2.6.4",
           "_indexed": false
         },
         {
           "name": "python-hyper/h11",
           "url": "https://github.com/python-hyper/h11",
+          "rev": "v0.14.0",
+          "_indexed": false
+        },
+        {
+          "name": "qos-ch/slf4j",
+          "url": "https://github.com/qos-ch/slf4j",
+          "rev": "v_2.0.13",
+          "_indexed": false
+        },
+        {
+          "name": "spring-projects/spring-boot",
+          "url": "https://github.com/spring-projects/spring-boot",
+          "rev": "v3.1.2",
+          "_indexed": false
+        },
+        {
+          "name": "spring-projects/spring-boot",
+          "url": "https://github.com/spring-projects/spring-boot",
+          "rev": "v3.2.4",
+          "_indexed": false
+        },
+        {
+          "name": "spring-projects/spring-framework",
+          "url": "https://github.com/spring-projects/spring-framework",
+          "rev": "v6.0.11",
+          "_indexed": false
+        },
+        {
+          "name": "spring-projects/spring-framework",
+          "url": "https://github.com/spring-projects/spring-framework",
+          "rev": "v6.1.4",
+          "_indexed": false
+        },
+        {
+          "name": "spring-projects/spring-kafka",
+          "url": "https://github.com/spring-projects/spring-kafka",
+          "rev": "v3.0.9",
+          "_indexed": false
+        },
+        {
+          "name": "spring-projects/spring-kafka",
+          "url": "https://github.com/spring-projects/spring-kafka",
+          "rev": "v3.1.4",
+          "_indexed": false
+        },
+        {
+          "name": "sqlalchemy/alembic",
+          "url": "https://github.com/sqlalchemy/alembic",
+          "rev": "rel_1_13_1",
+          "_indexed": false
+        },
+        {
+          "name": "sqlalchemy/sqlalchemy",
+          "url": "https://github.com/sqlalchemy/sqlalchemy",
+          "rev": "rel_2_0_29",
+          "_indexed": false
+        },
+        {
+          "name": "swc-project/swc",
+          "url": "https://github.com/swc-project/swc",
+          "rev": "v1.4.6",
+          "_indexed": false
+        },
+        {
+          "name": "tiangolo/fastapi",
+          "url": "https://github.com/tiangolo/fastapi",
+          "rev": "0.110.0",
+          "_indexed": false
+        },
+        {
+          "name": "tokio-rs/axum",
+          "url": "https://github.com/tokio-rs/axum",
+          "rev": "axum-v0.7.5",
+          "_indexed": false
+        },
+        {
+          "name": "tokio-rs/tokio",
+          "url": "https://github.com/tokio-rs/tokio",
+          "rev": "tokio-1.35.0",
+          "_indexed": false
+        },
+        {
+          "name": "tokio-rs/tokio",
+          "url": "https://github.com/tokio-rs/tokio",
+          "rev": "tokio-1.36.0",
+          "_indexed": false
+        },
+        {
+          "name": "tower-rs/tower",
+          "url": "https://github.com/tower-rs/tower",
+          "rev": "tower-0.4.13",
+          "_indexed": false
+        },
+        {
+          "name": "urllib3/urllib3",
+          "url": "https://github.com/urllib3/urllib3",
+          "rev": "2.0.0",
+          "_indexed": false
+        },
+        {
+          "name": "urllib3/urllib3",
+          "url": "https://github.com/urllib3/urllib3",
+          "rev": "2.1.0",
+          "_indexed": false
+        },
+        {
+          "name": "vercel/next.js",
+          "url": "https://github.com/vercel/next.js",
+          "rev": "v13.5.6",
+          "_indexed": false
+        },
+        {
+          "name": "vercel/next.js",
+          "url": "https://github.com/vercel/next.js",
+          "rev": "v14.1.4",
+          "_indexed": false
+        },
+        {
+          "name": "vercel/turbo",
+          "url": "https://github.com/vercel/turbo",
+          "rev": "v1.13.2",
+          "_indexed": false
+        },
+        {
+          "name": "vitejs/vite",
+          "url": "https://github.com/vitejs/vite",
+          "rev": "v5.2.6",
+          "_indexed": false
+        },
+        {
+          "name": "vitest-dev/vitest",
+          "url": "https://github.com/vitest-dev/vitest",
+          "rev": "v1.4.0",
+          "_indexed": false
+        },
+        {
+          "name": "wagtail/wagtail",
+          "url": "https://github.com/wagtail/wagtail",
+          "rev": "v5.2.2",
+          "_indexed": false
+        },
+        {
+          "name": "webpack/webpack",
+          "url": "https://github.com/webpack/webpack",
+          "rev": "v5.88.2",
           "_indexed": false
         }
       ]
@@ -268,6 +715,172 @@
         {
           "name": "opencontainers/runc",
           "url": "https://github.com/opencontainers/runc",
+          "_indexed": false
+        }
+      ]
+    },
+    "platform_engineering": {
+      "_status": "pending_verification",
+      "_indexed_count": 0,
+      "_repo_count": 26,
+      "_task_count": 15,
+      "_note": "Backfilled 2026-07-04 from task.toml repos[] (url+rev) across all 15 platform_engineering tasks. config-drift-tri-javax-jakarta-spring-001 has no task.toml; its pins come from ground_truth.json, which lists hibernate-orm @ 6.0.0.Final -- that tag does not exist upstream; the resolvable tag is 6.0.0 (2560cc66), recorded here. _indexed flips only after Sourcegraph indexing is verified.",
+      "repos": [
+        {
+          "name": "apache/tomcat",
+          "url": "https://github.com/apache/tomcat",
+          "rev": "10.1.0",
+          "_indexed": false
+        },
+        {
+          "name": "argoproj/argo-cd",
+          "url": "https://github.com/argoproj/argo-cd",
+          "rev": "v2.14.0-rc3",
+          "_indexed": false
+        },
+        {
+          "name": "argoproj/argo-cd",
+          "url": "https://github.com/argoproj/argo-cd",
+          "rev": "v2.9.0",
+          "_indexed": false
+        },
+        {
+          "name": "argoproj/argo-helm",
+          "url": "https://github.com/argoproj/argo-helm",
+          "rev": "argo-cd-5.51.0",
+          "_indexed": false
+        },
+        {
+          "name": "babel/babel",
+          "url": "https://github.com/babel/babel",
+          "rev": "v7.23.9",
+          "_indexed": false
+        },
+        {
+          "name": "bitnami/charts",
+          "url": "https://github.com/bitnami/charts",
+          "rev": "130ffd163382dffd5762034291203a3ac2792fba",
+          "_indexed": false
+        },
+        {
+          "name": "bitnami/charts",
+          "url": "https://github.com/bitnami/charts",
+          "rev": "478a81c9e91d2c2cf867e70aeea81e10cbcab9ce",
+          "_indexed": false
+        },
+        {
+          "name": "bitnami/charts",
+          "url": "https://github.com/bitnami/charts",
+          "rev": "53aca51120f86086e6780dc0453b93fbf49766b4",
+          "_indexed": false
+        },
+        {
+          "name": "dandydeveloper/charts",
+          "url": "https://github.com/dandydeveloper/charts",
+          "rev": "redis-ha-4.26.6",
+          "_indexed": false
+        },
+        {
+          "name": "fluxcd/flux2",
+          "url": "https://github.com/fluxcd/flux2",
+          "rev": "v2.2.0",
+          "_indexed": false
+        },
+        {
+          "name": "hashicorp/terraform",
+          "url": "https://github.com/hashicorp/terraform",
+          "rev": "v1.7.0",
+          "_indexed": false
+        },
+        {
+          "name": "hashicorp/terraform-provider-aws",
+          "url": "https://github.com/hashicorp/terraform-provider-aws",
+          "rev": "v5.31.0",
+          "_indexed": false
+        },
+        {
+          "name": "hibernate/hibernate-orm",
+          "url": "https://github.com/hibernate/hibernate-orm",
+          "rev": "6.0.0",
+          "_indexed": false,
+          "_rev_note": "ground_truth.json pins 6.0.0.Final (nonexistent upstream tag); 6.0.0 is the real tag"
+        },
+        {
+          "name": "hyperium/hyper",
+          "url": "https://github.com/hyperium/hyper",
+          "rev": "v1.0.0-rc.4",
+          "_indexed": false
+        },
+        {
+          "name": "jaegertracing/jaeger",
+          "url": "https://github.com/jaegertracing/jaeger",
+          "rev": "v1.51.0",
+          "_indexed": false
+        },
+        {
+          "name": "kubernetes-sigs/kustomize",
+          "url": "https://github.com/kubernetes-sigs/kustomize",
+          "rev": "kustomize/v5.3.0",
+          "_indexed": false
+        },
+        {
+          "name": "open-telemetry/opentelemetry-collector",
+          "url": "https://github.com/open-telemetry/opentelemetry-collector",
+          "rev": "v0.89.0",
+          "_indexed": false
+        },
+        {
+          "name": "pallets/click",
+          "url": "https://github.com/pallets/click",
+          "rev": "8.2.1",
+          "_indexed": false
+        },
+        {
+          "name": "pallets/flask",
+          "url": "https://github.com/pallets/flask",
+          "rev": "3.1.0",
+          "_indexed": false
+        },
+        {
+          "name": "prometheus/prometheus",
+          "url": "https://github.com/prometheus/prometheus",
+          "rev": "v2.48.0",
+          "_indexed": false
+        },
+        {
+          "name": "pypa/pip",
+          "url": "https://github.com/pypa/pip",
+          "rev": "23.0",
+          "_indexed": false
+        },
+        {
+          "name": "pypa/setuptools",
+          "url": "https://github.com/pypa/setuptools",
+          "rev": "v67.0.0",
+          "_indexed": false
+        },
+        {
+          "name": "spring-projects/spring-boot",
+          "url": "https://github.com/spring-projects/spring-boot",
+          "rev": "v3.0.0",
+          "_indexed": false
+        },
+        {
+          "name": "thanos-io/thanos",
+          "url": "https://github.com/thanos-io/thanos",
+          "rev": "v0.32.5",
+          "_indexed": false
+        },
+        {
+          "name": "tokio-rs/tokio",
+          "url": "https://github.com/tokio-rs/tokio",
+          "rev": "tokio-1.29.1",
+          "_indexed": false
+        },
+        {
+          "name": "webpack/webpack",
+          "url": "https://github.com/webpack/webpack",
+          "rev": "v5.88.2",
           "_indexed": false
         }
       ]
