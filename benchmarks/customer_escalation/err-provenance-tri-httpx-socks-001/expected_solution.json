@@ -1,0 +1,32 @@
+{
+  "task_id": "err-provenance-tri-httpx-socks-001",
+  "checkpoints": {
+    "origin_and_grammar": {
+      "expected_solution": "Message origin: h11/h11/_readers.py, _decode_header_lines, line 68: matches = validate(header_field_re, line, 'illegal header line: {!r}', line). The validate() helper lives in h11/h11/_util.py (raises LocalProtocolError when the regex does not fullmatch, formatting the message). header_field_re is compiled from the RFC 7230 ABNF in h11/h11/_abnf.py; its field_name component is a token, which forbids whitespace, so 'X-Gw-Status : OK' (space before the colon) fails the grammar.",
+      "evaluation_criteria": [
+        "Must locate the raise site in h11/h11/_readers.py (_decode_header_lines / validate call)",
+        "Must name the validate() helper in h11/h11/_util.py as the formatter/raiser",
+        "Must name header_field_re (or the _abnf.py grammar) as the regex the line is matched against",
+        "Must identify the whitespace before the colon in the field name as the grammar violation"
+      ]
+    },
+    "exception_translation": {
+      "expected_solution": "The raise site constructs LocalProtocolError, but Connection.next_event in h11/h11/_connection.py wraps event extraction in a try/except; on LocalProtocolError it calls exc._reraise_as_remote_protocol_error() (line 487). That method, defined on LocalProtocolError in h11/h11/_util.py (line 60), rewrites self.__class__ to RemoteProtocolError in place and re-raises -- parsing errors on received data are the remote peer's fault. httpcore then remaps via map_exceptions({h11.RemoteProtocolError: RemoteProtocolError}) around next_event() in httpcore/httpcore/_async/http11.py (line 220), and httpx remaps via map_httpcore_exceptions()/HTTPCORE_EXC_MAP in httpx/httpx/_transports/default.py (lines 67/89/103) into httpx.RemoteProtocolError.",
+      "evaluation_criteria": [
+        "Must name _reraise_as_remote_protocol_error as the conversion mechanism",
+        "Must place its definition in h11/h11/_util.py on LocalProtocolError and its invocation in Connection.next_event in h11/h11/_connection.py",
+        "Must include httpcore's map_exceptions remap around next_event",
+        "Must include httpx's map_httpcore_exceptions / HTTPCORE_EXC_MAP remap"
+      ]
+    },
+    "socks_transport_path": {
+      "expected_solution": "httpx AsyncHTTPTransport in httpx/httpx/_transports/default.py takes the socks5 branch (line 311-320) and sets self._pool = httpcore.AsyncSOCKSProxy(...). httpcore's AsyncSOCKSProxy (httpcore/httpcore/_async/socks_proxy.py) creates AsyncSocks5Connection per origin; its handle_async_request runs _init_socks5_connection for the SOCKS5 handshake (auth negotiation, CONNECT command), then wraps the established stream in AsyncHTTP11Connection (line 289). From that point the SOCKS layer only relays bytes; parsing happens in AsyncHTTP11Connection (httpcore/httpcore/_async/http11.py) via h11.Connection (line 67). The failure fires during header parsing after a successful handshake, so the tunnel is not corrupting bytes.",
+      "evaluation_criteria": [
+        "Must identify the socks5 branch in httpx/_transports/default.py constructing AsyncSOCKSProxy",
+        "Must identify AsyncSocks5Connection and/or _init_socks5_connection in httpcore/_async/socks_proxy.py",
+        "Must identify the post-handshake handoff to AsyncHTTP11Connection",
+        "Must conclude the SOCKS layer completes before parsing and is not the corruption source"
+      ]
+    }
+  }
+}

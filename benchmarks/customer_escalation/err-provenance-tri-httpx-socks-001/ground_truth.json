@@ -1,0 +1,94 @@
+{
+  "task_id": "err-provenance-tri-httpx-socks-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/encode/httpx",
+      "rev": "0.27.0",
+      "path": "httpx"
+    },
+    {
+      "url": "https://github.com/encode/httpcore",
+      "rev": "1.0.5",
+      "path": "httpcore"
+    },
+    {
+      "url": "https://github.com/python-hyper/h11",
+      "rev": "v0.14.0",
+      "path": "h11"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "httpx/httpx/_transports/default.py",
+      "repo": "httpx",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "httpcore/httpcore/_async/socks_proxy.py",
+      "repo": "httpcore",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "httpcore/httpcore/_async/http11.py",
+      "repo": "httpcore",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "h11/h11/_readers.py",
+      "repo": "h11",
+      "confidence": 0.9,
+      "source": "curator"
+    },
+    {
+      "path": "h11/h11/_connection.py",
+      "repo": "h11",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "h11/h11/_util.py",
+      "repo": "h11",
+      "confidence": 0.85
+    },
+    {
+      "path": "h11/h11/_abnf.py",
+      "repo": "h11",
+      "confidence": 0.75
+    },
+    {
+      "path": "httpx/httpx/_exceptions.py",
+      "repo": "httpx",
+      "confidence": 0.7
+    },
+    {
+      "path": "httpcore/httpcore/_exceptions.py",
+      "repo": "httpcore",
+      "confidence": 0.7
+    }
+  ],
+  "error_chain": [
+    "AsyncHTTPTransport in httpx/_transports/default.py constructs httpcore.AsyncSOCKSProxy when the proxy URL scheme is socks5",
+    "AsyncSocks5Connection in httpcore/_async/socks_proxy.py runs _init_socks5_connection for the SOCKS5 handshake and then wraps the tunneled stream in AsyncHTTP11Connection",
+    "AsyncHTTP11Connection in httpcore/_async/http11.py instantiates h11.Connection as the response parser over the tunneled stream",
+    "_decode_header_lines in h11/_readers.py calls validate(header_field_re, ...) which raises LocalProtocolError('illegal header line: ...') for the malformed header",
+    "Connection.next_event in h11/_connection.py catches the LocalProtocolError and calls _reraise_as_remote_protocol_error converting it in place to RemoteProtocolError",
+    "map_exceptions in httpcore/_async/http11.py and map_httpcore_exceptions with HTTPCORE_EXC_MAP in httpx/_transports/default.py rewrap it into httpx.RemoteProtocolError"
+  ],
+  "trigger_conditions": [
+    "The appliance emits a header line with whitespace before the colon (X-Gw-Status : OK) which violates the RFC 7230 token grammar for field names compiled into header_field_re in h11/_abnf.py",
+    "h11 is a strict spec-compliant parser and rejects the line via validate() in h11/_util.py while curl parses headers leniently and accepts the same bytes",
+    "The SOCKS5 layer completes its handshake before any HTTP bytes flow and hands off to the shared AsyncHTTP11Connection, so the tunnel transports bytes unmodified and cannot be the corruption source"
+  ],
+  "expected_answer": {
+    "error_origin": "h11/h11/_readers.py _decode_header_lines: matches = validate(header_field_re, line, 'illegal header line: {!r}', line) at line 68; validate() is defined in h11/h11/_util.py and raises LocalProtocolError with the formatted message; header_field_re is compiled from the RFC 7230 ABNF in h11/h11/_abnf.py",
+    "conversion_mechanism": "LocalProtocolError._reraise_as_remote_protocol_error in h11/h11/_util.py (line 60) rewrites self.__class__ to RemoteProtocolError and re-raises; it is invoked from the except-block of Connection.next_event in h11/h11/_connection.py (line 487) because a protocol violation found while parsing received data is the remote peer's fault",
+    "transport_chain": "httpx AsyncHTTPTransport (httpx/httpx/_transports/default.py line 320) builds httpcore.AsyncSOCKSProxy for socks5 scheme -> AsyncSocks5Connection (httpcore/httpcore/_async/socks_proxy.py) performs the SOCKS5 handshake via _init_socks5_connection and wraps the established stream in AsyncHTTP11Connection (line 289) -> AsyncHTTP11Connection (httpcore/httpcore/_async/http11.py line 67) instantiates h11.Connection; exceptions travel back through map_exceptions (http11.py line 220) and map_httpcore_exceptions/HTTPCORE_EXC_MAP (default.py lines 67/89/103)",
+    "verdict": "Not an httpx bug and not byte corruption: the appliance's header 'X-Gw-Status : OK' has a space before the colon, which the RFC 7230 field-name token grammar forbids; h11 enforces the grammar strictly while curl is lenient. Realistic options: fix the appliance header, front the appliance with a normalizing reverse proxy that rewrites the header, or use a lenient client for this one endpoint"
+  }
+}

@@ -1,30 +1,5 @@
 [
   {
-    "url": "https://github.com/FasterXML/jackson-databind",
-    "pinned_rev": "jackson-databind-2.13.2",
-    "last_verified": "2026-04-02"
-  },
-  {
-    "url": "https://github.com/FasterXML/jackson-databind",
-    "pinned_rev": "jackson-databind-2.15.2",
-    "last_verified": "2026-04-03"
-  },
-  {
-    "url": "https://github.com/LibreOffice/core",
-    "pinned_rev": "61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e",
-    "last_verified": "2026-04-02"
-  },
-  {
-    "url": "https://github.com/NodeBB/NodeBB",
-    "pinned_rev": "8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7",
-    "last_verified": "2026-04-02"
-  },
-  {
-    "url": "https://github.com/PostgREST/postgrest",
-    "pinned_rev": "v12.0.2",
-    "last_verified": "2026-04-03"
-  },
-  {
     "url": "https://github.com/angular/angular",
     "pinned_rev": "18.0.0",
     "last_verified": "2026-04-03"
@@ -255,14 +230,14 @@
     "last_verified": "2026-04-02"
   },
   {
-    "url": "https://github.com/encode/httpx",
-    "pinned_rev": "0.26.0",
-    "last_verified": "2026-04-03"
-  },
-  {
     "url": "https://github.com/encode/httpcore",
     "pinned_rev": "1.0.5",
     "last_verified": "2026-04-29"
+  },
+  {
+    "url": "https://github.com/encode/httpx",
+    "pinned_rev": "0.26.0",
+    "last_verified": "2026-04-03"
   },
   {
     "url": "https://github.com/envoyproxy/envoy",
@@ -352,6 +327,16 @@
   {
     "url": "https://github.com/facebook/react",
     "pinned_rev": "v18.2.0",
+    "last_verified": "2026-04-03"
+  },
+  {
+    "url": "https://github.com/FasterXML/jackson-databind",
+    "pinned_rev": "jackson-databind-2.13.2",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/FasterXML/jackson-databind",
+    "pinned_rev": "jackson-databind-2.15.2",
     "last_verified": "2026-04-03"
   },
   {
@@ -640,6 +625,11 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/LibreOffice/core",
+    "pinned_rev": "61f8fb648ecf9a20ee8abec0e8d3fad3e666db5e",
+    "last_verified": "2026-04-02"
+  },
+  {
     "url": "https://github.com/llvm/llvm-project",
     "pinned_rev": "llvmorg-18.1.0",
     "last_verified": "2026-04-02"
@@ -672,6 +662,11 @@
   {
     "url": "https://github.com/mozilla/gecko-dev",
     "pinned_rev": "1a843e2167f97a3789f9d8a7a9772586f0e1c16f",
+    "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/NodeBB/NodeBB",
+    "pinned_rev": "8fd8079a84d8e71ab02eaa69ef15cb33fcea85c7",
     "last_verified": "2026-04-02"
   },
   {
@@ -730,6 +725,11 @@
     "last_verified": "2026-04-02"
   },
   {
+    "url": "https://github.com/PostgREST/postgrest",
+    "pinned_rev": "v12.0.2",
+    "last_verified": "2026-04-03"
+  },
+  {
     "url": "https://github.com/projectcalico/calico",
     "pinned_rev": "70ebb8c4fd8cd32233afce241f013d484b4bb860",
     "last_verified": "2026-04-02"
@@ -778,6 +778,11 @@
     "url": "https://github.com/psf/requests",
     "pinned_rev": "v2.32.3",
     "last_verified": "2026-04-02"
+  },
+  {
+    "url": "https://github.com/python-hyper/h11",
+    "pinned_rev": "v0.14.0",
+    "last_verified": "2026-07-04"
   },
   {
     "url": "https://github.com/qutebrowser/qutebrowser",

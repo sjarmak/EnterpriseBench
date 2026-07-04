@@ -1,0 +1,82 @@
+{
+  "task_id": "err-provenance-tri-httpx-proxy-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/encode/httpx",
+      "rev": "0.27.0",
+      "path": "httpx"
+    },
+    {
+      "url": "https://github.com/encode/httpcore",
+      "rev": "1.0.5",
+      "path": "httpcore"
+    },
+    {
+      "url": "https://github.com/python-hyper/h11",
+      "rev": "v0.14.0",
+      "path": "h11"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "httpx/httpx/_transports/default.py",
+      "repo": "httpx",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "httpcore/httpcore/_async/http_proxy.py",
+      "repo": "httpcore",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "httpcore/httpcore/_async/http11.py",
+      "repo": "httpcore",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "h11/h11/_connection.py",
+      "repo": "h11",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "httpx/httpx/_exceptions.py",
+      "repo": "httpx",
+      "confidence": 0.8
+    },
+    {
+      "path": "httpcore/httpcore/_exceptions.py",
+      "repo": "httpcore",
+      "confidence": 0.75
+    },
+    {
+      "path": "h11/h11/_util.py",
+      "repo": "h11",
+      "confidence": 0.8
+    }
+  ],
+  "error_chain": [
+    "AsyncHTTPTransport httpx/_transports/default.py AsyncHTTPProxy is constructed as the connection pool when the client is configured with an http or https proxy URL",
+    "AsyncTunnelHTTPConnection httpcore/_async/http_proxy.py CONNECT request establishes the tunnel through the corporate proxy before any origin bytes flow",
+    "AsyncHTTP11Connection httpcore/_async/http11.py h11.Connection is instantiated as the state machine that parses response bytes read from the tunneled stream",
+    "next_event h11/_connection.py RemoteProtocolError with the message peer unexpectedly closed connection is raised when the receive buffer is closed while an event is still incomplete",
+    "map_exceptions HTTPCORE_EXC_MAP map_httpcore_exceptions translate the h11 exception into httpcore.RemoteProtocolError and finally the httpx.RemoteProtocolError the customer sees"
+  ],
+  "trigger_conditions": [
+    "next_event RemoteProtocolError unexpectedly closed is raised by h11 when the receive buffer is closed while a response event is still incomplete meaning the byte stream stopped mid-message",
+    "Server disconnected without sending a response is the distinct httpcore-origin message raised in _receive_event when the tunnel closes before any response bytes arrive",
+    "their_state SEND_RESPONSE httpcore/_async/http11.py separates an empty read before any response bytes from a drop that happens mid-message inside the h11 parser"
+  ],
+  "expected_answer": {
+    "error_origin": "h11 Connection.next_event in h11/h11/_connection.py raises RemoteProtocolError('peer unexpectedly closed connection') when self._receive_buffer_closed is set while the reader still needs data to complete the current event",
+    "wiring": "httpx AsyncHTTPTransport (httpx/httpx/_transports/default.py, self._pool = httpcore.AsyncHTTPProxy(...) for http/https proxy schemes) -> httpcore AsyncTunnelHTTPConnection (httpcore/httpcore/_async/http_proxy.py) issues CONNECT and wraps the tunneled stream in AsyncHTTP11Connection -> AsyncHTTP11Connection (httpcore/httpcore/_async/http11.py) sets self._h11_state = h11.Connection(our_role=h11.CLIENT)",
+    "translation": "httpcore wraps next_event() in map_exceptions({h11.RemoteProtocolError: RemoteProtocolError}) in httpcore/httpcore/_async/http11.py; httpx wraps every pool call in map_httpcore_exceptions() which uses HTTPCORE_EXC_MAP in httpx/httpx/_transports/default.py to re-raise httpcore.RemoteProtocolError as httpx.RemoteProtocolError",
+    "root_cause": "The corporate proxy terminates the tunneled TCP connection mid-response (data caps, content inspection, or connection-lifetime limits on long CONNECT tunnels). From h11's perspective the closing 'peer' is whatever sits on the other end of the tunneled socket -- here the proxy, not the vendor origin, which explains the vendor's clean access logs and the clean direct-path downloads"
+  }
+}

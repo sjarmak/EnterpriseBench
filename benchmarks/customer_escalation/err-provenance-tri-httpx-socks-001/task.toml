@@ -1,0 +1,173 @@
+# Error Provenance: httpx 'illegal header line' over a SOCKS5 tunnel traced through httpcore's SOCKS proxy to h11's header grammar
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "encode-httpstack-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "err-provenance-tri-httpx-socks-001"
+suite = "customer_escalation"
+task_type = "error_provenance"
+difficulty = "medium"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace 'illegal header line' from an httpx client behind a SOCKS5 tunnel through httpcore's AsyncSOCKSProxy into h11's strict header validation, including the LocalProtocolError-to-RemoteProtocolError re-raise"
+prompt = """
+A customer integrates with a legacy vendor appliance ("LegacyGW") that lives
+on an isolated management network. Developers reach it through an SSH dynamic
+port-forward used as a SOCKS5 proxy:
+
+    ssh -D 1080 -N jump.example-corp.net
+
+    client = httpx.AsyncClient(proxy="socks5://localhost:1080")
+    resp = await client.get("http://legacygw.mgmt.internal:8080/api/status")
+
+Every single request fails with:
+
+    httpx.RemoteProtocolError: illegal header line: bytearray(b'X-Gw-Status : OK')
+
+What has convinced the customer this is a proxy bug: the exact same request
+through the exact same tunnel works from curl:
+
+    curl --socks5-hostname localhost:1080 http://legacygw.mgmt.internal:8080/api/status
+
+prints the JSON body without complaint. The customer has filed this as
+"httpx SOCKS support corrupts response bytes" and wants it fixed. The
+appliance vendor is unresponsive, and nobody has explained where the message
+"illegal header line" even comes from.
+
+Your task:
+
+1. Locate the exact origin of the message text "illegal header line" --
+   which repository, file, and function produce it, the validation helper
+   that formats it, and the compiled grammar regex the header line is
+   matched against.
+2. Resolve the exception-class paradox: the raising site constructs a
+   LocalProtocolError, yet the exception the customer catches is a
+   RemoteProtocolError. Find the mechanism that performs this conversion,
+   the file that defines it, and the except-block that invokes it.
+3. Trace the SOCKS transport path and show the tunnel is NOT corrupting
+   bytes: the httpx AsyncHTTPTransport branch selected for socks5:// proxy
+   URLs, the httpcore SOCKS proxy pool and per-connection class, the SOCKS5
+   handshake helper, and the point after tunnel establishment where the
+   plain HTTP/1.1 connection layer and its parser state machine take over.
+   Cite files and classes at each step.
+4. State the actual trigger: which byte sequence in the appliance's response
+   violates which grammar rule (look at the whitespace around the colon in
+   the quoted header), and why curl accepts the same response. Give the
+   support engineer a defensible verdict: is this an httpx bug, and what
+   are the customer's realistic options?
+
+- Source files across all three repositories on the failure path
+- The exception conversion mechanism, named exactly
+- The transport chain proving the SOCKS layer hands off before parsing
+"""
+
+[[repos]]
+url = "https://github.com/encode/httpx"
+rev = "0.27.0"
+path = "httpx"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/encode/httpcore"
+rev = "1.0.5"
+path = "httpcore"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/python-hyper/h11"
+rev = "v0.14.0"
+path = "h11"
+role = "upstream"
+
+[metadata]
+languages = ["python"]
+total_loc = 50_000
+dependency_depth = 3
+frameworks = ["httpx", "httpcore", "h11", "asyncio"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "origin_and_grammar"
+weight = 0.40
+verifier = "checks/check_origin_and_grammar.sh"
+description = "Agent locates the 'illegal header line' origin in h11's reader, the validate() helper, the header grammar regex, and the whitespace-before-colon violation"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "exception_translation"
+weight = 0.35
+verifier = "checks/check_exception_translation.sh"
+description = "Agent names the LocalProtocolError-to-RemoteProtocolError re-raise mechanism and both cross-repo exception mapping layers"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "socks_transport_path"
+weight = 0.25
+verifier = "checks/check_socks_transport_path.sh"
+description = "Agent traces httpx AsyncHTTPTransport socks5 branch -> httpcore AsyncSOCKSProxy/AsyncSocks5Connection -> AsyncHTTP11Connection handoff after the handshake"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The error message string lives in h11's reader machinery two repos below the API the customer calls, the exception class is rewritten in-place by h11's own re-raise helper before httpcore and httpx each remap it again, and the SOCKS path that the customer blames is a separate httpcore module that hands off to the shared HTTP/1.1 layer. Establishing provenance requires navigating all three repos; no single-repo search surfaces the chain."
+
+[ground_truth]
+tiers = ["deterministic", "curator"]
+
+[[ground_truth.required_files]]
+path = "httpx/httpx/_transports/default.py"
+repo = "httpx"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "httpcore/httpcore/_async/socks_proxy.py"
+repo = "httpcore"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "httpcore/httpcore/_async/http11.py"
+repo = "httpcore"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "h11/h11/_readers.py"
+repo = "h11"
+confidence = 0.90
+source = "curator"
+
+[[ground_truth.required_files]]
+path = "h11/h11/_connection.py"
+repo = "h11"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "h11/h11/_util.py"
+repo = "h11"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "h11/h11/_abnf.py"
+repo = "h11"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "httpx/httpx/_exceptions.py"
+repo = "httpx"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "httpcore/httpcore/_exceptions.py"
+repo = "httpcore"
+confidence = 0.70

@@ -1,0 +1,161 @@
+# Error Provenance: httpx RemoteProtocolError behind a corporate HTTP proxy traced through httpcore's CONNECT tunnel to h11
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "encode-httpstack-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "err-provenance-tri-httpx-proxy-001"
+suite = "customer_escalation"
+task_type = "error_provenance"
+difficulty = "medium"
+estimated_duration_minutes = 30
+session_type = "single"
+description = "Trace 'peer unexpectedly closed connection' from httpx's proxied async client through httpcore's AsyncHTTPProxy CONNECT tunnel into h11's receive-buffer state machine"
+prompt = """
+A customer's platform team runs async httpx workers inside a locked-down
+datacenter where all egress traverses a corporate HTTP proxy. Their client:
+
+    client = httpx.AsyncClient(
+        proxy="http://proxy.internal.example-corp.net:3128",
+        timeout=httpx.Timeout(120.0),
+    )
+    resp = await client.get("https://reports.vendor-api.com/v2/export/full.csv")
+
+Large exports intermittently fail with:
+
+    httpx.RemoteProtocolError: peer unexpectedly closed connection
+
+The vendor's API team checked their access logs: every request from this
+customer shows a 200 with the full body written. From a jump host that
+bypasses the proxy the same download always succeeds. The customer is
+escalating because the error text blames the "peer" -- they read that as
+httpx accusing the vendor API of closing the connection, which the vendor
+denies. Nobody on the customer side can say which component actually
+generates this message.
+
+Your task:
+
+1. Locate the exact origin of the message text "peer unexpectedly closed
+   connection" -- which repository, file, and function raise it, and the
+   precise receive-buffer/state condition that triggers it.
+2. Trace how a proxied httpx request wires that parser into the stack: the
+   AsyncHTTPTransport branch that constructs the proxy connection pool for
+   http/https proxy URLs, the tunnel connection class that issues the CONNECT
+   request to the proxy, and the HTTP/1.1 connection layer that instantiates
+   the parser state machine over the tunneled stream. Cite the file and the
+   class or function responsible at each step.
+3. Explain every exception-translation layer between the origin and what the
+   customer sees: the mapping applied around next_event() in the HTTP/1.1
+   connection layer, and the httpx-side context manager and exception table
+   that produce httpx.RemoteProtocolError.
+4. Explain the trigger conditions: when does this exact message fire versus
+   the alternative "Server disconnected without sending a response." raised
+   one layer up (including the their_state check that separates the two
+   cases), and which network hop -- the origin server or the corporate
+   proxy -- is actually the "peer" closing the tunneled connection in this
+   deployment.
+
+- Source files across all three repositories on the failure path
+- The full error chain from the public httpx API down to the origin of the
+  message text and back up through both translation layers
+- Trigger conditions distinguishing the two disconnect messages
+"""
+
+[[repos]]
+url = "https://github.com/encode/httpx"
+rev = "0.27.0"
+path = "httpx"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/encode/httpcore"
+rev = "1.0.5"
+path = "httpcore"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/python-hyper/h11"
+rev = "v0.14.0"
+path = "h11"
+role = "upstream"
+
+[metadata]
+languages = ["python"]
+total_loc = 50_000
+dependency_depth = 3
+frameworks = ["httpx", "httpcore", "h11", "asyncio"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "error_source"
+weight = 0.40
+verifier = "checks/check_error_source.sh"
+description = "Agent identifies the source files on the failure path across httpx, httpcore, and h11"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces the chain from AsyncHTTPTransport through the CONNECT tunnel and h11 state machine back up through both exception-translation layers"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trigger_conditions"
+weight = 0.30
+verifier = "checks/check_trigger_conditions.sh"
+description = "Agent identifies the receive-buffer condition, the sibling httpcore-origin disconnect message, and the their_state check separating them"
+timeout_seconds = 60
+
+[artifacts]
+required = ["answer"]
+optional = []
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The message text originates two dependency levels below the public API: httpx constructs httpcore.AsyncHTTPProxy, httpcore's tunnel wraps the stream in AsyncHTTP11Connection, and the string lives in h11's Connection.next_event. Each hop is a cross-repo boundary invisible to single-repo search, and two separate exception-mapping tables rewrite the exception type on the way back up."
+
+[ground_truth]
+tiers = ["deterministic", "curator"]
+
+[[ground_truth.required_files]]
+path = "httpx/httpx/_transports/default.py"
+repo = "httpx"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "httpcore/httpcore/_async/http_proxy.py"
+repo = "httpcore"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "httpcore/httpcore/_async/http11.py"
+repo = "httpcore"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "h11/h11/_connection.py"
+repo = "h11"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "httpx/httpx/_exceptions.py"
+repo = "httpx"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "httpcore/httpcore/_exceptions.py"
+repo = "httpcore"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "h11/h11/_util.py"
+repo = "h11"
+confidence = 0.80

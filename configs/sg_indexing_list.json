@@ -4,6 +4,30 @@
   "_total_unique_repos": 135,
   "_total_mirror_files": 115,
   "suites": {
+    "customer_escalation": {
+      "_status": "pending_verification",
+      "_indexed_count": 0,
+      "_repo_count": 3,
+      "_task_count": 3,
+      "_note": "Partial: encode httpstack repos only (support-mapping-dual-httpx-httpcore-001 + tri-repo proxy/socks tasks). Remaining customer_escalation repos need backfill.",
+      "repos": [
+        {
+          "name": "encode/httpx",
+          "url": "https://github.com/encode/httpx",
+          "_indexed": false
+        },
+        {
+          "name": "encode/httpcore",
+          "url": "https://github.com/encode/httpcore",
+          "_indexed": false
+        },
+        {
+          "name": "python-hyper/h11",
+          "url": "https://github.com/python-hyper/h11",
+          "_indexed": false
+        }
+      ]
+    },
     "dependency_management": {
       "_status": "pending_verification",
       "_indexed_count": 0,

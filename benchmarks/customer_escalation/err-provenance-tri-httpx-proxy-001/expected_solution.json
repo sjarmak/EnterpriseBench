@@ -1,0 +1,35 @@
+{
+  "task_id": "err-provenance-tri-httpx-proxy-001",
+  "checkpoints": {
+    "error_source": {
+      "expected_solution": "Proxy pool construction in httpx: httpx/httpx/_transports/default.py (AsyncHTTPTransport.__init__, self._pool = httpcore.AsyncHTTPProxy(...) at line 294 for http/https proxy schemes; map_httpcore_exceptions and HTTPCORE_EXC_MAP in the same file). Tunnel in httpcore: httpcore/httpcore/_async/http_proxy.py (AsyncTunnelHTTPConnection.handle_async_request issues the CONNECT request at line 284-291 and wraps the tunneled stream in AsyncHTTP11Connection at line 337). Parser wiring in httpcore: httpcore/httpcore/_async/http11.py (AsyncHTTP11Connection, self._h11_state = h11.Connection(our_role=h11.CLIENT) at line 67). Message origin in h11: h11/h11/_connection.py (Connection.next_event, raise RemoteProtocolError('peer unexpectedly closed connection') at line 482).",
+      "evaluation_criteria": [
+        "Must identify httpx/httpx/_transports/default.py as the file constructing the proxy pool and mapping exceptions",
+        "Must identify httpcore/httpcore/_async/http_proxy.py as the CONNECT tunnel implementation",
+        "Must identify httpcore/httpcore/_async/http11.py as the layer instantiating the h11 state machine",
+        "Must identify h11/h11/_connection.py as the origin of the message text",
+        "Must reference specific symbols (AsyncHTTPTransport, AsyncHTTPProxy, AsyncTunnelHTTPConnection, AsyncHTTP11Connection, h11.Connection, next_event), not just file paths"
+      ]
+    },
+    "error_chain": {
+      "expected_solution": "Chain: (1) AsyncHTTPTransport in httpx/httpx/_transports/default.py constructs httpcore.AsyncHTTPProxy when the proxy URL scheme is http/https (line 294) -> (2) AsyncTunnelHTTPConnection in httpcore/httpcore/_async/http_proxy.py sends CONNECT to the proxy (line 284-291), then wraps the tunneled network stream in AsyncHTTP11Connection (line 337) -> (3) AsyncHTTP11Connection in httpcore/httpcore/_async/http11.py instantiates h11.Connection(our_role=h11.CLIENT) as self._h11_state (line 67) -> (4) h11 Connection.next_event in h11/h11/_connection.py raises RemoteProtocolError('peer unexpectedly closed connection') when the receive buffer is closed while an event is incomplete (line 482) -> (5) httpcore rewraps via map_exceptions({h11.RemoteProtocolError: RemoteProtocolError}) (http11.py line 220), and httpx rewraps via map_httpcore_exceptions/HTTPCORE_EXC_MAP (default.py lines 67/89/103) into httpx.RemoteProtocolError.",
+      "evaluation_criteria": [
+        "Must start the chain at AsyncHTTPTransport constructing AsyncHTTPProxy in httpx/_transports/default.py",
+        "Must include the CONNECT tunnel step via AsyncTunnelHTTPConnection in httpcore/_async/http_proxy.py",
+        "Must include AsyncHTTP11Connection instantiating h11.Connection in httpcore/_async/http11.py",
+        "Must locate the message origin in h11 Connection.next_event in h11/_connection.py",
+        "Must describe both translation layers: map_exceptions in httpcore and map_httpcore_exceptions/HTTPCORE_EXC_MAP in httpx",
+        "Must cite at least one file from each of the three repos in causal order"
+      ]
+    },
+    "trigger_conditions": {
+      "expected_solution": "Conditions: (1) h11 raises 'peer unexpectedly closed connection' from next_event when self._receive_buffer_closed is set while the current event is still incomplete -- i.e. the tunneled socket closed mid-message after some response bytes were already received; (2) if the socket closes before ANY response bytes, httpcore's _receive_event raises the different message 'Server disconnected without sending a response.' (http11.py lines 236-238) instead of feeding the close through h11; (3) the separator is the check data == b'' and self._h11_state.their_state == h11.SEND_RESPONSE in httpcore/_async/http11.py; (4) in this deployment the closing 'peer' is the corporate proxy terminating the CONNECT tunnel mid-response (data caps / inspection / lifetime limits), not the vendor origin -- consistent with the vendor's clean logs and clean direct-path downloads.",
+      "evaluation_criteria": [
+        "Must identify the receive-buffer-closed-mid-event condition in h11's next_event",
+        "Must contrast with the httpcore-origin 'Server disconnected without sending a response.' message",
+        "Must cite the their_state == SEND_RESPONSE empty-read check in httpcore/_async/http11.py as the separator",
+        "Must conclude that the proxy, not the origin server, is the closing peer in this deployment"
+      ]
+    }
+  }
+}
