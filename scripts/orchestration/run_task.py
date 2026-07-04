@@ -445,9 +445,14 @@ def _setup_container(
         _docker_exec(container_id, ["chmod", "+x", "/workspace/test.sh"])
         logger.info("Copied test_runner.sh as /workspace/test.sh")
 
-    # Copy eb_verify library for check scripts that import it
+    # Copy eb_verify library for check scripts that import it.
+    # The destination directory must exist BEFORE docker cp: copying a
+    # directory to a non-existent path copies the source's *contents* into
+    # the new directory, which drops the `eb_verify` package dir and breaks
+    # `python3 -m eb_verify.plugins...` under PYTHONPATH=/workspace/.eb_verify.
     if EB_VERIFY_LIB.is_dir():
-        _docker_cp(str(EB_VERIFY_LIB), f"{container_id}:/workspace/.eb_verify")
+        _docker_exec(container_id, ["mkdir", "-p", "/workspace/.eb_verify"])
+        _docker_cp(str(EB_VERIFY_LIB), f"{container_id}:/workspace/.eb_verify/")
         logger.info("Copied eb_verify library into container")
 
     # Copy ground_truth.json into a task metadata directory for verifiers
