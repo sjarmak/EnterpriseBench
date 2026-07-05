@@ -422,6 +422,109 @@ class TestMcpPreflightHardFail:
         assert result.success is True
 
 
+class TestPreAgentReadabilityGate:
+    """The pre-agent gate branches actually wired into run_task().
+
+    The helpers themselves are unit-tested below; these tests drive run_task()
+    end-to-end (with docker mocked) to verify the wiring: an unreadable
+    instruction/config file must invalidate the run BEFORE the agent starts,
+    and an MCP-config error in agent stderr must invalidate it after
+    (bead EnterpriseBench-0l2a / s58f).
+    """
+
+    @staticmethod
+    def _fake_task_data() -> dict:
+        return {
+            "task": {
+                "id": "test-readability-gate-001",
+                "suite": "test",
+                "task_type": "test",
+                "difficulty": "easy",
+                "session_type": "single",
+            },
+            "repos": [],
+        }
+
+    def _run(
+        self,
+        mode: str = "baseline",
+        readable: tuple[bool, str] = (True, ""),
+        mcp_config_error: bool = False,
+    ):
+        agent_mock = MagicMock(return_value=(0, 10.0))
+        readable_mock = MagicMock(return_value=readable)
+
+        config = TaskRunConfig(
+            task_toml=Path("/fake/task.toml"),
+            agent_command="claude -p",
+            timeout=300,
+            mode=mode,
+        )
+
+        with patch("run_task._parse_task", return_value=self._fake_task_data()), patch(
+            "run_task._generate_dockerfile", return_value=Path("/fake/Dockerfile")
+        ), patch("run_task._docker_build"), patch(
+            "run_task._docker_create_container", return_value="fake-container-id"
+        ), patch("run_task._docker_start"), patch("run_task._setup_container"), patch(
+            "run_task._run_health_check", return_value=True
+        ), patch(
+            "run_task._configure_mcp"
+        ), patch(
+            "run_task._chown_to_agent"
+        ), patch(
+            "run_task._assert_agent_readable", side_effect=readable_mock
+        ), patch(
+            "run_task._scan_mcp_config_error", return_value=mcp_config_error
+        ), patch(
+            "run_task._run_agent", side_effect=agent_mock
+        ), patch(
+            "run_task._run_scoring", return_value={"task_score": 0.0}
+        ), patch("run_task._save_results"), patch(
+            "run_task._extract_tool_usage", return_value={}
+        ), patch(
+            "run_task._copy_agent_trace", return_value=False
+        ), patch(
+            "run_task._check_disk_space", return_value=True
+        ), patch("run_task._docker_stop_rm"), patch.dict(
+            os.environ, {"SOURCEGRAPH_ACCESS_TOKEN": "sgp_test_token_xyz"}
+        ):
+            result = run_task(config)
+
+        return result, agent_mock, readable_mock
+
+    def test_unreadable_file_invalidates_run_before_agent(self) -> None:
+        result, agent_mock, _ = self._run(
+            readable=(False, "agent user cannot read /workspace/instruction.md")
+        )
+        assert result.status == RUN_STATUS_INVALID
+        assert result.phase == "agent_preflight_failed"
+        assert result.failure_class == "infra_perms"
+        assert result.success is False
+        agent_mock.assert_not_called()
+
+    def test_mcp_config_error_in_stderr_invalidates_run_after_agent(self) -> None:
+        result, agent_mock, _ = self._run(mode="mcp_only", mcp_config_error=True)
+        agent_mock.assert_called_once()
+        assert result.status == RUN_STATUS_INVALID
+        assert result.failure_class == "infra_mcp_config"
+        assert result.phase == "agent_infra_error"
+        assert result.success is False
+
+    def test_baseline_readability_targets_are_instruction_only(self) -> None:
+        _, _, readable_mock = self._run(mode="baseline")
+        readable_mock.assert_called_once()
+        assert readable_mock.call_args.args[1] == ["/workspace/instruction.md"]
+
+    def test_mcp_mode_readability_targets_include_mcp_configs(self) -> None:
+        _, _, readable_mock = self._run(mode="mcp_only")
+        readable_mock.assert_called_once()
+        assert readable_mock.call_args.args[1] == [
+            "/workspace/instruction.md",
+            "/workspace/.mcp.json",
+            "/home/agent/.mcp.json",
+        ]
+
+
 # ---------------------------------------------------------------------------
 # HTTP-level endpoint verification
 # ---------------------------------------------------------------------------
@@ -527,7 +630,7 @@ class TestChownToAgent:
             _chown_to_agent("cid", ["/workspace/instruction.md", "/workspace/.task"])
 
         cmd = mock_run.call_args.args[0]
-        assert cmd[:5] == ["docker", "exec", "-u", "root", "cid"]
+        assert cmd[:7] == ["docker", "exec", "-w", "/workspace", "-u", "root", "cid"]
         script = cmd[-1]
         assert "chown -R agent:agent" in script
         assert "/workspace/instruction.md" in script
@@ -542,7 +645,9 @@ class TestChownToAgent:
         script = mock_run.call_args.args[0][-1]
         assert '[ -e "$f" ]' in script
 
-    def test_logs_error_on_chown_failure(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_logs_error_on_chown_failure(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         fail = MagicMock(returncode=1, stdout="", stderr="chown: not permitted")
 
         with patch("run_task.subprocess.run", return_value=fail):
@@ -565,8 +670,8 @@ class TestAssertAgentReadable:
         assert err == ""
         assert mock_run.call_count == 2
         cmd = mock_run.call_args_list[0].args[0]
-        assert cmd[:5] == ["docker", "exec", "-u", "agent", "cid"]
-        assert cmd[5:] == ["test", "-r", "/workspace/instruction.md"]
+        assert cmd[:7] == ["docker", "exec", "-w", "/workspace", "-u", "agent", "cid"]
+        assert cmd[7:] == ["test", "-r", "/workspace/instruction.md"]
 
     def test_unreadable_path_returns_false_with_path_in_error(self) -> None:
         fail = MagicMock(returncode=1, stdout="", stderr="")

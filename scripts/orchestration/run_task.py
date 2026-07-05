@@ -297,9 +297,13 @@ def _docker_exec(
     cmd: list[str],
     timeout: int = 120,
     workdir: str = "/workspace",
+    user: str | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run a command inside the container."""
-    full_cmd = ["docker", "exec", "-w", workdir, container_id] + cmd
+    """Run a command inside the container, optionally as a specific user."""
+    full_cmd = ["docker", "exec", "-w", workdir]
+    if user is not None:
+        full_cmd += ["-u", user]
+    full_cmd += [container_id] + cmd
     return subprocess.run(
         full_cmd,
         capture_output=True,
@@ -408,12 +412,7 @@ def _chown_to_agent(container_id: str, paths: list[str]) -> None:
         'if [ -e "$f" ]; then chown -R agent:agent "$f" || rc=1; fi; '
         "done; exit $rc"
     )
-    result = subprocess.run(
-        ["docker", "exec", "-u", "root", container_id, "bash", "-c", script],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    result = _docker_exec(container_id, ["bash", "-c", script], user="root")
     if result.returncode != 0:
         logger.error(
             "chown to agent FAILED for one or more of %s: %s",
@@ -431,17 +430,13 @@ def _assert_agent_readable(container_id: str, paths: list[str]) -> tuple[bool, s
     (bead EnterpriseBench-s58f).
     """
     for path in paths:
-        check = subprocess.run(
-            ["docker", "exec", "-u", "agent", container_id, "test", "-r", path],
-            capture_output=True,
-            text=True,
-            timeout=30,
+        check = _docker_exec(
+            container_id, ["test", "-r", path], timeout=30, user="agent"
         )
         if check.returncode != 0:
-            return (
-                False,
+            return False, (
                 f"agent user cannot read {path} "
-                f"(EACCES or missing) — run is INVALID, not a real 0.0 score",
+                "(EACCES or missing) — run is INVALID, not a real 0.0 score"
             )
     return True, ""
 
@@ -549,6 +544,10 @@ def _setup_container(
     # Never chown -R /workspace (too slow for large repos like K8s, Terraform).
     # Fail-loud: a silently masked chown failure here is what produced
     # unreadable instruction.md and fake-0 no-op runs (bead EnterpriseBench-s58f).
+    # The agent .mcp.json files are written and chowned later by
+    # _configure_mcp; agent_output is created by the agent step — both are
+    # intentionally omitted here (s58f design intent: don't chown stale
+    # leftovers from a reused container).
     _chown_to_agent(
         container_id,
         [
@@ -557,8 +556,6 @@ def _setup_container(
             "/workspace/.task",
             "/workspace/.eb_verify",
             "/workspace/test.sh",
-            "/workspace/agent_output",
-            "/workspace/.mcp.json",
         ],
     )
 
