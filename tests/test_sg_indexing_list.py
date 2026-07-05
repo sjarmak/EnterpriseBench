@@ -1,5 +1,6 @@
 """Tests for configs/sg_indexing_list.json structure and generation script."""
 
+import hashlib
 import json
 import glob
 import os
@@ -58,13 +59,13 @@ class TestRepoEntries:
     """Validate individual repo entries."""
 
     def test_every_repo_has_required_fields(self, index_data: dict) -> None:
+        # Only the fields the generator guarantees for every entry.
+        # Enrichment fields (_language/_loc_estimate/_tier) are hint-based
+        # and validated separately in TestRepoEnrichment when present.
         required_fields = {
             "sg_name",
             "github_repo",
             "commit",
-            "_language",
-            "_loc_estimate",
-            "_tier",
             "_indexed",
             "_task_count",
         }
@@ -102,33 +103,41 @@ class TestRepoEntries:
 
 
 class TestRepoEnrichment:
-    """Validate LOC estimates, language, and tier classification."""
+    """Validate LOC estimates, language, and tier classification.
 
-    def test_language_populated(self, index_data: dict) -> None:
-        for repo in index_data["repos"]:
-            lang = repo.get("_language")
-            assert (
-                lang and isinstance(lang, str) and len(lang) > 0
-            ), f"Repo {repo['sg_name']} has empty/null _language"
+    Enrichment fields are hint-based: the generator only emits them for
+    repos present in its LANGUAGE_HINTS/LOC_HINTS tables. Entries without
+    hints legitimately lack them, so these tests validate the fields when
+    present rather than requiring them on every entry.
+    """
 
-    def test_loc_estimate_positive(self, index_data: dict) -> None:
+    def test_language_valid_when_present(self, index_data: dict) -> None:
         for repo in index_data["repos"]:
-            loc = repo.get("_loc_estimate")
-            assert (
-                isinstance(loc, int) and loc > 0
-            ), f"Repo {repo['sg_name']} has invalid _loc_estimate: {loc}"
+            if "_language" in repo:
+                lang = repo["_language"]
+                assert (
+                    isinstance(lang, str) and len(lang) > 0
+                ), f"Repo {repo['sg_name']} has empty/null _language"
 
-    def test_tier_valid(self, index_data: dict) -> None:
+    def test_loc_estimate_positive_when_present(self, index_data: dict) -> None:
         for repo in index_data["repos"]:
-            tier = repo.get("_tier")
-            assert tier in {
-                "A",
-                "B",
-                "C",
-            }, f"Repo {repo['sg_name']} has invalid _tier: {tier}"
+            if "_loc_estimate" in repo:
+                loc = repo["_loc_estimate"]
+                assert (
+                    isinstance(loc, int) and loc > 0
+                ), f"Repo {repo['sg_name']} has invalid _loc_estimate: {loc}"
+
+    def test_tier_paired_with_loc_estimate(self, index_data: dict) -> None:
+        """The generator emits _tier and _loc_estimate together, never alone."""
+        for repo in index_data["repos"]:
+            assert ("_tier" in repo) == ("_loc_estimate" in repo), (
+                f"Repo {repo['sg_name']} has _tier/_loc_estimate unpaired"
+            )
 
     def test_tier_matches_loc_range(self, index_data: dict) -> None:
         for repo in index_data["repos"]:
+            if "_tier" not in repo:
+                continue
             loc = repo["_loc_estimate"]
             tier = repo["_tier"]
             if loc > 500_000:
@@ -143,8 +152,9 @@ class TestRepoEnrichment:
             )
 
     def test_tier_distribution_reasonable(self, index_data: dict) -> None:
-        """Ensure we have repos across all tiers (not all one tier)."""
-        tiers = {repo["_tier"] for repo in index_data["repos"]}
+        """Enriched repos must span all tiers (catches enrichment being
+        dropped wholesale or collapsing to one tier)."""
+        tiers = {r["_tier"] for r in index_data["repos"] if "_tier" in r}
         assert tiers == {"A", "B", "C"}, f"Expected all tiers A/B/C, got {tiers}"
 
 
@@ -194,34 +204,109 @@ class TestCrossReferences:
                 ), f"Repo {repo['sg_name']} _suites not sorted"
 
 
+@pytest.fixture(scope="module")
+def generated_index(tmp_path_factory: pytest.TempPathFactory) -> dict:
+    """Run the generator once, writing to a temp path (never the checked-in
+    file), and return the parsed output."""
+    out_path = tmp_path_factory.mktemp("sg_index") / "sg_indexing_list.json"
+    result = subprocess.run(
+        [sys.executable, GENERATE_SCRIPT, "--output", str(out_path)],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+    assert out_path.exists(), "Generator did not write to the --output path"
+    with open(out_path) as f:
+        return json.load(f)
+
+
 class TestGenerationScript:
-    """Verify the generation script produces consistent output."""
+    """Verify the generation script produces output consistent with the
+    checked-in index.
 
-    def test_script_runs_without_error(self) -> None:
+    The checked-in file may carry hand-backfilled entries and suites on top
+    of what the generator produces (e.g. the fa876ae customer_escalation /
+    platform_engineering backfill from task.tomls without mirror files), so
+    the contract is a superset relationship, not byte equality: everything
+    the generator produces must appear in the checked-in file.
+    """
+
+    def test_generated_output_is_structurally_valid(
+        self, generated_index: dict
+    ) -> None:
+        required = {
+            "_description",
+            "_generated",
+            "_total_unique_repos",
+            "_total_mirror_files",
+            "suites",
+            "repos",
+        }
+        assert required.issubset(set(generated_index.keys()))
+        assert generated_index["_total_unique_repos"] == len(
+            generated_index["repos"]
+        )
+        assert len(generated_index["repos"]) > 0
+
+    def test_generated_repos_all_present_in_checked_in(
+        self, generated_index: dict, index_data: dict
+    ) -> None:
+        """Every generator-produced repo must exist in the checked-in index
+        with the same source repo and pinned commit. Catches a stale
+        checked-in index (new mirror file not reflected) and silent rev
+        drift between mirror files and the index."""
+        checked_in = {r["sg_name"]: r for r in index_data["repos"]}
+        problems = []
+        for repo in generated_index["repos"]:
+            name = repo["sg_name"]
+            existing = checked_in.get(name)
+            if existing is None:
+                problems.append(f"{name}: missing from checked-in index")
+                continue
+            for field in ("github_repo", "commit"):
+                if repo[field] != existing[field]:
+                    problems.append(
+                        f"{name}: {field} differs "
+                        f"(generated={repo[field]!r}, "
+                        f"checked-in={existing[field]!r})"
+                    )
+        assert not problems, (
+            "Checked-in index is stale or diverged; regenerate with "
+            "scripts/generate_sg_index.py and re-apply manual entries:\n"
+            + "\n".join(problems)
+        )
+
+    def test_generated_suites_all_present_in_checked_in(
+        self, generated_index: dict, index_data: dict
+    ) -> None:
+        generated = set(generated_index["suites"])
+        checked_in = set(index_data["suites"])
+        missing = generated - checked_in
+        assert not missing, f"Generator suites missing from checked-in: {missing}"
+
+    def test_generator_does_not_modify_checked_in_index(self, tmp_path) -> None:
+        """Regression test: the test suite's generator invocation must never
+        touch configs/sg_indexing_list.json (it used to clobber it)."""
+
+        def digest() -> str:
+            with open(INDEX_PATH, "rb") as f:
+                return hashlib.sha256(f.read()).hexdigest()
+
+        before = digest()
         result = subprocess.run(
-            [sys.executable, GENERATE_SCRIPT],
+            [
+                sys.executable,
+                GENERATE_SCRIPT,
+                "--output",
+                str(tmp_path / "out.json"),
+            ],
             capture_output=True,
             text=True,
             cwd=ROOT,
         )
         assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-    def test_script_output_matches_checked_in(self, index_data: dict) -> None:
-        """Re-generate and verify it matches what's on disk."""
-        result = subprocess.run(
-            [sys.executable, GENERATE_SCRIPT],
-            capture_output=True,
-            text=True,
-            cwd=ROOT,
+        assert digest() == before, (
+            "Generator modified configs/sg_indexing_list.json despite "
+            "--output pointing elsewhere"
         )
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-
-        with open(INDEX_PATH) as f:
-            regenerated = json.load(f)
-
-        # Compare everything except _generated date
-        index_copy = {k: v for k, v in index_data.items() if k != "_generated"}
-        regen_copy = {k: v for k, v in regenerated.items() if k != "_generated"}
-        assert (
-            index_copy == regen_copy
-        ), "Regenerated index differs from checked-in version"
