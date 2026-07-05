@@ -5,9 +5,13 @@ Consolidates all per-task mirror files into a single centralized repo index
 with per-repo metadata and cross-references.
 
 Usage:
-    python scripts/generate_sg_index.py
+    python scripts/generate_sg_index.py [--output PATH]
+
+By default writes configs/sg_indexing_list.json in place; pass --output to
+write elsewhere (used by tests to avoid touching the checked-in file).
 """
 
+import argparse
 import json
 import glob
 import os
@@ -323,15 +327,26 @@ def build_index(mirrors: dict[str, Any], task_suites: dict[str, str]) -> dict[st
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate the consolidated sg-evals repo index."
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        default=OUTPUT_PATH,
+        help="Output path (default: configs/sg_indexing_list.json)",
+    )
+    args = parser.parse_args()
+
     mirrors = load_mirrors()
     task_suites = load_task_suites()
     index = build_index(mirrors, task_suites)
 
-    with open(OUTPUT_PATH, "w") as f:
+    with open(args.output, "w") as f:
         json.dump(index, f, indent=2)
         f.write("\n")
 
-    print(f"Generated {OUTPUT_PATH}")
+    print(f"Generated {args.output}")
     print(f"  Total unique repos: {index['_total_unique_repos']}")
     print(f"  Total mirror files: {index['_total_mirror_files']}")
     print(f"  Suites:")
