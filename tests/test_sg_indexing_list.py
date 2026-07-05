@@ -1,11 +1,12 @@
 """Tests for configs/sg_indexing_list.json structure and generation script."""
 
+import glob
 import hashlib
 import json
-import glob
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -112,6 +113,12 @@ class TestRepoEnrichment:
     """
 
     def test_language_valid_when_present(self, index_data: dict) -> None:
+        # Floor guard: if LANGUAGE_HINTS drifts out of sync with github_repo
+        # values, every entry loses _language and the loop below becomes
+        # vacuous — require at least one enriched entry.
+        assert any(
+            "_language" in r for r in index_data["repos"]
+        ), "No repo has _language — LANGUAGE_HINTS out of sync with index"
         for repo in index_data["repos"]:
             if "_language" in repo:
                 lang = repo["_language"]
@@ -130,9 +137,9 @@ class TestRepoEnrichment:
     def test_tier_paired_with_loc_estimate(self, index_data: dict) -> None:
         """The generator emits _tier and _loc_estimate together, never alone."""
         for repo in index_data["repos"]:
-            assert ("_tier" in repo) == ("_loc_estimate" in repo), (
-                f"Repo {repo['sg_name']} has _tier/_loc_estimate unpaired"
-            )
+            assert ("_tier" in repo) == (
+                "_loc_estimate" in repo
+            ), f"Repo {repo['sg_name']} has _tier/_loc_estimate unpaired"
 
     def test_tier_matches_loc_range(self, index_data: dict) -> None:
         for repo in index_data["repos"]:
@@ -221,15 +228,24 @@ def generated_index(tmp_path_factory: pytest.TempPathFactory) -> dict:
         return json.load(f)
 
 
+# Suites present in the checked-in index that the generator cannot produce
+# (fa876ae backfill: their tasks have no configs/sg_mirrors/ files). Extending
+# the backfill means adding the new suite here — the reverse-containment test
+# below will fail loudly until you do, which is the point.
+HAND_BACKFILLED_SUITES = {"customer_escalation", "platform_engineering"}
+
+
 class TestGenerationScript:
     """Verify the generation script produces output consistent with the
     checked-in index.
 
-    The checked-in file may carry hand-backfilled entries and suites on top
-    of what the generator produces (e.g. the fa876ae customer_escalation /
-    platform_engineering backfill from task.tomls without mirror files), so
-    the contract is a superset relationship, not byte equality: everything
-    the generator produces must appear in the checked-in file.
+    The checked-in file may carry hand-backfilled suites on top of what the
+    generator produces (HAND_BACKFILLED_SUITES above), so suite comparison
+    allows those exceptions. The contract is containment in BOTH directions:
+    everything the generator produces must appear in the checked-in file, and
+    everything checked-in (minus the known backfill) must be reproduced by
+    the generator — a one-way subset check would pass vacuously if the
+    generator silently dropped most of its output.
     """
 
     def test_generated_output_is_structurally_valid(
@@ -244,18 +260,20 @@ class TestGenerationScript:
             "repos",
         }
         assert required.issubset(set(generated_index.keys()))
-        assert generated_index["_total_unique_repos"] == len(
-            generated_index["repos"]
-        )
+        assert generated_index["_total_unique_repos"] == len(generated_index["repos"])
         assert len(generated_index["repos"]) > 0
 
     def test_generated_repos_all_present_in_checked_in(
         self, generated_index: dict, index_data: dict
     ) -> None:
         """Every generator-produced repo must exist in the checked-in index
-        with the same source repo and pinned commit. Catches a stale
-        checked-in index (new mirror file not reflected) and silent rev
-        drift between mirror files and the index."""
+        with the same source repo and pinned commit, AND every checked-in
+        repo must be reproduced by the generator. Catches a stale checked-in
+        index (new mirror file not reflected), silent rev drift, and a
+        generator regression that silently drops repos (a one-way subset
+        check passes vacuously on undercounts). No repos are hand-backfilled
+        today; if that changes, add a HAND_BACKFILLED_REPOS allowlist
+        mirroring the suites one."""
         checked_in = {r["sg_name"]: r for r in index_data["repos"]}
         problems = []
         for repo in generated_index["repos"]:
@@ -271,21 +289,30 @@ class TestGenerationScript:
                         f"(generated={repo[field]!r}, "
                         f"checked-in={existing[field]!r})"
                     )
+        generated_names = {r["sg_name"] for r in generated_index["repos"]}
+        for name in checked_in.keys() - generated_names:
+            problems.append(f"{name}: checked-in but not produced by generator")
         assert not problems, (
             "Checked-in index is stale or diverged; regenerate with "
             "scripts/generate_sg_index.py and re-apply manual entries:\n"
             + "\n".join(problems)
         )
 
-    def test_generated_suites_all_present_in_checked_in(
+    def test_generated_suites_match_checked_in_modulo_backfill(
         self, generated_index: dict, index_data: dict
     ) -> None:
         generated = set(generated_index["suites"])
         checked_in = set(index_data["suites"])
+        assert generated, "Generator produced zero suites"
         missing = generated - checked_in
         assert not missing, f"Generator suites missing from checked-in: {missing}"
+        dropped = checked_in - HAND_BACKFILLED_SUITES - generated
+        assert not dropped, (
+            f"Generator no longer produces checked-in suites {dropped} "
+            "(not in the HAND_BACKFILLED_SUITES allowlist)"
+        )
 
-    def test_generator_does_not_modify_checked_in_index(self, tmp_path) -> None:
+    def test_generator_does_not_modify_checked_in_index(self, tmp_path: Path) -> None:
         """Regression test: the test suite's generator invocation must never
         touch configs/sg_indexing_list.json (it used to clobber it)."""
 
