@@ -1,8 +1,8 @@
 {
   "_description": "Centralized repo index for EnterpriseBench. Consolidates configs/sg_mirrors/ into a single index. Each entry maps an sg-evals mirror name to its source GitHub repo, pinned commit, and metadata.",
-  "_generated": "2026-04-04",
-  "_total_unique_repos": 135,
-  "_total_mirror_files": 115,
+  "_generated": "2026-07-04",
+  "_total_unique_repos": 133,
+  "_total_mirror_files": 114,
   "suites": {
     "customer_escalation": {
       "_status": "pending_verification",
@@ -1192,8 +1192,11 @@
       "sg_name": "sg-evals/containerd/containerd--v1.7.24",
       "github_repo": "containerd/containerd",
       "commit": "v1.7.24",
+      "_language": "Go",
+      "_loc_estimate": 400000,
+      "_tier": "B",
       "_indexed": false,
-      "_task_count": 1,
+      "_task_count": 2,
       "_suites": [
         "incident_response"
       ]
@@ -1210,6 +1213,16 @@
       "_suites": [
         "dependency_management"
       ]
+    },
+    {
+      "sg_name": "sg-evals/dandydeveloper/charts--redis-ha-4.26.6",
+      "github_repo": "dandydeveloper/charts",
+      "commit": "redis-ha-4.26.6",
+      "_language": "YAML/Helm",
+      "_loc_estimate": 5000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/discourse/discourse--168de525",
@@ -1872,6 +1885,16 @@
       ]
     },
     {
+      "sg_name": "sg-evals/kubernetes-sigs/knftables--v0.0.17",
+      "github_repo": "kubernetes-sigs/knftables",
+      "commit": "v0.0.17",
+      "_language": "Go",
+      "_loc_estimate": 10000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
+    },
+    {
       "sg_name": "sg-evals/kubernetes/kubernetes--v1.13.0",
       "github_repo": "kubernetes/kubernetes",
       "commit": "v1.13.0",
@@ -2050,6 +2073,9 @@
       "sg_name": "sg-evals/opencontainers/runc--v1.2.4",
       "github_repo": "opencontainers/runc",
       "commit": "v1.2.4",
+      "_language": "Go",
+      "_loc_estimate": 70000,
+      "_tier": "C",
       "_indexed": false,
       "_task_count": 1,
       "_suites": [
@@ -2108,6 +2134,16 @@
       "_suites": [
         "security_operations"
       ]
+    },
+    {
+      "sg_name": "sg-evals/prometheus/alertmanager--v0.26.0",
+      "github_repo": "prometheus/alertmanager",
+      "commit": "v0.26.0",
+      "_language": "Go",
+      "_loc_estimate": 80000,
+      "_tier": "C",
+      "_indexed": false,
+      "_task_count": 1
     },
     {
       "sg_name": "sg-evals/prometheus/prometheus--v2.45.0",
@@ -2216,34 +2252,6 @@
       "_task_count": 1
     },
     {
-      "sg_name": "sg-evals/sg-evals/containerd-containerd",
-      "github_repo": "containerd/containerd",
-      "commit": "v1.7.24",
-      "_indexed": false,
-      "_task_count": 1
-    },
-    {
-      "sg_name": "sg-evals/sg-evals/dandydeveloper-charts",
-      "github_repo": "dandydeveloper/charts",
-      "commit": "redis-ha-4.26.6",
-      "_indexed": false,
-      "_task_count": 1
-    },
-    {
-      "sg_name": "sg-evals/sg-evals/kubernetes-sigs-knftables",
-      "github_repo": "kubernetes-sigs/knftables",
-      "commit": "v0.6.0",
-      "_indexed": false,
-      "_task_count": 1
-    },
-    {
-      "sg_name": "sg-evals/sg-evals/prometheus-alertmanager",
-      "github_repo": "prometheus/alertmanager",
-      "commit": "v0.26.0",
-      "_indexed": false,
-      "_task_count": 1
-    },
-    {
       "sg_name": "sg-evals/spf13/cobra--v1.10.2",
       "github_repo": "spf13/cobra",
       "commit": "v1.10.2",
@@ -2296,16 +2304,6 @@
       "_language": "TypeScript",
       "_loc_estimate": 150000,
       "_tier": "B",
-      "_indexed": false,
-      "_task_count": 1
-    },
-    {
-      "sg_name": "sg-evals/unknown/repo--HEAD",
-      "github_repo": "unknown/repo",
-      "commit": "HEAD",
-      "_language": "Unknown",
-      "_loc_estimate": 10000,
-      "_tier": "C",
       "_indexed": false,
       "_task_count": 1
     },

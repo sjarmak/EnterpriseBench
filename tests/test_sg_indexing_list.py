@@ -94,6 +94,19 @@ class TestRepoEntries:
                 repo["_indexed"], bool
             ), f"Repo {repo['sg_name']} _indexed is not bool"
 
+    def test_no_malformed_sg_names(self, index_data: dict) -> None:
+        """Regression (EnterpriseBench-p6ms): four 2026-04-03 mirror files
+        embedded the sg-evals/ prefix inside mirror_id (yielding
+        sg-evals/sg-evals/* garbage) and one archived-task placeholder
+        produced sg-evals/unknown/repo--HEAD. Neither shape may reappear."""
+        bad = [
+            r["sg_name"]
+            for r in index_data["repos"]
+            if r["sg_name"].startswith("sg-evals/sg-evals/")
+            or r["sg_name"].startswith("sg-evals/unknown/")
+        ]
+        assert not bad, f"Malformed sg_name entries in index: {bad}"
+
     def test_no_duplicate_sg_names(self, index_data: dict) -> None:
         names = [r["sg_name"] for r in index_data["repos"]]
         assert len(names) == len(set(names)), "Duplicate sg_name entries found"
@@ -125,6 +138,41 @@ class TestRepoEnrichment:
                 assert (
                     isinstance(lang, str) and len(lang) > 0
                 ), f"Repo {repo['sg_name']} has empty/null _language"
+
+    def test_every_repo_is_enriched(self, index_data: dict) -> None:
+        """Every repo in the index must carry _language/_loc_estimate/_tier.
+        The generator's hint tables claim full coverage ("Every repo in the
+        index must have an entry here"); this makes the claim enforceable.
+        Adding a mirror for a new repo requires adding LANGUAGE_HINTS and
+        LOC_HINTS entries in scripts/generate_sg_index.py."""
+        unenriched = [
+            r["sg_name"]
+            for r in index_data["repos"]
+            if not {"_language", "_loc_estimate", "_tier"} <= set(r.keys())
+        ]
+        assert not unenriched, (
+            "Repos missing enrichment (add LANGUAGE_HINTS/LOC_HINTS entries "
+            f"in scripts/generate_sg_index.py): {unenriched}"
+        )
+
+    def test_corrected_mirror_repos_present_and_enriched(
+        self, index_data: dict
+    ) -> None:
+        """Regression (EnterpriseBench-p6ms): the four repaired mirror_ids
+        must appear under their canonical {org}/{repo}--{rev} names with
+        enrichment fields."""
+        expected = {
+            "sg-evals/containerd/containerd--v1.7.24",
+            "sg-evals/prometheus/alertmanager--v0.26.0",
+            "sg-evals/dandydeveloper/charts--redis-ha-4.26.6",
+            "sg-evals/kubernetes-sigs/knftables--v0.0.17",
+        }
+        by_name = {r["sg_name"]: r for r in index_data["repos"]}
+        missing = expected - set(by_name)
+        assert not missing, f"Corrected mirror repos missing from index: {missing}"
+        for name in expected:
+            fields = {"_language", "_loc_estimate", "_tier"} - set(by_name[name])
+            assert not fields, f"{name} missing enrichment fields: {fields}"
 
     def test_loc_estimate_positive_when_present(self, index_data: dict) -> None:
         for repo in index_data["repos"]:
@@ -228,24 +276,28 @@ def generated_index(tmp_path_factory: pytest.TempPathFactory) -> dict:
         return json.load(f)
 
 
-# Suites present in the checked-in index that the generator cannot produce
-# (fa876ae backfill: their tasks have no configs/sg_mirrors/ files). Extending
-# the backfill means adding the new suite here — the reverse-containment test
-# below will fail loudly until you do, which is the point.
-HAND_BACKFILLED_SUITES = {"customer_escalation", "platform_engineering"}
+# Suites whose entries were hand-backfilled (fa876ae) from task sets that are
+# not reproducible from this branch's benchmarks tree. The generator carries
+# them over verbatim from the checked-in index; import its constant directly
+# so the test set cannot drift from the script's (a hand-copied duplicate
+# would silently stop exercising content equality for a drifted suite).
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from generate_sg_index import (  # noqa: E402
+    BACKFILLED_SUITES as CARRIED_BACKFILL_SUITES,
+)
 
 
 class TestGenerationScript:
     """Verify the generation script produces output consistent with the
     checked-in index.
 
-    The checked-in file may carry hand-backfilled suites on top of what the
-    generator produces (HAND_BACKFILLED_SUITES above), so suite comparison
-    allows those exceptions. The contract is containment in BOTH directions:
-    everything the generator produces must appear in the checked-in file, and
-    everything checked-in (minus the known backfill) must be reproduced by
-    the generator — a one-way subset check would pass vacuously if the
-    generator silently dropped most of its output.
+    The generator derives most content from configs/sg_mirrors/ and carries
+    the CARRIED_BACKFILL_SUITES over from the checked-in index verbatim, so
+    generate -> write reproduces the full checked-in file. The contract is
+    containment in BOTH directions: everything the generator produces must
+    appear in the checked-in file, and everything checked-in must be
+    reproduced by the generator — a one-way subset check would pass vacuously
+    if the generator silently dropped most of its output.
     """
 
     def test_generated_output_is_structurally_valid(
@@ -298,19 +350,32 @@ class TestGenerationScript:
             + "\n".join(problems)
         )
 
-    def test_generated_suites_match_checked_in_modulo_backfill(
+    def test_generated_suites_match_checked_in(
         self, generated_index: dict, index_data: dict
     ) -> None:
         generated = set(generated_index["suites"])
         checked_in = set(index_data["suites"])
         assert generated, "Generator produced zero suites"
-        missing = generated - checked_in
-        assert not missing, f"Generator suites missing from checked-in: {missing}"
-        dropped = checked_in - HAND_BACKFILLED_SUITES - generated
-        assert not dropped, (
-            f"Generator no longer produces checked-in suites {dropped} "
-            "(not in the HAND_BACKFILLED_SUITES allowlist)"
+        assert generated == checked_in, (
+            "Generated suite set diverged from checked-in: "
+            f"only-generated={generated - checked_in}, "
+            f"only-checked-in={checked_in - generated}"
         )
+
+    def test_carried_backfill_suites_survive_regeneration(
+        self, generated_index: dict, index_data: dict
+    ) -> None:
+        """The fa876ae backfilled suites must be carried over by the
+        generator with content identical to the checked-in index — any
+        delta means the carry-over silently mutated hand-curated data."""
+        for suite in sorted(CARRIED_BACKFILL_SUITES):
+            assert (
+                suite in generated_index["suites"]
+            ), f"Backfilled suite '{suite}' missing from generated output"
+            assert generated_index["suites"][suite] == index_data["suites"][suite], (
+                f"Backfilled suite '{suite}' content changed across "
+                "regeneration (carry-over must be verbatim)"
+            )
 
     def test_generator_does_not_modify_checked_in_index(self, tmp_path: Path) -> None:
         """Regression test: the test suite's generator invocation must never
