@@ -7,6 +7,7 @@ Plugins are registered by artifact type name.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Protocol
@@ -46,26 +47,48 @@ class FileTooLargeError(ValueError):
     """Raised by safe_read when a file exceeds the caller's max_bytes cap."""
 
 
+# Generous cap for the hand-authored JSON/text artifacts (answer, incident
+# report, etc.) that safe_read's small-artifact callers read in full. These
+# are meant to be at most a few KB; this bounds worst-case memory use if a
+# symlink (or literal file) at the artifact path targets something huge.
+MAX_ARTIFACT_BYTES = 10 * 1024 * 1024  # 10 MiB
+
+
 def safe_read(path: Path, workspace: Path, max_bytes: Optional[int] = None) -> str:
     """Read a file, asserting the resolved path stays within workspace (symlink-safe).
 
     When max_bytes is set, files larger than the cap raise FileTooLargeError
     without being read. Containment is checked FIRST: an escaping path always
     reports the escape and is never stat'd for a size verdict.
+
+    Opens *path* once via a file descriptor and derives the real path,
+    containment check, size check, and read all from that same fd (rather
+    than re-resolving/re-opening the path at each step). This closes the
+    TOCTOU window a path-based resolve-then-reopen sequence would leave
+    between the containment check and the read.
     """
-    resolved = path.resolve()
     workspace_resolved = workspace.resolve()
-    if not str(resolved).startswith(str(workspace_resolved) + "/") and resolved != workspace_resolved:
-        raise ValueError(
-            f"Path escapes workspace: {path} -> {resolved}"
-        )
-    if max_bytes is not None:
-        size = resolved.stat().st_size
-        if size > max_bytes:
-            raise FileTooLargeError(
-                f"File too large to read: {path} is {size} bytes (max {max_bytes})"
+    fd = os.open(str(path), os.O_RDONLY)
+    opened = False
+    try:
+        real_path = Path(os.path.realpath(f"/proc/self/fd/{fd}"))
+        if not str(real_path).startswith(str(workspace_resolved) + "/") and real_path != workspace_resolved:
+            raise ValueError(
+                f"Path escapes workspace: {path} -> {real_path}"
             )
-    return resolved.read_text()
+        if max_bytes is not None:
+            size = os.fstat(fd).st_size
+            if size > max_bytes:
+                raise FileTooLargeError(
+                    f"File too large to read: {path} is {size} bytes (max {max_bytes})"
+                )
+        handle = os.fdopen(fd)
+        opened = True
+    finally:
+        if not opened:
+            os.close(fd)
+    with handle:
+        return handle.read()
 
 
 # Import all plugins to trigger registration

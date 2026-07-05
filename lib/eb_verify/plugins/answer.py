@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from eb_verify.groundedness import CitationParseError, ground_citations
-from eb_verify.plugins import ValidationResult, safe_read
+from eb_verify.plugins import MAX_ARTIFACT_BYTES, ValidationResult, safe_read
 
 
 def _normalize(text: str) -> str:
@@ -172,7 +172,7 @@ class AnswerValidator:
 
         if json_candidates:
             try:
-                data = json.loads(safe_read(json_candidates[0], workspace))
+                data = json.loads(safe_read(json_candidates[0], workspace, max_bytes=MAX_ARTIFACT_BYTES))
                 if not isinstance(data, dict):
                     return ValidationResult(valid=False, detail="answer.json should be a JSON object")
                 answer_text = _extract_text(data)
@@ -180,7 +180,7 @@ class AnswerValidator:
                 return ValidationResult(valid=False, detail=f"answer.json invalid: {e}")
         elif txt_candidates:
             try:
-                content = safe_read(txt_candidates[0], workspace).strip()
+                content = safe_read(txt_candidates[0], workspace, max_bytes=MAX_ARTIFACT_BYTES).strip()
             except ValueError as e:
                 return ValidationResult(valid=False, detail=str(e))
             if not content:

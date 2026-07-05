@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import pytest
 
 from eb_verify.plugins import (
     FileTooLargeError,
+    MAX_ARTIFACT_BYTES,
     ValidationResult,
     get_validator,
     list_validators,
@@ -246,6 +248,22 @@ class TestAnswerValidator:
         result = validator.validate(tmp_path)
         assert result.valid is True
 
+    def test_oversized_answer_json_fails(self, tmp_path):
+        (tmp_path / "answer.json").write_text(
+            json.dumps({"answer": "x" * (MAX_ARTIFACT_BYTES + 1)})
+        )
+        validator = AnswerValidator()
+        result = validator.validate(tmp_path)
+        assert result.valid is False
+        assert "too large" in result.detail.lower()
+
+    def test_oversized_answer_txt_fails(self, tmp_path):
+        (tmp_path / "answer.txt").write_text("x" * (MAX_ARTIFACT_BYTES + 1))
+        validator = AnswerValidator()
+        result = validator.validate(tmp_path)
+        assert result.valid is False
+        assert "too large" in result.detail.lower()
+
 
 # ---------------------------------------------------------------------------
 # CodePatchValidator
@@ -428,6 +446,19 @@ class TestIncidentReportValidatorDetailed:
         result = v.validate(tmp_path)
         assert result.valid is False
         assert "JSON object" in result.detail
+
+    def test_oversized_incident_report_fails(self, tmp_path):
+        data = {
+            "timeline": [{"time": "00:00", "event": "alert fired"}],
+            "root_cause": "x" * (MAX_ARTIFACT_BYTES + 1),
+            "remediation": "Restart service X",
+            "affected_services": ["service-x"],
+        }
+        (tmp_path / "incident_report.json").write_text(json.dumps(data))
+        v = IncidentReportValidator()
+        result = v.validate(tmp_path)
+        assert result.valid is False
+        assert "too large" in result.detail.lower()
 
     def test_timeline_not_list_fails(self, tmp_path):
         data = {
@@ -1036,6 +1067,39 @@ class TestSafeReadMaxBytes:
         with pytest.raises(ValueError, match="escapes workspace") as exc_info:
             safe_read(ws / ".." / "huge_outside.txt", ws, max_bytes=5)
         assert not isinstance(exc_info.value, FileTooLargeError)
+
+    def test_swap_after_open_returns_original_fd_content(self, tmp_path, monkeypatch):
+        # Regression test for the TOCTOU window between the containment check
+        # and the read: safe_read must read from the fd it already opened,
+        # not re-open by path, so re-pointing the *path* at a different file
+        # after the open (simulated here via the realpath call safe_read
+        # makes right after opening) must not affect the returned content.
+        # In-place mutation of the same inode (e.g. write_text on the same
+        # path) doesn't model this attack — an already-open fd sees that
+        # kind of change too. The attack is swapping the directory entry
+        # (unlink + symlink, as done here, or a rename) to a different inode.
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        target = ws / "artifact.json"
+        target.write_text("original-content")
+        swapped = ws / "swapped.json"
+        swapped.write_text("swapped-content-attacker-controlled")
+
+        real_realpath = os.path.realpath
+
+        def swap_after_open(path_arg, *args, **kwargs):
+            result = real_realpath(path_arg, *args, **kwargs)
+            # Only the fd-derived realpath call (made after os.open already
+            # has the original file's fd) simulates the attacker's swap —
+            # not the earlier workspace.resolve() call, which happens before
+            # the target is even opened.
+            if str(path_arg).startswith("/proc/self/fd/"):
+                target.unlink()
+                target.symlink_to(swapped)
+            return result
+
+        monkeypatch.setattr(os.path, "realpath", swap_after_open)
+        assert safe_read(target, ws) == "original-content"
 
 
 # ---------------------------------------------------------------------------

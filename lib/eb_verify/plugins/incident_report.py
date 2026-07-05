@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from eb_verify.groundedness import CitationParseError, ground_citations
-from eb_verify.plugins import ValidationResult, safe_read
+from eb_verify.plugins import MAX_ARTIFACT_BYTES, ValidationResult, safe_read
 
 
 REQUIRED_FIELDS = ["timeline", "root_cause", "remediation", "affected_services"]
@@ -163,7 +163,7 @@ class IncidentReportValidator:
         # Validate the first found
         report_path = candidates[0]
         try:
-            data = json.loads(safe_read(report_path, workspace))
+            data = json.loads(safe_read(report_path, workspace, max_bytes=MAX_ARTIFACT_BYTES))
         except (json.JSONDecodeError, ValueError) as e:
             return ValidationResult(valid=False, detail=f"Invalid JSON: {e}")
 
