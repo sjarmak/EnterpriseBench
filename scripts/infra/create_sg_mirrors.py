@@ -41,8 +41,9 @@ except ImportError:
     except ImportError:
         tomllib = None
 
+from mirror_naming import GITHUB_REPO_NAME_RE, ORG, derive_mirror_name, is_hex_rev
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-ORG = "sg-evals"
 MANIFEST_DIR = REPO_ROOT / "configs" / "runs"
 
 
@@ -216,19 +217,10 @@ def extract_mirrors_from_task(task_data: dict, task_file: Path) -> list[dict]:
         if upstream.endswith(".git"):
             upstream = upstream[:-4]
 
-        # Generate mirror name: {repo-name}--{short_hash_or_tag}
-        repo_name = upstream.split("/")[-1]
-
-        # For tags like v1.60.0, use as-is; for hashes, use first 8 chars
-        is_tag = not all(c in "0123456789abcdef" for c in rev.lower())
-        ref_suffix = rev if is_tag else rev[:8]
-        ref_suffix = ref_suffix.replace("/", "_")
-        mirror_name = f"{repo_name}--{ref_suffix}"
-
         mirrors.append({
             "upstream": upstream,
             "commit": rev,
-            "mirror": f"{ORG}/{mirror_name}",
+            "mirror": derive_mirror_name(url, rev),
             "pin_source": f"task.toml repos[].rev",
             "tasks": [task_id],
         })
@@ -310,9 +302,8 @@ def resolve_commit(upstream: str, ref: str) -> str | None:
 
 def create_mirror(entry: dict, dry_run: bool = False) -> tuple[bool, str]:
     """Create a single sg-evals mirror. Returns (success, message)."""
-    import re
     mirror_name = entry["mirror"].replace(f"{ORG}/", "")
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_.-]+-[a-zA-Z0-9._-]+$', mirror_name):
+    if not GITHUB_REPO_NAME_RE.match(mirror_name):
         raise ValueError(f"Invalid mirror name: {mirror_name}")
     upstream = entry["upstream"]
     commit = entry["commit"]
@@ -332,10 +323,9 @@ def create_mirror(entry: dict, dry_run: bool = False) -> tuple[bool, str]:
             time.sleep(2)
 
     # Resolve short hashes to full
-    is_tag = not all(c in "0123456789abcdef" for c in commit.lower())
     archive_ref = commit
 
-    if not is_tag and len(commit) < 40:
+    if is_hex_rev(commit) and len(commit) < 40:
         full_sha = resolve_commit(upstream, commit)
         if full_sha:
             archive_ref = full_sha

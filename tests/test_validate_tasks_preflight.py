@@ -470,27 +470,141 @@ class TestGenerateRegistry:
 
 
 # ---------------------------------------------------------------------------
+# Tests for the two mirror-indexed candidate-matching code paths
+# (EnterpriseBench-k9po: sg_name convention fix)
+# ---------------------------------------------------------------------------
+
+
+def _toml_with_sourcegraph_mirrors(mirror_id: str) -> str:
+    return textwrap.dedent(f"""\
+        difficulty_stratum = "dual_repo"
+        mcp_suite = "eb_v1"
+        repo_set_id = "test-ecosystem"
+        org_scale = true
+        verification_modes = ["deterministic"]
+
+        [task]
+        id = "test-task-mirrors"
+        suite = "customer_escalation"
+        difficulty = "hard"
+        session_type = "single"
+        description = "Test task"
+        prompt = "Do the thing."
+
+        [[repos]]
+        url = "https://github.com/test/repo"
+        rev = "v1.0.0"
+        path = "repo"
+
+        [[checkpoints]]
+        name = "check_one"
+        weight = 1.0
+        verifier = "checks/check_one.sh"
+        description = "Only check"
+
+        [artifacts]
+        required = ["answer"]
+
+        [tool_access]
+        expected_mcp_benefit = "high"
+        mcp_benefit_rationale = "Test rationale"
+
+        [[tool_access.sourcegraph_mirrors]]
+        repo = "github.com/org/repo"
+        mirror_id = "{mirror_id}"
+
+        [ground_truth]
+        tiers = ["deterministic"]
+
+        [[ground_truth.required_files]]
+        path = "src/main.go"
+        repo = "repo"
+        confidence = 0.95
+        source = "deterministic"
+    """)
+
+
+class TestSourcegraphMirrorsCandidateMatching:
+    """tool_access.sourcegraph_mirrors entries have no independent rev, so
+    the org is stripped directly off mirror_id rather than routed through
+    derive_mirror_name() (see validate_task, "10. Mirrors indexed")."""
+
+    def test_pre_transformed_mirror_id_matches_indexed_entry(
+        self, tmp_benchmarks: Path
+    ) -> None:
+        task_dir = _create_task_dir(
+            tmp_benchmarks,
+            "customer_escalation",
+            "test-task-mirrors",
+            _toml_with_sourcegraph_mirrors("org/repo--v1.0.0"),
+        )
+        result = _validate(task_dir, sg_index={"sg-evals/repo--v1.0.0": True})
+        assert result.mirrors_indexed is True
+        assert not any(i.check == "mirrors_indexed" for i in result.issues)
+
+    def test_pre_transformed_mirror_id_not_yet_indexed(
+        self, tmp_benchmarks: Path
+    ) -> None:
+        task_dir = _create_task_dir(
+            tmp_benchmarks,
+            "customer_escalation",
+            "test-task-mirrors",
+            _toml_with_sourcegraph_mirrors("org/repo--v1.0.0"),
+        )
+        result = _validate(task_dir, sg_index={"sg-evals/repo--v1.0.0": False})
+        assert result.mirrors_indexed is False
+        assert any(
+            i.check == "mirrors_indexed" and "Not all mirrors indexed" in i.message
+            for i in result.issues
+        )
+
+    def test_malformed_mirror_id_flagged_distinctly_from_not_indexed(
+        self, tmp_benchmarks: Path
+    ) -> None:
+        """A mirror_id whose rev segment was never pre-transformed (slash
+        left in place, as derive_mirror_name would have replaced with '_')
+        must be flagged as malformed, not silently treated as an ordinary
+        not-yet-indexed mirror."""
+        task_dir = _create_task_dir(
+            tmp_benchmarks,
+            "customer_escalation",
+            "test-task-mirrors",
+            _toml_with_sourcegraph_mirrors("org/repo--rel/2.14.1"),
+        )
+        result = _validate(task_dir, sg_index={"sg-evals/repo--rel_2.14.1": True})
+        assert result.mirrors_indexed is False
+        assert any(
+            i.check == "mirrors_indexed" and "not a legal sg-evals mirror" in i.message
+            for i in result.issues
+        )
+
+
+# ---------------------------------------------------------------------------
 # Tests for load_sg_index
 # ---------------------------------------------------------------------------
 
 
 class TestLoadSgIndex:
     def test_loads_index(self, tmp_path: Path) -> None:
+        """load_sg_index() is format-agnostic — it just builds {sg_name:
+        indexed} from whatever string is in the field — but use the real
+        org-dropped convention here (not the pre-k9po org-embedded shape)
+        so this fixture doesn't read as a stale example of the fixed bug."""
         index_path = tmp_path / "sg_indexing_list.json"
         index_path.write_text(
             json.dumps(
                 {
                     "repos": [
-                        {"sg_name": "sg-evals/test/repo--v1", "_indexed": True},
-                        {"sg_name": "sg-evals/other/repo--v2", "_indexed": False},
+                        {"sg_name": "sg-evals/repo--v1", "_indexed": True},
+                        {"sg_name": "sg-evals/other-repo--v2", "_indexed": False},
                     ]
                 }
             )
         )
         with patch.object(vtp, "SG_INDEXING_PATH", index_path):
             result = vtp.load_sg_index()
-        assert result["sg-evals/test/repo--v1"] is True
-        assert result["sg-evals/other/repo--v2"] is False
+        assert result["sg-evals/repo--v1"] is True
+        assert result["sg-evals/other-repo--v2"] is False
 
     def test_missing_file(self, tmp_path: Path) -> None:
         with patch.object(vtp, "SG_INDEXING_PATH", tmp_path / "nonexistent.json"):

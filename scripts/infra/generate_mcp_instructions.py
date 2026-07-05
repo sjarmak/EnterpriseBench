@@ -20,10 +20,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "infra"))
-from create_sg_mirrors import parse_toml, find_task_files, ORG
+from create_sg_mirrors import parse_toml, find_task_files  # noqa: E402
+from mirror_naming import ORG  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "sandbox"))
-from dockerfile_generator import mirror_name_for_repo
+from dockerfile_generator import mirror_name_for_repo  # noqa: E402
 
 
 # ═══════════════════════════════════════════════════════════════

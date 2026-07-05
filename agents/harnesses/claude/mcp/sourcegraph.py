@@ -12,7 +12,13 @@ Auth: SOURCEGRAPH_ACCESS_TOKEN environment variable
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
 from typing import Sequence
+
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(_REPO_ROOT / "scripts" / "infra"))
+from mirror_naming import derive_mirror_name  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -171,11 +177,7 @@ def _build_repo_scope(repos: Sequence[dict]) -> str:
             org_repo = org_repo[:-4]
         repo_name = org_repo.split("/")[-1]
 
-        # Build sg-evals mirror name (matches create_sg_mirrors.py logic)
-        is_tag = not all(c in "0123456789abcdef" for c in rev.lower())
-        ref_suffix = rev if is_tag else rev[:8]
-        ref_suffix = ref_suffix.replace("/", "_")
-        sg_mirror = f"sg-evals/{repo_name}--{ref_suffix}"
+        sg_mirror = derive_mirror_name(url, rev)
 
         lines.append(f"- **{path or repo_name}** (local: `/workspace/{path}/`)")
         lines.append(f"  - MCP filter: `repo:^github.com/{sg_mirror}$`")

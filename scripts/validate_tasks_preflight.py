@@ -44,6 +44,9 @@ SG_INDEXING_PATH = ROOT / "configs" / "sg_indexing_list.json"
 SG_MIRRORS_DIR = ROOT / "configs" / "sg_mirrors"
 REGISTRY_PATH = ROOT / "configs" / "validation_registry.json"
 
+sys.path.insert(0, str(ROOT / "scripts" / "infra"))
+from mirror_naming import GITHUB_REPO_NAME_RE, ORG, derive_mirror_name  # noqa: E402
+
 EXCLUDED_DIRS = {"mined", "_archived"}
 DOCKERFILE_VARIANTS = {"Dockerfile", "Dockerfile.hybrid", "Dockerfile.sg_only"}
 
@@ -333,18 +336,31 @@ def validate_task(
         all_indexed = True
         for m in mirrors:
             mirror_id = m.get("mirror_id", "")
-            sg_name_candidates = [
-                f"sg-evals/{mirror_id}",
-                mirror_id,
-            ]
-            found = False
-            for candidate in sg_name_candidates:
-                if candidate in sg_index:
-                    if not sg_index[candidate]:
-                        all_indexed = False
-                    found = True
-                    break
-            if not found:
+            # mirror_id is "{org}/{repo}--{rev}"; the real sg-evals mirror
+            # name drops the org (EnterpriseBench-k9po). No independent rev
+            # is available here to route through derive_mirror_name, so
+            # strip the org segment directly — this assumes whoever wrote
+            # mirror_id already applied derive_mirror_name's ref_suffix
+            # transform (slash->underscore, hash truncation). Validate that
+            # assumption explicitly rather than let a violation blend into
+            # a generic "not indexed" result.
+            name_segment = mirror_id.split("/", 1)[-1] if mirror_id else ""
+            candidate = f"{ORG}/{name_segment}" if name_segment else ""
+            if candidate and not GITHUB_REPO_NAME_RE.match(name_segment):
+                all_indexed = False
+                result.issues.append(
+                    TaskIssue(
+                        "warning",
+                        "mirrors_indexed",
+                        f"mirror_id '{mirror_id}' is not a legal sg-evals mirror "
+                        "name segment (not pre-transformed to match "
+                        "derive_mirror_name's convention)",
+                    )
+                )
+            elif candidate in sg_index:
+                if not sg_index[candidate]:
+                    all_indexed = False
+            else:
                 all_indexed = False
         result.mirrors_indexed = all_indexed
         if not all_indexed:
@@ -368,12 +384,10 @@ def validate_task(
                         if mirror_list:
                             all_indexed = True
                             for m in mirror_list:
-                                mid = m.get("mirror_id", "")
-                                # Check in sg_index
-                                found = any(
-                                    c in sg_index for c in [f"sg-evals/{mid}", mid]
+                                sg_name = derive_mirror_name(
+                                    m.get("repo", ""), m.get("rev", "")
                                 )
-                                if not found:
+                                if sg_name not in sg_index:
                                     all_indexed = False
                             result.mirrors_indexed = all_indexed
                     except (json.JSONDecodeError, KeyError):

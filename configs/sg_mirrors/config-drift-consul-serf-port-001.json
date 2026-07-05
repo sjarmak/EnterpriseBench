@@ -3,8 +3,8 @@
   "mirrors": [
     {
       "repo": "github.com/bitnami/charts",
-      "rev": "33114~1",
-      "mirror_id": "bitnami/charts--33114~1"
+      "rev": "130ffd163382dffd5762034291203a3ac2792fba",
+      "mirror_id": "bitnami/charts--130ffd16"
     }
   ]
 }

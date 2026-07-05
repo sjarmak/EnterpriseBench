@@ -18,6 +18,7 @@ import argparse
 import json
 import glob
 import os
+import sys
 from collections import defaultdict
 from datetime import date
 from typing import Any
@@ -26,6 +27,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MIRRORS_DIR = os.path.join(ROOT, "configs", "sg_mirrors")
 BENCHMARKS_DIR = os.path.join(ROOT, "benchmarks")
 OUTPUT_PATH = os.path.join(ROOT, "configs", "sg_indexing_list.json")
+
+sys.path.insert(0, os.path.join(ROOT, "scripts", "infra"))
+from mirror_naming import derive_mirror_name  # noqa: E402
 
 # Suites whose entries were hand-backfilled (commit fa876ae) from task sets
 # that are NOT reproducible from this branch's benchmarks tree — the backfill
@@ -310,14 +314,22 @@ def build_index(
         if tid in mirrors:
             suite_stats[suite]["tasks"] += 1
 
-    # Build flat repo list (sorted by sg_name for determinism)
+    # Build flat repo list (sorted by sg_name for determinism). sg_name is
+    # derived from repo+rev via the shared formula, not from mid (mid keeps
+    # embedding the org, which real sg-evals mirrors drop — see
+    # EnterpriseBench-k9po); sort by the derived value, not mid, or ordering
+    # can silently diverge between the two.
+    sg_names = {
+        mid: derive_mirror_name(info["repo"], info["rev"])
+        for mid, info in repo_info.items()
+    }
     repos_list: list[dict[str, Any]] = []
-    for mid in sorted(repo_info.keys()):
+    for mid in sorted(repo_info.keys(), key=lambda m: sg_names[m]):
         info = repo_info[mid]
         github_repo = info["repo"].replace("github.com/", "")
 
         entry: dict[str, Any] = {
-            "sg_name": f"sg-evals/{mid}",
+            "sg_name": sg_names[mid],
             "github_repo": github_repo,
             "commit": info["rev"],
         }

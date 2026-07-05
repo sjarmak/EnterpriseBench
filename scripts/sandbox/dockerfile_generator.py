@@ -26,7 +26,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Reuse the TOML parser from create_sg_mirrors
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "infra"))
-from create_sg_mirrors import parse_toml, find_task_files, ORG
+from create_sg_mirrors import parse_toml, find_task_files  # noqa: E402
+from mirror_naming import ORG, derive_mirror_name  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 from validation import validate_repo_entry
@@ -37,16 +38,9 @@ from validation import validate_repo_entry
 
 
 def mirror_name_for_repo(url: str, rev: str) -> str:
-    """Generate sg-evals mirror name for a repo entry."""
-    upstream = url.replace("https://", "").replace("http://", "").rstrip("/")
-    if upstream.endswith(".git"):
-        upstream = upstream[:-4]
-    repo_name = upstream.split("/")[-1]
-
-    is_tag = not all(c in "0123456789abcdef" for c in rev.lower())
-    ref_suffix = rev if is_tag else rev[:8]
-    ref_suffix = ref_suffix.replace("/", "_")
-    return f"{repo_name}--{ref_suffix}"
+    """Generate sg-evals mirror name for a repo entry (without the ORG prefix;
+    callers here prepend it themselves)."""
+    return derive_mirror_name(url, rev).removeprefix(f"{ORG}/")
 
 
 def sourcegraph_repos_value(repos: list[dict]) -> str:

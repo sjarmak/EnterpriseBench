@@ -15,6 +15,9 @@ INDEX_PATH = os.path.join(ROOT, "configs", "sg_indexing_list.json")
 MIRRORS_DIR = os.path.join(ROOT, "configs", "sg_mirrors")
 GENERATE_SCRIPT = os.path.join(ROOT, "scripts", "generate_sg_index.py")
 
+sys.path.insert(0, os.path.join(ROOT, "scripts", "infra"))
+from mirror_naming import GITHUB_REPO_NAME_RE, derive_mirror_name  # noqa: E402
+
 
 @pytest.fixture(scope="module")
 def index_data() -> dict:
@@ -107,6 +110,46 @@ class TestRepoEntries:
         ]
         assert not bad, f"Malformed sg_name entries in index: {bad}"
 
+    def test_sg_name_has_exactly_one_path_segment_after_prefix(
+        self, index_data: dict
+    ) -> None:
+        """Regression (EnterpriseBench-k9po): the index's sg_name convention
+        was sg-evals/{org}/{repo}--{rev} for all 133 entries, embedding the
+        org — but real sg-evals mirrors drop the org (sg-evals/{repo}--{rev}).
+        General shape check, not just the two specific garbage patterns
+        test_no_malformed_sg_names already knew about."""
+        bad = [
+            r["sg_name"]
+            for r in index_data["repos"]
+            if r["sg_name"].removeprefix("sg-evals/").count("/") != 0
+        ]
+        assert not bad, f"sg_name embeds extra path segments (org?): {bad}"
+
+    def test_sg_name_matches_derivation(self, index_data: dict) -> None:
+        """Positive check: sg_name must equal what derive_mirror_name()
+        computes from github_repo + commit — the actual convention
+        create_sg_mirrors.py uses when creating mirrors on GitHub."""
+        for repo in index_data["repos"]:
+            expected = derive_mirror_name(repo["github_repo"], repo["commit"])
+            assert (
+                repo["sg_name"] == expected
+            ), f"{repo['sg_name']} does not match derived name {expected}"
+
+    def test_sg_name_suffix_is_a_legal_github_repo_name(self, index_data: dict) -> None:
+        """Non-tautological companion to test_sg_name_matches_derivation:
+        re-deriving from a bad input (e.g. an unresolved `<sha>~1` rev) would
+        still round-trip green against itself. This instead checks the
+        result is an actually creatable GitHub repo name — the same
+        validation create_sg_mirrors.py applies before creating a mirror
+        (EnterpriseBench-k9po: 5 mirror files pinned unresolved `~1` revs,
+        which produce a `~` here and must fail this check)."""
+        bad = [
+            r["sg_name"]
+            for r in index_data["repos"]
+            if not GITHUB_REPO_NAME_RE.match(r["sg_name"].removeprefix("sg-evals/"))
+        ]
+        assert not bad, f"sg_name is not a legal GitHub repo name: {bad}"
+
     def test_no_duplicate_sg_names(self, index_data: dict) -> None:
         names = [r["sg_name"] for r in index_data["repos"]]
         assert len(names) == len(set(names)), "Duplicate sg_name entries found"
@@ -159,13 +202,13 @@ class TestRepoEnrichment:
         self, index_data: dict
     ) -> None:
         """Regression (EnterpriseBench-p6ms): the four repaired mirror_ids
-        must appear under their canonical {org}/{repo}--{rev} names with
-        enrichment fields."""
+        must appear under their canonical sg-evals/{repo}--{rev} names
+        (org dropped, per EnterpriseBench-k9po) with enrichment fields."""
         expected = {
-            "sg-evals/containerd/containerd--v1.7.24",
-            "sg-evals/prometheus/alertmanager--v0.26.0",
-            "sg-evals/dandydeveloper/charts--redis-ha-4.26.6",
-            "sg-evals/kubernetes-sigs/knftables--v0.0.17",
+            "sg-evals/containerd--v1.7.24",
+            "sg-evals/alertmanager--v0.26.0",
+            "sg-evals/charts--redis-ha-4.26.6",
+            "sg-evals/knftables--v0.0.17",
         }
         by_name = {r["sg_name"]: r for r in index_data["repos"]}
         missing = expected - set(by_name)
@@ -237,7 +280,7 @@ class TestMirrorCoverage:
         missing = []
         for mf in mirror_files:
             for m in mf.get("mirrors", []):
-                sg_name = f"sg-evals/{m['mirror_id']}"
+                sg_name = derive_mirror_name(m["repo"], m["rev"])
                 if sg_name not in index_sg_names:
                     missing.append(sg_name)
         assert not missing, f"Mirror repos missing from index: {missing}"

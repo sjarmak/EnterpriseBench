@@ -3,8 +3,8 @@
   "mirrors": [
     {
       "repo": "github.com/projectcalico/calico",
-      "rev": "1ea2a4ea3e0407c97d387cc8dbe5f80db7e2e430~1",
-      "mirror_id": "projectcalico/calico--1ea2a4ea3e0407c97d387cc8dbe5f80db7e2e430~1"
+      "rev": "70ebb8c4fd8cd32233afce241f013d484b4bb860",
+      "mirror_id": "projectcalico/calico--70ebb8c4"
     }
   ]
 }
