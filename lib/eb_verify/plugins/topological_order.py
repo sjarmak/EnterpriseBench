@@ -10,11 +10,139 @@ Scoring:
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Iterable, List
 
 from eb_verify.plugins import ValidationResult
+
+# Agents write the required "numbered list of repos in order" as either:
+#   - "### Step N — <description>" headings, with the actual repo named on a
+#     separate "**Repo:** `<repo>`" line within that step's block, or
+#   - plain "Step N — <repo> ..." lines (e.g. inside a fenced code block), or
+#   - a flat markdown numbered list "N. <repo> ..." / "N. **<repo>** ...".
+# All three shapes appear in real completed runs. Extraction below handles
+# all three instead of assuming one flat shape.
+_HEADING_RE = re.compile(r"^(#{1,6})\s*(.+)$")
+_ANCHOR_RE = re.compile(r"order|topolog", re.IGNORECASE)
+_LEADING_HASH_RE = re.compile(r"^#{1,6}\s*")
+_STEP_LINE_RE = re.compile(r"^Step\s+(\d+)\s*[—\-:]\s*(.+)$", re.IGNORECASE)
+_NUMBERED_LINE_RE = re.compile(r"^(\d+)[.)]\s+(.+)$")
+_REPO_FIELD_RE = re.compile(r"^\*{0,2}repo\*{0,2}:\*{0,2}\s*(.+)$", re.IGNORECASE)
+_BACKTICK_TOKEN_RE = re.compile(r"^\*{0,2}`([^`]+)`")
+_BOLD_TOKEN_RE = re.compile(r"^\*\*([^*]+)\*\*")
+_PLAIN_TOKEN_RE = re.compile(r"^([^\s(]+)")
+
+
+def _clean_token(text: str) -> str:
+    """Pull the repo/module identifier out of a line fragment, stripping markdown."""
+    text = text.strip()
+    m = _BACKTICK_TOKEN_RE.match(text)
+    if m:
+        return m.group(1).strip()
+    m = _BOLD_TOKEN_RE.match(text)
+    if m:
+        return m.group(1).strip()
+    m = _PLAIN_TOKEN_RE.match(text)
+    if m:
+        return m.group(1).strip("`*,:;")
+    return text
+
+
+def extract_proposed_order(plan_text: str) -> List[str]:
+    """Extract the ordered list of repo/module tokens an agent proposed.
+
+    Scans the section whose heading mentions "order" or "topological" (the
+    task instructions always ask for this), then reads step ordering from
+    either "Step N" markers (heading or plain line, preferring a "**Repo:**"
+    field inside that step's block if present) or a flat "N." numbered list.
+    Returns raw tokens as written — callers resolve them against a
+    dependency graph's actual keys via `resolve_tokens_to_graph`.
+    """
+    lines = plan_text.splitlines()
+
+    anchor_idx = None
+    anchor_level = None
+    for i, line in enumerate(lines):
+        m = _HEADING_RE.match(line.strip())
+        if m and _ANCHOR_RE.search(m.group(2)):
+            anchor_idx = i
+            anchor_level = len(m.group(1))
+            break
+
+    if anchor_idx is not None:
+        end = len(lines)
+        for j in range(anchor_idx + 1, len(lines)):
+            hm = _HEADING_RE.match(lines[j].strip())
+            if hm and len(hm.group(1)) <= anchor_level:
+                end = j
+                break
+        section = lines[anchor_idx + 1 : end]
+    else:
+        section = lines
+
+    step_matches = []  # (index_in_section, step_num, rest_text)
+    for idx, line in enumerate(section):
+        destripped = _LEADING_HASH_RE.sub("", line.strip())
+        m = _STEP_LINE_RE.match(destripped)
+        if m:
+            step_matches.append((idx, int(m.group(1)), m.group(2)))
+
+    tokens: List[str] = []
+    if step_matches:
+        for k, (idx, _step_num, rest) in enumerate(step_matches):
+            block_end = step_matches[k + 1][0] if k + 1 < len(step_matches) else len(section)
+            token_source = rest
+            for block_line in section[idx + 1 : block_end]:
+                rm = _REPO_FIELD_RE.match(block_line.strip())
+                if rm:
+                    token_source = rm.group(1)
+                    break
+            tokens.append(_clean_token(token_source))
+    else:
+        for line in section:
+            destripped = _LEADING_HASH_RE.sub("", line.strip())
+            m = _NUMBERED_LINE_RE.match(destripped)
+            if m:
+                tokens.append(_clean_token(m.group(2)))
+
+    return tokens
+
+
+def _last_segment(name: str) -> str:
+    return name.rstrip("/").split("/")[-1].strip().lower()
+
+
+def resolve_tokens_to_graph(tokens: Iterable[str], graph_nodes: Iterable[str]) -> List[str]:
+    """Map raw extracted tokens onto actual dependency-graph node keys.
+
+    Step text names repos narratively ("go.etcd.io/etcd", "kubernetes"
+    monorepo module paths like "k8s.io/apiserver") rather than the literal
+    "org/repo" graph keys, so this matches by exact string first, then by
+    case-insensitive last-path-segment ("etcd-io/etcd" ~ "go.etcd.io/etcd").
+    Deduplicates to first occurrence per resolved key and drops unmatched
+    tokens (e.g. narrative sub-headings that aren't repo identifiers).
+    """
+    nodes = list(graph_nodes)
+    resolved: List[str] = []
+    seen = set()
+
+    for token in tokens:
+        token = token.strip()
+        if not token:
+            continue
+
+        match = next((key for key in nodes if token == key), None)
+        if match is None:
+            token_seg = _last_segment(token)
+            match = next((key for key in nodes if _last_segment(key) == token_seg), None)
+
+        if match and match not in seen:
+            seen.add(match)
+            resolved.append(match)
+
+    return resolved
 
 
 def _has_cycle(graph: Dict[str, List[str]]) -> bool:
@@ -123,6 +251,26 @@ def validate_topological_order(
         detail_parts.insert(0, "Partially valid ordering")
 
     return {"score": round(score, 4), "detail": "; ".join(detail_parts)}
+
+
+def validate_refactor_plan_markdown(
+    plan_text: str,
+    dependency_graph: Dict[str, List[str]],
+) -> dict:
+    """Score a REFACTOR_PLAN.md-style markdown document against a dependency graph.
+
+    Single entry point used by checks/check_topo_order.sh across all
+    refactor-orchestration tasks: extracts the agent's proposed repo
+    ordering from the markdown (whatever shape it's written in) and
+    validates it, so the extraction logic lives in one tested place
+    instead of being duplicated as a shell regex per task.
+    """
+    tokens = extract_proposed_order(plan_text)
+    if not tokens:
+        return {"score": 0.0, "detail": "No numbered ordering found in plan"}
+
+    proposed_order = resolve_tokens_to_graph(tokens, dependency_graph.keys())
+    return validate_topological_order(proposed_order, dependency_graph)
 
 
 class TopologicalOrderValidator:
