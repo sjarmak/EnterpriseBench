@@ -9,7 +9,7 @@
     {
       "repo": "github.com/dandydeveloper/charts",
       "rev": "redis-ha-4.26.6",
-      "mirror_id": "sg-evals/dandydeveloper-charts"
+      "mirror_id": "dandydeveloper/charts--redis-ha-4.26.6"
     }
   ]
 }

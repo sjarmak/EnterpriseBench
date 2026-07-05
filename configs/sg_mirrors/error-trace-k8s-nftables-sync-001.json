@@ -8,8 +8,8 @@
     },
     {
       "repo": "github.com/kubernetes-sigs/knftables",
-      "rev": "v0.6.0",
-      "mirror_id": "sg-evals/kubernetes-sigs-knftables"
+      "rev": "v0.0.17",
+      "mirror_id": "kubernetes-sigs/knftables--v0.0.17"
     }
   ]
 }

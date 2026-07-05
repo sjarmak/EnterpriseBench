@@ -2,7 +2,10 @@
 """Generate configs/sg_indexing_list.json from configs/sg_mirrors/ and benchmarks/.
 
 Consolidates all per-task mirror files into a single centralized repo index
-with per-repo metadata and cross-references.
+with per-repo metadata and cross-references. Suites listed in
+BACKFILLED_SUITES are carried over verbatim from the checked-in index (they
+are not derivable from mirror files; see the constant's comment), so
+generate -> write reproduces the full checked-in file with no manual splicing.
 
 Usage:
     python scripts/generate_sg_index.py [--output PATH]
@@ -24,6 +27,16 @@ MIRRORS_DIR = os.path.join(ROOT, "configs", "sg_mirrors")
 BENCHMARKS_DIR = os.path.join(ROOT, "benchmarks")
 OUTPUT_PATH = os.path.join(ROOT, "configs", "sg_indexing_list.json")
 
+# Suites whose entries were hand-backfilled (commit fa876ae) from task sets
+# that are NOT reproducible from this branch's benchmarks tree — the backfill
+# parsed task.tomls from a working tree containing tasks that live only on
+# unmerged branches (e.g. config-drift-tri-javax-jakarta-spring-001) and at
+# different pinned revs than main's task.tomls. The generator therefore
+# carries these suite entries over VERBATIM from the checked-in index rather
+# than deriving them. Retire an entry here (and delete this mechanism when
+# the set is empty) once its tasks get real configs/sg_mirrors/ files.
+BACKFILLED_SUITES = {"customer_escalation", "platform_engineering"}
+
 # Language heuristics keyed by org/repo (without version suffix).
 # Every repo in the index must have an entry here.
 LANGUAGE_HINTS: dict[str, str] = {
@@ -44,7 +57,9 @@ LANGUAGE_HINTS: dict[str, str] = {
     "bitnami/charts": "YAML/Helm",
     "boto/boto3": "Python",
     "ceph/ceph": "C++",
+    "containerd/containerd": "Go",
     "curl/curl": "C",
+    "dandydeveloper/charts": "YAML/Helm",
     "discourse/discourse": "Ruby",
     "django/django": "Python",
     "dotnet/aspnetcore": "C#",
@@ -73,6 +88,7 @@ LANGUAGE_HINTS: dict[str, str] = {
     "jestjs/jest": "JavaScript",
     "keycloak/keycloak": "Java",
     "kubernetes-client/javascript": "TypeScript",
+    "kubernetes-sigs/knftables": "Go",
     "kubernetes/kubernetes": "Go",
     "llvm/llvm-project": "C++",
     "lodash/lodash": "JavaScript",
@@ -80,10 +96,12 @@ LANGUAGE_HINTS: dict[str, str] = {
     "microsoft/TypeScript": "TypeScript",
     "moby/moby": "Go",
     "mozilla/gecko-dev": "C++/Rust",
+    "opencontainers/runc": "Go",
     "pallets/click": "Python",
     "pallets/flask": "Python",
     "pnpm/pnpm": "TypeScript",
     "projectcalico/calico": "Go",
+    "prometheus/alertmanager": "Go",
     "prometheus/prometheus": "Go",
     "protocolbuffers/protobuf-go": "Go",
     "psf/requests": "Python",
@@ -93,7 +111,6 @@ LANGUAGE_HINTS: dict[str, str] = {
     "spring-projects/spring-boot": "Java",
     "stripe/stripe-go": "Go",
     "typescript-eslint/typescript-eslint": "TypeScript",
-    "unknown/repo": "Unknown",
     "urllib3/urllib3": "Python",
     "vercel/next.js": "TypeScript",
     "webpack/webpack": "JavaScript",
@@ -122,7 +139,9 @@ LOC_HINTS: dict[str, int] = {
     "bitnami/charts": 300_000,
     "boto/boto3": 100_000,
     "ceph/ceph": 2_500_000,
+    "containerd/containerd": 400_000,
     "curl/curl": 250_000,
+    "dandydeveloper/charts": 5_000,
     "discourse/discourse": 350_000,
     "django/django": 350_000,
     "dotnet/aspnetcore": 1_500_000,
@@ -151,6 +170,7 @@ LOC_HINTS: dict[str, int] = {
     "jestjs/jest": 150_000,
     "keycloak/keycloak": 700_000,
     "kubernetes-client/javascript": 80_000,
+    "kubernetes-sigs/knftables": 10_000,
     "kubernetes/kubernetes": 3_500_000,
     "llvm/llvm-project": 8_000_000,
     "lodash/lodash": 30_000,
@@ -158,10 +178,12 @@ LOC_HINTS: dict[str, int] = {
     "microsoft/TypeScript": 400_000,
     "moby/moby": 500_000,
     "mozilla/gecko-dev": 15_000_000,
+    "opencontainers/runc": 70_000,
     "pallets/click": 25_000,
     "pallets/flask": 15_000,
     "pnpm/pnpm": 200_000,
     "projectcalico/calico": 300_000,
+    "prometheus/alertmanager": 80_000,
     "prometheus/prometheus": 250_000,
     "protocolbuffers/protobuf-go": 100_000,
     "psf/requests": 15_000,
@@ -171,7 +193,6 @@ LOC_HINTS: dict[str, int] = {
     "spring-projects/spring-boot": 350_000,
     "stripe/stripe-go": 80_000,
     "typescript-eslint/typescript-eslint": 150_000,
-    "unknown/repo": 10_000,
     "urllib3/urllib3": 20_000,
     "vercel/next.js": 400_000,
     "webpack/webpack": 150_000,
@@ -217,7 +238,38 @@ def load_task_suites() -> dict[str, str]:
     return task_suites
 
 
-def build_index(mirrors: dict[str, Any], task_suites: dict[str, str]) -> dict[str, Any]:
+def load_backfilled_suites() -> dict[str, Any]:
+    """Load the BACKFILLED_SUITES entries verbatim from the checked-in index.
+
+    These suites cannot be derived from configs/sg_mirrors/ or this branch's
+    task.tomls (see BACKFILLED_SUITES comment), so regeneration preserves
+    their checked-in content unchanged. Fails loudly if the checked-in index
+    or any expected suite is missing — a silent drop here would destroy
+    hand-curated data.
+    """
+    if not os.path.exists(OUTPUT_PATH):
+        raise FileNotFoundError(
+            f"Checked-in index {OUTPUT_PATH} not found; cannot carry over "
+            f"backfilled suites {sorted(BACKFILLED_SUITES)}"
+        )
+    with open(OUTPUT_PATH) as f:
+        existing = json.load(f)
+    carried: dict[str, Any] = {}
+    for suite in sorted(BACKFILLED_SUITES):
+        if suite not in existing.get("suites", {}):
+            raise KeyError(
+                f"Backfilled suite '{suite}' missing from {OUTPUT_PATH}; "
+                "refusing to regenerate without it"
+            )
+        carried[suite] = existing["suites"][suite]
+    return carried
+
+
+def build_index(
+    mirrors: dict[str, Any],
+    task_suites: dict[str, str],
+    backfilled_suites: dict[str, Any],
+) -> dict[str, Any]:
     """Build the consolidated index structure."""
     # Collect unique repos and their task usage
     repo_tasks: dict[str, list[str]] = defaultdict(list)
@@ -296,8 +348,18 @@ def build_index(mirrors: dict[str, Any], task_suites: dict[str, str]) -> dict[st
             )
 
     # Build suite summary section
+    derived_collisions = BACKFILLED_SUITES & set(suite_stats)
+    if derived_collisions:
+        raise ValueError(
+            f"Suites {sorted(derived_collisions)} are now derived from mirror "
+            "files AND listed in BACKFILLED_SUITES — remove them from "
+            "BACKFILLED_SUITES instead of merging silently"
+        )
     suites_summary: dict[str, Any] = {}
-    for suite_name in sorted(suite_stats.keys()):
+    for suite_name in sorted(set(suite_stats) | set(backfilled_suites)):
+        if suite_name in backfilled_suites:
+            suites_summary[suite_name] = backfilled_suites[suite_name]
+            continue
         stats = suite_stats[suite_name]
         suite_repos = suite_repo_entries.get(suite_name, [])
         indexed_count = sum(1 for r in suite_repos if r["_indexed"])
@@ -340,7 +402,8 @@ def main() -> None:
 
     mirrors = load_mirrors()
     task_suites = load_task_suites()
-    index = build_index(mirrors, task_suites)
+    backfilled_suites = load_backfilled_suites()
+    index = build_index(mirrors, task_suites, backfilled_suites)
 
     with open(args.output, "w") as f:
         json.dump(index, f, indent=2)
@@ -351,7 +414,13 @@ def main() -> None:
     print(f"  Total mirror files: {index['_total_mirror_files']}")
     print(f"  Suites:")
     for name, info in index["suites"].items():
-        print(f"    {name}: {info['_repo_count']} repos, {info['_task_count']} tasks")
+        carried = ""
+        if name in BACKFILLED_SUITES:
+            carried = " [carried over from checked-in index, not derived]"
+        print(
+            f"    {name}: {info['_repo_count']} repos, "
+            f"{info['_task_count']} tasks{carried}"
+        )
 
 
 if __name__ == "__main__":

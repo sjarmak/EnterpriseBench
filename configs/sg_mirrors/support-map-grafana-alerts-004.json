@@ -9,7 +9,7 @@
     {
       "repo": "github.com/prometheus/alertmanager",
       "rev": "v0.26.0",
-      "mirror_id": "sg-evals/prometheus-alertmanager"
+      "mirror_id": "prometheus/alertmanager--v0.26.0"
     }
   ]
 }
