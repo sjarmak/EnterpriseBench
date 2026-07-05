@@ -580,6 +580,50 @@ class TestSourcegraphMirrorsCandidateMatching:
 
 
 # ---------------------------------------------------------------------------
+# Tests for the shared _mirror_is_indexed helper
+# (EnterpriseBench-pias: unify branch-1/branch-2 truthiness semantics behind
+# one tested helper, without changing either branch's observable behavior)
+# ---------------------------------------------------------------------------
+
+
+class TestMirrorIsIndexed:
+    def test_absent_flag_true(self) -> None:
+        assert vtp._mirror_is_indexed("x", {}, require_indexed_flag=True) is False
+
+    def test_absent_flag_false(self) -> None:
+        assert vtp._mirror_is_indexed("x", {}, require_indexed_flag=False) is False
+
+    def test_present_indexed_flag_true(self) -> None:
+        assert (
+            vtp._mirror_is_indexed("x", {"x": True}, require_indexed_flag=True) is True
+        )
+
+    def test_present_indexed_flag_false(self) -> None:
+        # Membership-only semantics: truthiness of the stored value is
+        # irrelevant when require_indexed_flag is False.
+        assert (
+            vtp._mirror_is_indexed("x", {"x": True}, require_indexed_flag=False)
+            is True
+        )
+
+    def test_present_not_indexed_flag_true(self) -> None:
+        assert (
+            vtp._mirror_is_indexed("x", {"x": False}, require_indexed_flag=True)
+            is False
+        )
+
+    def test_present_not_indexed_flag_false(self) -> None:
+        # The critical differentiator: membership-only semantics must return
+        # True even though the stored _indexed value is falsy. This is what
+        # keeps branch 2 (configs/sg_mirrors/*.json) from silently flipping
+        # 77 real tasks from indexed to not-indexed if the flag gating leaks.
+        assert (
+            vtp._mirror_is_indexed("x", {"x": False}, require_indexed_flag=False)
+            is True
+        )
+
+
+# ---------------------------------------------------------------------------
 # Tests for load_sg_index
 # ---------------------------------------------------------------------------
 
@@ -678,6 +722,42 @@ class TestRealBenchmarks:
             # Should not have toml_parse errors
             parse_errors = [i for i in result.issues if i.check == "toml_parse"]
             assert parse_errors == [], f"{td.name}: {parse_errors}"
+
+    @pytest.mark.skipif(
+        not (Path(__file__).resolve().parent.parent / "benchmarks").exists(),
+        reason="Not in EnterpriseBench repo",
+    )
+    def test_mirrors_indexed_branches_unchanged_by_refactor(self) -> None:
+        """Regression lock for EnterpriseBench-pias: extracting the shared
+        _mirror_is_indexed helper must not change either branch's real-corpus
+        result. Branch 1 (tool_access.sourcegraph_mirrors[]) currently has
+        exactly two tasks, both not-indexed; branch 2 (configs/sg_mirrors/
+        *.json) has 77, all indexed. Asserted per-task (not just a count) so
+        a future change that flips a task's result trips this even if the
+        aggregate counts happen to cancel out."""
+        import tomllib
+
+        schema = vtp.load_schema()
+        sg_index = vtp.load_sg_index()
+        mirror_ids = vtp.load_mirror_task_ids()
+
+        branch1_not_indexed = set()
+        branch2_indexed_count = 0
+        for td in vtp.collect_task_dirs():
+            data = tomllib.loads((td / "task.toml").read_text())
+            has_branch1 = bool(
+                data.get("tool_access", {}).get("sourcegraph_mirrors")
+            )
+            result = vtp.validate_task(td, schema, None, sg_index, mirror_ids)
+            if has_branch1:
+                if not result.mirrors_indexed:
+                    branch1_not_indexed.add(td.name)
+            elif result.has_mirror_config:
+                if result.mirrors_indexed:
+                    branch2_indexed_count += 1
+
+        assert branch1_not_indexed == {"ccx-dep-trace-106", "ccx-incident-032"}
+        assert branch2_indexed_count == 77
 
     @pytest.mark.skipif(
         not (Path(__file__).resolve().parent.parent / "benchmarks").exists(),

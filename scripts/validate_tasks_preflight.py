@@ -135,6 +135,26 @@ def load_sg_index() -> dict[str, bool]:
     }
 
 
+def _mirror_is_indexed(
+    sg_name: str, sg_index: dict[str, bool], *, require_indexed_flag: bool
+) -> bool:
+    """Check whether sg_name counts as 'indexed' for mirrors_indexed.
+
+    The two call sites intentionally disagree on semantics right now:
+    tool_access.sourcegraph_mirrors[] requires verified-indexed-on-Sourcegraph
+    (membership + _indexed truthiness), while configs/sg_mirrors/*.json only
+    requires presence-in-index (membership). _indexed is currently hardcoded
+    False for every repo pending the deferred --check-api work
+    (EnterpriseBench-k9po.1), so unifying the semantics now would either mass-
+    flip every mirrored task to not-indexed or silently drop the only signal
+    that exists. Keep both semantics behind this flag until k9po.1 makes
+    _indexed a real signal, then pick one.
+    """
+    if sg_name not in sg_index:
+        return False
+    return sg_index[sg_name] if require_indexed_flag else True
+
+
 def load_mirror_task_ids() -> set[str]:
     """Get set of task IDs that have mirror config files."""
     if not SG_MIRRORS_DIR.exists():
@@ -357,10 +377,7 @@ def validate_task(
                         "derive_mirror_name's convention)",
                     )
                 )
-            elif candidate in sg_index:
-                if not sg_index[candidate]:
-                    all_indexed = False
-            else:
+            elif not _mirror_is_indexed(candidate, sg_index, require_indexed_flag=True):
                 all_indexed = False
         result.mirrors_indexed = all_indexed
         if not all_indexed:
@@ -387,7 +404,9 @@ def validate_task(
                                 sg_name = derive_mirror_name(
                                     m.get("repo", ""), m.get("rev", "")
                                 )
-                                if sg_name not in sg_index:
+                                if not _mirror_is_indexed(
+                                    sg_name, sg_index, require_indexed_flag=False
+                                ):
                                     all_indexed = False
                             result.mirrors_indexed = all_indexed
                     except (json.JSONDecodeError, KeyError):
