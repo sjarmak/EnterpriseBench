@@ -247,17 +247,18 @@ def load_backfilled_suites() -> dict[str, Any]:
     or any expected suite is missing — a silent drop here would destroy
     hand-curated data.
     """
-    if not os.path.exists(OUTPUT_PATH):
+    try:
+        with open(OUTPUT_PATH) as f:
+            existing = json.load(f)
+    except FileNotFoundError as e:
         raise FileNotFoundError(
             f"Checked-in index {OUTPUT_PATH} not found; cannot carry over "
             f"backfilled suites {sorted(BACKFILLED_SUITES)}"
-        )
-    with open(OUTPUT_PATH) as f:
-        existing = json.load(f)
+        ) from e
     carried: dict[str, Any] = {}
     for suite in sorted(BACKFILLED_SUITES):
         if suite not in existing.get("suites", {}):
-            raise KeyError(
+            raise ValueError(
                 f"Backfilled suite '{suite}' missing from {OUTPUT_PATH}; "
                 "refusing to regenerate without it"
             )
@@ -270,7 +271,12 @@ def build_index(
     task_suites: dict[str, str],
     backfilled_suites: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build the consolidated index structure."""
+    """Build the consolidated index structure.
+
+    backfilled_suites: pre-formed suite summary dicts keyed by suite name
+    (from load_backfilled_suites), spliced into the output verbatim; a name
+    collision with a mirror-derived suite raises ValueError (retire signal).
+    """
     # Collect unique repos and their task usage
     repo_tasks: dict[str, list[str]] = defaultdict(list)
     repo_info: dict[str, dict[str, str]] = {}
@@ -412,7 +418,7 @@ def main() -> None:
     print(f"Generated {args.output}")
     print(f"  Total unique repos: {index['_total_unique_repos']}")
     print(f"  Total mirror files: {index['_total_mirror_files']}")
-    print(f"  Suites:")
+    print("  Suites:")
     for name, info in index["suites"].items():
         carried = ""
         if name in BACKFILLED_SUITES:

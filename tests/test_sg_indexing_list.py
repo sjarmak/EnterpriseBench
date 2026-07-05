@@ -277,11 +277,14 @@ def generated_index(tmp_path_factory: pytest.TempPathFactory) -> dict:
 
 
 # Suites whose entries were hand-backfilled (fa876ae) from task sets that are
-# not reproducible from this branch's benchmarks tree. The generator now
-# carries them over verbatim from the checked-in index (BACKFILLED_SUITES in
-# scripts/generate_sg_index.py), so generated output includes them; the test
-# below asserts they survive regeneration byte-for-byte in content.
-CARRIED_BACKFILL_SUITES = {"customer_escalation", "platform_engineering"}
+# not reproducible from this branch's benchmarks tree. The generator carries
+# them over verbatim from the checked-in index; import its constant directly
+# so the test set cannot drift from the script's (a hand-copied duplicate
+# would silently stop exercising content equality for a drifted suite).
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from generate_sg_index import (  # noqa: E402
+    BACKFILLED_SUITES as CARRIED_BACKFILL_SUITES,
+)
 
 
 class TestGenerationScript:
@@ -366,9 +369,9 @@ class TestGenerationScript:
         generator with content identical to the checked-in index — any
         delta means the carry-over silently mutated hand-curated data."""
         for suite in sorted(CARRIED_BACKFILL_SUITES):
-            assert suite in generated_index["suites"], (
-                f"Backfilled suite '{suite}' missing from generated output"
-            )
+            assert (
+                suite in generated_index["suites"]
+            ), f"Backfilled suite '{suite}' missing from generated output"
             assert generated_index["suites"][suite] == index_data["suites"][suite], (
                 f"Backfilled suite '{suite}' content changed across "
                 "regeneration (carry-over must be verbatim)"
