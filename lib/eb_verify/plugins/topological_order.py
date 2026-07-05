@@ -27,7 +27,7 @@ from eb_verify.plugins import ValidationResult
 _HEADING_RE = re.compile(r"^(#{1,6})\s*(.+)$")
 _ANCHOR_RE = re.compile(r"order|topolog", re.IGNORECASE)
 _LEADING_HASH_RE = re.compile(r"^#{1,6}\s*")
-_STEP_LINE_RE = re.compile(r"^Step\s+(\d+)\s*[—\-:]\s*(.+)$", re.IGNORECASE)
+_STEP_LINE_RE = re.compile(r"^Step\s+\d+\s*[—\-:]\s*(.+)$", re.IGNORECASE)
 _NUMBERED_LINE_RE = re.compile(r"^(\d+)[.)]\s+(.+)$")
 _REPO_FIELD_RE = re.compile(r"^\*{0,2}repo\*{0,2}:\*{0,2}\s*(.+)$", re.IGNORECASE)
 _BACKTICK_TOKEN_RE = re.compile(r"^\*{0,2}`([^`]+)`")
@@ -82,16 +82,16 @@ def extract_proposed_order(plan_text: str) -> List[str]:
     else:
         section = lines
 
-    step_matches = []  # (index_in_section, step_num, rest_text)
+    step_matches = []  # (index_in_section, rest_text)
     for idx, line in enumerate(section):
         destripped = _LEADING_HASH_RE.sub("", line.strip())
         m = _STEP_LINE_RE.match(destripped)
         if m:
-            step_matches.append((idx, int(m.group(1)), m.group(2)))
+            step_matches.append((idx, m.group(1)))
 
     tokens: List[str] = []
     if step_matches:
-        for k, (idx, _step_num, rest) in enumerate(step_matches):
+        for k, (idx, rest) in enumerate(step_matches):
             block_end = step_matches[k + 1][0] if k + 1 < len(step_matches) else len(section)
             token_source = rest
             for block_line in section[idx + 1 : block_end]:
@@ -125,6 +125,11 @@ def resolve_tokens_to_graph(tokens: Iterable[str], graph_nodes: Iterable[str]) -
     tokens (e.g. narrative sub-headings that aren't repo identifiers).
     """
     nodes = list(graph_nodes)
+    node_set = set(nodes)
+    seg_to_key: Dict[str, str] = {}
+    for key in nodes:
+        seg_to_key.setdefault(_last_segment(key), key)
+
     resolved: List[str] = []
     seen = set()
 
@@ -133,10 +138,7 @@ def resolve_tokens_to_graph(tokens: Iterable[str], graph_nodes: Iterable[str]) -
         if not token:
             continue
 
-        match = next((key for key in nodes if token == key), None)
-        if match is None:
-            token_seg = _last_segment(token)
-            match = next((key for key in nodes if _last_segment(key) == token_seg), None)
+        match = token if token in node_set else seg_to_key.get(_last_segment(token))
 
         if match and match not in seen:
             seen.add(match)
