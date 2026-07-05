@@ -30,7 +30,10 @@ from run_task import (
     RUN_STATUS_INVALID,
     SOURCEGRAPH_MCP_ENDPOINT,
     _DEFAULT_MCP_URL,
+    _assert_agent_readable,
+    _chown_to_agent,
     _configure_mcp,
+    _scan_mcp_config_error,
     _verify_mcp_endpoint,
     run_task,
     TaskRunConfig,
@@ -203,6 +206,12 @@ class TestMcpEnvVars:
             "run_task._run_health_check", return_value=True
         ), patch(
             "run_task._configure_mcp"
+        ), patch(
+            "run_task._chown_to_agent"
+        ), patch(
+            "run_task._assert_agent_readable", return_value=(True, "")
+        ), patch(
+            "run_task._scan_mcp_config_error", return_value=False
         ), patch(
             "run_task._run_agent", side_effect=mock_run_agent
         ) as mock_agent, patch(
@@ -503,3 +512,88 @@ class TestMcpDualConfig:
             len(workspace_writes) == 1
         ), f"Expected 1 workspace write, got {workspace_writes}"
         assert len(user_writes) == 1, f"Expected 1 user-level write, got {user_writes}"
+
+
+# ---------------------------------------------------------------------------
+# Container permission helpers (bead EnterpriseBench-0l2a / s58f)
+# ---------------------------------------------------------------------------
+
+
+class TestChownToAgent:
+    def test_chowns_as_root_with_quoted_paths(self) -> None:
+        ok = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("run_task.subprocess.run", return_value=ok) as mock_run:
+            _chown_to_agent("cid", ["/workspace/instruction.md", "/workspace/.task"])
+
+        cmd = mock_run.call_args.args[0]
+        assert cmd[:5] == ["docker", "exec", "-u", "root", "cid"]
+        script = cmd[-1]
+        assert "chown -R agent:agent" in script
+        assert "/workspace/instruction.md" in script
+        assert "/workspace/.task" in script
+
+    def test_skips_missing_paths_via_existence_check(self) -> None:
+        ok = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("run_task.subprocess.run", return_value=ok) as mock_run:
+            _chown_to_agent("cid", ["/workspace/.mcp.json"])
+
+        script = mock_run.call_args.args[0][-1]
+        assert '[ -e "$f" ]' in script
+
+    def test_logs_error_on_chown_failure(self, caplog: pytest.LogCaptureFixture) -> None:
+        fail = MagicMock(returncode=1, stdout="", stderr="chown: not permitted")
+
+        with patch("run_task.subprocess.run", return_value=fail):
+            with caplog.at_level("ERROR", logger="run_task"):
+                _chown_to_agent("cid", ["/workspace/instruction.md"])
+
+        assert any("chown to agent FAILED" in r.message for r in caplog.records)
+
+
+class TestAssertAgentReadable:
+    def test_all_readable_returns_true(self) -> None:
+        ok = MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("run_task.subprocess.run", return_value=ok) as mock_run:
+            readable, err = _assert_agent_readable(
+                "cid", ["/workspace/instruction.md", "/workspace/.mcp.json"]
+            )
+
+        assert readable is True
+        assert err == ""
+        assert mock_run.call_count == 2
+        cmd = mock_run.call_args_list[0].args[0]
+        assert cmd[:5] == ["docker", "exec", "-u", "agent", "cid"]
+        assert cmd[5:] == ["test", "-r", "/workspace/instruction.md"]
+
+    def test_unreadable_path_returns_false_with_path_in_error(self) -> None:
+        fail = MagicMock(returncode=1, stdout="", stderr="")
+
+        with patch("run_task.subprocess.run", return_value=fail):
+            readable, err = _assert_agent_readable("cid", ["/workspace/.mcp.json"])
+
+        assert readable is False
+        assert "/workspace/.mcp.json" in err
+
+
+class TestScanMcpConfigError:
+    def test_missing_log_is_not_an_error(self, tmp_path: Path) -> None:
+        assert _scan_mcp_config_error(tmp_path) is False
+
+    def test_clean_log_is_not_an_error(self, tmp_path: Path) -> None:
+        (tmp_path / "agent_stderr.log").write_text("all good\n")
+        assert _scan_mcp_config_error(tmp_path) is False
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "Invalid MCP configuration in /home/agent/.mcp.json",
+            "bash: /workspace/instruction.md: Permission denied",
+            "Error: EACCES reading /workspace/.mcp.json",
+        ],
+    )
+    def test_detects_noop_markers(self, tmp_path: Path, content: str) -> None:
+        (tmp_path / "agent_stderr.log").write_text(content)
+        assert _scan_mcp_config_error(tmp_path) is True
