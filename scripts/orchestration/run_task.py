@@ -365,9 +365,6 @@ def _build_instruction_text(
 
     instruction_text = instruction.read_text()
 
-    sys.path.insert(0, str(REPO_ROOT / "lib"))
-    from eb_verify.groundedness import MIN_SPAN_CHARS
-
     # Build MCP preamble for non-baseline modes
     preamble_parts: list[str] = []
     if mode in ("mcp_only", "hybrid"):
@@ -381,23 +378,25 @@ def _build_instruction_text(
         if instruction_mcp.exists():
             preamble_parts.append(instruction_mcp.read_text())
 
-    citations_field = (
-        (
-            '  "citations": [\n'
+    if require_grounded_citations:
+        sys.path.insert(0, str(REPO_ROOT / "lib"))
+        from eb_verify.groundedness import MIN_SPAN_CHARS
+
+        citations_block = (
+            ',\n  "citations": [\n'
             '    {"repo": "repo-name", "file": "relative/path", '
             f'"evidence_span": "verbatim excerpt, >={MIN_SPAN_CHARS} characters, copied exactly from the file"}}\n'
             "  ]\n"
         )
-        if require_grounded_citations
-        else ""
-    )
-    closing_sentence = (
-        "Include only the fields relevant to this task, but `citations` is "
-        "required. Every entry in `citations` must quote an exact, verbatim "
-        "span from the cited file — not a paraphrase or summary. "
-        if require_grounded_citations
-        else "Include only the fields relevant to this task. "
-    )
+        closing_sentence = (
+            "Include only the fields relevant to this task, but `citations` is "
+            "required. Every entry in `citations` must quote an exact, verbatim "
+            "span from the cited file — not a paraphrase or summary. "
+        )
+    else:
+        citations_block = "\n"
+        closing_sentence = "Include only the fields relevant to this task. "
+
     output_appendix = (
         "\n\n---\n\n## Output Requirements\n\n"
         "Write your findings as a JSON file to `/workspace/agent_output/answer.json`.\n"
@@ -412,7 +411,7 @@ def _build_instruction_text(
         '  "ownership": "subsystem description",\n'
         '  "severity": {"level": "high", "rationale": "..."},\n'
         '  "related_issues": ["path/to/related/file.go", "description of related component"]'
-        + (",\n" + citations_field if citations_field else "\n")
+        + citations_block
         + "}\n```\n"
         + closing_sentence
         + "Your answer is evaluated against a closed-world oracle — completeness matters.\n"
