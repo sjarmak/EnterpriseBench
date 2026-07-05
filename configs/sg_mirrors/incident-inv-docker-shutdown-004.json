@@ -9,7 +9,7 @@
     {
       "repo": "github.com/containerd/containerd",
       "rev": "v1.7.24",
-      "mirror_id": "sg-evals/containerd-containerd"
+      "mirror_id": "containerd/containerd--v1.7.24"
     }
   ]
 }
