@@ -135,24 +135,25 @@ def load_sg_index() -> dict[str, bool]:
     }
 
 
-def _mirror_is_indexed(
-    sg_name: str, sg_index: dict[str, bool], *, require_indexed_flag: bool
-) -> bool:
-    """Check whether sg_name counts as 'indexed' for mirrors_indexed.
+def _mirror_verified_indexed(sg_name: str, sg_index: dict[str, bool]) -> bool:
+    """True iff sg_name is present in sg_index AND its _indexed flag is truthy.
 
-    The two call sites intentionally disagree on semantics right now:
-    tool_access.sourcegraph_mirrors[] requires verified-indexed-on-Sourcegraph
-    (membership + _indexed truthiness), while configs/sg_mirrors/*.json only
-    requires presence-in-index (membership). _indexed is currently hardcoded
-    False for every repo pending the deferred --check-api work
-    (EnterpriseBench-k9po.1), so unifying the semantics now would either mass-
-    flip every mirrored task to not-indexed or silently drop the only signal
-    that exists. Keep both semantics behind this flag until k9po.1 makes
-    _indexed a real signal, then pick one.
+    Used by tool_access.sourcegraph_mirrors[], which wants verified-indexed-
+    on-Sourcegraph semantics.
     """
-    if sg_name not in sg_index:
-        return False
-    return sg_index[sg_name] if require_indexed_flag else True
+    return sg_index.get(sg_name, False)
+
+
+def _mirror_present_in_index(sg_name: str, sg_index: dict[str, bool]) -> bool:
+    """True iff sg_name is present in sg_index, regardless of _indexed.
+
+    Used by configs/sg_mirrors/*.json, which only wants presence-in-index
+    semantics. _indexed is currently hardcoded False for every repo pending
+    the deferred --check-api work (EnterpriseBench-k9po.1); once that ships
+    and _indexed becomes a real signal, decide then whether this call site
+    should switch to _mirror_verified_indexed instead.
+    """
+    return sg_name in sg_index
 
 
 def load_mirror_task_ids() -> set[str]:
@@ -377,7 +378,7 @@ def validate_task(
                         "derive_mirror_name's convention)",
                     )
                 )
-            elif not _mirror_is_indexed(candidate, sg_index, require_indexed_flag=True):
+            elif not _mirror_verified_indexed(candidate, sg_index):
                 all_indexed = False
         result.mirrors_indexed = all_indexed
         if not all_indexed:
@@ -404,9 +405,7 @@ def validate_task(
                                 sg_name = derive_mirror_name(
                                     m.get("repo", ""), m.get("rev", "")
                                 )
-                                if not _mirror_is_indexed(
-                                    sg_name, sg_index, require_indexed_flag=False
-                                ):
+                                if not _mirror_present_in_index(sg_name, sg_index):
                                     all_indexed = False
                             result.mirrors_indexed = all_indexed
                     except (json.JSONDecodeError, KeyError):

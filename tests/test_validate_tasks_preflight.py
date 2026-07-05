@@ -580,47 +580,37 @@ class TestSourcegraphMirrorsCandidateMatching:
 
 
 # ---------------------------------------------------------------------------
-# Tests for the shared _mirror_is_indexed helper
-# (EnterpriseBench-pias: unify branch-1/branch-2 truthiness semantics behind
-# one tested helper, without changing either branch's observable behavior)
+# Tests for the shared mirror-indexed-check helpers
+# (EnterpriseBench-pias: unify branch-1/branch-2 semantics behind two
+# intention-revealing functions, without changing either branch's
+# observable behavior)
 # ---------------------------------------------------------------------------
 
 
-class TestMirrorIsIndexed:
-    def test_absent_flag_true(self) -> None:
-        assert vtp._mirror_is_indexed("x", {}, require_indexed_flag=True) is False
+class TestMirrorVerifiedIndexed:
+    def test_absent(self) -> None:
+        assert vtp._mirror_verified_indexed("x", {}) is False
 
-    def test_absent_flag_false(self) -> None:
-        assert vtp._mirror_is_indexed("x", {}, require_indexed_flag=False) is False
+    def test_present_indexed(self) -> None:
+        assert vtp._mirror_verified_indexed("x", {"x": True}) is True
 
-    def test_present_indexed_flag_true(self) -> None:
-        assert (
-            vtp._mirror_is_indexed("x", {"x": True}, require_indexed_flag=True) is True
-        )
+    def test_present_not_indexed(self) -> None:
+        assert vtp._mirror_verified_indexed("x", {"x": False}) is False
 
-    def test_present_indexed_flag_false(self) -> None:
-        # Membership-only semantics: truthiness of the stored value is
-        # irrelevant when require_indexed_flag is False.
-        assert (
-            vtp._mirror_is_indexed("x", {"x": True}, require_indexed_flag=False)
-            is True
-        )
 
-    def test_present_not_indexed_flag_true(self) -> None:
-        assert (
-            vtp._mirror_is_indexed("x", {"x": False}, require_indexed_flag=True)
-            is False
-        )
+class TestMirrorPresentInIndex:
+    def test_absent(self) -> None:
+        assert vtp._mirror_present_in_index("x", {}) is False
 
-    def test_present_not_indexed_flag_false(self) -> None:
-        # The critical differentiator: membership-only semantics must return
-        # True even though the stored _indexed value is falsy. This is what
-        # keeps branch 2 (configs/sg_mirrors/*.json) from silently flipping
-        # 77 real tasks from indexed to not-indexed if the flag gating leaks.
-        assert (
-            vtp._mirror_is_indexed("x", {"x": False}, require_indexed_flag=False)
-            is True
-        )
+    def test_present_indexed(self) -> None:
+        assert vtp._mirror_present_in_index("x", {"x": True}) is True
+
+    def test_present_not_indexed(self) -> None:
+        # The critical differentiator versus _mirror_verified_indexed:
+        # membership alone is enough here, the stored _indexed value is
+        # irrelevant. This is what keeps branch 2 (configs/sg_mirrors/*.json)
+        # from silently flipping 77 real tasks from indexed to not-indexed.
+        assert vtp._mirror_present_in_index("x", {"x": False}) is True
 
 
 # ---------------------------------------------------------------------------
@@ -728,13 +718,16 @@ class TestRealBenchmarks:
         reason="Not in EnterpriseBench repo",
     )
     def test_mirrors_indexed_branches_unchanged_by_refactor(self) -> None:
-        """Regression lock for EnterpriseBench-pias: extracting the shared
-        _mirror_is_indexed helper must not change either branch's real-corpus
-        result. Branch 1 (tool_access.sourcegraph_mirrors[]) currently has
-        exactly two tasks, both not-indexed; branch 2 (configs/sg_mirrors/
-        *.json) has 77, all indexed. Asserted per-task (not just a count) so
-        a future change that flips a task's result trips this even if the
-        aggregate counts happen to cancel out."""
+        """Regression lock for EnterpriseBench-pias: splitting the shared
+        indexed-check into _mirror_verified_indexed/_mirror_present_in_index
+        must not change either branch's real-corpus result. Branch 1
+        (tool_access.sourcegraph_mirrors[]) currently has exactly two tasks,
+        both not-indexed -- asserted by name. Branch 2 (configs/sg_mirrors/
+        *.json) has 77, all indexed; asserted by count rather than by name
+        (unlike branch 1) since hardcoding 77 task names would be pure
+        noise, but still built as a set for the same per-task tracking
+        shape so a future change flipping one task while adding another
+        doesn't cancel out silently within this test run."""
         import tomllib
 
         schema = vtp.load_schema()
@@ -742,8 +735,12 @@ class TestRealBenchmarks:
         mirror_ids = vtp.load_mirror_task_ids()
 
         branch1_not_indexed = set()
-        branch2_indexed_count = 0
+        branch2_indexed = set()
         for td in vtp.collect_task_dirs():
+            # td.name alone isn't a unique key -- task dir names repeat
+            # across suites (e.g. calibration-001 exists in 3 suites), so
+            # dedup on the suite-qualified relative path instead.
+            key = str(td.relative_to(vtp.BENCHMARKS_DIR))
             data = tomllib.loads((td / "task.toml").read_text())
             has_branch1 = bool(
                 data.get("tool_access", {}).get("sourcegraph_mirrors")
@@ -751,13 +748,16 @@ class TestRealBenchmarks:
             result = vtp.validate_task(td, schema, None, sg_index, mirror_ids)
             if has_branch1:
                 if not result.mirrors_indexed:
-                    branch1_not_indexed.add(td.name)
+                    branch1_not_indexed.add(key)
             elif result.has_mirror_config:
                 if result.mirrors_indexed:
-                    branch2_indexed_count += 1
+                    branch2_indexed.add(key)
 
-        assert branch1_not_indexed == {"ccx-dep-trace-106", "ccx-incident-032"}
-        assert branch2_indexed_count == 77
+        assert branch1_not_indexed == {
+            "dependency_management/ccx-dep-trace-106",
+            "incident_response/ccx-incident-032",
+        }
+        assert len(branch2_indexed) == 77
 
     @pytest.mark.skipif(
         not (Path(__file__).resolve().parent.parent / "benchmarks").exists(),
