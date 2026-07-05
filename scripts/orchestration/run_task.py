@@ -344,12 +344,18 @@ def _build_instruction_text(
     task_dir: Path,
     mode: str,
     repos: list[dict] | None = None,
+    require_grounded_citations: bool = False,
 ) -> str | None:
     """Build the full instruction text with optional MCP preamble and output appendix.
 
     For mcp_only/hybrid modes, prepends the Sourcegraph MCP preamble (from
     agents.harnesses.claude.mcp.sourcegraph) and any task-specific
     instruction_mcp.md. For baseline mode, uses instruction.md as-is.
+
+    When require_grounded_citations is True, the answer.json appendix's
+    example JSON includes a top-level `citations` field (schema:
+    {repo, file, evidence_span}), matching what
+    lib/eb_verify/plugins/answer.py's groundedness gate requires.
 
     Returns the combined text, or None if instruction.md does not exist.
     """
@@ -358,6 +364,9 @@ def _build_instruction_text(
         return None
 
     instruction_text = instruction.read_text()
+
+    sys.path.insert(0, str(REPO_ROOT / "lib"))
+    from eb_verify.groundedness import MIN_SPAN_CHARS
 
     # Build MCP preamble for non-baseline modes
     preamble_parts: list[str] = []
@@ -372,6 +381,23 @@ def _build_instruction_text(
         if instruction_mcp.exists():
             preamble_parts.append(instruction_mcp.read_text())
 
+    citations_field = (
+        (
+            '  "citations": [\n'
+            '    {"repo": "repo-name", "file": "relative/path", '
+            f'"evidence_span": "verbatim excerpt, >={MIN_SPAN_CHARS} characters, copied exactly from the file"}}\n'
+            "  ]\n"
+        )
+        if require_grounded_citations
+        else ""
+    )
+    closing_sentence = (
+        "Include only the fields relevant to this task, but `citations` is "
+        "required. Every entry in `citations` must quote an exact, verbatim "
+        "span from the cited file — not a paraphrase or summary. "
+        if require_grounded_citations
+        else "Include only the fields relevant to this task. "
+    )
     output_appendix = (
         "\n\n---\n\n## Output Requirements\n\n"
         "Write your findings as a JSON file to `/workspace/agent_output/answer.json`.\n"
@@ -385,10 +411,11 @@ def _build_instruction_text(
         '  "code_paths": [{"path": "relative/path"}],\n'
         '  "ownership": "subsystem description",\n'
         '  "severity": {"level": "high", "rationale": "..."},\n'
-        '  "related_issues": ["path/to/related/file.go", "description of related component"]\n'
-        "}\n```\n"
-        "Include only the fields relevant to this task. "
-        "Your answer is evaluated against a closed-world oracle — completeness matters.\n"
+        '  "related_issues": ["path/to/related/file.go", "description of related component"]'
+        + (",\n" + citations_field if citations_field else "\n")
+        + "}\n```\n"
+        + closing_sentence
+        + "Your answer is evaluated against a closed-world oracle — completeness matters.\n"
     )
 
     if preamble_parts:
@@ -475,7 +502,14 @@ def _setup_container(
     - eb_verify library -> /workspace/.eb_verify/ (if needed by check scripts)
     """
     # Copy instruction.md with output format appendix and optional MCP preamble
-    combined = _build_instruction_text(task_dir, mode, repos=task_data.get("repos", []))
+    combined = _build_instruction_text(
+        task_dir,
+        mode,
+        repos=task_data.get("repos", []),
+        require_grounded_citations=(task_data.get("ground_truth") or {}).get(
+            "require_grounded_citations", False
+        ),
+    )
     if combined is not None:
         import tempfile
 

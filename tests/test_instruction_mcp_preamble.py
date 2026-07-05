@@ -23,6 +23,7 @@ sys.path.insert(
     0, str(Path(__file__).resolve().parent.parent / "scripts" / "orchestration")
 )
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "infra"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 from run_task import _build_instruction_text
 
@@ -215,7 +216,9 @@ class TestSetupContainerPassesMode:
             from run_task import _setup_container
 
             _setup_container("fake-container", task_dir, {}, mode="hybrid")
-            mock_build.assert_called_once_with(task_dir, "hybrid", repos=[])
+            mock_build.assert_called_once_with(
+                task_dir, "hybrid", repos=[], require_grounded_citations=False
+            )
 
     def test_setup_container_defaults_to_baseline(self, task_dir: Path) -> None:
         with patch(
@@ -224,4 +227,76 @@ class TestSetupContainerPassesMode:
             from run_task import _setup_container
 
             _setup_container("fake-container", task_dir, {})
-            mock_build.assert_called_once_with(task_dir, "baseline", repos=[])
+            mock_build.assert_called_once_with(
+                task_dir, "baseline", repos=[], require_grounded_citations=False
+            )
+
+    def test_setup_container_passes_require_grounded_citations_true(
+        self, task_dir: Path
+    ) -> None:
+        with patch(
+            "run_task._build_instruction_text", return_value=None
+        ) as mock_build, patch("run_task._docker_exec"), patch("run_task._docker_cp"):
+            from run_task import _setup_container
+
+            task_data = {"ground_truth": {"require_grounded_citations": True}}
+            _setup_container("fake-container", task_dir, task_data)
+            mock_build.assert_called_once_with(
+                task_dir, "baseline", repos=[], require_grounded_citations=True
+            )
+
+
+# ---------------------------------------------------------------------------
+# answer.json appendix citation-awareness
+# ---------------------------------------------------------------------------
+
+
+class TestAnswerAppendixCitations:
+    """require_grounded_citations must add citations guidance to the answer.json
+    appendix, mirroring the schema lib/eb_verify/plugins/answer.py's groundedness
+    gate expects (top-level `citations` list of {repo, file, evidence_span})."""
+
+    def test_flag_true_adds_citations_guidance(self, task_dir: Path) -> None:
+        result = _build_instruction_text(
+            task_dir, "baseline", require_grounded_citations=True
+        )
+        assert result is not None
+        assert "answer.json" in result
+        assert "citations" in result
+        assert "evidence_span" in result
+
+    def test_flag_false_omits_citations_guidance(self, task_dir: Path) -> None:
+        result = _build_instruction_text(
+            task_dir, "baseline", require_grounded_citations=False
+        )
+        assert result is not None
+        assert "answer.json" in result
+        assert "citations" not in result
+        assert "evidence_span" not in result
+
+    def test_flag_defaults_to_false(self, task_dir: Path) -> None:
+        """Existing callers that don't pass the new param keep current behavior."""
+        result = _build_instruction_text(task_dir, "baseline")
+        assert result is not None
+        assert "citations" not in result
+
+    def test_flag_true_requires_verbatim_evidence(self, task_dir: Path) -> None:
+        result = _build_instruction_text(
+            task_dir, "baseline", require_grounded_citations=True
+        )
+        assert result is not None
+        assert "verbatim" in result.lower()
+
+    def test_flag_true_span_length_matches_groundedness_gate(
+        self, task_dir: Path
+    ) -> None:
+        """The advertised minimum evidence-span length must track
+        eb_verify.groundedness.MIN_SPAN_CHARS, not a hardcoded copy — otherwise
+        the appendix can silently drift out of sync with what the gate enforces."""
+        from eb_verify.groundedness import MIN_SPAN_CHARS
+
+        result = _build_instruction_text(
+            task_dir, "baseline", require_grounded_citations=True
+        )
+        assert result is not None
+        assert f">={MIN_SPAN_CHARS} characters" in result
