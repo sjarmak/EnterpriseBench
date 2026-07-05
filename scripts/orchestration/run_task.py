@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -392,6 +393,79 @@ def _build_instruction_text(
     return instruction_text + output_appendix
 
 
+def _chown_to_agent(container_id: str, paths: list[str]) -> None:
+    """chown the given container paths to agent:agent (recursively), as root.
+
+    Only paths that exist are chowned (missing ones are skipped, not treated as
+    errors — some are created by later steps). A genuine chown failure is logged
+    loudly, never silently swallowed: a swallowed failure is what produced
+    unreadable instruction.md / .mcp.json files and fake-0 no-op runs
+    (bead EnterpriseBench-s58f).
+    """
+    quoted = " ".join(shlex.quote(p) for p in paths)
+    script = (
+        f"rc=0; for f in {quoted}; do "
+        'if [ -e "$f" ]; then chown -R agent:agent "$f" || rc=1; fi; '
+        "done; exit $rc"
+    )
+    result = subprocess.run(
+        ["docker", "exec", "-u", "root", container_id, "bash", "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        logger.error(
+            "chown to agent FAILED for one or more of %s: %s",
+            paths,
+            result.stderr.strip(),
+        )
+
+
+def _assert_agent_readable(container_id: str, paths: list[str]) -> tuple[bool, str]:
+    """Verify the AGENT user can read each path inside the container.
+
+    Returns (ok, error_message). This is the pre-agent gate that converts a
+    silent container EACCES into a loud, recorded failure instead of letting the
+    agent fail to start and the run record a fake 0.0 score
+    (bead EnterpriseBench-s58f).
+    """
+    for path in paths:
+        check = subprocess.run(
+            ["docker", "exec", "-u", "agent", container_id, "test", "-r", path],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if check.returncode != 0:
+            return (
+                False,
+                f"agent user cannot read {path} "
+                f"(EACCES or missing) — run is INVALID, not a real 0.0 score",
+            )
+    return True, ""
+
+
+def _scan_mcp_config_error(output_dir: Path) -> bool:
+    """Scan the agent stderr log for an MCP-config parse / EACCES / perms error.
+
+    These are the audited no-op markers (validity audit uu8z): the agent could
+    not load its instruction file or MCP config, so the run is INVALID, not a
+    real 0.0 score.
+    """
+    stderr_log = output_dir / "agent_stderr.log"
+    if not stderr_log.exists():
+        return False
+    content = stderr_log.read_text(errors="replace")
+    if "Invalid MCP configuration" in content:
+        return True
+    if "instruction.md: Permission denied" in content:
+        return True
+    if "EACCES" in content and ".mcp.json" in content:
+        return True
+    return False
+
+
 def _setup_container(
     container_id: str,
     task_dir: Path,
@@ -473,29 +547,19 @@ def _setup_container(
     # Fix ownership of copied files only — docker cp preserves host UID which
     # may not match the agent user inside the container.
     # Never chown -R /workspace (too slow for large repos like K8s, Terraform).
-    # Must run as root since the container default user may be non-root.
-    subprocess.run(
+    # Fail-loud: a silently masked chown failure here is what produced
+    # unreadable instruction.md and fake-0 no-op runs (bead EnterpriseBench-s58f).
+    _chown_to_agent(
+        container_id,
         [
-            "docker",
-            "exec",
-            "-u",
-            "root",
-            container_id,
-            "bash",
-            "-c",
-            "chown -R agent:agent "
-            "/workspace/instruction.md "
-            "/workspace/.verifiers "
-            "/workspace/.task "
-            "/workspace/.eb_verify "
-            "/workspace/test.sh "
-            "/workspace/agent_output "
-            "/workspace/.mcp.json "
-            "2>/dev/null; true",
+            "/workspace/instruction.md",
+            "/workspace/.verifiers",
+            "/workspace/.task",
+            "/workspace/.eb_verify",
+            "/workspace/test.sh",
+            "/workspace/agent_output",
+            "/workspace/.mcp.json",
         ],
-        capture_output=True,
-        text=True,
-        timeout=60,
     )
 
 
@@ -1582,6 +1646,33 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 return result
 
         if agent_command:
+            # --- Pre-agent readability gate (fail loud, never fake-0) ---
+            # Re-assert ownership then verify the AGENT user can actually read
+            # the files it needs. A silent EACCES here previously let the agent
+            # fail to start while the run still recorded success=True,
+            # num_turns=0, task_score=0.0 — a fake 0 that corrupted the
+            # MCP-vs-baseline comparison (bead EnterpriseBench-s58f).
+            readability_targets = ["/workspace/instruction.md"]
+            if config.mode in ("mcp_only", "hybrid"):
+                readability_targets += [
+                    "/workspace/.mcp.json",
+                    "/home/agent/.mcp.json",
+                ]
+            _chown_to_agent(container_id, readability_targets)
+            readable, read_err = _assert_agent_readable(
+                container_id, readability_targets
+            )
+            if not readable:
+                logger.error("Pre-agent readability gate FAILED: %s", read_err)
+                result.phase = "agent_preflight_failed"
+                result.status = RUN_STATUS_INVALID
+                result.success = False
+                result.failure_class = "infra_perms"
+                result.error = read_err
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
+
             t0 = time.monotonic()
             agent_exit, agent_duration = _run_agent(
                 container_id,
@@ -1606,6 +1697,18 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
 
             # Extract tool-usage metadata from agent output
             result.tool_usage = _extract_tool_usage(output_dir)
+
+            # An MCP-config parse / EACCES error means the agent never really
+            # started: route to the infra-error re-run channel instead of
+            # recording a fake 0.0 score (bead EnterpriseBench-s58f).
+            if _scan_mcp_config_error(output_dir):
+                result.status = RUN_STATUS_INVALID
+                result.failure_class = "infra_mcp_config"
+                result.phase = "agent_infra_error"
+                logger.error(
+                    "MCP-config / EACCES error in agent stderr — run is "
+                    "INVALID, recording as infra error for re-run"
+                )
 
             # Flag hybrid runs where MCP wasn't used — these don't count
             # as valid MCP comparison data
