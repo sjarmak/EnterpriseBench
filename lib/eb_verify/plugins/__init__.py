@@ -69,8 +69,7 @@ def safe_read(path: Path, workspace: Path, max_bytes: Optional[int] = None) -> s
     """
     workspace_resolved = workspace.resolve()
     fd = os.open(str(path), os.O_RDONLY)
-    opened = False
-    try:
+    with os.fdopen(fd) as handle:
         real_path = Path(os.path.realpath(f"/proc/self/fd/{fd}"))
         if not str(real_path).startswith(str(workspace_resolved) + "/") and real_path != workspace_resolved:
             raise ValueError(
@@ -82,12 +81,6 @@ def safe_read(path: Path, workspace: Path, max_bytes: Optional[int] = None) -> s
                 raise FileTooLargeError(
                     f"File too large to read: {path} is {size} bytes (max {max_bytes})"
                 )
-        handle = os.fdopen(fd)
-        opened = True
-    finally:
-        if not opened:
-            os.close(fd)
-    with handle:
         return handle.read()
 
 
