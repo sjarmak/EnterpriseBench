@@ -47,10 +47,11 @@ class FileTooLargeError(ValueError):
     """Raised by safe_read when a file exceeds the caller's max_bytes cap."""
 
 
-# Generous cap for the hand-authored JSON/text artifacts (answer, incident
-# report, etc.) that safe_read's small-artifact callers read in full. These
-# are meant to be at most a few KB; this bounds worst-case memory use if a
-# symlink (or literal file) at the artifact path targets something huge.
+# Default cap for every safe_read call in this package (opt out with
+# max_bytes=None). Generous relative to the hand-authored JSON/text artifacts
+# (answer, incident report, etc.) that are meant to be at most a few KB; this
+# bounds worst-case memory use if a symlink (or literal file) at the artifact
+# path targets something huge.
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024  # 10 MiB
 
 
