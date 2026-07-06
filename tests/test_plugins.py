@@ -1052,10 +1052,23 @@ class TestSafeReadMaxBytes:
     def test_file_too_large_is_a_value_error(self):
         assert issubclass(FileTooLargeError, ValueError)
 
-    def test_default_none_is_unlimited(self, tmp_path):
+    def test_default_caps_at_max_artifact_bytes(self, tmp_path):
         f = tmp_path / "any.txt"
         f.write_text("x" * 4096)
         assert len(safe_read(f, tmp_path)) == 4096
+
+    def test_default_rejects_file_over_max_artifact_bytes(self, tmp_path):
+        f = tmp_path / "huge.txt"
+        with open(f, "wb") as fh:
+            fh.truncate(MAX_ARTIFACT_BYTES + 1)
+        with pytest.raises(FileTooLargeError):
+            safe_read(f, tmp_path)
+
+    def test_explicit_none_disables_the_cap(self, tmp_path):
+        f = tmp_path / "huge.txt"
+        with open(f, "wb") as fh:
+            fh.truncate(MAX_ARTIFACT_BYTES + 1)
+        assert len(safe_read(f, tmp_path, max_bytes=None)) == MAX_ARTIFACT_BYTES + 1
 
     def test_containment_checked_before_size(self, tmp_path):
         # A path escaping the workspace must raise the escape error, never

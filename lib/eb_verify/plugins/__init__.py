@@ -54,10 +54,14 @@ class FileTooLargeError(ValueError):
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024  # 10 MiB
 
 
-def safe_read(path: Path, workspace: Path, max_bytes: Optional[int] = None) -> str:
+def safe_read(
+    path: Path, workspace: Path, max_bytes: Optional[int] = MAX_ARTIFACT_BYTES
+) -> str:
     """Read a file, asserting the resolved path stays within workspace (symlink-safe).
 
-    When max_bytes is set, files larger than the cap raise FileTooLargeError
+    Defaults to capping reads at MAX_ARTIFACT_BYTES so callers are protected
+    unless they explicitly opt into unbounded reads with max_bytes=None. When
+    max_bytes is set, files larger than the cap raise FileTooLargeError
     without being read. Containment is checked FIRST: an escaping path always
     reports the escape and is never stat'd for a size verdict.
 
