@@ -21,18 +21,24 @@ from eb_verify.plugins import ValidationResult
 #   - "### Step N — <description>" headings, with the actual repo named on a
 #     separate "**Repo:** `<repo>`" line within that step's block, or
 #   - plain "Step N — <repo> ..." lines (e.g. inside a fenced code block), or
+#   - "### Phase A — <repo>: <description>" headings (lettered, not numbered),
+#     with the repo token sometimes bolded as "**Step N** — ..." underneath, or
 #   - a flat markdown numbered list "N. <repo> ..." / "N. **<repo>** ...".
-# All three shapes appear in real completed runs. Extraction below handles
-# all three instead of assuming one flat shape.
+# All shapes appear in real completed runs. Extraction below handles them
+# instead of assuming one flat shape.
 _HEADING_RE = re.compile(r"^(#{1,6})\s*(.+)$")
 _ANCHOR_RE = re.compile(r"order|topolog", re.IGNORECASE)
 _LEADING_HASH_RE = re.compile(r"^#{1,6}\s*")
-_STEP_LINE_RE = re.compile(r"^Step\s+\d+\s*[—\-:]\s*(.+)$", re.IGNORECASE)
+_STEP_LINE_RE = re.compile(
+    r"^(?:Step|Phase)\s+([0-9]+|[A-Za-z])\s*[—\-:]\s*(.+)$", re.IGNORECASE
+)
 _NUMBERED_LINE_RE = re.compile(r"^(\d+)[.)]\s+(.+)$")
 _REPO_FIELD_RE = re.compile(r"^\*{0,2}repo\*{0,2}:\*{0,2}\s*(.+)$", re.IGNORECASE)
 _BACKTICK_TOKEN_RE = re.compile(r"^\*{0,2}`([^`]+)`")
 _BOLD_TOKEN_RE = re.compile(r"^\*\*([^*]+)\*\*")
 _PLAIN_TOKEN_RE = re.compile(r"^([^\s(]+)")
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
+_MIN_SUBSTRING_MATCH_LEN = 5
 
 
 def _clean_token(text: str) -> str:
@@ -84,14 +90,14 @@ def extract_proposed_order(plan_text: str) -> List[str]:
 
     step_matches = []  # (index_in_section, rest_text)
     for idx, line in enumerate(section):
-        destripped = _LEADING_HASH_RE.sub("", line.strip())
+        destripped = _LEADING_HASH_RE.sub("", line.strip()).replace("**", "")
         m = _STEP_LINE_RE.match(destripped)
         if m:
-            step_matches.append((idx, m.group(1)))
+            step_matches.append((idx, m.group(1), m.group(2)))
 
     tokens: List[str] = []
     if step_matches:
-        for k, (idx, rest) in enumerate(step_matches):
+        for k, (idx, _step_id, rest) in enumerate(step_matches):
             block_end = step_matches[k + 1][0] if k + 1 < len(step_matches) else len(section)
             token_source = rest
             for block_line in section[idx + 1 : block_end]:
@@ -114,21 +120,34 @@ def _last_segment(name: str) -> str:
     return name.rstrip("/").split("/")[-1].strip().lower()
 
 
+def _normalize(text: str) -> str:
+    """Strip everything but lowercase letters/digits, for punctuation-insensitive matching."""
+    return _NON_ALNUM_RE.sub("", text.lower())
+
+
 def resolve_tokens_to_graph(tokens: Iterable[str], graph_nodes: Iterable[str]) -> List[str]:
     """Map raw extracted tokens onto actual dependency-graph node keys.
 
     Step text names repos narratively ("go.etcd.io/etcd", "kubernetes"
     monorepo module paths like "k8s.io/apiserver") rather than the literal
-    "org/repo" graph keys, so this matches by exact string first, then by
-    case-insensitive last-path-segment ("etcd-io/etcd" ~ "go.etcd.io/etcd").
-    Deduplicates to first occurrence per resolved key and drops unmatched
-    tokens (e.g. narrative sub-headings that aren't repo identifiers).
+    "org/repo" graph keys, so this matches in order of decreasing strictness:
+    exact string, case-insensitive last-path-segment ("etcd-io/etcd" ~
+    "go.etcd.io/etcd"), punctuation-stripped last-path-segment ("vercel/
+    next.js" ~ "nextjs"), and finally substring containment between
+    normalized last segments ("build-infra" ~ "Build Infrastructure") —
+    guarded by a minimum length so short generic tokens ("api", "go") don't
+    match everything. Deduplicates to first occurrence per resolved key and
+    drops unmatched tokens (e.g. narrative sub-headings that aren't repo
+    identifiers).
     """
     nodes = list(graph_nodes)
     node_set = set(nodes)
     seg_to_key: Dict[str, str] = {}
+    seg_norm_to_key: Dict[str, str] = {}
     for key in nodes:
-        seg_to_key.setdefault(_last_segment(key), key)
+        seg = _last_segment(key)
+        seg_to_key.setdefault(seg, key)
+        seg_norm_to_key.setdefault(_normalize(seg), key)
 
     resolved: List[str] = []
     seen = set()
@@ -139,6 +158,25 @@ def resolve_tokens_to_graph(tokens: Iterable[str], graph_nodes: Iterable[str]) -
             continue
 
         match = token if token in node_set else seg_to_key.get(_last_segment(token))
+
+        if match is None:
+            token_seg = _last_segment(token)
+            token_norm = _normalize(token_seg)
+            match = seg_norm_to_key.get(token_norm)
+
+        if match is None and len(token_norm) >= _MIN_SUBSTRING_MATCH_LEN:
+            match = next(
+                (
+                    key
+                    for key in nodes
+                    if len(_normalize(_last_segment(key))) >= _MIN_SUBSTRING_MATCH_LEN
+                    and (
+                        token_norm in _normalize(_last_segment(key))
+                        or _normalize(_last_segment(key)) in token_norm
+                    )
+                ),
+                None,
+            )
 
         if match and match not in seen:
             seen.add(match)
