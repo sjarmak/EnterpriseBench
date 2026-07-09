@@ -51,5 +51,15 @@ scripts/infra/accounts_config.json
 
 # Beads / Dolt files (added by bd init)
 .dolt/
+.beads/
+.brainstorm/
+.claude/
+.codegraph/
+.codex/
+.gc/
+.runtime/
 *.db
 .beads-credential-key
+
+# Agent audit/status reports (local, not tracked)
+.gc-reports/
