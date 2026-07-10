@@ -42,7 +42,7 @@ from codeprobe.analysis.trace_quality import (
 )
 
 from eb_metrics.ir_metrics import IRScores
-from eb_metrics.retrieval_extraction import compute_run_ir_scores
+from eb_metrics.retrieval_extraction import compute_run_ir_scores, resolve_ground_truth
 
 __all__ = [
     "metrics_from_eb_record",
@@ -220,22 +220,6 @@ def metrics_from_eb_record(
     )
 
 
-def _resolve_ground_truth(
-    benchmarks_dir: Path, task_id: str, suite: str | None
-) -> Path | None:
-    """Locate a task's ``ground_truth.json`` under ``benchmarks_dir``.
-
-    Tries the canonical ``<benchmarks>/<suite>/<task_id>/`` layout first,
-    then falls back to a recursive search by task id (covers ``_archived``
-    and any non-standard nesting).
-    """
-    if suite:
-        direct = benchmarks_dir / suite / task_id / "ground_truth.json"
-        if direct.is_file():
-            return direct
-    return next(benchmarks_dir.glob(f"**/{task_id}/ground_truth.json"), None)
-
-
 def metrics_from_results_file(
     path: Path,
     *,
@@ -288,7 +272,7 @@ def metrics_from_results_file(
                 if isinstance(task_meta, Mapping):
                     suite_val = task_meta.get("suite")
                     suite = suite_val if isinstance(suite_val, str) else None
-                gt_path = _resolve_ground_truth(
+                gt_path = resolve_ground_truth(
                     Path(benchmarks_dir), task_id, suite
                 )
                 if gt_path is not None:

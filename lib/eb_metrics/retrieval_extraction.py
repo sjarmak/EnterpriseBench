@@ -42,8 +42,27 @@ from eb_metrics.ir_metrics import IRScores, compute_ir_scores, normalize_path
 __all__ = [
     "retrieved_files_from_trace",
     "required_files_from_ground_truth",
+    "resolve_ground_truth",
     "compute_run_ir_scores",
 ]
+
+
+def resolve_ground_truth(
+    benchmarks_dir: Path, task_id: str, suite: str | None = None
+) -> Path | None:
+    """Locate a task's ``ground_truth.json`` under ``benchmarks_dir``.
+
+    Tries the canonical ``<benchmarks>/<suite>/<task_id>/`` layout first (when
+    a suite is known), then falls back to a recursive search by task id (covers
+    ``_archived`` and any non-standard nesting). Shared by the trace-quality
+    adapter and the per-config retrieval rollup.
+    """
+    benchmarks_dir = Path(benchmarks_dir)
+    if suite:
+        direct = benchmarks_dir / suite / task_id / "ground_truth.json"
+        if direct.is_file():
+            return direct
+    return next(benchmarks_dir.glob(f"**/{task_id}/ground_truth.json"), None)
 
 # MCP tools that read a specific remote file (path in the tool input).
 _MCP_READ_TOOLS = frozenset(

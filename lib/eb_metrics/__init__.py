@@ -16,7 +16,14 @@ from eb_metrics.ir_metrics import IRScores, compute_ir_scores
 from eb_metrics.retrieval_extraction import (
     compute_run_ir_scores,
     required_files_from_ground_truth,
+    resolve_ground_truth,
     retrieved_files_from_trace,
+)
+from eb_metrics.retrieval_rollup import (
+    RunRetrieval,
+    MeanRetrieval,
+    aggregate_retrieval,
+    iter_run_retrievals,
 )
 
 __all__ = [
@@ -27,5 +34,10 @@ __all__ = [
     "compute_ir_scores",
     "compute_run_ir_scores",
     "required_files_from_ground_truth",
+    "resolve_ground_truth",
     "retrieved_files_from_trace",
+    "RunRetrieval",
+    "MeanRetrieval",
+    "aggregate_retrieval",
+    "iter_run_retrievals",
 ]
