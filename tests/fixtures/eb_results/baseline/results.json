@@ -1,0 +1,47 @@
+[
+  {
+    "task_id": "synthetic-clean-001",
+    "success": true,
+    "phase": "complete",
+    "error": "",
+    "failure_class": null,
+    "scores": {
+      "task_score": 3.0,
+      "all_passed": true,
+      "checkpoints_passed": 3,
+      "checkpoints_total": 3,
+      "checkpoints": [
+        {"name": "cp1", "weight": 1.0, "score": 1.0, "passed": true, "duration_ms": 1, "exit_code": 0},
+        {"name": "cp2", "weight": 1.0, "score": 1.0, "passed": true, "duration_ms": 1, "exit_code": 0},
+        {"name": "cp3", "weight": 1.0, "score": 1.0, "passed": true, "duration_ms": 1, "exit_code": 0}
+      ]
+    },
+    "task_metadata": {
+      "suite": "platform_engineering",
+      "task_type": "config_drift",
+      "difficulty": "medium",
+      "languages": ["python"]
+    },
+    "config": {"mode": "baseline", "timeout": 120}
+  },
+  {
+    "task_id": "synthetic-build-failed-001",
+    "success": false,
+    "phase": "build_failed",
+    "error": "docker build returned non-zero",
+    "failure_class": "infra_build",
+    "scores": {
+      "task_score": 0.0,
+      "all_passed": false,
+      "checkpoints_passed": 0,
+      "checkpoints_total": 0,
+      "checkpoints": []
+    },
+    "task_metadata": {
+      "suite": "platform_engineering",
+      "task_type": "config_drift",
+      "difficulty": "hard"
+    },
+    "config": {"mode": "baseline", "timeout": 120}
+  }
+]

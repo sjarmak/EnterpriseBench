@@ -1,0 +1,49 @@
+[
+  {
+    "task_id": "synthetic-partial-001",
+    "success": true,
+    "phase": "complete",
+    "error": "",
+    "failure_class": null,
+    "scores": {
+      "task_score": 2.0,
+      "all_passed": false,
+      "checkpoints_passed": 2,
+      "checkpoints_total": 3,
+      "checkpoints": [
+        {"name": "cp1", "weight": 1.0, "score": 1.0, "passed": true, "duration_ms": 1, "exit_code": 0},
+        {"name": "cp2", "weight": 1.0, "score": 1.0, "passed": true, "duration_ms": 1, "exit_code": 0},
+        {"name": "cp3", "weight": 1.0, "score": 0.0, "passed": false, "duration_ms": 1, "exit_code": 1}
+      ]
+    },
+    "task_metadata": {
+      "suite": "incident_response",
+      "task_type": "incident_investigation",
+      "difficulty": "medium"
+    },
+    "config": {"mode": "mcp_only", "timeout": 120}
+  },
+  {
+    "task_id": "synthetic-agent-error-001",
+    "success": false,
+    "phase": "error",
+    "error": "agent crashed",
+    "failure_class": "agent_error",
+    "scores": {
+      "task_score": 0.0,
+      "all_passed": false,
+      "checkpoints_passed": 0,
+      "checkpoints_total": 2,
+      "checkpoints": [
+        {"name": "cp1", "weight": 1.0, "score": 0.0, "passed": false, "duration_ms": 1, "exit_code": 0},
+        {"name": "cp2", "weight": 1.0, "score": 0.0, "passed": false, "duration_ms": 1, "exit_code": 0}
+      ]
+    },
+    "task_metadata": {
+      "suite": "incident_response",
+      "task_type": "incident_investigation",
+      "difficulty": "hard"
+    },
+    "config": {"mode": "mcp_only", "timeout": 120}
+  }
+]
