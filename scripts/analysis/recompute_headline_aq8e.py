@@ -34,8 +34,8 @@ from pathlib import Path
 MAIN = Path("/home/ds/projects/EnterpriseBench")
 RERUN9 = Path("/home/ds/projects/EnterpriseBench-9awn/results/rerun_9awn")
 AQ8E = Path(__file__).resolve().parent
-BASE_MEDIAN = AQ8E / "results" / "rescore_aq8e" / "aggregated_median.json"
-MCP_MEDIAN = AQ8E / "results" / "rescore_aq8e" / "mcp_only_uu17_median.json"
+BASE_MEDIAN = MAIN / "results" / "rescore_aq8e" / "aggregated_median.json"
+MCP_MEDIAN = MAIN / "results" / "rescore_aq8e" / "mcp_only_uu17_median.json"
 
 sys.path.insert(0, str(MAIN / "results" / "analysis"))
 import os
@@ -93,6 +93,14 @@ def main() -> None:
     base_median = json.loads(BASE_MEDIAN.read_text())
     mcp_median = json.loads(MCP_MEDIAN.read_text())
 
+    # pt0n/lyse: correct the docker-cp-contaminated topo_order cells in-memory
+    # (published median artifacts left untouched — see topo_corrections.py).
+    import topo_corrections as _tc
+    _corr = _tc.load()
+    _b_applied = _tc.apply_median(base_median, _corr["baseline_rescore_median"])
+    _m_applied = _tc.apply_median(mcp_median, _corr["mcp_rescore_median"])
+    print(f"topo_order correction (pt0n): baseline_median={_b_applied} mcp_median={_m_applied}")
+
     # uu17's baseline arm = 9awn RE-RUN — only trust phase==complete & success.
     # An infra-error re-run (gocp-module-007) is NOT a measurement; fall back to
     # the locked baseline value (never score its 0.0).
@@ -106,6 +114,13 @@ def main() -> None:
                 rerun_baseline[t["task"]] = (d.get("scores") or {}).get("task_score")
             else:
                 rerun_infra.append(t["task"])
+
+    # pt0n: the 9awn re-run baseline (mixed variant) is also topo-contaminated;
+    # apply only the cells whose 9awn re-run answer genuinely lifts (007). The
+    # 9awn re-run of 004 produced a worse plan (topo genuinely 0.0), so it is
+    # intentionally absent from baseline_9awn_rerun and stays at its 1.8.
+    _9awn_applied = _tc.apply_scalar(rerun_baseline, _corr["baseline_9awn_rerun"])
+    print(f"topo_order correction (pt0n): 9awn_baseline={_9awn_applied}")
 
     # aq8e baseline arm = RE-SCORE median. Infra cell -> locked fallback.
     rescore_infra: list[str] = [
@@ -230,7 +245,7 @@ def main() -> None:
         "direction": {"old": d_old, "mixed": d_mixed, "symmetric": d_sym},
         "moves": moves,
     }
-    (AQ8E / "results" / "rescore_aq8e" / "headline_recompute.json").write_text(
+    (MAIN / "results" / "rescore_aq8e" / "headline_recompute.json").write_text(
         json.dumps(out, indent=2)
     )
     print(f"\nwrote {AQ8E / 'results' / 'rescore_aq8e' / 'headline_recompute.json'}")

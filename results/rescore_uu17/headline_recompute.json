@@ -11,34 +11,34 @@
   },
   "new": {
     "n": 105,
-    "mean": -0.10406761904761905,
+    "mean": -0.10195142857142857,
     "median": 0.0,
-    "better": 23,
-    "tie": 49,
+    "better": 24,
+    "tie": 48,
     "worse": 33
   },
   "band_mcp_max": {
     "n": 105,
-    "mean": -0.07073428571428572,
+    "mean": -0.06861809523809524,
     "median": 0.0,
-    "better": 24,
-    "tie": 50,
+    "better": 25,
+    "tie": 49,
     "worse": 31
   },
   "band_mcp_min": {
     "n": 105,
-    "mean": -0.11359142857142858,
+    "mean": -0.1114752380952381,
     "median": 0.0,
-    "better": 23,
-    "tie": 48,
+    "better": 24,
+    "tie": 47,
     "worse": 34
   },
   "variant_A_reselected": {
     "n": 104,
-    "mean": -0.13151057692307694,
+    "mean": -0.12937403846153847,
     "median": 0.0,
-    "better": 22,
-    "tie": 49,
+    "better": 23,
+    "tie": 48,
     "worse": 33
   },
   "dropped_baseline_dead": [
@@ -182,6 +182,24 @@
       "m_new": 1.8,
       "delta_old": 0.30000000000000004,
       "delta_new": 0.0
+    },
+    {
+      "task": "refactor-orch-007",
+      "b_old": 1.8,
+      "m_old": 1.8,
+      "b_new": 2.8,
+      "m_new": 2.8,
+      "delta_old": 0.0,
+      "delta_new": 0.0
+    },
+    {
+      "task": "refactor-orch-008",
+      "b_old": 1.8,
+      "m_old": 1.8,
+      "b_new": 1.8,
+      "m_new": 2.0222,
+      "delta_old": 0.0,
+      "delta_new": 0.22220000000000018
     },
     {
       "task": "support-map-grafana-alerts-004",

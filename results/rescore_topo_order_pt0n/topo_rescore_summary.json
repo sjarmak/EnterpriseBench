@@ -108,6 +108,78 @@
         "parallelism": 0.4,
         "repo_set": 1.0
       }
+    },
+    {
+      "task": "refactor-orchestration-tri-babel-001",
+      "mode": "baseline",
+      "owner": "completeness",
+      "run_dir": "results/runs/refactor-orchestration-tri-babel-001/baseline",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 1.0,
+      "corrected_topo_detail": "Valid topological ordering; 3/3 dependency constraints satisfied; 3/3 repos covered",
+      "topo_weight": 1.0,
+      "old_task_score": 1.5,
+      "new_task_score": 2.5,
+      "delta_task_score": 1.0,
+      "other_checkpoints": {
+        "parallelism": 0.5,
+        "repo_set": 1.0
+      }
+    },
+    {
+      "task": "refactor-orchestration-tri-babel-001",
+      "mode": "mcp_only",
+      "owner": "completeness",
+      "run_dir": "results/runs/refactor-orchestration-tri-babel-001/mcp_only",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 1.0,
+      "corrected_topo_detail": "Valid topological ordering; 3/3 dependency constraints satisfied; 3/3 repos covered",
+      "topo_weight": 1.0,
+      "old_task_score": 1.5,
+      "new_task_score": 2.5,
+      "delta_task_score": 1.0,
+      "other_checkpoints": {
+        "parallelism": 0.5,
+        "repo_set": 1.0
+      }
+    },
+    {
+      "task": "refactor-orchestration-tri-tokio-001",
+      "mode": "baseline",
+      "owner": "completeness",
+      "run_dir": "results/runs/refactor-orchestration-tri-tokio-001/baseline",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 1.0,
+      "corrected_topo_detail": "Valid topological ordering; 3/3 dependency constraints satisfied; 3/3 repos covered",
+      "topo_weight": 1.0,
+      "old_task_score": 1.5,
+      "new_task_score": 2.5,
+      "delta_task_score": 1.0,
+      "other_checkpoints": {
+        "parallelism": 0.5,
+        "repo_set": 1.0
+      }
+    },
+    {
+      "task": "refactor-orchestration-tri-tokio-001",
+      "mode": "mcp_only",
+      "owner": "completeness",
+      "run_dir": "results/runs/refactor-orchestration-tri-tokio-001/mcp_only",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 1.0,
+      "corrected_topo_detail": "Valid topological ordering; 3/3 dependency constraints satisfied; 3/3 repos covered",
+      "topo_weight": 1.0,
+      "old_task_score": 2.0,
+      "new_task_score": 3.0,
+      "delta_task_score": 1.0,
+      "other_checkpoints": {
+        "parallelism": 1.0,
+        "repo_set": 1.0
+      }
     }
   ]
 }

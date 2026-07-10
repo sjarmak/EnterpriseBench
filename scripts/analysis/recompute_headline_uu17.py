@@ -24,7 +24,7 @@ from pathlib import Path
 MAIN = Path("/home/ds/projects/EnterpriseBench")
 RERUN9 = Path("/home/ds/projects/EnterpriseBench-9awn/results/rerun_9awn")
 UU17 = Path(__file__).resolve().parent
-AGG_MEDIAN = UU17 / "results" / "rescore_uu17" / "aggregated_median.json"
+AGG_MEDIAN = MAIN / "results" / "rescore_uu17" / "aggregated_median.json"
 
 # Build the locked clean set using the canonical generator.
 sys.path.insert(0, str(MAIN / "results" / "analysis"))
@@ -78,6 +78,13 @@ def main():
     affected_names = {t["task"] for t in affected}
     median_agg = json.loads(AGG_MEDIAN.read_text())
 
+    # pt0n/lyse: correct the docker-cp-contaminated topo_order cells in-memory
+    # (published median artifacts left untouched — see topo_corrections.py).
+    import topo_corrections as _tc
+    _corr = _tc.load()
+    _m_applied = _tc.apply_median(median_agg, _corr["mcp_rescore_median"])
+    print(f"topo_order correction (pt0n): mcp_median={_m_applied}")
+
     # Re-run baseline scores for affected tasks — ONLY trust phase==complete,
     # success runs. A verifier_infra_error re-run (e.g. gocp-module-007) is NOT
     # a measurement: its 0.0 must not be scored. For those we fall back to the
@@ -94,6 +101,11 @@ def main():
                 baseline_infra.append(t["task"])
     if baseline_infra:
         print(f"NOTE: baseline re-run NOT valid (infra-error, locked fallback): {baseline_infra}")
+
+    # pt0n: correct the topo-contaminated 9awn re-run baseline cells that
+    # genuinely lift (007). 004's 9awn re-run stays 1.8 (worse re-run plan).
+    _9awn_applied = _tc.apply_scalar(rerun_baseline, _corr["baseline_9awn_rerun"])
+    print(f"topo_order correction (pt0n): 9awn_baseline={_9awn_applied}")
 
     # OLD headline over locked clean set.
     old_deltas = [ms - bs for (bs, ms) in clean.values()]
@@ -189,7 +201,7 @@ def main():
             for m in moves
         ],
     }
-    (UU17 / "results" / "rescore_uu17" / "headline_recompute.json").write_text(
+    (MAIN / "results" / "rescore_uu17" / "headline_recompute.json").write_text(
         json.dumps(out, indent=2)
     )
 

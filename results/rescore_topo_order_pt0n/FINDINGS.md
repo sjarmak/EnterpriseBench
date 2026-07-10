@@ -48,10 +48,39 @@ Membership: 001/004/007/008 are in the affected-29 (their arms are overridden
 by the medians above); 006 is not in affected-29, and its cell is unchanged, so
 it does not move the headline either way.
 
-## Open decision (published numbers)
+## Completeness audit — the 5-pair scope was incomplete (but the delta is not)
 
-Regenerating `headline_recompute.json` means editing the published median JSONs
-and re-running `recompute_headline_aq8e.py` / `recompute_headline_uu17.py`. Two
-wrinkles make this a judgment call rather than a mechanical edit: (1) it mutates
-published artifacts, and (2) the uu17-mixed variant needs the 9awn baseline
-re-scored too, for symmetry with the aq8e-symmetric variant. Held for Stephanie.
+Scanning **all** locked runs for `topo_order exit_code=1` (the docker-cp crash
+signature) surfaced two contaminated tasks the handoff's 5 pairs missed, both in
+the locked-105 and both `affected=False` (not overridden by the k4tv rescores):
+
+| task | baseline (was→now) | mcp (was→now) | delta (was→now) |
+|---|---|---|---|
+| refactor-orchestration-tri-babel-001 | 1.5 → 2.5 | 1.5 → 2.5 | 0.0 → 0.0 |
+| refactor-orchestration-tri-tokio-001 | 1.5 → 2.5 | 2.0 → 3.0 | +0.5 → +0.5 |
+
+Both arms lift by exactly +1.0 (both agents wrote valid orderings), so the
+MCP-vs-baseline **delta is unchanged** and the headline is unaffected. The same
+holds for `007` in the 5-pair set (both arms contaminated, both correct to +1.0,
+`d_symmetric=0`). The cells that actually move the headline are the
+**asymmetrically** contaminated ones: `004` (baseline-only → −1.0 symmetric) and
+`008` (mcp-only → +0.2222). Absolute per-task topo scores for tri-babel/tri-tokio
+remain at their locked (contaminated) values in the clean-set base of both the
+old and new headlines, which is why the delta is identical either way.
+
+## Regenerated headline (before → after topo fix)
+
+`recompute_headline_{aq8e,uu17}.py` re-run with the in-memory correction
+(`topo_corrections.json` via `topo_corrections.py`; published median artifacts
+untouched). Also fixed a stale path in both scripts (`AQ8E/UU17 "results"` →
+repo-root `MAIN "results"`; broken by the earlier analysis-script move).
+
+| variant | mean before → after | verdict |
+|---|---|---|
+| OLD locked | −0.0925 → −0.0925 | unchanged (pre-correction baseline) |
+| uu17 mixed | −0.1041 → −0.1020 | MCP_worse (unchanged) |
+| aq8e symmetric | −0.0826 → −0.0900 | MCP_worse (unchanged) |
+
+Median 0.0 in every variant; direction MCP_worse throughout;
+`conclusion_changed_vs_mixed=False`. **The topo_order contamination fix does not
+change the headline conclusion — no MCP win, in every variant, before or after.**

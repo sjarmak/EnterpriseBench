@@ -1,0 +1,19 @@
+{
+  "_provenance": "Read-only topo_order rescore of the docker-cp-contaminated refactor-orch runs (bead pt0n/lyse; verifier fix 16280cf). Produced by scripts/analysis/rescore_topo_order_pt0n.py from the locked agent_trace.jsonl Write calls, scored under the fixed validate_refactor_plan_markdown. The topo_order checkpoint is deterministic, so its corrected score is constant across the 7 judge passes and each median/min/max/vals collapses to the corrected task_score. Applied to the recompute inputs in-memory (via scripts/analysis/topo_corrections.py) so the published median/results artifacts keep their original provenance.",
+  "baseline_rescore_median": {
+    "refactor-orch-004": 2.8,
+    "refactor-orch-007": 2.8
+  },
+  "mcp_rescore_median": {
+    "refactor-orch-007": 2.8,
+    "refactor-orch-008": 2.0222
+  },
+  "baseline_9awn_rerun": {
+    "refactor-orch-007": 2.8
+  },
+  "_unchanged": {
+    "refactor-orch-001_mcp": "genuine 0.0 (extractor cannot resolve 'Step N — <verb>' tokens; baseline arm also 0.0 -> no bias)",
+    "refactor-orch-006_mcp": "genuine 0.0 (agent covered 1/7 graph repos, 0/13 constraints); not in affected-29",
+    "refactor-orch-004_9awn_baseline": "9awn re-run produced a worse plan (topo genuinely 0.0, 1/3 repos) -> mixed-variant baseline stays 1.8; the symmetric variant uses the locked-run rescore (2.8)"
+  }
+}

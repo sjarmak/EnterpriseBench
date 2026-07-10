@@ -11,43 +11,43 @@
   },
   "uu17_mixed": {
     "n": 105,
-    "mean": -0.10406761904761905,
+    "mean": -0.10195142857142857,
     "median": 0.0,
-    "better": 23,
-    "tie": 49,
+    "better": 24,
+    "tie": 48,
     "worse": 33
   },
   "aq8e_symmetric": {
     "n": 105,
-    "mean": -0.08263904761904763,
+    "mean": -0.09004666666666666,
     "median": 0.0,
-    "better": 25,
-    "tie": 52,
-    "worse": 28
+    "better": 26,
+    "tie": 50,
+    "worse": 29
   },
   "symmetric_band_pro_mcp": {
     "n": 105,
-    "mean": -0.03025809523809524,
+    "mean": -0.03766571428571428,
     "median": 0.0,
-    "better": 30,
-    "tie": 48,
-    "worse": 27
+    "better": 31,
+    "tie": 46,
+    "worse": 28
   },
   "symmetric_band_anti_mcp": {
     "n": 105,
-    "mean": -0.12968666666666667,
+    "mean": -0.13709428571428572,
     "median": 0.0,
-    "better": 23,
-    "tie": 51,
-    "worse": 31
+    "better": 24,
+    "tie": 49,
+    "worse": 32
   },
   "symmetric_variant_A_reselected": {
     "n": 104,
-    "mean": -0.08343365384615385,
+    "mean": -0.0909125,
     "median": 0.0,
-    "better": 25,
-    "tie": 51,
-    "worse": 28
+    "better": 26,
+    "tie": 49,
+    "worse": 29
   },
   "dropped_baseline_dead": [
     "support-map-grafana-alerts-004"
@@ -238,6 +238,39 @@
       "d_locked": 0.3,
       "d_mixed_uu17": 0.0,
       "d_symmetric": 0.3
+    },
+    {
+      "task": "refactor-orch-004",
+      "b_locked": 1.8,
+      "m_locked": 1.8,
+      "b_rerun_9awn": 1.8,
+      "b_rescore_aq8e": 2.8,
+      "m_rescore_uu17": 1.8,
+      "d_locked": 0.0,
+      "d_mixed_uu17": 0.0,
+      "d_symmetric": -1.0
+    },
+    {
+      "task": "refactor-orch-007",
+      "b_locked": 1.8,
+      "m_locked": 1.8,
+      "b_rerun_9awn": 2.8,
+      "b_rescore_aq8e": 2.8,
+      "m_rescore_uu17": 2.8,
+      "d_locked": 0.0,
+      "d_mixed_uu17": 0.0,
+      "d_symmetric": 0.0
+    },
+    {
+      "task": "refactor-orch-008",
+      "b_locked": 1.8,
+      "m_locked": 1.8,
+      "b_rerun_9awn": 1.8,
+      "b_rescore_aq8e": 1.8,
+      "m_rescore_uu17": 2.0222,
+      "d_locked": 0.0,
+      "d_mixed_uu17": 0.2222,
+      "d_symmetric": 0.2222
     },
     {
       "task": "support-map-grafana-alerts-004",

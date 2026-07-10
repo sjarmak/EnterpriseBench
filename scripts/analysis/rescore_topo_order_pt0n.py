@@ -35,8 +35,12 @@ from eb_verify.plugins.topological_order import validate_refactor_plan_markdown 
 LOCKED_RUNS = REPO_ROOT / "results" / "runs"
 BENCH = REPO_ROOT / "benchmarks" / "technical_debt"
 
-# The 5 contaminated (task, mode) pairs + the lyse pair, with the contamination
-# owner (which rescore headline they feed). id -> refactor-orchestration-<N>.
+# The 5 contaminated (task, mode) pairs + the lyse pair (owner = which rescore
+# headline they feed), plus the two tasks a full-locked-set completeness scan
+# (topo_order exit_code=1) surfaced beyond the handoff scope: tri-babel-001 and
+# tri-tokio-001, both contaminated in BOTH arms. Both arms lift by +1.0 there, so
+# the MCP-vs-baseline delta is unchanged and the headline is unaffected — they
+# are rescored here for completeness/auditability, not because they move a number.
 PAIRS = [
     {"task": "refactor-orch-004", "mode": "baseline", "owner": "aq8e"},
     {"task": "refactor-orch-007", "mode": "baseline", "owner": "aq8e"},
@@ -44,10 +48,18 @@ PAIRS = [
     {"task": "refactor-orch-007", "mode": "mcp_only", "owner": "uu17"},
     {"task": "refactor-orch-008", "mode": "mcp_only", "owner": "uu17"},
     {"task": "refactor-orch-006", "mode": "mcp_only", "owner": "lyse"},
+    {"task": "refactor-orchestration-tri-babel-001", "mode": "baseline", "owner": "completeness"},
+    {"task": "refactor-orchestration-tri-babel-001", "mode": "mcp_only", "owner": "completeness"},
+    {"task": "refactor-orchestration-tri-tokio-001", "mode": "baseline", "owner": "completeness"},
+    {"task": "refactor-orchestration-tri-tokio-001", "mode": "mcp_only", "owner": "completeness"},
 ]
 
 
 def _task_dir(task_id: str) -> Path:
+    """Task-definition dir. Handles both the short results id (refactor-orch-004
+    -> refactor-orchestration-004) and the full-name tri-* ids."""
+    if (BENCH / task_id).is_dir():
+        return BENCH / task_id
     return BENCH / f"refactor-orchestration-{task_id.rsplit('-', 1)[-1]}"
 
 
