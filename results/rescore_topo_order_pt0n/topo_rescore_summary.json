@@ -1,0 +1,113 @@
+{
+  "method": "read_only_topo_rescore",
+  "pairs": [
+    {
+      "task": "refactor-orch-004",
+      "mode": "baseline",
+      "owner": "aq8e",
+      "run_dir": "results/runs/refactor-orch-004/baseline",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 1.0,
+      "corrected_topo_detail": "Valid topological ordering; 3/3 dependency constraints satisfied; 3/3 repos covered",
+      "topo_weight": 1.0,
+      "old_task_score": 1.8,
+      "new_task_score": 2.8,
+      "delta_task_score": 1.0,
+      "other_checkpoints": {
+        "parallelism": 0.8,
+        "repo_set": 1.0
+      }
+    },
+    {
+      "task": "refactor-orch-007",
+      "mode": "baseline",
+      "owner": "aq8e",
+      "run_dir": "results/runs/refactor-orch-007/baseline",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 1.0,
+      "corrected_topo_detail": "Valid topological ordering; 3/3 dependency constraints satisfied; 3/3 repos covered",
+      "topo_weight": 1.0,
+      "old_task_score": 1.8,
+      "new_task_score": 2.8,
+      "delta_task_score": 1.0,
+      "other_checkpoints": {
+        "parallelism": 0.8,
+        "repo_set": 1.0
+      }
+    },
+    {
+      "task": "refactor-orch-001",
+      "mode": "mcp_only",
+      "owner": "uu17",
+      "run_dir": "results/runs/refactor-orch-001/mcp_only",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 0.0,
+      "corrected_topo_detail": "Empty proposal",
+      "topo_weight": 1.0,
+      "old_task_score": 1.8,
+      "new_task_score": 1.8,
+      "delta_task_score": 0.0,
+      "other_checkpoints": {
+        "parallelism": 0.8,
+        "repo_set": 1.0
+      }
+    },
+    {
+      "task": "refactor-orch-007",
+      "mode": "mcp_only",
+      "owner": "uu17",
+      "run_dir": "results/runs/refactor-orch-007/mcp_only",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 1.0,
+      "corrected_topo_detail": "Valid topological ordering; 3/3 dependency constraints satisfied; 3/3 repos covered",
+      "topo_weight": 1.0,
+      "old_task_score": 1.8,
+      "new_task_score": 2.8,
+      "delta_task_score": 1.0,
+      "other_checkpoints": {
+        "parallelism": 0.8,
+        "repo_set": 1.0
+      }
+    },
+    {
+      "task": "refactor-orch-008",
+      "mode": "mcp_only",
+      "owner": "uu17",
+      "run_dir": "results/runs/refactor-orch-008/mcp_only",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 0.2222,
+      "corrected_topo_detail": "Partially valid ordering; 1/3 dependency constraints satisfied; 2/3 repos covered; missing: grpc-ecosystem/go-grpc-middleware",
+      "topo_weight": 1.0,
+      "old_task_score": 1.8,
+      "new_task_score": 2.0222,
+      "delta_task_score": 0.2222,
+      "other_checkpoints": {
+        "parallelism": 0.8,
+        "repo_set": 1.0
+      }
+    },
+    {
+      "task": "refactor-orch-006",
+      "mode": "mcp_only",
+      "owner": "lyse",
+      "run_dir": "results/runs/refactor-orch-006/mcp_only",
+      "contaminated_topo": 0.0,
+      "topo_exit_code": 1,
+      "corrected_topo": 0.0,
+      "corrected_topo_detail": "0/13 dependency constraints satisfied; 1/7 repos covered; missing: distroless-images, e2e-infra, k8s.io/api, k8s.io/apimachinery, k8s.io/apiserver, k8s.io/client-go",
+      "topo_weight": 1.0,
+      "old_task_score": 1.4,
+      "new_task_score": 1.4,
+      "delta_task_score": 0.0,
+      "other_checkpoints": {
+        "parallelism": 0.4,
+        "repo_set": 1.0
+      }
+    }
+  ]
+}
