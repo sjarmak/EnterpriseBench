@@ -55,6 +55,11 @@ from agents.harnesses.claude.mcp.sourcegraph import (
     build_system_prompt as _build_mcp_preamble,
 )
 
+# Scorer trust boundary — single definition of "infra failure vs real score",
+# shared by every scoring entry point in this file and by code_patch.validate.
+sys.path.insert(0, str(REPO_ROOT / "lib"))
+from eb_verify.scorer_guard import InfraError, guard_verifier_output
+
 logger = logging.getLogger(__name__)
 
 # Paths to sandbox scripts (relative to repo root)
@@ -840,6 +845,26 @@ def _run_agent(
     return exit_code, duration
 
 
+def _route_verifier_infra_error(result: "TaskRunResult", scores: dict) -> None:
+    """Route a ``verifier_infra_error`` on ``scores`` to the re-run channel.
+
+    Single place that reacts to the scorer trust boundary: if any scoring stage
+    tagged an infra error, mark the run so the phase-complete guard never
+    records it as a legitimate score. Idempotent and safe to call after each
+    stage.
+    """
+    infra_err = scores.get("verifier_infra_error")
+    if not infra_err:
+        return
+    result.failure_class = "verifier_infra_error"
+    result.phase = "verifier_infra_error"
+    logger.warning(
+        "Verifier infra error (%s): %s",
+        infra_err.get("reason", "?"),
+        infra_err.get("detail", ""),
+    )
+
+
 def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
     """Run /workspace/test.sh and capture the JSON results."""
     logger.info("Running checkpoint verifiers (timeout=%ds)...", verifier_timeout)
@@ -860,26 +885,19 @@ def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
     if result.stderr:
         logger.info("Verifier diagnostics:\n%s", result.stderr.rstrip())
 
-    # Parse the JSON output
-    stdout = result.stdout.strip()
-    if not stdout:
+    # Route the raw verifier output through the scorer trust boundary. Empty /
+    # malformed output, a top-level error key, or a per-checkpoint infra
+    # signature (docker-cp harness-import failure, explicit sentinel) become a
+    # verifier_infra_error instead of a false 0.0 the caller would record as a
+    # legitimate all-checkpoint-fail (beads s58f, hktt/pt0n, apfp #2).
+    guarded = guard_verifier_output(result.stdout, result.returncode)
+    if isinstance(guarded, InfraError):
         return {
             "task_score": 0.0,
             "all_passed": False,
-            "error": f"test.sh produced no output (exit {result.returncode})",
+            "verifier_infra_error": guarded.as_verifier_error(),
         }
-
-    try:
-        scores = json.loads(stdout)
-    except json.JSONDecodeError as e:
-        return {
-            "task_score": 0.0,
-            "all_passed": False,
-            "error": f"test.sh output was not valid JSON: {e}",
-            "raw_output": stdout[:2000],
-        }
-
-    return scores
+    return guarded
 
 
 # Canonical answer-artifact location appended to every task instruction by
@@ -933,7 +951,16 @@ def _apply_llm_judge(
     try:
         expected = json.loads(expected_path.read_text())
     except (json.JSONDecodeError, OSError) as exc:
+        # The task declares llm_curator + expected_solution but its ground
+        # truth won't load: the Tier-2 cap cannot be applied. Do NOT pass the
+        # un-capped grep scores through as a real measurement (apfp #3) — flag
+        # the run for the re-run channel.
         logger.warning("Failed to load expected_solution.json: %s", exc)
+        scores["verifier_infra_error"] = InfraError(
+            reason="malformed_expected_solution",
+            stage="llm_judge",
+            detail=f"could not load expected_solution.json: {exc}",
+        ).as_verifier_error()
         return scores
 
     checkpoints_gt = expected.get("checkpoints", {})
@@ -960,17 +987,17 @@ def _apply_llm_judge(
             "expected_solution (candidates: %s) — routing to verifier_infra_error",
             ", ".join(candidates),
         )
-        scores["verifier_infra_error"] = {
-            "reason": "no_agent_output",
-            "stage": "llm_judge",
-            "detail": (
+        scores["verifier_infra_error"] = InfraError(
+            reason="no_agent_output",
+            stage="llm_judge",
+            detail=(
                 "llm_curator task declares expected_solution but no agent "
                 "artifact was found in the container; Tier-2 cap could not be "
                 "applied, so the deterministic grep scores are un-capped and "
                 "must not be recorded as the final measurement"
             ),
-            "candidates": candidates,
-        }
+            context={"candidates": candidates},
+        ).as_verifier_error()
         return scores
 
     try:
@@ -979,7 +1006,15 @@ def _apply_llm_judge(
 
         judge = LLMJudge(model="cc:haiku")
     except Exception as exc:
+        # Judge could not be constructed (import/config/credential failure):
+        # the Tier-2 cap cannot be applied. Flag infra error rather than
+        # recording the un-capped grep scores as real (apfp #3).
         logger.warning("Failed to init LLM judge: %s", exc)
+        scores["verifier_infra_error"] = InfraError(
+            reason="judge_init_failed",
+            stage="llm_judge",
+            detail=f"could not initialize LLM judge: {exc}",
+        ).as_verifier_error()
         return scores
 
     task_desc = task_data.get("task", {}).get("description", "")
@@ -1007,8 +1042,18 @@ def _apply_llm_judge(
             )
             judge_score = judge_result.score
         except Exception as exc:
+            # A judge call raised: this checkpoint's grep score cannot be
+            # capped. A bare `continue` would silently keep the un-capped grep
+            # score (apfp #3, over-credit on judge outage). Flag the whole run
+            # for re-run — a partially-capped score is not a real measurement.
             logger.warning("LLM judge failed for %s: %s", cp_name, exc)
-            continue
+            scores["verifier_infra_error"] = InfraError(
+                reason="judge_checkpoint_failed",
+                stage="llm_judge",
+                detail=f"LLM judge raised on checkpoint {cp_name!r}: {exc}",
+                context={"checkpoint": cp_name},
+            ).as_verifier_error()
+            return scores
 
         final_score = min(grep_score, judge_score)
         logger.info(
@@ -1827,20 +1872,16 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         t0 = time.monotonic()
         scores = _run_scoring(container_id, config.verifier_timeout)
         timings["scoring"] = time.monotonic() - t0
+        _route_verifier_infra_error(result, scores)
 
         # --- Phase 5b: Score (Tier 2 — LLM curator) ---
+        # Skip the judge if the deterministic stage already flagged an infra
+        # error — the run is already routed to re-run, and the judge would run
+        # against un-guarded scores.
         verification_modes = task_data.get("verification_modes", ["deterministic"])
-        if "llm_curator" in verification_modes:
+        if "llm_curator" in verification_modes and result.phase != "verifier_infra_error":
             scores = _apply_llm_judge(scores, task_dir, container_id, task_data)
-            infra_err = scores.get("verifier_infra_error")
-            if infra_err:
-                result.failure_class = "verifier_infra_error"
-                result.phase = "verifier_infra_error"
-                logger.warning(
-                    "Verifier infra error (%s): %s",
-                    infra_err["reason"],
-                    infra_err["detail"],
-                )
+            _route_verifier_infra_error(result, scores)
 
         result.scores = scores
 

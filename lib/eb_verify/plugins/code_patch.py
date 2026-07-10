@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from eb_verify.plugins import ValidationResult
+from eb_verify.scorer_guard import INFRA_SENTINEL, DiffProbeError
 
 
 # Diff size thresholds (in lines of diff output)
@@ -16,38 +17,47 @@ DEFAULT_MAX_DIFF_LINES = 10_000
 DEFAULT_MIN_DIFF_LINES = 1
 
 
-def _get_diff_stat(repo_path: Path) -> Optional[str]:
-    """Return combined diff --stat output for a repo, or None on error."""
+def _run_git_diff(args: list[str], repo_path: Path) -> str:
+    """Run a ``git diff`` variant and return stdout, or raise DiffProbeError.
+
+    A git subprocess that fails to *run* (missing git, EACCES, corrupt .git,
+    I/O error, timeout) or that exits non-zero is an infrastructure failure —
+    NOT the same as "git ran and found no diff" (exit 0, empty stdout). Raising
+    keeps the two apart so a sandbox failure is never collapsed into a false
+    "no changes" 0-score (apfp #4).
+    """
     try:
-        unstaged = subprocess.run(
-            ["git", "diff", "--stat", "HEAD"],
+        proc = subprocess.run(
+            ["git", *args],
             capture_output=True, text=True, cwd=str(repo_path), timeout=30,
         )
-        staged = subprocess.run(
-            ["git", "diff", "--cached", "--stat"],
-            capture_output=True, text=True, cwd=str(repo_path), timeout=30,
+    except subprocess.TimeoutExpired as exc:
+        raise DiffProbeError(f"git {' '.join(args)} timed out in {repo_path}") from exc
+    except OSError as exc:
+        raise DiffProbeError(f"git {' '.join(args)} failed to run in {repo_path}: {exc}") from exc
+    if proc.returncode != 0:
+        raise DiffProbeError(
+            f"git {' '.join(args)} exited {proc.returncode} in {repo_path}: "
+            f"{proc.stderr.strip()}"
         )
-        combined = (unstaged.stdout.strip() + "\n" + staged.stdout.strip()).strip()
-        return combined if combined else None
-    except (subprocess.TimeoutExpired, Exception):
-        return None
+    return proc.stdout
+
+
+def _get_diff_stat(repo_path: Path) -> Optional[str]:
+    """Return combined diff --stat output for a repo, or None if there is no
+    diff. Raises :class:`DiffProbeError` if git itself fails."""
+    unstaged = _run_git_diff(["diff", "--stat", "HEAD"], repo_path)
+    staged = _run_git_diff(["diff", "--cached", "--stat"], repo_path)
+    combined = (unstaged.strip() + "\n" + staged.strip()).strip()
+    return combined if combined else None
 
 
 def _get_diff_lines(repo_path: Path) -> int:
-    """Return total number of diff lines (staged + unstaged)."""
-    try:
-        unstaged = subprocess.run(
-            ["git", "diff", "HEAD"],
-            capture_output=True, text=True, cwd=str(repo_path), timeout=30,
-        )
-        staged = subprocess.run(
-            ["git", "diff", "--cached"],
-            capture_output=True, text=True, cwd=str(repo_path), timeout=30,
-        )
-        total = len(unstaged.stdout.splitlines()) + len(staged.stdout.splitlines())
-        return total
-    except (subprocess.TimeoutExpired, Exception):
-        return 0
+    """Return total number of diff lines (staged + unstaged). Raises
+    :class:`DiffProbeError` if git itself fails."""
+    unstaged = _run_git_diff(["diff", "HEAD"], repo_path)
+    staged = _run_git_diff(["diff", "--cached"], repo_path)
+    return len(unstaged.splitlines()) + len(staged.splitlines())
 
 
 def check_patch_applies(repo_path: Path) -> tuple[bool, str]:
@@ -134,14 +144,29 @@ class CodePatchValidator:
             if not git_dir.exists():
                 continue
 
-            stat = _get_diff_stat(item)
+            # A git-probe infra failure must NOT masquerade as "no changes".
+            # Emit the shared infra sentinel so the scorer trust boundary routes
+            # the run to re-run instead of recording a false 0 (apfp #4).
+            try:
+                stat = _get_diff_stat(item)
+            except DiffProbeError as exc:
+                return ValidationResult(
+                    valid=False,
+                    detail=f"{INFRA_SENTINEL}: {exc}",
+                )
             if not stat:
                 continue
 
             repos_with_changes.append(item.name)
 
             # Diff size check
-            size_ok, size_detail = check_diff_size(item, max_diff_lines, min_diff_lines)
+            try:
+                size_ok, size_detail = check_diff_size(item, max_diff_lines, min_diff_lines)
+            except DiffProbeError as exc:
+                return ValidationResult(
+                    valid=False,
+                    detail=f"{INFRA_SENTINEL}: {exc}",
+                )
             if not size_ok:
                 warnings.append(f"{item.name}: {size_detail}")
 

@@ -21,6 +21,12 @@ jobs:
           pip install -e lib/
       - name: Run tests
         run: python3 -m pytest tests/ -v --tb=short -m "not network and not docker"
+      - name: Scoring-integrity corpus (merge blocker)
+        # Explicit, un-skippable gate for the scorer trust boundary: one
+        # adversarial vector per known score-corruption class (over-credit
+        # forgery + under-credit false-zero). Named separately so a future
+        # marker-filter change on the step above can never silently drop it.
+        run: python3 -m pytest tests/integrity/ -v --tb=short
       - name: Audit task consistency
         run: python3 scripts/audit_consistency.py
       - name: Validate shell scripts
