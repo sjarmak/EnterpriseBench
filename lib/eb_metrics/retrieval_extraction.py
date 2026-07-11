@@ -100,8 +100,13 @@ _BASH_READ_CMDS = frozenset(
         "rg", "ag", "sed", "awk", "diff",
     }
 )
-# Shell control operators that separate sub-commands.
-_SHELL_SPLIT_RE = re.compile(r"\|\||&&|[|;&]")
+# Shell control operators that separate sub-commands. Matched against whole
+# *tokens*, never against raw text: a `|` inside a quoted pattern
+# (``grep 'a|b' file.py``) is data, not an operator. Redirections (``>``,
+# ``<``) are deliberately absent — they do not start a new command, and
+# treating them as separators would silently change how redirect targets score
+# (see :func:`_bash_read_files`).
+_SHELL_OPERATORS = frozenset({"|", "||", "&&", "&", ";", ";;", "\n"})
 
 _PATH_JSON_RE = re.compile(r'"path"\s*:\s*"([^"]+)"')
 _FILE_JSON_RE = re.compile(r'"file"\s*:\s*"([^"]+)"')
@@ -114,34 +119,51 @@ _PATH_PREFIX_RE = re.compile(r"(?:^|\n|\\n)Path: ([^\n\\]+\.\w{1,5})")
 _QUERY_PATH_RE = re.compile(r"([a-zA-Z][\w/.-]+/[\w.-]+\.\w{1,5})")
 
 
+def _tokenize(command: str) -> list[str]:
+    """Tokenize a shell command, keeping control operators as their own tokens.
+
+    ``punctuation_chars`` makes shlex emit ``|``/``&&``/``;`` as standalone
+    tokens even when unspaced (``cat a.py|grep b``), while quoted occurrences
+    stay inside their word (``grep 'a|b' a.py``) — the distinction the caller
+    needs to tell an operator from a search pattern. An unterminated quote
+    yields whatever parsed cleanly before it rather than a hard failure; the
+    lexer is a best-effort reader of someone else's shell, not a validator.
+    """
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""  # `#` is data here, not a comment (shlex.split parity)
+    tokens: list[str] = []
+    try:
+        tokens.extend(lexer)
+    except ValueError:
+        pass  # unbalanced quote — keep the prefix we did parse
+    return tokens
+
+
 def _bash_read_files(command: str) -> list[str]:
     """Extract file arguments from shell read-commands in ``command``.
 
-    Splits on shell control operators, and for each sub-command whose program
-    is in :data:`_BASH_READ_CMDS`, yields its non-flag tokens. Callers gate
-    each token through ``_looks_like_file`` (via ``_add``), so search patterns
-    and options are dropped. Conservative by construction — a sub-command not
-    led by a known read program contributes nothing (a script being *run* is
-    not a retrieval).
+    Tokenizes first, *then* splits the token list on control operators, so a
+    ``|`` inside a quoted grep alternation stays part of the pattern instead of
+    truncating the command and taking its file argument with it. For each
+    sub-command whose program is in :data:`_BASH_READ_CMDS`, yields the
+    non-flag tokens. Callers gate each one through ``_looks_like_file`` (via
+    ``_add``), so search patterns and options are dropped. Conservative by
+    construction — a sub-command not led by a known read program contributes
+    nothing (a script being *run* is not a retrieval).
+
+    Known false positive, preserved: redirections are not separators, so the
+    target of ``cat a.py > out.txt`` is counted as a read (EnterpriseBench-qefr).
     """
     files: list[str] = []
-    for sub in _SHELL_SPLIT_RE.split(command):
-        sub = sub.strip()
-        if not sub:
+    sub: list[str] = []
+    for tok in [*_tokenize(command), ";"]:
+        if tok in _SHELL_OPERATORS:
+            if sub and sub[0].rsplit("/", 1)[-1] in _BASH_READ_CMDS:
+                files.extend(t for t in sub[1:] if not t.startswith("-"))
+            sub = []
             continue
-        try:
-            toks = shlex.split(sub)
-        except ValueError:
-            toks = sub.split()
-        if not toks:
-            continue
-        prog = toks[0].rsplit("/", 1)[-1]
-        if prog not in _BASH_READ_CMDS:
-            continue
-        for tok in toks[1:]:
-            if tok.startswith("-"):
-                continue
-            files.append(tok)
+        sub.append(tok)
     return files
 
 

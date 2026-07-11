@@ -142,6 +142,85 @@ def test_retrieved_files_ignores_non_file_writes(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Bash tokenization — file args must survive shell metacharacters that appear
+# *inside* quoted search patterns (regression: splitting on `|` before
+# tokenizing dropped the file arg of any `grep 'a|b' path` command).
+# ---------------------------------------------------------------------------
+
+
+def _bash_files(tmp_path: Path, command: str) -> list[str]:
+    trace = _write_trace(
+        tmp_path / "agent_trace.jsonl",
+        [_assistant_tool_use("b1", "Bash", {"command": command})],
+    )
+    return retrieved_files_from_trace(trace)
+
+
+def test_bash_quoted_pipe_in_grep_pattern_keeps_file(tmp_path: Path) -> None:
+    # BRE alternation: the `|` is inside the quoted pattern, not an operator.
+    assert _bash_files(tmp_path, "grep -n 'realm|export' zerver/models/realms.py") == [
+        "zerver/models/realms.py"
+    ]
+
+
+def test_bash_escaped_pipe_alternation_keeps_file(tmp_path: Path) -> None:
+    # `grep 'a\|b' file` — escaped BRE alternation; pattern has no extension so
+    # it is dropped by the _looks_like_file gate, the file survives.
+    assert _bash_files(tmp_path, r"grep 'realm\|export' zerver/models/realms.py") == [
+        "zerver/models/realms.py"
+    ]
+
+
+def test_bash_ere_alternation_then_real_pipe(tmp_path: Path) -> None:
+    # Quoted `|` stays in the pattern; the unquoted `|` still separates
+    # sub-commands (head contributes nothing).
+    assert _bash_files(
+        tmp_path, "grep -E 'foo|bar' src/handler.go | head -20"
+    ) == ["src/handler.go"]
+
+
+def test_bash_unspaced_pipe_separates_subcommands(tmp_path: Path) -> None:
+    # `cat foo.py|grep bar` — no spaces around the operator.
+    assert _bash_files(tmp_path, "cat zerver/views/realm_export.py|grep export") == [
+        "zerver/views/realm_export.py"
+    ]
+
+
+def test_bash_semicolon_and_andand_chains(tmp_path: Path) -> None:
+    assert _bash_files(tmp_path, "cat a/first.py; cat b/second.py") == [
+        "a/first.py",
+        "b/second.py",
+    ]
+    assert _bash_files(tmp_path, "cat a/first.py && head -5 b/second.py") == [
+        "a/first.py",
+        "b/second.py",
+    ]
+
+
+def test_bash_awk_field_separator_pipe_keeps_file(tmp_path: Path) -> None:
+    # `awk -F'|'` — the separator is an argument, not an operator.
+    assert _bash_files(tmp_path, "awk -F'|' '{print $1}' data/report.csv") == [
+        "data/report.csv"
+    ]
+
+
+def test_bash_unbalanced_quote_degrades_without_bogus_path(tmp_path: Path) -> None:
+    # Tokenizing stops at the unterminated quote; we keep what parsed cleanly
+    # rather than emitting a quote-mangled path.
+    assert _bash_files(tmp_path, "cat 'zerver/models/realms.py") == []
+
+
+def test_bash_redirect_target_still_counted(tmp_path: Path) -> None:
+    # Pre-existing false positive, preserved deliberately: an output-redirect
+    # target is counted as a read. Fixing it changes scoring on a different
+    # axis than this bug, so it is tracked separately (EnterpriseBench-qefr).
+    assert _bash_files(tmp_path, "cat src/handler.go > /tmp/out.txt") == [
+        "src/handler.go",
+        "/tmp/out.txt",
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Ground-truth loader
 # ---------------------------------------------------------------------------
 
