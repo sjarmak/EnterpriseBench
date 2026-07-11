@@ -20,8 +20,11 @@ Two structural readers plus one compute helper, feeding
   of the retrieval-recall aggregate.
 
 ZFC compliance: parsing is mechanical field extraction and structural
-validation (``_looks_like_file`` is a has-extension check) — no semantic
-classification or learned scoring.
+validation — no semantic classification or learned scoring. The two judgement
+calls stay in code by design: ``_BASH_READ_CMDS`` is policy (which programs
+count as a retrieval) and ``_looks_like_file`` is a shape filter. A scoring
+primitive a model re-judged per call would not reproduce across rescores, and
+the back-computations depend on that.
 
 Known limitation (inherited from CSB ``_normalize``): repos whose
 repo-relative paths lead with a non-code directory (e.g. grafana's
@@ -34,6 +37,7 @@ from __future__ import annotations
 import json
 import re
 import shlex
+from itertools import groupby
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -100,13 +104,22 @@ _BASH_READ_CMDS = frozenset(
         "rg", "ag", "sed", "awk", "diff",
     }
 )
-# Shell control operators that separate sub-commands. Matched against whole
-# *tokens*, never against raw text: a `|` inside a quoted pattern
-# (``grep 'a|b' file.py``) is data, not an operator. Redirections (``>``,
-# ``<``) are deliberately absent — they do not start a new command, and
-# treating them as separators would silently change how redirect targets score
-# (see :func:`_bash_read_files`).
-_SHELL_OPERATORS = frozenset({"|", "||", "&&", "&", ";", ";;", "\n"})
+# Shell tokens that delimit one sub-command from the next, matched against whole
+# *tokens* from :func:`_tokenize` — never against raw text, which is the whole
+# point of tokenizing first (a ``|`` inside ``grep 'a|b' f.py`` lexes to the word
+# ``a|b``, not to a bare ``|``, so it stays data).
+#
+# Deliberately absent:
+#   ``>`` / ``<``  — not separators, so the target of ``cat a.py > out.txt`` is
+#     counted as a read. A known false positive, kept (EnterpriseBench-qefr).
+#   ``(`` / ``)``  — listing them would let ``(cat a.py)`` contribute a.py, but it
+#     would also make ``grep '(' f.go`` lose f.go: posix lexing strips quotes, so a
+#     quoted bare paren and a real operator are the same token and this set cannot
+#     tell them apart. That trade re-opens the quoted-operator hole this function
+#     exists to close, so subshells stay a false negative (EnterpriseBench-fhtm).
+#   newline        — ``whitespace_split`` never emits one; it could only ever match
+#     a *quoted* newline, i.e. data.
+_SHELL_OPERATORS = frozenset({"|", "||", "&&", "&", ";", ";;"})
 
 _PATH_JSON_RE = re.compile(r'"path"\s*:\s*"([^"]+)"')
 _FILE_JSON_RE = re.compile(r'"file"\s*:\s*"([^"]+)"')
@@ -120,14 +133,13 @@ _QUERY_PATH_RE = re.compile(r"([a-zA-Z][\w/.-]+/[\w.-]+\.\w{1,5})")
 
 
 def _tokenize(command: str) -> list[str]:
-    """Tokenize a shell command, keeping control operators as their own tokens.
+    """Tokenize a shell command, emitting control operators as their own tokens.
 
-    ``punctuation_chars`` makes shlex emit ``|``/``&&``/``;`` as standalone
-    tokens even when unspaced (``cat a.py|grep b``), while quoted occurrences
-    stay inside their word (``grep 'a|b' a.py``) — the distinction the caller
-    needs to tell an operator from a search pattern. An unterminated quote
-    yields whatever parsed cleanly before it rather than a hard failure; the
-    lexer is a best-effort reader of someone else's shell, not a validator.
+    ``punctuation_chars`` is what lets the caller tell an operator from a search
+    pattern: an unquoted ``|`` becomes a standalone token even unspaced
+    (``cat a.py|grep b``), while a quoted one stays inside its word
+    (``grep 'a|b' a.py``). An unterminated quote yields whatever parsed cleanly
+    before it — this reads someone else's shell, it does not validate it.
     """
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
@@ -143,27 +155,22 @@ def _tokenize(command: str) -> list[str]:
 def _bash_read_files(command: str) -> list[str]:
     """Extract file arguments from shell read-commands in ``command``.
 
-    Tokenizes first, *then* splits the token list on control operators, so a
-    ``|`` inside a quoted grep alternation stays part of the pattern instead of
-    truncating the command and taking its file argument with it. For each
-    sub-command whose program is in :data:`_BASH_READ_CMDS`, yields the
-    non-flag tokens. Callers gate each one through ``_looks_like_file`` (via
-    ``_add``), so search patterns and options are dropped. Conservative by
-    construction — a sub-command not led by a known read program contributes
-    nothing (a script being *run* is not a retrieval).
-
-    Known false positive, preserved: redirections are not separators, so the
-    target of ``cat a.py > out.txt`` is counted as a read (EnterpriseBench-qefr).
+    Tokenizes first, *then* groups the tokens into sub-commands on
+    :data:`_SHELL_OPERATORS`, so a ``|`` inside a quoted grep alternation stays
+    part of the pattern instead of truncating the command and taking its file
+    argument with it. For each sub-command whose program is in
+    :data:`_BASH_READ_CMDS`, yields the non-flag tokens; callers gate each one
+    through ``_looks_like_file`` (via ``_add``), so search patterns and options
+    are dropped. Conservative by construction — a sub-command not led by a known
+    read program contributes nothing (a script being *run* is not a retrieval).
     """
     files: list[str] = []
-    sub: list[str] = []
-    for tok in [*_tokenize(command), ";"]:
-        if tok in _SHELL_OPERATORS:
-            if sub and sub[0].rsplit("/", 1)[-1] in _BASH_READ_CMDS:
-                files.extend(t for t in sub[1:] if not t.startswith("-"))
-            sub = []
+    for is_operator, group in groupby(_tokenize(command), _SHELL_OPERATORS.__contains__):
+        if is_operator:
             continue
-        sub.append(tok)
+        sub = list(group)
+        if sub[0].rsplit("/", 1)[-1] in _BASH_READ_CMDS:
+            files.extend(tok for tok in sub[1:] if not tok.startswith("-"))
     return files
 
 

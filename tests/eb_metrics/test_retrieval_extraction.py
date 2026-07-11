@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from eb_metrics.retrieval_extraction import (
     compute_run_ir_scores,
     required_files_from_ground_truth,
@@ -156,58 +158,75 @@ def _bash_files(tmp_path: Path, command: str) -> list[str]:
     return retrieved_files_from_trace(trace)
 
 
-def test_bash_quoted_pipe_in_grep_pattern_keeps_file(tmp_path: Path) -> None:
-    # BRE alternation: the `|` is inside the quoted pattern, not an operator.
-    assert _bash_files(tmp_path, "grep -n 'realm|export' zerver/models/realms.py") == [
-        "zerver/models/realms.py"
-    ]
-
-
-def test_bash_escaped_pipe_alternation_keeps_file(tmp_path: Path) -> None:
-    # `grep 'a\|b' file` — escaped BRE alternation; pattern has no extension so
-    # it is dropped by the _looks_like_file gate, the file survives.
-    assert _bash_files(tmp_path, r"grep 'realm\|export' zerver/models/realms.py") == [
-        "zerver/models/realms.py"
-    ]
-
-
-def test_bash_ere_alternation_then_real_pipe(tmp_path: Path) -> None:
-    # Quoted `|` stays in the pattern; the unquoted `|` still separates
-    # sub-commands (head contributes nothing).
-    assert _bash_files(
-        tmp_path, "grep -E 'foo|bar' src/handler.go | head -20"
-    ) == ["src/handler.go"]
-
-
-def test_bash_unspaced_pipe_separates_subcommands(tmp_path: Path) -> None:
-    # `cat foo.py|grep bar` — no spaces around the operator.
-    assert _bash_files(tmp_path, "cat zerver/views/realm_export.py|grep export") == [
-        "zerver/views/realm_export.py"
-    ]
-
-
-def test_bash_semicolon_and_andand_chains(tmp_path: Path) -> None:
-    assert _bash_files(tmp_path, "cat a/first.py; cat b/second.py") == [
-        "a/first.py",
-        "b/second.py",
-    ]
-    assert _bash_files(tmp_path, "cat a/first.py && head -5 b/second.py") == [
-        "a/first.py",
-        "b/second.py",
-    ]
-
-
-def test_bash_awk_field_separator_pipe_keeps_file(tmp_path: Path) -> None:
-    # `awk -F'|'` — the separator is an argument, not an operator.
-    assert _bash_files(tmp_path, "awk -F'|' '{print $1}' data/report.csv") == [
-        "data/report.csv"
-    ]
-
-
-def test_bash_unbalanced_quote_degrades_without_bogus_path(tmp_path: Path) -> None:
-    # Tokenizing stops at the unterminated quote; we keep what parsed cleanly
-    # rather than emitting a quote-mangled path.
-    assert _bash_files(tmp_path, "cat 'zerver/models/realms.py") == []
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        # A quoted `|` is part of the pattern, not an operator. Each of these
+        # lost its file argument when the raw command was split before lexing.
+        pytest.param(
+            "grep -n 'realm|export' zerver/models/realms.py",
+            ["zerver/models/realms.py"],
+            id="bre-alternation",
+        ),
+        pytest.param(
+            r"grep 'realm\|export' zerver/models/realms.py",
+            ["zerver/models/realms.py"],
+            id="escaped-alternation",
+        ),
+        pytest.param(
+            "grep -E 'foo|bar' src/handler.go | head -20",
+            ["src/handler.go"],
+            id="quoted-alternation-then-real-pipe",
+        ),
+        pytest.param(
+            "awk -F'|' '{print $1}' data/report.csv",
+            ["data/report.csv"],
+            id="pipe-as-field-separator",
+        ),
+        # An unquoted operator still separates, spaced or not.
+        pytest.param(
+            "cat zerver/views/realm_export.py|grep export",
+            ["zerver/views/realm_export.py"],
+            id="unspaced-pipe",
+        ),
+        pytest.param(
+            "cat a/first.py; cat b/second.py",
+            ["a/first.py", "b/second.py"],
+            id="semicolon-chain",
+        ),
+        pytest.param(
+            "cat a/first.py && head -5 b/second.py",
+            ["a/first.py", "b/second.py"],
+            id="andand-chain",
+        ),
+        # Guard: `(` must NOT be a shell operator. Adding it would make the
+        # subshell case below work, at the cost of losing this file — the same
+        # quoted-operator hole this whole function exists to close.
+        pytest.param("grep '(' src/handler.go", ["src/handler.go"], id="bare-quoted-paren"),
+        # Known residual holes (EnterpriseBench-fhtm): when a quoted operator is
+        # the *whole* argument, posix lexing strips the quotes and it becomes
+        # indistinguishable from a real operator, so the file arg is lost. Same
+        # root cause costs us subshells. Latent — zero impact on the scored corpus.
+        pytest.param(
+            "grep '|' src/handler.go",
+            ["src/handler.go"],
+            id="bare-quoted-pipe",
+            marks=pytest.mark.xfail(strict=True, reason="EnterpriseBench-fhtm"),
+        ),
+        pytest.param(
+            "(cat a/first.py; cat b/second.py)",
+            ["a/first.py", "b/second.py"],
+            id="subshell",
+            marks=pytest.mark.xfail(strict=True, reason="EnterpriseBench-fhtm"),
+        ),
+        # Unterminated quote: keep the prefix that lexed, emit no mangled path.
+        pytest.param("cat 'zerver/models/realms.py", [], id="unbalanced-quote"),
+    ],
+)
+def test_bash_read_files_survives_shell_metacharacters(
+    tmp_path: Path, command: str, expected: list[str]
+) -> None:
+    assert _bash_files(tmp_path, command) == expected
 
 
 def test_bash_redirect_target_still_counted(tmp_path: Path) -> None:
