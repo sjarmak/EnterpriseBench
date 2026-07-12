@@ -22,6 +22,11 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import validate_tasks_preflight as vtp
 
+# The python-interpreter check is derived from the Dockerfile generator, so the
+# drift tests patch the generator itself rather than a copy of its conclusions.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "sandbox"))
+import dockerfile_generator
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -649,6 +654,152 @@ class TestLoadSgIndex:
 # ---------------------------------------------------------------------------
 # Tests for TaskValidation properties
 # ---------------------------------------------------------------------------
+
+
+class TestScriptInvokesPython:
+    """The detector is deliberately over-inclusive. A false positive costs
+    nothing (every image ships python3), while a miss lets a checkpoint score
+    0.0 forever with no signal."""
+
+    @pytest.mark.parametrize(
+        "script",
+        [
+            'if python3 -c "import json" 2>/dev/null; then FOUND=1; fi',
+            'python3 - "$LIB_DIR" <<\'PYEOF\'\nprint(1)\nPYEOF',
+            "python -c 'print(1)'",
+            "from eb_verify.plugins.topological_order import validate_refactor_plan",
+            'python3 -m eb_verify.cli score',
+        ],
+    )
+    def test_detects_python_usage(self, script: str) -> None:
+        assert vtp._script_invokes_python(f"#!/usr/bin/env bash\n{script}\n")
+
+    @pytest.mark.parametrize(
+        "script",
+        [
+            "#!/usr/bin/env bash\ngrep -q foo bar.txt\n",
+            "#!/usr/bin/env bash\n# rewrite this in python3 someday\nexit 0\n",
+            "#!/usr/bin/env bash\n#   uses eb_verify in a future life\nexit 0\n",
+        ],
+    )
+    def test_ignores_comments_and_plain_shell(self, script: str) -> None:
+        assert not vtp._script_invokes_python(script)
+
+
+class TestPythonInterpreterCheck:
+    """A check script that shells out to python on an image with no python
+    scores 0.0 no matter how good the agent's answer is. Preflight must catch
+    that before the run, not leave it to the scorer."""
+
+    def _java_task(
+        self, tmp_benchmarks: Path, minimal_task_toml: str, check_body: str
+    ) -> Path:
+        toml = minimal_task_toml + '\n[metadata]\nlanguages = ["java"]\n'
+        task_dir = _create_task_dir(
+            tmp_benchmarks, "technical_debt", "java-task", toml
+        )
+        (task_dir / "checks" / "check_one.sh").write_text(check_body)
+        return task_dir
+
+    def test_python_using_check_passes_when_image_provides_python(
+        self, tmp_benchmarks: Path, minimal_task_toml: str
+    ) -> None:
+        task_dir = self._java_task(
+            tmp_benchmarks,
+            minimal_task_toml,
+            '#!/usr/bin/env bash\npython3 -c "import json"\n',
+        )
+        result = _validate(task_dir)
+        assert result.python_interpreter_ok
+        assert not [i for i in result.issues if i.check == "python_interpreter"]
+
+    def test_errors_when_image_has_no_python(
+        self, tmp_benchmarks: Path, minimal_task_toml: str, monkeypatch
+    ) -> None:
+        """Reproduces the pre-fix generator: temurin with no interpreter."""
+        monkeypatch.setattr(
+            dockerfile_generator,
+            "_setup_lines",
+            lambda base: ["RUN apt-get install -y git curl", "USER agent"],
+        )
+        task_dir = self._java_task(
+            tmp_benchmarks,
+            minimal_task_toml,
+            '#!/usr/bin/env bash\npython3 -c "import json"\n',
+        )
+        result = _validate(task_dir)
+
+        assert not result.python_interpreter_ok
+        errors = [
+            i
+            for i in result.issues
+            if i.check == "python_interpreter" and i.severity == "error"
+        ]
+        assert len(errors) == 1
+        assert "eclipse-temurin:17-jdk-jammy" in errors[0].message
+        assert "checks/check_one.sh" in errors[0].message
+        assert not result.ready, "a task that cannot score its checkpoints is not ready"
+
+    def test_eb_verify_import_counts_as_needing_python(
+        self, tmp_benchmarks: Path, minimal_task_toml: str, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            dockerfile_generator,
+            "_setup_lines",
+            lambda base: ["RUN apt-get install -y git curl", "USER agent"],
+        )
+        task_dir = self._java_task(
+            tmp_benchmarks,
+            minimal_task_toml,
+            "#!/usr/bin/env bash\ngrep -q x y\n"
+            "from eb_verify.plugins.topological_order import validate_refactor_plan\n",
+        )
+        result = _validate(task_dir)
+        assert not result.python_interpreter_ok
+
+    def test_shell_only_task_is_unaffected_by_a_pythonless_image(
+        self, tmp_benchmarks: Path, minimal_task_toml: str, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            dockerfile_generator,
+            "_setup_lines",
+            lambda base: ["RUN apt-get install -y git curl", "USER agent"],
+        )
+        task_dir = self._java_task(
+            tmp_benchmarks,
+            minimal_task_toml,
+            "#!/usr/bin/env bash\ngrep -q foo /workspace/ANSWER.md\n",
+        )
+        result = _validate(task_dir)
+        assert result.python_interpreter_ok
+        assert not [i for i in result.issues if i.check == "python_interpreter"]
+
+    def test_a_python_verifier_needs_an_interpreter_to_start(
+        self, tmp_benchmarks: Path, minimal_task_toml: str, monkeypatch
+    ) -> None:
+        """schemas/task.schema.json puts no extension constraint on `verifier`.
+        A .py verifier cannot even start without an interpreter, and globbing
+        only *.sh would wave it through."""
+        monkeypatch.setattr(
+            dockerfile_generator,
+            "_setup_lines",
+            lambda base: ["RUN apt-get install -y git curl", "USER agent"],
+        )
+        toml = minimal_task_toml.replace(
+            'verifier = "checks/check_one.sh"', 'verifier = "checks/check_one.py"'
+        ) + '\n[metadata]\nlanguages = ["java"]\n'
+        task_dir = _create_task_dir(
+            tmp_benchmarks, "technical_debt", "py-verifier-task", toml
+        )
+        (task_dir / "checks" / "check_one.sh").unlink()
+        (task_dir / "checks" / "check_two.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
+        (task_dir / "checks" / "check_one.py").write_text("print('hello')\n")
+
+        result = _validate(task_dir)
+        assert not result.python_interpreter_ok
+        errors = [i for i in result.issues if i.check == "python_interpreter"]
+        assert len(errors) == 1
+        assert "checks/check_one.py" in errors[0].message
 
 
 class TestTaskValidationProperties:

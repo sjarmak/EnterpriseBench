@@ -11,6 +11,8 @@ Validates all tasks against the schema and checks structural readiness:
 - Mirror config in configs/sg_mirrors/
 - Mirror repos indexed in configs/sg_indexing_list.json
 - Required top-level fields present (mcp_suite, repo_set_id, etc.)
+- A python3 interpreter exists in the task's image whenever a check script
+  runs python or imports eb_verify
 
 Usage:
     python scripts/validate_tasks_preflight.py
@@ -25,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import stat
 import sys
 import tomllib
@@ -47,11 +50,61 @@ REGISTRY_PATH = ROOT / "configs" / "validation_registry.json"
 sys.path.insert(0, str(ROOT / "scripts" / "infra"))
 from mirror_naming import GITHUB_REPO_NAME_RE, ORG, derive_mirror_name  # noqa: E402
 
+sys.path.insert(0, str(ROOT / "scripts" / "sandbox"))
+from dockerfile_generator import (  # noqa: E402
+    base_image_for_languages,
+    image_provides_python,
+)
+
 EXCLUDED_DIRS = {"mined", "_archived"}
 DOCKERFILE_VARIANTS = {"Dockerfile", "Dockerfile.hybrid", "Dockerfile.sg_only"}
 
 # Top-level fields expected in task.toml (from convergence report)
 EXPECTED_TOP_LEVEL = {"difficulty_stratum", "mcp_suite", "verification_modes"}
+
+# A check script needs an interpreter in the container if it runs python or
+# imports the eb_verify library through one.
+_PYTHON_USE_RE = re.compile(r"\bpython3?\b|\beb_verify\b")
+
+
+def _script_invokes_python(text: str) -> bool:
+    """True if any executable line of *text* runs python or reaches eb_verify.
+
+    Over-inclusive on purpose. Only whole-line comments are skipped, so a
+    trailing ``# python`` still trips the detector. A false positive costs
+    nothing — every generated image ships an interpreter — while a miss leaves
+    a checkpoint scoring 0.0 forever with no signal that anything is wrong.
+    """
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if _PYTHON_USE_RE.search(line):
+            return True
+    return False
+
+
+def _python_dependent_scripts(task_dir: Path, checkpoints: list[dict]) -> list[str]:
+    """Names of the task's scripts that cannot run without a python3.
+
+    Covers every declared checkpoint verifier plus every ``*.sh`` under the
+    task. The verifiers alone are not enough — the schema lets a verifier be a
+    ``.py`` file, which needs an interpreter just to start — and the shell glob
+    alone is not enough either, since a verifier may be a helper the checkpoint
+    list does not name. Scanning the union over-includes, which is the safe
+    direction: a spurious hit fails preflight loudly, while a miss puts the
+    checkpoint back to scoring 0.0 in silence.
+    """
+    candidates = {task_dir / cp["verifier"] for cp in checkpoints if cp.get("verifier")}
+    candidates.update(task_dir.rglob("*.sh"))
+
+    needs_python: list[str] = []
+    for path in candidates:
+        if not path.is_file():
+            continue  # missing verifiers are already reported by the scripts check
+        if path.suffix == ".py" or _script_invokes_python(path.read_text(errors="replace")):
+            needs_python.append(path.relative_to(task_dir).as_posix())
+    return sorted(needs_python)
 
 
 @dataclass(frozen=True)
@@ -86,6 +139,7 @@ class TaskValidation:
     has_ground_truth_in_toml: bool = False
     has_tool_access: bool = False
     top_level_fields_present: bool = False
+    python_interpreter_ok: bool = False
     issues: list[TaskIssue] = field(default_factory=list)
 
     @property
@@ -436,6 +490,25 @@ def validate_task(
             )
         )
 
+    # 14. Python interpreter present wherever a check script needs one.
+    # A python-invoking check on a python-less image does not fail loudly — it
+    # scores 0.0 with a plausible-looking reason ("Found 0/2 drift points"), so
+    # nothing downstream can tell a wrong answer from an unrunnable checkpoint.
+    languages = task_data.get("metadata", {}).get("languages", [])
+    python_scripts = _python_dependent_scripts(task_dir, checkpoints)
+    if python_scripts and not image_provides_python(languages):
+        result.issues.append(
+            TaskIssue(
+                "error",
+                "python_interpreter",
+                f"{python_scripts} run python or import eb_verify, but the "
+                f"generated image ({base_image_for_languages(languages)}) ships "
+                "no python3 — those checkpoints would silently score 0.0",
+            )
+        )
+    else:
+        result.python_interpreter_ok = True
+
     return result
 
 
@@ -467,6 +540,7 @@ def generate_registry(results: list[TaskValidation]) -> dict[str, Any]:
             "has_ground_truth_in_toml": r.has_ground_truth_in_toml,
             "has_tool_access": r.has_tool_access,
             "top_level_fields_present": r.top_level_fields_present,
+            "python_interpreter_ok": r.python_interpreter_ok,
             "error_count": r.error_count,
             "warning_count": r.warning_count,
             "issues": [asdict(i) for i in r.issues],
@@ -578,6 +652,7 @@ def print_report(results: list[TaskValidation]) -> None:
         "ground_truth_in_toml": sum(1 for r in results if r.has_ground_truth_in_toml),
         "tool_access": sum(1 for r in results if r.has_tool_access),
         "top_level_fields": sum(1 for r in results if r.top_level_fields_present),
+        "python_interpreter": sum(1 for r in results if r.python_interpreter_ok),
     }
     for label, count in coverage.items():
         pct = (count / total * 100) if total > 0 else 0

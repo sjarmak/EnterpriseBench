@@ -109,7 +109,7 @@ def _clone_commands(url: str, rev: str, path: str, source: str) -> list[str]:
 # ═══════════════════════════════════════════════════════════════
 
 
-def _base_image_for_languages(languages: list[str]) -> str:
+def base_image_for_languages(languages: list[str]) -> str:
     """Select Docker base image based on task's primary language."""
     if "go" in languages:
         return "golang:1.21-bookworm"
@@ -133,10 +133,74 @@ def _has_node(base_image: str) -> bool:
     return base_image.startswith("node:")
 
 
+# Provisions the interpreter every image needs: checks/*.sh shell out to
+# python3 and import eb_verify through it, so an image without one scores those
+# checkpoints 0.0 no matter what the agent answered.
+#
+# The condition tests tomllib rather than the interpreter, because both halves
+# have to hold: eb_verify.task_parser imports tomllib at package-import time,
+# and jammy's python3 is 3.10, which predates it. So one guard covers a base
+# with no python (temurin, ubuntu, dotnet -> install both) and a base whose
+# python is too old for tomllib (-> python3-tomli supplies the fallback).
+#
+# Guarding on the base's actual behaviour rather than an allowlist of image
+# names means a base that ships its own interpreter (python:3.11-bookworm and
+# the other buildpack-deps images) is left alone, and a base nobody has
+# classified yet still comes out correct.
+_PYTHON_PROVISION = (
+    "if ! python3 -c 'import tomllib' >/dev/null 2>&1; "
+    "then apt-get install -y python3 python3-tomli; fi"
+)
+
+# Base images that ship a usable python3 (3.11+, inherited from buildpack-deps)
+# before _setup_lines runs. Verified with `docker run <image> python3 -V`.
+#
+# Purely descriptive: the guard above does not consult this, so a wrong or
+# stale entry cannot produce a broken image — it only makes image_provides_python
+# more conservative, which costs a loud preflight error rather than a silent 0.0.
+_BASES_WITH_PYTHON = frozenset(
+    {
+        "golang:1.21-bookworm",
+        "python:3.11-bookworm",
+        "rust:1.75-bookworm",
+        "node:20-bookworm",
+        "gcc:13-bookworm",
+    }
+)
+
+# True when a RUN line apt-installs python3. Continuations are collapsed before
+# matching, so the answer tracks what the shell would run rather than how the
+# line happens to be wrapped.
+_PYTHON_INSTALL_RE = re.compile(r"\bapt-get install\b.*\bpython3\b")
+
+
+def _provisions_python(setup_lines: list[str]) -> bool:
+    """True if *setup_lines* apt-install a python3."""
+    logical = "\n".join(setup_lines).replace("\\\n", " ")
+    return any(_PYTHON_INSTALL_RE.search(line) for line in logical.splitlines())
+
+
+def image_provides_python(languages: list[str]) -> bool:
+    """True if the image generated for *languages* will have python3 on PATH.
+
+    Either the base already carries one, or _setup_lines installs one. The
+    second half is read off the lines the generator actually emits rather than
+    re-derived, so dropping the provisioning flips this to False for the bases
+    that depend on it — and preflight then rejects those tasks outright instead
+    of letting their checkpoints score 0.0 with no explanation.
+    """
+    base_image = base_image_for_languages(languages)
+    return base_image in _BASES_WITH_PYTHON or _provisions_python(
+        _setup_lines(base_image)
+    )
+
+
 def _setup_lines(base_image: str) -> list[str]:
     """Common setup: install system packages, Node.js 20 (if needed), and Claude Code CLI."""
     lines = [
-        "RUN apt-get update && apt-get install -y git curl ca-certificates jq xz-utils && rm -rf /var/lib/apt/lists/*",
+        "RUN apt-get update && apt-get install -y git curl ca-certificates jq xz-utils && \\",
+        f"    {_PYTHON_PROVISION} && \\",
+        "    rm -rf /var/lib/apt/lists/*",
         "",
     ]
     if not _has_node(base_image):
@@ -174,7 +238,7 @@ def generate_standard_dockerfile(task_data: dict, *, source: str = "mirror") -> 
     languages = task_data.get("metadata", {}).get("languages", [])
 
     # Choose base image based on primary language
-    base_image = _base_image_for_languages(languages)
+    base_image = base_image_for_languages(languages)
 
     clone_label = "upstream repos" if source == "upstream" else "sg-evals mirrors"
     lines = [
@@ -261,7 +325,7 @@ def generate_hybrid_dockerfile(task_data: dict, *, source: str = "mirror") -> st
     env_name, env_value = sourcegraph_env_var(repos)
 
     # Same base image logic as standard
-    base_image = _base_image_for_languages(languages)
+    base_image = base_image_for_languages(languages)
 
     lines = [
         f"# EnterpriseBench task: {task_info.get('id', 'unknown')}",
