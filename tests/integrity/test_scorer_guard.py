@@ -63,6 +63,16 @@ class TestIsValidScore:
 # ---------------------------------------------------------------------------
 
 
+def _cp(**fields) -> dict:
+    """A checkpoint as test_runner.sh emits it.
+
+    ``verifier_ran`` defaults to True — "the verifier reached a verdict" — so
+    each test states only the property it is actually about. Tests that are
+    specifically about the attestation override it explicitly.
+    """
+    return {"name": "cp1", "score": 0.0, "passed": False, "verifier_ran": True, **fields}
+
+
 class TestGuardVerifierOutput:
     def test_empty_output_is_infra_not_zero(self) -> None:
         """broken-test.sh-false-zero (apfp #2): empty stdout is an infra error,
@@ -99,20 +109,66 @@ class TestGuardVerifierOutput:
         assert isinstance(out, InfraError)
         assert out.reason == "verifier_reported_error"
 
+    # --- primary gate: positive attestation (bead glka.2) -------------------
+    #
+    # These fire on the ABSENCE of "the verifier reached a verdict", so an
+    # unrecognised never-ran mode fails closed instead of becoming a false 0.0.
+
+    def test_missing_attestation_is_infra_not_zero(self) -> None:
+        """A checkpoint that cannot attest it ran is refused a score — this is
+        what makes an unknown future never-ran mode fail closed."""
+        payload = json.dumps(
+            {
+                "task_score": 0.0,
+                "all_passed": False,
+                "checkpoints": [{"name": "cp1", "score": 0.0, "passed": False, "detail": "x"}],
+            }
+        )
+        out = guard_verifier_output(payload, returncode=1)
+        assert isinstance(out, InfraError)
+        assert out.reason == "verifier_did_not_run"
+        assert out.context["checkpoint"] == "cp1"
+
+    def test_false_attestation_is_infra_not_zero(self) -> None:
+        """The silent variant: the verifier swallowed a missing interpreter and
+        printed a well-formed 0.0 with exit 0. Only the attestation catches it —
+        there is nothing in the score, the exit code, or the detail to key on."""
+        payload = json.dumps(
+            {
+                "task_score": 0.0,
+                "all_passed": False,
+                "checkpoints": [_cp(verifier_ran=False, exit_code=0, detail="")],
+            }
+        )
+        out = guard_verifier_output(payload, returncode=0)
+        assert isinstance(out, InfraError)
+        assert out.reason == "verifier_did_not_run"
+
+    def test_exit_127_is_infra_even_when_attested(self) -> None:
+        """Secondary net: a not-found command raised outside bash's handler
+        still routes to infra, independently of the primary gate."""
+        payload = json.dumps(
+            {"task_score": 0.0, "checkpoints": [_cp(exit_code=127, detail="python3: not found")]}
+        )
+        out = guard_verifier_output(payload, returncode=1)
+        assert isinstance(out, InfraError)
+        assert out.reason == "verifier_command_not_found"
+
     def test_docker_cp_module_not_found_is_infra(self) -> None:
         """docker-cp-module-not-found (bead hktt/pt0n): a checkpoint whose
-        detail carries the harness-import failure is infra, not a real 0."""
+        detail carries the harness-import failure is infra, not a real 0.
+
+        Attested as having run, so this proves the tertiary signature net still
+        fires on its own rather than being masked by the primary gate."""
         payload = json.dumps(
             {
                 "task_score": 0.0,
                 "all_passed": False,
                 "checkpoints": [
-                    {
-                        "name": "error_source",
-                        "score": 0.0,
-                        "passed": False,
-                        "detail": "ModuleNotFoundError: No module named 'eb_verify.plugins'",
-                    }
+                    _cp(
+                        name="error_source",
+                        detail="ModuleNotFoundError: No module named 'eb_verify.plugins'",
+                    )
                 ],
             }
         )
@@ -125,9 +181,7 @@ class TestGuardVerifierOutput:
         payload = json.dumps(
             {
                 "task_score": 0.0,
-                "checkpoints": [
-                    {"name": "cp1", "score": 0.0, "detail": f"{INFRA_SENTINEL}: git probe failed"}
-                ],
+                "checkpoints": [_cp(detail=f"{INFRA_SENTINEL}: git probe failed")],
             }
         )
         out = guard_verifier_output(payload, returncode=0)
@@ -141,7 +195,7 @@ class TestGuardVerifierOutput:
             {
                 "task_score": 0.75,
                 "all_passed": False,
-                "checkpoints": [{"name": "cp1", "score": 0.75, "passed": True, "detail": "ok"}],
+                "checkpoints": [_cp(score=0.75, passed=True, detail="ok")],
             }
         )
         out = guard_verifier_output(payload, returncode=0)
@@ -157,12 +211,10 @@ class TestGuardVerifierOutput:
                 "task_score": 0.0,
                 "all_passed": False,
                 "checkpoints": [
-                    {
-                        "name": "root_cause",
-                        "score": 0.0,
-                        "passed": False,
-                        "detail": "agent answer wrong: expected ImportError in requests.compat",
-                    }
+                    _cp(
+                        name="root_cause",
+                        detail="agent answer wrong: expected ImportError in requests.compat",
+                    )
                 ],
             }
         )
@@ -177,9 +229,7 @@ class TestGuardVerifierOutput:
             {
                 "task_score": 0.0,
                 "all_passed": False,
-                "checkpoints": [
-                    {"name": "cp1", "score": 0.0, "passed": False, "detail": "assertion failed"}
-                ],
+                "checkpoints": [_cp(detail="assertion failed")],
             }
         )
         out = guard_verifier_output(payload, returncode=1)

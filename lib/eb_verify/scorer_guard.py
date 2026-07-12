@@ -40,6 +40,11 @@ _HARNESS_IMPORT_FAILURE = "No module named 'eb_verify"
 # Explicit, harness-specific detail signatures that mean "the verifier did not
 # really run". Deliberately NOT a generic traceback/ImportError match — those
 # occur legitimately in error-provenance task subjects.
+#
+# These are a SECONDARY net only. A denylist can only ever name the never-ran
+# modes we have already been burned by (s58f, then hktt/pt0n, then the missing
+# interpreter) — it is silent on the next one. The primary gate is the positive
+# attestation below.
 _INFRA_DETAIL_SIGNATURES = (INFRA_SENTINEL, _HARNESS_IMPORT_FAILURE)
 
 # Machine key for the no-verdict rule below. The shell scoring path
@@ -50,6 +55,15 @@ NO_VERDICT_REASON = "verifier_did_not_run"
 # Cap on evidence copied into an InfraError, so a runaway verifier cannot flood
 # reward.txt and the results payload.
 _EVIDENCE_CHARS = 2000
+
+# Positive attestation, emitted per checkpoint by test_runner.sh: "this verifier
+# reached a verdict". Its ABSENCE — not the presence of any known-bad string —
+# is what routes a checkpoint to an infra error, so an unrecognised never-ran
+# mode fails closed (loudly, into the re-run channel) instead of open (silently,
+# into a false 0.0). test_runner.sh is docker-cp'd fresh over /workspace/test.sh
+# on every run, so it is the sole producer of the JSON parsed here and the two
+# cannot drift apart.
+_ATTESTATION = "verifier_ran"
 
 
 @dataclass(frozen=True)
@@ -155,8 +169,9 @@ def guard_verifier_output(
     * the parsed result carries a top-level ``error`` key — test.sh emits this
       for "cannot access repo" / "no .verifiers/ directory" (previously read by
       no caller, so it became a false 0.0);
-    * a checkpoint ``detail`` carries an explicit infra signature
-      (:data:`INFRA_SENTINEL` or the docker-cp harness-import failure).
+    * a checkpoint does not attest ``verifier_ran: true`` — the primary gate;
+    * a checkpoint exited 127, or its ``detail`` carries an explicit infra
+      signature (:data:`INFRA_SENTINEL` / the docker-cp harness-import failure).
 
     Otherwise the parsed scores dict is returned unchanged.
     """
@@ -199,13 +214,40 @@ def guard_verifier_output(
     for cp in scores.get("checkpoints", []):
         if not isinstance(cp, dict):
             continue
+        name = cp.get("name", "?")
+
+        # PRIMARY GATE — positive attestation. A checkpoint that cannot state it
+        # reached a verdict does not get scored, whatever number it carries.
+        if cp.get(_ATTESTATION) is not True:
+            return InfraError(
+                reason="verifier_did_not_run",
+                stage=stage,
+                detail=(
+                    f"checkpoint {name!r} carries no {_ATTESTATION}=true "
+                    f"attestation — the verifier did not reach a verdict, so its "
+                    f"score is not a measurement of the agent"
+                ),
+                context={"checkpoint": cp.get("name", "")},
+            )
+
+        # SECONDARY — a not-found command surfaced by something outside bash's
+        # command_not_found_handle, so the runner could not attest against it.
+        if cp.get("exit_code") == 127:
+            return InfraError(
+                reason="verifier_command_not_found",
+                stage=stage,
+                detail=f"checkpoint {name!r} exited 127 (command not found)",
+                context={"checkpoint": cp.get("name", ""), "returncode": 127},
+            )
+
+        # TERTIARY — a verifier that explicitly declared its own harness failure.
         sig = _detail_infra_signature(str(cp.get("detail", "")))
         if sig is not None:
             return InfraError(
                 reason="verifier_crash",
                 stage=stage,
                 detail=(
-                    f"checkpoint {cp.get('name', '?')!r} reported a verifier "
+                    f"checkpoint {name!r} reported a verifier "
                     f"infra failure (signature: {sig!r})"
                 ),
                 context={"checkpoint": cp.get("name", ""), "signature": sig},
