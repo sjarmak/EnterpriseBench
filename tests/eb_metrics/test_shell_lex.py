@@ -199,3 +199,22 @@ def test_unterminated_subst_drops_the_partial_word() -> None:
 def test_empty_command_lexes_to_nothing() -> None:
     assert lex("") == []
     assert lex("   \t  ") == []
+
+
+def test_pathological_nesting_does_not_blow_the_stack() -> None:
+    # A substitution inside a quoted run inside a substitution is mutual
+    # recursion (_match_paren -> _scan_double -> _scan_dollar_paren). Trace
+    # commands are model-authored and this parser is not allowed to raise on
+    # them: a RecursionError here would abort a whole scoring run, and the run
+    # that dies is the one that dies *silently* in a batch rescore.
+    # Deeper than _MAX_NEST reads as malformed, which the module already
+    # defines as "drop the partial word" rather than "guess".
+    deep = '$("' * 5000 + "cat a.py" + '")' * 5000
+    assert lex(deep) == []
+
+
+def test_real_nesting_within_the_bound_still_lexes() -> None:
+    # The bound must not cost a command anyone would actually write: a
+    # substitution inside a quoted run is the shape the bound guards, and the
+    # one-deep case is ordinary.
+    assert Token("cat a.py", SUBST) in lex('echo "$(cat a.py)"')

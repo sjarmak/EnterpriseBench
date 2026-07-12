@@ -71,6 +71,14 @@ _OPERATORS = (
 )
 _OP_START = frozenset("<>&|;()")
 _DQUOTE_ESCAPABLE = '"\\$`\n'
+# A substitution inside a quoted run inside a substitution recurses
+# (_match_paren -> _scan_double -> _scan_dollar_paren -> _match_paren). Commands
+# come from model-authored traces, so the nesting is not ours to trust: past this
+# depth the command reads as malformed, which this module already answers by
+# dropping the partial word rather than guessing. Unbounded, it would instead
+# raise RecursionError and abort the scoring run. Real commands nest one or two
+# deep; 64 is far past anything a corpus has shown.
+_MAX_NEST = 64
 _ANSI_C_ESCAPES = {
     "n": "\n", "t": "\t", "r": "\r", "a": "\a", "b": "\b", "f": "\f",
     "v": "\v", "e": "\x1b", "E": "\x1b", "0": "\0", "\\": "\\", "'": "'",
@@ -179,12 +187,16 @@ def _match_operator(command: str, i: int) -> str | None:
     return next((op for op in _OPERATORS if command.startswith(op, i)), None)
 
 
-def _scan_double(command: str, i: int, buf: list[str], tokens: list[Token]) -> int | None:
+def _scan_double(
+    command: str, i: int, buf: list[str], tokens: list[Token], depth: int = 0
+) -> int | None:
     """Consume a double-quoted run at ``i``; return the index after its close.
 
     Metacharacters inside are data, but substitutions are still live — so this
     emits ``subst`` tokens for any ``$(...)``/backtick it passes over.
     """
+    if depth > _MAX_NEST:
+        return None
     n = len(command)
     j = i + 1
     while j < n:
@@ -201,7 +213,7 @@ def _scan_double(command: str, i: int, buf: list[str], tokens: list[Token]) -> i
                 return None
             j = k
         elif c == "$" and command.startswith("$(", j):
-            k = _scan_dollar_paren(command, j, tokens)
+            k = _scan_dollar_paren(command, j, tokens, depth + 1)
             if k is None:
                 return None
             j = k
@@ -251,13 +263,17 @@ def _scan_backtick(command: str, i: int, tokens: list[Token]) -> int | None:
     return None  # unterminated
 
 
-def _scan_dollar_paren(command: str, i: int, tokens: list[Token]) -> int | None:
+def _scan_dollar_paren(
+    command: str, i: int, tokens: list[Token], depth: int = 0
+) -> int | None:
     """Consume ``$(...)`` at ``i``, emitting its inner text as a ``subst``.
 
     ``$((...))`` is arithmetic, not a command: it is skipped and emits nothing.
     """
+    if depth > _MAX_NEST:
+        return None
     arithmetic = command.startswith("$((", i)
-    close = _match_paren(command, i + 1)
+    close = _match_paren(command, i + 1, depth)
     if close is None:
         return None
     if not arithmetic:
@@ -265,13 +281,15 @@ def _scan_dollar_paren(command: str, i: int, tokens: list[Token]) -> int | None:
     return close + 1
 
 
-def _match_paren(command: str, i: int) -> int | None:
+def _match_paren(command: str, i: int, depth: int = 0) -> int | None:
     """Index of the ``)`` closing the ``(`` at ``i``, or ``None`` if unbalanced.
 
     Parens inside quotes are data — ``$(grep ')' a.py)`` closes at the last one.
     """
+    if depth > _MAX_NEST:
+        return None
     n = len(command)
-    depth = 0
+    nesting = 0
     j = i
     while j < n:
         c = command[j]
@@ -286,16 +304,16 @@ def _match_paren(command: str, i: int) -> int | None:
             # Scan the quoted run only to step over it — its content and any
             # substitution inside it are re-lexed when the caller recurses into
             # this substitution's text, so both outputs are discarded here.
-            k = _scan_double(command, j, [], [])
+            k = _scan_double(command, j, [], [], depth + 1)
             if k is None:
                 return None
             j = k
         else:
             if c == "(":
-                depth += 1
+                nesting += 1
             elif c == ")":
-                depth -= 1
-                if depth == 0:
+                nesting -= 1
+                if nesting == 0:
                     return j
             j += 1
     return None
