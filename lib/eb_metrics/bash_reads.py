@@ -150,7 +150,16 @@ def _sub_command_read_files(sub: list[Token], depth: int) -> list[str]:
 
 
 def _program_read_files(words: list[str], depth: int) -> list[str]:
-    """Files read by a single program invocation, given its words."""
+    """Files read by a single program invocation, given its words.
+
+    The depth bound lives here because this is the one point *every* recursive
+    path crosses. ``$(…)`` and ``sh -c`` re-enter :func:`bash_read_files`, which
+    bounds itself, but ``find -exec find -exec …`` recurses back through here
+    without ever passing through it — so bounding only there left that shape to
+    climb to Python's own recursion limit and raise.
+    """
+    if depth > _MAX_SUBST_DEPTH:
+        return []
     words = _strip_wrappers(words)
     if not words:
         return []

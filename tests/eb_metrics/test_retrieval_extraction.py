@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from eb_metrics.bash_reads import bash_read_files
 from eb_metrics.retrieval_extraction import (
     compute_run_ir_scores,
     required_files_from_ground_truth,
@@ -422,6 +423,24 @@ def test_bash_heredoc_body_excluded_but_redirect_target_kept(tmp_path: Path) -> 
     # The two rules meet: the here-doc body is dropped (it was written, not
     # read) while the redirect target stays counted (EnterpriseBench-qefr).
     assert _bash_files(tmp_path, "cat <<'EOF' > out.txt\nsrc/fake.py\nEOF") == ["out.txt"]
+
+
+def test_bash_nested_find_exec_is_depth_bounded() -> None:
+    # `find -exec find -exec …` recurses through _program_read_files, which is
+    # the one path that does NOT re-enter bash_read_files — so before the guard
+    # moved there it climbed past _MAX_SUBST_DEPTH to Python's own recursion
+    # limit and raised. Extraction must be *total*: a scoring run reads whatever
+    # commands a model happened to emit, and one RecursionError aborts the whole
+    # batch rescore in iter_run_retrievals, not just the offending trial.
+    command = "find ." + " -exec find ." * 500 + " -exec cat x.py \\;" + " \\;" * 500
+    assert bash_read_files(command) == []  # bounded, and must not raise
+
+
+def test_bash_shallow_find_exec_still_reads() -> None:
+    # The bound must not cost the real shape it guards.
+    assert bash_read_files("find . -name '*.yaml' -exec grep -l db cfg.yaml \\;") == [
+        "cfg.yaml"
+    ]
 
 
 # ---------------------------------------------------------------------------
