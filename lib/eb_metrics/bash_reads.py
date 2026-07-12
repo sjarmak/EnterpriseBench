@@ -30,7 +30,16 @@ import re
 from itertools import groupby
 from typing import Mapping
 
-from eb_metrics.shell_lex import HEREDOC_OPS, OP, SEPARATORS, SUBST, WORD, Token, lex
+from eb_metrics.shell_lex import (
+    HEREDOC_OPS,
+    OP,
+    SEPARATORS,
+    SUBST,
+    SUBST_MARK,
+    WORD,
+    Token,
+    lex,
+)
 
 __all__ = ["bash_read_files"]
 
@@ -103,6 +112,14 @@ _VALUE_FLAGS: Mapping[str, frozenset[str]] = {
 
 _ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _GLOB_CHARS = "*?"
+# Redirects whose operand is a descriptor, not a path (`2>&1`), and the full set
+# a leading fd number can attach to (`2>`, `2>>`, `2<`).
+_FD_DUP_OPS = frozenset({">&", "<&"})
+_REDIRECT_OPS = frozenset({">", ">>", "<", ">&", "<&", "&>"})
+# `{}` is the placeholder `find -exec` and `xargs -I` substitute the matched file
+# into. It names whatever the filesystem matched, which the command text does not
+# contain — the same floor as an unexpanded glob (EnterpriseBench-jqyhg).
+_PLACEHOLDER = "{}"
 # `sh -c "sh -c ..."` nests in principle; in practice two levels is already
 # exotic. The bound just stops a pathological trace from recursing without end.
 _MAX_SUBST_DEPTH = 4
@@ -183,12 +200,21 @@ def _command_words(sub: list[Token]) -> list[str]:
     operand of every other redirect stays, which is what keeps ``> out.txt``
     counted (EnterpriseBench-qefr) and ``< in.py`` counted as the genuine read
     it is.
+
+    File descriptors are not files. ``2>/dev/null`` redirects fd 2, so the ``2``
+    in front of the operator is part of the redirect, not an argument; ``>&1``
+    dups fd 1, so its operand is a descriptor rather than a path. Both are
+    dropped — today a filter in another module happens to reject them for having
+    no extension, but this function promises paths, and a promise kept by
+    somebody else's filter is not kept.
     """
     words: list[str] = []
     skip_operand = False
     for token in sub:
         if token.kind == OP:
-            skip_operand = token.text in HEREDOC_OPS
+            if token.text in _REDIRECT_OPS and words and words[-1].isdigit():
+                words.pop()  # a leading fd number, e.g. the `2` of `2>`
+            skip_operand = token.text in HEREDOC_OPS or token.text in _FD_DUP_OPS
         elif token.kind == WORD:
             if skip_operand:
                 skip_operand = False
@@ -283,10 +309,27 @@ def _read_command_args(cmd: str, args: list[str]) -> list[str]:
                 i += 1  # a count/glob/assignment — neither file nor pattern
         elif not pattern_seen:
             pattern_seen = True  # the first positional is the pattern, not a file
-        elif not any(ch in arg for ch in _GLOB_CHARS):
+        elif _names_a_concrete_path(arg):
             files.append(arg)
         i += 1
     return files
+
+
+def _names_a_concrete_path(arg: str) -> bool:
+    """Does ``arg`` name one file the *command text* determines?
+
+    A glob, a ``{}`` placeholder, and a substitution's result are all decided by
+    the filesystem or by another command's output, not by the text in front of
+    us. Crediting them would either invent a path (``$(pwd)/x.py`` with the
+    substitution erased is ``/x.py``, which nothing opened) or occupy a rank slot
+    with something that can never match a ground-truth path. Contributing nothing
+    is the documented floor (EnterpriseBench-jqyhg), and it is the honest answer.
+    """
+    return (
+        SUBST_MARK not in arg
+        and _PLACEHOLDER not in arg
+        and not any(ch in arg for ch in _GLOB_CHARS)
+    )
 
 
 def _is_flag(word: str) -> bool:

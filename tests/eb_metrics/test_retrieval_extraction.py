@@ -399,6 +399,11 @@ def test_bash_read_files_rejects_non_reads(
             [],
             id="find-exec-placeholder",
         ),
+        pytest.param(
+            "xargs -I{} grep -l foo {}",
+            [],
+            id="xargs-replace-placeholder",
+        ),
     ],
 )
 def test_bash_read_files_known_floor(
@@ -423,6 +428,53 @@ def test_bash_heredoc_body_excluded_but_redirect_target_kept(tmp_path: Path) -> 
     # The two rules meet: the here-doc body is dropped (it was written, not
     # read) while the redirect target stays counted (EnterpriseBench-qefr).
     assert _bash_files(tmp_path, "cat <<'EOF' > out.txt\nsrc/fake.py\nEOF") == ["out.txt"]
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        # A substitution glued to literal text makes ONE word whose value the
+        # command text does not contain. Erasing the substitution and keeping
+        # the leftover literal invents a path the agent never opened — the same
+        # class of fabrication as crediting an unexpanded glob, and the exact
+        # thing the module's "no guessing" contract forbids. These are mainstream
+        # idioms, not corner cases.
+        pytest.param('cat "$(pwd)/config.py"', [], id="subst-prefix-quoted"),
+        pytest.param("cat $(pwd)/x.py", [], id="subst-prefix-bare"),
+        pytest.param("cat src/$(basename x).py", [], id="subst-infix"),
+        pytest.param("cat pre$(echo mid)post.py", [], id="subst-middle"),
+        pytest.param("cat `pwd`/x.py", [], id="subst-prefix-backtick"),
+        # ...but a read INSIDE the substitution is still real and still counted.
+        pytest.param("cat $(cat inner.py)/x.py", ["inner.py"], id="subst-inner-read-kept"),
+        # A substitution standing alone is a separate argument, not glued to
+        # anything: the words around it keep their own meaning.
+        pytest.param("echo $(cat x.py)", ["x.py"], id="subst-standalone"),
+        pytest.param("cat $(cmd) file.py", ["file.py"], id="subst-then-real-file"),
+        # Regression the fix buys back: the substitution occupies the pattern
+        # slot, so the file after it is a FILE. Erasing the substitution made
+        # grep read `f.py` as its pattern and the real read vanished.
+        pytest.param("grep $(get_pattern) f.py", ["f.py"], id="subst-as-grep-pattern"),
+    ],
+)
+def test_bash_substitution_adjacent_to_text_is_not_a_file(
+    command: str, expected: list[str]
+) -> None:
+    assert bash_read_files(command) == expected
+
+
+def test_bash_backtick_keeps_non_special_escapes() -> None:
+    # POSIX: inside backquotes a backslash keeps its literal value except before
+    # $, ` or \. Unescaping everything splits one escaped-space filename into
+    # two fabricated reads.
+    assert bash_read_files(r"echo `cat foo.txt\ bar.py`") == ["foo.txt bar.py"]
+
+
+def test_bash_fd_redirect_digits_are_not_files() -> None:
+    # `2>` is a redirect on fd 2, not the file "2"; `>&1` dups fd 1, not "1".
+    # Inert today only because a filter in another module drops extension-less
+    # candidates — bash_read_files promises paths, so it should not emit these.
+    assert bash_read_files("cat a.py 2>/dev/null") == ["a.py", "/dev/null"]
+    assert bash_read_files("cat a.py 2>&1") == ["a.py"]
 
 
 def test_bash_nested_find_exec_is_depth_bounded() -> None:

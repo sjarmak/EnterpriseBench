@@ -38,12 +38,21 @@ Known limitations, both undercounts:
   ``/workspace/<repo>/`` retrieved path. See ``tests/eb_metrics/test_ir_metrics.py``.
 * **The Bash floor.** Some commands do not name the files they read: ``xargs``
   takes them on stdin, a glob (``packages/*/package.json``) is expanded by the
-  filesystem, and ``find … -exec cat {} \;`` substitutes whatever find matched.
-  No lexer can resolve these from the command text — the file set is not *in*
-  the text. They extract to nothing, which understates the Bash-mediated arms.
+  filesystem, ``find … -exec cat {} \;`` substitutes whatever find matched, and
+  a path built around a command substitution (``cat "$(pwd)/config.py"``) is
+  finished by another command's output. No lexer can resolve these from the
+  command text — the file set is not *in* the text. They extract to nothing,
+  which understates the Bash-mediated arms.
+
+  The alternative is worse than the floor: erase the substitution and keep the
+  leftover literal and you get ``/config.py``, a path nothing opened. An
+  undercount is a known bias; a fabricated read is a wrong number that looks
+  like a right one.
+
   The only sound recovery is to read the command's *output* from the trace
   (the paths grep printed), tracked as EnterpriseBench-jqyhg. Documented rather
-  than papered over: ``test_bash_read_files_known_floor`` pins the shapes, so
+  than papered over: ``test_bash_read_files_known_floor`` and
+  ``test_bash_substitution_adjacent_to_text_is_not_a_file`` pin the shapes, so
   the day that recovery lands, it announces itself there.
 """
 
@@ -115,7 +124,6 @@ _GH_URL_IN_TEXT_RE = re.compile(
 _BACKTICK_PATH_RE = re.compile(r"`([a-zA-Z][\w/.-]+/[\w.-]+\.\w{1,5})`")
 _PATH_PREFIX_RE = re.compile(r"(?:^|\n|\\n)Path: ([^\n\\]+\.\w{1,5})")
 _QUERY_PATH_RE = re.compile(r"([a-zA-Z][\w/.-]+/[\w.-]+\.\w{1,5})")
-
 
 
 def _looks_like_file(path: str) -> bool:

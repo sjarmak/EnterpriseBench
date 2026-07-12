@@ -35,11 +35,30 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["OP", "SUBST", "WORD", "SEPARATORS", "HEREDOC_OPS", "Token", "lex"]
+__all__ = [
+    "OP",
+    "SUBST",
+    "SUBST_MARK",
+    "WORD",
+    "SEPARATORS",
+    "HEREDOC_OPS",
+    "Token",
+    "lex",
+]
 
 WORD = "word"
 OP = "op"
 SUBST = "subst"
+
+# Stands in for a substitution's *result* at the position it occupied inside a
+# word. A substitution glued to literal text makes one word — `$(pwd)/x.py` is a
+# single argument — whose value the command text does not contain. Dropping the
+# substitution and keeping the leftover literal would hand `/x.py` to the caller
+# as a path the agent opened, which it never did; the mark is what lets the
+# caller tell that fabrication apart from a genuine literal argument and drop it
+# (the same floor as an unexpanded glob). NUL cannot occur in a real shell word,
+# so it can never collide with one.
+SUBST_MARK = "\x00"
 
 
 @dataclass(frozen=True)
@@ -71,6 +90,7 @@ _OPERATORS = (
 )
 _OP_START = frozenset("<>&|;()")
 _DQUOTE_ESCAPABLE = '"\\$`\n'
+_BACKTICK_ESCAPABLE = "$`\\"
 # A substitution inside a quoted run inside a substitution recurses
 # (_match_paren -> _scan_double -> _scan_dollar_paren -> _match_paren). Commands
 # come from model-authored traces, so the nesting is not ours to trust: past this
@@ -162,11 +182,15 @@ def lex(command: str) -> list[Token]:
             j = _scan_backtick(command, i, tokens)
             if j is None:
                 return tokens  # unterminated
+            buf.append(SUBST_MARK)
+            in_word = True
             i = j
         elif c == "$" and command.startswith("$(", i):
             j = _scan_dollar_paren(command, i, tokens)
             if j is None:
                 return tokens  # unterminated
+            buf.append(SUBST_MARK)
+            in_word = True
             i = j
         elif c in _OP_START and (op := _match_operator(command, i)):
             flush()
@@ -211,11 +235,13 @@ def _scan_double(
             k = _scan_backtick(command, j, tokens)
             if k is None:
                 return None
+            buf.append(SUBST_MARK)
             j = k
         elif c == "$" and command.startswith("$(", j):
             k = _scan_dollar_paren(command, j, tokens, depth + 1)
             if k is None:
                 return None
+            buf.append(SUBST_MARK)
             j = k
         else:
             buf.append(c)
@@ -246,7 +272,13 @@ def _scan_ansi_c(command: str, i: int, buf: list[str]) -> int | None:
 
 
 def _scan_backtick(command: str, i: int, tokens: list[Token]) -> int | None:
-    """Consume a backtick substitution at ``i``, emitting its inner text."""
+    """Consume a backtick substitution at ``i``, emitting its inner text.
+
+    Inside backquotes a backslash keeps its literal value except before ``$``,
+    ``` ` ``` or ``\\`` (POSIX). Unescaping everything would strip the backslash
+    from ``cat foo.txt\\ bar.py`` before the inner text is re-lexed, splitting one
+    escaped-space filename into two files the agent never opened.
+    """
     n = len(command)
     inner: list[str] = []
     j = i + 1
@@ -255,7 +287,10 @@ def _scan_backtick(command: str, i: int, tokens: list[Token]) -> int | None:
             tokens.append(Token("".join(inner), SUBST))
             return j + 1
         if command[j] == "\\" and j + 1 < n:
-            inner.append(command[j + 1])
+            if command[j + 1] in _BACKTICK_ESCAPABLE:
+                inner.append(command[j + 1])  # the backslash was the escape
+            else:
+                inner.extend(command[j : j + 2])  # literal backslash, kept
             j += 2
         else:
             inner.append(command[j])
