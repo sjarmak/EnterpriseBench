@@ -120,9 +120,11 @@ def load_scoring_deps() -> None:
 
     A broken dependency is under no obligation to raise ImportError: an ABI mismatch
     raises RuntimeError, a truncated shared object raises OSError, a bad C extension
-    raises SystemError, and module-level code may raise anything at all. Enumerating
-    those types is a losing game, so this catches whatever the import throws and
-    re-raises the one type callers can guard on.
+    raises SystemError. Enumerating those types is a losing game, so this catches any
+    Exception the import throws and re-raises the one type callers can guard on.
+
+    Exception, not BaseException: a KeyboardInterrupt or SystemExit arriving during the
+    import is process control, not a broken dependency, and must keep propagating.
 
     The broad catch is safe precisely because the try block holds nothing but the
     import. Scoring runs outside it, so a genuine bug in the scoring logic still

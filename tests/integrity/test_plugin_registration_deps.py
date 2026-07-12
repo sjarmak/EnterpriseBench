@@ -329,6 +329,33 @@ class TestBrokenInstallCannotKillTheRun:
         assert "RECORDED" in out, out
 
 
+    def test_process_control_still_propagates(self, tmp_path: Path) -> None:
+        """The guard stops at Exception on purpose.
+
+        A KeyboardInterrupt or SystemExit arriving mid-import is process control, not a
+        broken dependency. Swallowing it into "dependency unavailable" would make the
+        verifier unkillable and mask a deliberate exit, so it must keep propagating.
+        """
+        out = run_in_fresh_interpreter(
+            f"""
+            import pathlib
+            from eb_verify.plugins import get_validator
+
+            validator = get_validator("fact_triples")
+            try:
+                validator.validate(pathlib.Path({str(_fact_triples_workspace(tmp_path))!r}))
+                print("SWALLOWED")
+            except SystemExit:
+                print("PROPAGATED")
+            """,
+            block_deps=False,
+            extra_path=self._shadow_broken_numpy(tmp_path, "SystemExit"),
+        )
+        assert "PROPAGATED" in out, (
+            f"SystemExit was swallowed by the dependency guard: {out.strip()}"
+        )
+
+
 class TestProbeStaysCheap:
     """The probe must not undo the deferral it exists to protect."""
 
