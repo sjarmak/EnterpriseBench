@@ -10,7 +10,10 @@ set -uo pipefail
 
 WORKSPACE="/workspace"
 VERIFIER_DIR="$WORKSPACE/.verifiers"
-RESULTS_FILE="$WORKSPACE/.results.json"
+# Scoring closes $WORKSPACE to everyone but root (the grader must not be able to
+# plant an artifact for a later checkpoint), so the orchestrator redirects this
+# file to a scorer-writable path. The default stays put for standalone runs.
+RESULTS_FILE="${EB_RESULTS_FILE:-$WORKSPACE/.results.json}"
 
 # --- helpers ---
 
@@ -54,8 +57,8 @@ run_verifier() {
 
     # Pass the workspace explicitly as $1: several checks resolve
     # WORKSPACE="${1:-.}", which shadows the exported env var. Scoring runs from
-    # a root-owned cwd (the agent must not control the checks' sys.path[0]), so
-    # the "." fallback would silently zero every such check.
+    # a cwd outside the workspace (the agent must not control the checks'
+    # sys.path[0]), so the "." fallback would silently zero every such check.
     if command -v timeout >/dev/null 2>&1; then
         timeout "$timeout_sec" bash "$verifier_path" "$WORKSPACE" >"$raw_stdout_file" 2>"$raw_stderr"
         VERIFIER_EXIT=$?

@@ -141,11 +141,44 @@ AGENT_OUTPUT_DIR = f"{WORKSPACE_DIR}/agent_output"
 UNTRUSTED_SCORE_PHASES = frozenset({"verifier_infra_error", "integrity_violation"})
 NON_COMPLETE_PHASES = UNTRUSTED_SCORE_PHASES | {"agent_infra_error"}
 
-# Root-owned, empty cwd for the scoring exec. Ownership alone would not close
-# the hole: the checks shell out to `python3 -c`, whose sys.path[0] is the cwd,
-# so scoring from agent-owned /workspace lets a planted /workspace/json.py
-# hijack the grader.
+# The grader's identity. Scoring must not run as the agent (it would own the
+# grader) and must not run as root either: several checks execute code the agent
+# controls, BY DESIGN — pytest auto-loads a planted /workspace/conftest.py, git
+# runs a .gitattributes-selected textconv driver, and check_test_fails.sh runs
+# the agent's own test suite. A root grader turns any of those into a rewrite of
+# the root-owned seal for a not-yet-run checkpoint, forging the very score the
+# seal exists to protect.
+#
+# So the grading assets are owned by root and *read* by a third identity that
+# runs the checks. It can execute the grader; it cannot modify it. Agent code
+# that executes during scoring therefore gains an unprivileged uid with no path
+# back to the verifiers, the answer key, or the harness.
+SCORING_USER = "ebscorer"
+SCORING_GROUP = "ebscorer"
+SCORING_UID = 2000
+
+# Root-owned, scorer-unwritable cwd for the scoring exec. Ownership alone would
+# not close the hole: the checks shell out to `python3 -c`, whose sys.path[0] is
+# the cwd, so scoring from agent-owned /workspace lets a planted
+# /workspace/json.py hijack the grader. The cwd must stay unwritable by the
+# scoring user too, or planted code would simply hijack the *next* check's
+# import from there.
 SCORING_WORKDIR = "/opt/eb_scoring"
+
+# The one scorer-writable path: test_runner.sh's results file. Deliberately NOT
+# the cwd (see above) and deliberately not under /workspace, which is sealed
+# shut for the scoring window.
+SCORING_OUT_DIR = f"{SCORING_WORKDIR}/out"
+SCORING_RESULTS_FILE = f"{SCORING_OUT_DIR}/results.json"
+
+# /workspace during the agent's session: root-owned + sticky, world-writable so
+# the agent can create its own artifacts (it cannot unlink root-owned entries).
+WORKSPACE_MODE_SESSION = "1777"
+# /workspace during the scoring window: the agent is no longer running, so
+# nothing legitimate creates entries here. Closing the write bit denies planted
+# code, executing as the scorer, the one shared drop point it could use to plant
+# an answer artifact for a later checkpoint after reading the answer key.
+WORKSPACE_MODE_SCORING = "1755"
 
 # Git config for the scoring exec. The repos under /workspace are agent-owned
 # (cloned as USER agent), so git run by the scorer refuses them as "dubious
@@ -551,15 +584,25 @@ def _chown_to_agent(container_id: str, paths: list[str]) -> None:
 
 
 def _seal_grading_assets(container_id: str) -> None:
-    """Make the grading assets root-owned and unreachable by the agent user.
+    """Seal the grading assets: owned by root, read by the scorer, agent locked out.
 
     The agent under test previously owned its own verifiers, ground truth and
     harness library, so it could overwrite a check with a forged verdict, read
     the answer key, or delete the harness to convert a scored 0.0 into a free
     re-run (beads EnterpriseBench-8krz5, -g5k5s).
 
-    Also hardens /workspace itself and creates the root-owned scoring cwd, so
-    the scoring exec never starts in a directory the agent can write to.
+    Three parties, three privileges, and no two of them collapse into one:
+
+      root         owns the assets; the only identity that can modify them
+      SCORING_USER runs the checks; reads and executes the assets, writes none
+      agent        no access at all
+
+    That split is what makes the seal survive code execution during scoring:
+    some checks run agent-controlled code by design, so the identity running
+    them is assumed compromised, and the assets must not be writable by it.
+
+    Also hardens /workspace itself and creates the scoring cwd, so the scoring
+    exec never starts in a directory the agent — or the scorer — can write to.
 
     Raises:
         RuntimeError: if the seal cannot be applied. An unsealed run is
@@ -573,15 +616,31 @@ def _seal_grading_assets(container_id: str) -> None:
     # Sticky alone does not close it either — sticky still permits the DIRECTORY's
     # owner to unlink — so ownership must move to root as well. 1777 keeps the
     # agent able to create and delete its OWN entries.
+    #
+    # `useradd` is guaranteed present: the image built the agent user with it
+    # (dockerfile_generator). The -u/-g variants fall back to auto-allocated ids
+    # if 2000 is already taken in some base image; _assert_scoring_identity is
+    # what decides whether whatever we ended up with is actually safe.
     script = (
         f"set -e; "
-        f"mkdir -p {shlex.quote(SCORING_WORKDIR)}; "
+        f"if ! id -u {shlex.quote(SCORING_USER)} >/dev/null 2>&1; then "
+        f"  groupadd -g {SCORING_UID} {shlex.quote(SCORING_GROUP)} 2>/dev/null "
+        f"    || groupadd {shlex.quote(SCORING_GROUP)}; "
+        f"  useradd -u {SCORING_UID} -g {shlex.quote(SCORING_GROUP)} -M -s /bin/bash "
+        f"    {shlex.quote(SCORING_USER)} 2>/dev/null "
+        f"    || useradd -g {shlex.quote(SCORING_GROUP)} -M -s /bin/bash "
+        f"    {shlex.quote(SCORING_USER)}; "
+        f"fi; "
+        f"mkdir -p {shlex.quote(SCORING_OUT_DIR)}; "
         f"chown root:root {shlex.quote(SCORING_WORKDIR)}; "
-        f"chmod 700 {shlex.quote(SCORING_WORKDIR)}; "
+        f"chmod 755 {shlex.quote(SCORING_WORKDIR)}; "
+        f"chown root:{shlex.quote(SCORING_GROUP)} {shlex.quote(SCORING_OUT_DIR)}; "
+        f"chmod 770 {shlex.quote(SCORING_OUT_DIR)}; "
         f"chown root:root {shlex.quote(WORKSPACE_DIR)}; "
-        f"chmod 1777 {shlex.quote(WORKSPACE_DIR)}; "
+        f"chmod {WORKSPACE_MODE_SESSION} {shlex.quote(WORKSPACE_DIR)}; "
         f"for f in {_GRADING_PATHS_SH}; do "
-        'if [ -e "$f" ]; then chown -R root:root "$f"; chmod -R go-rwx "$f"; fi; '
+        f'if [ -e "$f" ]; then chown -R root:{shlex.quote(SCORING_GROUP)} "$f"; '
+        'chmod -R u=rwX,g=rX,o= "$f"; fi; '
         "done"
     )
     result = _docker_exec(container_id, ["bash", "-c", script], user="root")
@@ -590,7 +649,11 @@ def _seal_grading_assets(container_id: str) -> None:
             f"failed to seal grading assets {GRADING_PATHS}: "
             f"{result.stderr.strip() or 'unknown error'}"
         )
-    logger.info("Sealed grading assets root-only: %s", ", ".join(GRADING_PATHS))
+    logger.info(
+        "Sealed grading assets root-owned, %s-readable, agent-inaccessible: %s",
+        SCORING_USER,
+        ", ".join(GRADING_PATHS),
+    )
 
 
 def _assert_grading_assets_sealed(container_id: str) -> tuple[bool, str]:
@@ -647,20 +710,212 @@ def _assert_grading_assets_sealed(container_id: str) -> tuple[bool, str]:
             + ", ".join(breached.splitlines())
         )
 
-    if _agent_can_read(container_id, GROUND_TRUTH):
+    if _can_read(container_id, GROUND_TRUTH, user="agent"):
         return False, f"{GROUND_TRUTH} is readable by the agent user"
+
+    identity_ok, identity_err = _assert_scoring_identity(container_id)
+    if not identity_ok:
+        return False, identity_err
+
+    # The mirror image of the seal: assets the scorer cannot READ score every
+    # checkpoint 0.0 with no crash and no diagnostic — a silent false zero, the
+    # same failure class as the ${1:-.} workspace bug this seal already caused
+    # once. A seal that grades everything 0.0 is not a seal, it is an outage.
+    for path in (TEST_SH, GROUND_TRUTH, VERIFIER_DIR, EB_VERIFY_DIR):
+        if not _can_read(container_id, path, user=SCORING_USER):
+            return False, (
+                f"{path} is not readable by the {SCORING_USER} user — every "
+                "checkpoint would score a false 0.0"
+            )
 
     return True, ""
 
 
-def _agent_can_read(container_id: str, path: str) -> bool:
-    """Whether the AGENT user can read `path` inside the container.
+def _assert_scoring_identity(container_id: str) -> tuple[bool, str]:
+    """Verify the identity that will run the checks cannot rewrite them.
 
-    Both trust gates hinge on this one probe, in opposite directions: the agent
-    MUST be able to read its instruction file, and MUST NOT be able to read the
-    answer key.
+    The seal is only worth the identity that runs against it. Scoring as root
+    voids it outright (root ignores the mode bits it just set), and scoring as
+    the agent hands the grader to the graded. Both were live: the first shipped
+    in the original seal, the second is the bug the seal was written for.
+
+    Returns (ok, error_message).
     """
-    check = _docker_exec(container_id, ["test", "-r", path], timeout=30, user="agent")
+    scoring_user = shlex.quote(SCORING_USER)
+    script = (
+        f"suid=$(id -u {scoring_user} 2>/dev/null) "
+        f'|| {{ echo "the {SCORING_USER} user does not exist"; exit 0; }}; '
+        f'[ "$suid" = "0" ] && echo "the scoring user is root — it can rewrite '
+        f'the sealed grading assets it is grading against"; '
+        f"auid=$(id -u agent 2>/dev/null) || true; "
+        f'[ -n "$auid" ] && [ "$suid" = "$auid" ] '
+        f'&& echo "the scoring user IS the agent user — the graded party owns the grader"; '
+        f"id -nG agent 2>/dev/null | tr ' ' '\\n' | grep -qx {shlex.quote(SCORING_GROUP)} "
+        f'&& echo "the agent belongs to the {SCORING_GROUP} group — it can read the answer key"; '
+        "exit 0"
+    )
+    # workdir="/": who the grader IS is a property of the container, not of the
+    # workspace. Probing from /workspace would make this gate fail closed for a
+    # reason that has nothing to do with the identity it is checking.
+    result = _docker_exec(
+        container_id, ["bash", "-c", script], user="root", workdir="/"
+    )
+    if result.returncode != 0:
+        return False, (
+            f"could not verify the scoring identity: "
+            f"{result.stderr.strip() or 'unknown error'}"
+        )
+    breached = result.stdout.strip()
+    if breached:
+        return False, "unsafe scoring identity: " + "; ".join(breached.splitlines())
+    return True, ""
+
+
+def _reap_agent_processes(container_id: str) -> None:
+    """Kill every agent-owned process before scoring, except PID 1.
+
+    The seal denies the agent USER any write to the grader. It does not, on its
+    own, stop a process the agent LEFT RUNNING. A check that runs agent code as
+    the unprivileged scorer (pytest loading a planted conftest.py) can read the
+    answer key — legitimately, the checks need it — and hand it to a lingering
+    agent-owned daemon (`setsid … &` survives the `docker exec -u agent` that
+    started the session). That daemon still owns the agent's answer files, which
+    the workspace close leaves owner-writable, so it can rewrite the answer a
+    later checkpoint grades. Killing it removes the only identity that can write
+    a checkpoint-read path during the scoring window (the scorer cannot: the
+    answer tree is agent-owned and the workspace is closed).
+
+    PID 1 is the container's `sleep infinity`, itself running as agent; killing
+    it would stop the container mid-score, so it is spared. Enumeration is via
+    /proc so no `ps`/`pgrep` need exist in the image.
+
+    Raises:
+        RuntimeError: if agent processes cannot be enumerated. Scoring beside a
+            live agent process is not a trustworthy measurement, so this fails
+            loud rather than leaving the injection window open.
+
+    Residual (bead EnterpriseBench-8krz5, fix-candidate-3): a single reap pass
+    cannot outrace a respawner rooted at the un-killable PID 1, and it does not
+    touch the answer key an earlier chain session may already have copied to a
+    persistent drop point outside /workspace. The durable boundary is a separate
+    scoring container that never shares a filesystem, or GT, with the agent.
+    """
+    # stat -c %u on /proc/<pid> yields the process's real uid. Two wrinkles:
+    #  - Killing a parent orphans its children onto PID 1, which as `sleep
+    #    infinity` never wait()s, so one pass is not enough AND every process we
+    #    kill becomes a permanent ZOMBIE whose /proc entry still shows agent's
+    #    uid. A zombie cannot write, so it is not a live writer — the scan skips
+    #    state Z (field after the last ')' in /proc/<pid>/stat) or the run would
+    #    fail closed forever on the corpses of the processes it just reaped.
+    #  - So the loop re-kills the live (non-zombie) agent set until a scan finds
+    #    none. A benign orphan clears within a couple of passes; only a genuine
+    #    respawn loop rooted at the un-killable PID 1 survives all of them, and
+    #    that residual (fix-candidate-3) is what the caller fails closed on.
+    script = (
+        "set -u; "
+        "auid=$(id -u agent) || exit 3; "
+        # is_live_agent <pid> -> 0 if a killable agent-owned process
+        "is_live_agent() { "
+        '  [ "$1" = 1 ] && return 1; '
+        '  [ "$(stat -c %u /proc/$1 2>/dev/null)" = "$auid" ] || return 1; '
+        "  st=$(cat /proc/$1/stat 2>/dev/null) || return 1; "
+        '  state=${st##*) }; state=${state%% *}; '
+        '  [ "$state" = Z ] && return 1; '
+        "  return 0; }; "
+        "count_live() { c=0; for d in /proc/[0-9]*; do "
+        "  is_live_agent ${d#/proc/} && c=$((c+1)); done; echo $c; }; "
+        "for attempt in 1 2 3 4 5 6 7 8; do "
+        "  for d in /proc/[0-9]*; do "
+        "    is_live_agent ${d#/proc/} && kill -9 ${d#/proc/} 2>/dev/null || true; "
+        "  done; "
+        '  [ "$(count_live)" = 0 ] && break; '
+        "  sleep 0.2; "
+        "done; "
+        'echo "agent_procs_remaining=$(count_live)"'
+    )
+    result = _docker_exec(container_id, ["bash", "-c", script], user="root", workdir="/")
+    if result.returncode != 0:
+        raise RuntimeError(
+            "could not reap agent processes before scoring: "
+            f"{result.stderr.strip() or 'unknown error'}"
+        )
+    remaining = result.stdout.strip()
+    if remaining != "agent_procs_remaining=0":
+        # A survivor is a live agent-identity writer during scoring — the exact
+        # gap this reap exists to close. Fail closed; do not score beside it.
+        raise RuntimeError(
+            "agent processes survived the pre-scoring reap "
+            f"({remaining or 'unknown'}) — an agent-owned writer is live during "
+            "the scoring window; refusing to score (bead EnterpriseBench-8krz5)"
+        )
+    logger.info("Reaped agent processes before scoring (none survived)")
+
+
+def _close_workspace_for_scoring(container_id: str) -> None:
+    """Leave the scorer nothing under /workspace to write.
+
+    The seal stops planted code from rewriting the grader. On its own it does not
+    stop it from writing an *answer*: the checks must read ground_truth.json, so
+    code executing as the scorer can read it too, and any scorer-writable path a
+    later checkpoint reads back is then a forge vector. Agent-owned is NOT the
+    same as scorer-can't-write — the agent picks the modes on its own files and
+    can leave a 0777 directory behind for exactly this purpose.
+
+    So, for the scoring window: close /workspace itself, and drop the group/other
+    write bit anywhere under it the agent opened one. Owner bits are untouched,
+    so the agent keeps full access to its own tree in a later chain session. The
+    cost is one metadata traversal; only the (rare) offending entries are
+    written, so this is not the `chown -R /workspace` that is too slow to do.
+
+    Raises:
+        RuntimeError: if the lock cannot be applied. Scoring into a workspace the
+            grader can write is not a measurement.
+    """
+    script = (
+        f"set -e; "
+        f"chmod {WORKSPACE_MODE_SCORING} {shlex.quote(WORKSPACE_DIR)}; "
+        f"find {shlex.quote(WORKSPACE_DIR)} -mindepth 1 -xdev "
+        f"\\( -type d -o -type f \\) -perm /go+w -exec chmod go-w {{}} +"
+    )
+    result = _docker_exec(container_id, ["bash", "-c", script], user="root", timeout=300)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"failed to close {WORKSPACE_DIR} for scoring: "
+            f"{result.stderr.strip() or 'unknown error'}"
+        )
+
+
+def _reopen_workspace_for_agent(container_id: str) -> None:
+    """Give the agent back its write access to /workspace after scoring.
+
+    Chain tasks score between sessions and hand the same container back to the
+    agent afterwards (chain_runner), so the scoring lock must not outlive the
+    scoring window. Best-effort by design: the score is already computed, and
+    failing the run here would throw away a sound measurement over a container
+    the caller may be about to discard. Logged loudly, never swallowed.
+    """
+    result = _docker_exec(
+        container_id,
+        ["chmod", WORKSPACE_MODE_SESSION, WORKSPACE_DIR],
+        user="root",
+    )
+    if result.returncode != 0:
+        logger.error(
+            "failed to reopen %s for the agent after scoring (a chain's next "
+            "session may be unable to write): %s",
+            WORKSPACE_DIR,
+            result.stderr.strip() or "unknown error",
+        )
+
+
+def _can_read(container_id: str, path: str, user: str) -> bool:
+    """Whether `user` can read `path` inside the container.
+
+    Three trust gates hinge on this one probe, in opposing directions: the agent
+    MUST be able to read its instruction file, MUST NOT be able to read the
+    answer key, and the scorer MUST be able to read the grader it runs.
+    """
+    check = _docker_exec(container_id, ["test", "-r", path], timeout=30, user=user)
     return check.returncode == 0
 
 
@@ -673,7 +928,7 @@ def _assert_agent_readable(container_id: str, paths: list[str]) -> tuple[bool, s
     (bead EnterpriseBench-s58f).
     """
     for path in paths:
-        if not _agent_can_read(container_id, path):
+        if not _can_read(container_id, path, user="agent"):
             return False, (
                 f"agent user cannot read {path} "
                 "(EACCES or missing) — run is INVALID, not a real 0.0 score"
@@ -1107,25 +1362,39 @@ def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
 
     logger.info("Running checkpoint verifiers (timeout=%ds)...", verifier_timeout)
 
-    # Scoring runs as root from a root-owned cwd: the image ends with
-    # `USER agent`, so an exec without -u would run the grader as the very user
-    # it is grading, and the checks' `python3 -c` calls put the cwd on
-    # sys.path[0]. PYTHONSAFEPATH is defence-in-depth on py>=3.11 images.
-    result = _docker_exec(
-        container_id,
-        [
-            "bash",
-            "-c",
-            f"export WORKSPACE={shlex.quote(WORKSPACE_DIR)} "
-            f"TASK_DIR={shlex.quote(TASK_DIR)} "
-            f"PYTHONPATH={shlex.quote(EB_VERIFY_DIR)}:${{PYTHONPATH:-}} "
-            f"PYTHONSAFEPATH=1 {GIT_SCORING_ENV}; "
-            f"bash {shlex.quote(TEST_SH)}",
-        ],
-        timeout=verifier_timeout,
-        workdir=SCORING_WORKDIR,
-        user="root",
-    )
+    # Scoring runs as SCORING_USER from a cwd neither it nor the agent can write.
+    # Not as `agent` (the image ends with `USER agent`, so an exec without -u
+    # would run the grader as the very user it is grading) and not as root: the
+    # checks execute agent-controlled code by design, and a root grader turns
+    # that into a rewrite of the seal. PYTHONSAFEPATH keeps the cwd off
+    # sys.path[0] on py>=3.11; the cwd being unwritable is what holds on older
+    # images. PYTHONDONTWRITEBYTECODE and the pytest cache opt-out keep the
+    # checks from *needing* the write access they no longer have in the
+    # now-closed workspace.
+    _reap_agent_processes(container_id)
+    _close_workspace_for_scoring(container_id)
+    try:
+        result = _docker_exec(
+            container_id,
+            [
+                "bash",
+                "-c",
+                f"export WORKSPACE={shlex.quote(WORKSPACE_DIR)} "
+                f"TASK_DIR={shlex.quote(TASK_DIR)} "
+                f"PYTHONPATH={shlex.quote(EB_VERIFY_DIR)}:${{PYTHONPATH:-}} "
+                f"HOME={shlex.quote(SCORING_WORKDIR)} "
+                f"EB_RESULTS_FILE={shlex.quote(SCORING_RESULTS_FILE)} "
+                f"PYTHONSAFEPATH=1 PYTHONDONTWRITEBYTECODE=1 "
+                f"PYTEST_ADDOPTS={shlex.quote('-p no:cacheprovider')} "
+                f"{GIT_SCORING_ENV}; "
+                f"bash {shlex.quote(TEST_SH)}",
+            ],
+            timeout=verifier_timeout,
+            workdir=SCORING_WORKDIR,
+            user=SCORING_USER,
+        )
+    finally:
+        _reopen_workspace_for_agent(container_id)
 
     # test.sh outputs JSON to stdout, diagnostics to stderr
     if result.stderr:
