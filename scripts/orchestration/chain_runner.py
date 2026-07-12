@@ -17,9 +17,11 @@ import sys
 import tempfile
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(REPO_ROOT / "lib"))
 
 # Support both toml (Python 3.11+) and tomli
 try:
@@ -54,14 +56,21 @@ class ChainTaskDefinition:
 
 @dataclass
 class ChainResult:
-    """Complete result of running a chain task."""
+    """Complete result of running a chain task.
+
+    ``total_score``/``final_score`` are ``None`` exactly when
+    ``verifier_infra_error`` is set: at least one milestone verifier never reached
+    a verdict, so the chain has no score. The run belongs in the re-run channel,
+    not in the results table.
+    """
 
     task_id: str
     total_sessions: int = 0
     session_results: list[SessionResult] = field(default_factory=list)
     milestone_scores: list[SessionScore] = field(default_factory=list)
-    final_score: float = 0.0
-    total_score: float = 0.0
+    final_score: Optional[float] = None
+    total_score: Optional[float] = None
+    verifier_infra_error: Optional[dict] = None
 
     def summary(self) -> str:
         lines = [
@@ -76,17 +85,38 @@ class ChainResult:
 
         lines.append("")
         for ms in self.milestone_scores:
-            lines.append(
-                f"  Session {ms.session_number} milestones: {ms.total_score:.2f}"
-            )
+            total = "INVALID" if ms.total_score is None else f"{ms.total_score:.2f}"
+            lines.append(f"  Session {ms.session_number} milestones: {total}")
             for m in ms.milestones:
+                if m.infra_error is not None:
+                    lines.append(
+                        f"    {m.milestone_name}: INVALID (no verdict: "
+                        f"{m.infra_error.context.get('cause', m.infra_error.reason)}) "
+                        f"{m.message}"
+                    )
+                    continue
                 status = "PASS" if m.passed else "FAIL"
                 lines.append(
                     f"    {m.milestone_name}: {status} ({m.score:.2f}) {m.message}"
                 )
 
-        lines.append(f"\nFinal score: {self.final_score:.2f}")
-        lines.append(f"Total score: {self.total_score:.2f}")
+        if self.verifier_infra_error is not None:
+            lines.append(
+                f"\nINVALID RUN — a milestone verifier never reached a verdict "
+                f"({self.verifier_infra_error.get('cause', self.verifier_infra_error['reason'])}); "
+                f"this chain has no score and must be re-run."
+            )
+            lines.append(f"  {self.verifier_infra_error['detail']}")
+            return "\n".join(lines)
+
+        # None here (with no infra error) means the chain produced no milestone
+        # results at all — nothing was scored. Say so; the score fields used to
+        # default to 0.0 and printed that absence as an earned zero.
+        def render(score: Optional[float]) -> str:
+            return "NOT SCORED" if score is None else f"{score:.2f}"
+
+        lines.append(f"\nFinal score: {render(self.final_score)}")
+        lines.append(f"Total score: {render(self.total_score)}")
         return "\n".join(lines)
 
 
@@ -235,12 +265,24 @@ def run_chain(
     # Compute total score
     _compute_total_score(chain_result, task_def)
 
-    logger.info("Chain complete. Total score: %.2f", chain_result.total_score)
+    if chain_result.verifier_infra_error is not None:
+        logger.error(
+            "Chain INVALID — a milestone verifier never reached a verdict: %s",
+            chain_result.verifier_infra_error["detail"],
+        )
+    else:
+        logger.info("Chain complete. Total score: %.2f", chain_result.total_score)
     return chain_result
 
 
 def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinition):
-    """Compute weighted total score from milestone results and final checkpoints."""
+    """Compute weighted total score from milestone results and final checkpoints.
+
+    Short-circuits to ``verifier_infra_error`` if ANY milestone never reached a
+    verdict. Folding such a milestone into the weighted sum is what made the bug
+    invisible: whatever placeholder it carried (a free 1.0, a false 0.0) became a
+    real numeric total that no downstream reader could tell apart from a scored run.
+    """
     # Milestone scores contribute proportionally
     all_milestone_results = []
     for ms in chain_result.milestone_scores:
@@ -249,8 +291,14 @@ def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinitio
     if not all_milestone_results:
         return
 
+    for mr in all_milestone_results:
+        if mr.infra_error is not None:
+            chain_result.verifier_infra_error = mr.infra_error.as_verifier_error()
+            chain_result.total_score = None
+            chain_result.final_score = None
+            return
+
     # Final checkpoints have explicit weights; milestones are equal-weighted
-    final_cp_names = {cp["name"] for cp in task_def.final_checkpoints}
     final_cp_weights = {
         cp["name"]: cp.get("weight", 1.0) for cp in task_def.final_checkpoints
     }
@@ -261,13 +309,11 @@ def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinitio
     for mr in all_milestone_results:
         if mr.milestone_name in final_cp_weights:
             w = final_cp_weights[mr.milestone_name]
-            weighted_sum += mr.score * w
-            weight_sum += w
         else:
             # Inter-session milestones: small fixed weight
             w = 0.1
-            weighted_sum += mr.score * w
-            weight_sum += w
+        weighted_sum += mr.score * w
+        weight_sum += w
 
     chain_result.total_score = weighted_sum / weight_sum if weight_sum > 0 else 0.0
     chain_result.final_score = chain_result.total_score
@@ -317,23 +363,28 @@ def main():
     print(result.summary())
     print("=" * 60)
 
-    # Write result JSON
+    # Write result JSON. `total_score` is null for an invalid run — a reader must
+    # never be handed a number that came from a verifier which did not score.
     result_path = Path(task_dir) / "chain_result.json"
+    payload = {
+        "task_id": result.task_id,
+        "total_score": result.total_score,
+        "sessions_completed": len([s for s in result.session_results if s.success]),
+        "sessions_total": len(result.session_results),
+    }
+    if result.verifier_infra_error is not None:
+        payload["verifier_infra_error"] = result.verifier_infra_error
+
     with open(result_path, "w") as f:
-        json.dump(
-            {
-                "task_id": result.task_id,
-                "total_score": result.total_score,
-                "sessions_completed": len(
-                    [s for s in result.session_results if s.success]
-                ),
-                "sessions_total": len(result.session_results),
-            },
-            f,
-            indent=2,
-        )
+        json.dump(payload, f, indent=2)
     print(f"\nResult written to: {result_path}")
+
+    if result.verifier_infra_error is not None:
+        # Nonzero exit routes the run to run_benchmark's error channel, so an
+        # unscoreable chain is never recorded as a completed one.
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
