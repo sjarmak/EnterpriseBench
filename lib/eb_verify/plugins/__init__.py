@@ -116,7 +116,17 @@ register(TopologicalOrderValidator())
 # inside the sandbox) can import this package without the heavy stack.
 # get_validator("fact_triples") returns None in that case and the runner
 # reports the unknown artifact type explicitly.
+#
+# numpy/sklearn must be probed explicitly: fact_triples defers those imports to
+# its scoring call sites, so importing it cleanly proves only that jsonschema is
+# present. Relying on the ImportError alone once registered a validator that then
+# raised from inside validate() — which runner.py calls unguarded, killing the run
+# instead of recording a clean unscoreable result.
 try:
+    from eb_verify.fact_coverage import scoring_deps_available
+
+    if not scoring_deps_available():
+        raise ImportError("numpy and scikit-learn are required to score facts")
     from eb_verify.plugins.fact_triples import FactTriplesValidator
 except ImportError as _fact_triples_exc:  # numpy/sklearn/jsonschema absent
     import warnings

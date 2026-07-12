@@ -64,6 +64,7 @@ Example::
 
 from __future__ import annotations
 
+import importlib.util
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, Sequence
 
@@ -74,6 +75,26 @@ if TYPE_CHECKING:  # numpy/sklearn are imported lazily — see below.
 # scope. `eb_verify/__init__` re-exports the runner, which reaches this module, so a
 # module-scope import made *every* importer of eb_verify (including the chain runner,
 # which never scores facts) pay ~0.7s and ~100MB of TF-IDF machinery at startup.
+def scoring_deps_available() -> bool:
+    """Whether the deferred scoring stack can actually be imported.
+
+    Because the imports above are deferred, importing this module no longer proves
+    numpy and sklearn are installed — it only proves nothing has needed them yet.
+    Anything deciding *whether fact scoring is possible at all* must ask here rather
+    than infer it from a successful import; `plugins/__init__` keys the fact_triples
+    registration off this, so a numpy-less sandbox drops the validator up front
+    instead of raising ImportError from inside a scoring call.
+
+    Resolves the modules without executing them, which is what keeps the deferral
+    worth having: the check itself must not drag in the stack it is checking for.
+    """
+    try:
+        return all(
+            importlib.util.find_spec(m) is not None for m in ("numpy", "sklearn")
+        )
+    except (ImportError, ValueError):
+        # A blocked or half-installed module can raise here rather than return None.
+        return False
 
 # Calibrated on the labeled pair set in fact_coverage_calibration.py:
 # best F1 = 0.828 at threshold 0.40 for the TF-IDF char 3-5-gram default
