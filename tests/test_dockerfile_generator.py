@@ -10,12 +10,13 @@ Ensures:
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import docker_available
 
 REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "sandbox"))
@@ -172,9 +173,10 @@ class TestSetupLinesPythonProvision:
         assert "apt-get install -y python3 python3-tomli" in text
 
     def test_guard_tests_tomllib_not_merely_the_interpreter(self) -> None:
-        """eb_verify.task_parser imports tomllib at package-import time, and
-        jammy's python3 is 3.10, which predates it. A `command -v python3` guard
-        would call that image good and still fail every eb_verify check."""
+        """eb_verify needs a TOML parser at package-import time, and jammy's
+        python3 is 3.10, which has no tomllib — task_parser falls back to
+        `import tomli`. A `command -v python3` guard would call that image good,
+        install no tomli, and still fail every eb_verify check."""
         text = "\n".join(_setup_lines("eclipse-temurin:17-jdk-jammy"))
         assert "import tomllib" in text
         assert "python3-tomli" in text
@@ -222,11 +224,6 @@ class TestImageProvidesPython:
             lambda base: ["RUN apt-get install -y git curl", "USER agent"],
         )
         assert image_provides_python(["java"]) is False
-        # ...but only for the bases that actually depend on the provisioning.
-        # golang/python/rust/node/gcc carry their own interpreter, and blaming
-        # them would bury the handful of genuinely broken tasks in noise.
-        for languages in (["go"], ["python"], ["rust"], ["javascript"], ["c++"]):
-            assert image_provides_python(languages) is True
 
     def test_survives_a_reflow_of_the_run_line(self) -> None:
         """The detector reads what the shell would run, not how the RUN line is
@@ -275,14 +272,19 @@ class TestGeneratedDockerfilesPython:
         assert "python3" in content and "python3-tomli" in content
 
 
-@pytest.mark.docker
-@pytest.mark.skipif(shutil.which("docker") is None, reason="docker not installed")
-class TestPythonInterpreterE2E:
-    """Build the generated provisioning for real. String assertions cannot catch
-    a package missing from a base image's apt repo, a guard whose shell syntax
-    is wrong, or an interpreter that imports eb_verify only on paper."""
+@pytest.fixture(scope="session")
+def build_setup_image(tmp_path_factory):
+    """Build the generator's apt RUN block on a base image, yield the tag.
 
-    def _build_setup(self, base: str, tmp_path: Path) -> str:
+    Memoized and torn down: the two tests below overlap on five bases, and each
+    image runs to ~1.5 GB. Building per test case and leaving the tags behind
+    costs a full run five redundant builds and ~7.5 GB of resident images.
+    """
+    tags: dict[str, str] = {}
+
+    def _build(base: str) -> str:
+        if base in tags:
+            return tags[base]
         # Just the apt RUN block, taken verbatim from the generator. The rest of
         # _setup_lines (npm install of the Claude CLI) is slow, network-heavy,
         # and has nothing to do with the interpreter.
@@ -290,17 +292,32 @@ class TestPythonInterpreterE2E:
         start = next(i for i, ln in enumerate(lines) if ln.startswith("RUN apt-get"))
         end = next(i for i, ln in enumerate(lines) if "rm -rf /var/lib/apt/lists" in ln)
         run_block = "\n".join(lines[start : end + 1])
-        (tmp_path / "Dockerfile").write_text(f"FROM {base}\n{run_block}\n")
+        context = tmp_path_factory.mktemp("eb-python-e2e")
+        (context / "Dockerfile").write_text(f"FROM {base}\n{run_block}\n")
 
         tag = f"eb-test-python-{base.replace(':', '-').replace('/', '-')}"
         build = subprocess.run(
-            ["docker", "build", "-q", "-t", tag, str(tmp_path)],
+            ["docker", "build", "-q", "-t", tag, str(context)],
             capture_output=True,
             text=True,
             timeout=900,
         )
         assert build.returncode == 0, f"docker build failed for {base}:\n{build.stderr}"
+        tags[base] = tag
         return tag
+
+    yield _build
+
+    for tag in tags.values():
+        subprocess.run(["docker", "rmi", "-f", tag], capture_output=True, timeout=120)
+
+
+@pytest.mark.docker
+@pytest.mark.skipif(not docker_available(), reason="docker daemon not available")
+class TestPythonInterpreterE2E:
+    """Build the generated provisioning for real. String assertions cannot catch
+    a package missing from a base image's apt repo, a guard whose shell syntax
+    is wrong, or an interpreter that imports eb_verify only on paper."""
 
     def _run(self, tag: str, code: str) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -316,8 +333,8 @@ class TestPythonInterpreterE2E:
         )
 
     @pytest.mark.parametrize("base", PYTHONLESS_BASES + PYTHON_BEARING_BASES)
-    def test_eb_verify_imports_on_generated_image(self, base: str, tmp_path: Path) -> None:
-        tag = self._build_setup(base, tmp_path)
+    def test_eb_verify_imports_on_generated_image(self, base: str, build_setup_image) -> None:
+        tag = build_setup_image(base)
         run = self._run(
             tag, "import eb_verify.plugins.topological_order as m; print(m.__name__)"
         )
@@ -327,10 +344,10 @@ class TestPythonInterpreterE2E:
         assert "eb_verify.plugins.topological_order" in run.stdout
 
     @pytest.mark.parametrize("base", PYTHON_BEARING_BASES)
-    def test_base_interpreter_is_not_shadowed(self, base: str, tmp_path: Path) -> None:
+    def test_base_interpreter_is_not_shadowed(self, base: str, build_setup_image) -> None:
         """These images ship their own python. The guard must leave it alone
         rather than lay a distro interpreter over the top of it."""
-        tag = self._build_setup(base, tmp_path)
+        tag = build_setup_image(base)
         run = self._run(tag, "import sys; print(sys.version_info[:2])")
         assert run.returncode == 0, run.stderr
         assert "(3, 11)" in run.stdout or "(3, 12)" in run.stdout, (

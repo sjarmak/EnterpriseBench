@@ -70,10 +70,8 @@ _PYTHON_USE_RE = re.compile(r"\bpython3?\b|\beb_verify\b")
 def _script_invokes_python(text: str) -> bool:
     """True if any executable line of *text* runs python or reaches eb_verify.
 
-    Over-inclusive on purpose. Only whole-line comments are skipped, so a
-    trailing ``# python`` still trips the detector. A false positive costs
-    nothing — every generated image ships an interpreter — while a miss leaves
-    a checkpoint scoring 0.0 forever with no signal that anything is wrong.
+    Only whole-line comments are skipped, so a trailing ``# python`` still trips
+    the detector. See check 14 for why the detector errs this way.
     """
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -87,13 +85,10 @@ def _script_invokes_python(text: str) -> bool:
 def _python_dependent_scripts(task_dir: Path, checkpoints: list[dict]) -> list[str]:
     """Names of the task's scripts that cannot run without a python3.
 
-    Covers every declared checkpoint verifier plus every ``*.sh`` under the
-    task. The verifiers alone are not enough — the schema lets a verifier be a
-    ``.py`` file, which needs an interpreter just to start — and the shell glob
-    alone is not enough either, since a verifier may be a helper the checkpoint
-    list does not name. Scanning the union over-includes, which is the safe
-    direction: a spurious hit fails preflight loudly, while a miss puts the
-    checkpoint back to scoring 0.0 in silence.
+    Scans every declared checkpoint verifier *and* every ``*.sh`` under the
+    task. Neither alone is enough: the schema lets a verifier be a ``.py`` file,
+    which needs an interpreter just to start, and a verifier may call a shell
+    helper the checkpoint list never names.
     """
     candidates = {task_dir / cp["verifier"] for cp in checkpoints if cp.get("verifier")}
     candidates.update(task_dir.rglob("*.sh"))
@@ -494,6 +489,10 @@ def validate_task(
     # A python-invoking check on a python-less image does not fail loudly — it
     # scores 0.0 with a plausible-looking reason ("Found 0/2 drift points"), so
     # nothing downstream can tell a wrong answer from an unrunnable checkpoint.
+    #
+    # That asymmetry is why the two helpers above deliberately over-include: a
+    # false positive costs a loud preflight error on an image that does ship an
+    # interpreter, while a miss puts a checkpoint back to scoring 0.0 in silence.
     languages = task_data.get("metadata", {}).get("languages", [])
     python_scripts = _python_dependent_scripts(task_dir, checkpoints)
     if python_scripts and not image_provides_python(languages):

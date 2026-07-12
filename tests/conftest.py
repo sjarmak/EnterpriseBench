@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,20 @@ import pytest
 def pytest_configure(config):
     config.addinivalue_line("markers", "network: requires network access (git ls-remote)")
     config.addinivalue_line("markers", "docker: requires Docker daemon")
+
+
+def docker_available() -> bool:
+    """True if the Docker daemon is reachable.
+
+    Not the same question as "is the binary installed": a `shutil.which` check
+    passes on a host whose daemon is down, and the docker-marked tests then
+    error instead of skipping.
+    """
+    try:
+        result = subprocess.run(["docker", "info"], capture_output=True, timeout=10)
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
