@@ -88,7 +88,7 @@ _OPERATORS = (
     "<<<", "<<-", "<<", "&&", "||", "|&", ";;", ">>", ">&", "&>",
     ";", "&", "|", "(", ")", "<", ">",
 )
-_OP_START = frozenset("<>&|;()")
+_OP_START = frozenset(op[0] for op in _OPERATORS)
 _DQUOTE_ESCAPABLE = '"\\$`\n'
 _BACKTICK_ESCAPABLE = "$`\\"
 # A substitution inside a quoted run inside a substitution recurses

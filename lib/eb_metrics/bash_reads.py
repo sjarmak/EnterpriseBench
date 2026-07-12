@@ -47,9 +47,10 @@ __all__ = ["bash_read_files"]
 # Shell programs that read file contents. Baseline agents open files via these
 # (`cat foo.py`, `grep pat src/x.go`) rather than the structured Read tool, so
 # without this the baseline arm's retrieval is largely unobservable. EB-specific
-# extension beyond the CSB port (which does not parse Bash); path candidates
-# still pass the shared ``_looks_like_file`` gate, so flags and search patterns
-# (no extension) are filtered out.
+# extension beyond the CSB port, which does not parse Bash. Flags and search
+# patterns are dropped by this module (`_is_flag`, `_read_command_args`) rather
+# than left to the consumer's ``_looks_like_file`` shape filter — see
+# :func:`_command_words` on why this layer keeps its own promises.
 _BASH_READ_CMDS = frozenset(
     {
         "cat", "head", "tail", "less", "more", "bat", "nl", "view", "cut",
@@ -109,6 +110,7 @@ _VALUE_FLAGS: Mapping[str, frozenset[str]] = {
     "awk": frozenset({"-F", "-v", "--field-separator", "--assign"}),
     "sed": frozenset({"-l", "--line-length"}),
 }
+_NO_FLAGS: frozenset[str] = frozenset()
 
 _ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _GLOB_CHARS = "*?"
@@ -169,11 +171,18 @@ def _sub_command_read_files(sub: list[Token], depth: int) -> list[str]:
 def _program_read_files(words: list[str], depth: int) -> list[str]:
     """Files read by a single program invocation, given its words.
 
-    The depth bound lives here because this is the one point *every* recursive
-    path crosses. ``$(…)`` and ``sh -c`` re-enter :func:`bash_read_files`, which
-    bounds itself, but ``find -exec find -exec …`` recurses back through here
-    without ever passing through it — so bounding only there left that shape to
-    climb to Python's own recursion limit and raise.
+    There are two *disjoint* recursion cycles, so each needs its own bound and
+    neither guard is redundant:
+
+    * ``$(…)`` and ``sh -c`` — :func:`bash_read_files` →
+      :func:`_sub_command_read_files` → :func:`bash_read_files`, which never
+      passes through here on its recursive step.
+    * ``find -exec find -exec …`` — here → :func:`_find_exec_read_files` → here,
+      which never passes through :func:`bash_read_files`.
+
+    Bounding only one of the two left the other free to climb to Python's own
+    recursion limit and raise, which aborts the whole batch rescore rather than
+    the one trial. Delete either guard and that shape comes back.
     """
     if depth > _MAX_SUBST_DEPTH:
         return []
@@ -289,20 +298,21 @@ def _read_command_args(cmd: str, args: list[str]) -> list[str]:
     module docstring's floor.
     """
     takes_pattern = cmd in _PATTERN_CMDS
-    value_flags = _VALUE_FLAGS.get(cmd, frozenset())
+    value_flags = _VALUE_FLAGS.get(cmd, _NO_FLAGS)
     pattern_seen = not takes_pattern
     end_of_options = False
     files: list[str] = []
     i = 0
     while i < len(args):
         arg = args[i]
-        if not end_of_options and arg == "--":
-            # Everything after `--` is an operand, however dash-shaped. Reading
-            # it as one more flag would leave `pattern_seen` unset, and the file
-            # after it would then be swallowed as the pattern and never counted.
-            end_of_options = True
-        elif not end_of_options and _is_flag(arg):
-            if takes_pattern and arg in _PATTERN_FLAGS:
+        if not end_of_options and _is_flag(arg):
+            if arg == "--":
+                # Everything after `--` is an operand, however dash-shaped.
+                # Reading it as one more flag would leave `pattern_seen` unset,
+                # and the file after it would then be swallowed as the pattern
+                # and never counted.
+                end_of_options = True
+            elif takes_pattern and arg in _PATTERN_FLAGS:
                 pattern_seen = True  # the pattern came from here, not a positional
                 i += 1
             elif arg in value_flags:
