@@ -25,12 +25,17 @@ Two mechanisms, because neither covers the other's ground:
 
 The genuine-score controls are the point of the exercise: a wrong answer must
 still be a 0.0 and a correct one still a 1.0, or the fix has merely traded a
-false-zero problem for a false-infra one.
+false-zero problem for a false-infra one. The last section of this file is that
+trade caught in the act — an answer the check scripts cannot parse aborts them
+mid-flight, and "no verdict" alone cannot tell that apart from a verifier that
+never ran. Scored one way, a garbage answer buys the agent a re-run instead of
+the 0.0 it earned.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -96,8 +101,18 @@ def sanitized_path(tmp_path_factory) -> str:
     return str(bin_dir)
 
 
-def run_test_runner(workspace: Path, verifiers: dict[str, str], path: str) -> dict:
-    """Exec the real test_runner.sh over ``verifiers`` and parse its JSON."""
+def run_test_runner(
+    workspace: Path,
+    verifiers: dict[str, str],
+    path: str,
+    answer: str | None = None,
+    task_dir: Path | None = None,
+) -> dict:
+    """Exec the real test_runner.sh over ``verifiers`` and parse its JSON.
+
+    ``answer`` writes the agent's artifact at the path the check scripts read;
+    ``task_dir`` points them at a task's ground truth, as run_task.py does.
+    """
     vdir = workspace / ".verifiers"
     vdir.mkdir(parents=True, exist_ok=True)
     (workspace / "repo-a" / ".git").mkdir(parents=True, exist_ok=True)
@@ -107,11 +122,16 @@ def run_test_runner(workspace: Path, verifiers: dict[str, str], path: str) -> di
         script.write_text(body)
         script.chmod(0o755)
 
+    if answer is not None:
+        (workspace / "agent_output").mkdir(exist_ok=True)
+        (workspace / "agent_output" / "answer.json").write_text(answer)
+
+    env = {"WORKSPACE": str(workspace), "PATH": path}
+    if task_dir is not None:
+        env["TASK_DIR"] = str(task_dir)
+
     proc = subprocess.run(
-        ["bash", str(TEST_RUNNER)],
-        capture_output=True,
-        text=True,
-        env={"WORKSPACE": str(workspace), "PATH": path},
+        ["bash", str(TEST_RUNNER)], capture_output=True, text=True, env=env
     )
     return json.loads(proc.stdout)
 
@@ -350,3 +370,155 @@ fi
     assert cp["verifier_ran"] is True, "command -v is a builtin and must not trip the handler"
     assert cp["score"] == 1.0
     assert isinstance(guard_verifier_output(json.dumps(result), returncode=0), dict)
+
+
+# --- the mirror image: a bad ANSWER must not be laundered into an infra error --
+#
+# "No verdict" has two causes, and only one of them is the harness's fault. The
+# check scripts run under `set -euo pipefail` and read the agent's answer through
+# a command substitution, so an answer they cannot parse aborts them BEFORE their
+# final print — no verdict, exactly as if they had never run. Attribute that to
+# the harness and a garbage answer buys the agent a re-run instead of the 0.0 it
+# earned: the same false-scoring disease as the bead, pointed the other way.
+#
+# Measured over the corpus: of the 132 check scripts that read answer.json, 104
+# abort on an answer that is not a JSON object. This is the common case.
+
+REAL_TASKS = {
+    # One per affected suite. Every check listed here was verified to abort on a
+    # malformed answer, so these vectors exercise the attribution, not a script's
+    # own early-exit verdict.
+    "customer_escalation/err-provenance-01": 3,
+    "dependency_management/api-contract-dual-fastapi-001": 3,
+    "technical_debt/calibration-001": 2,
+}
+
+# Neither is a JSON object, and neither is anything a check script can read.
+INVALID_ANSWERS = {
+    "unparseable": "not json {{{",
+    "json-but-a-list": "[]",
+    "json-but-a-string": '"the answer is in the files"',
+}
+
+
+@pytest.fixture
+def real_path() -> str:
+    """The unmodified PATH: python3 present, as in the task images. The point
+    here is a verifier that CAN run, unlike the never-ran vectors above."""
+    return os.environ["PATH"]
+
+
+@pytest.mark.parametrize("task", sorted(REAL_TASKS))
+@pytest.mark.parametrize("shape,answer", sorted(INVALID_ANSWERS.items()))
+def test_invalid_agent_answer_is_scored_not_re_run(
+    task: str, shape: str, answer: str, tmp_path: Path, real_path: str
+) -> None:
+    """The REAL check scripts of a REAL task, fed an answer they cannot read."""
+    task_dir = REPO_ROOT / "benchmarks" / task
+    checks = {p.stem: p.read_text() for p in sorted((task_dir / "checks").glob("*.sh"))}
+    assert len(checks) == REAL_TASKS[task], f"{task} checks changed; revisit this vector"
+
+    result = run_test_runner(tmp_path, checks, real_path, answer=answer, task_dir=task_dir)
+    guarded = guard_verifier_output(json.dumps(result), returncode=1)
+
+    assert not isinstance(guarded, InfraError), (
+        f"a {shape} answer is the AGENT's failure — scoring it 0.0 is the whole "
+        f"point of the benchmark; routing it to the re-run channel lets an agent "
+        f"escape a 0.0 by emitting garbage"
+    )
+    assert guarded["task_score"] == 0.0
+    for cp in result["checkpoints"]:
+        assert cp["verifier_ran"] is True, "the verifier ran; the answer killed it"
+        assert cp["score"] == 0.0
+
+
+def test_the_checkpoint_says_why_an_unreadable_answer_scored_zero(
+    tmp_path: Path, real_path: str
+) -> None:
+    """Non-vacuity, and the diagnosis a 0.0 owes its reader.
+
+    Some checks survive a hostile answer and reach their own verdict; the three
+    here do not — each dies in the command substitution that reads it. Their 0.0
+    therefore comes from the runner, and must say so rather than pass for a
+    considered judgement of the agent's reasoning.
+    """
+    task_dir = REPO_ROOT / "benchmarks" / "customer_escalation" / "err-provenance-01"
+    checks = {p.stem: p.read_text() for p in sorted((task_dir / "checks").glob("*.sh"))}
+
+    result = run_test_runner(
+        tmp_path, checks, real_path, answer="not json {{{", task_dir=task_dir
+    )
+    for cp in result["checkpoints"]:
+        assert "not a JSON object" in cp["detail"]
+
+
+def test_a_valid_answer_object_still_reaches_the_checks(
+    tmp_path: Path, real_path: str
+) -> None:
+    """The other side of the line. Only the two unreadable SHAPES are attributed
+    to the agent; an answer that is a JSON object — however wrong — is scored by
+    the check scripts themselves, never short-circuited here."""
+    task_dir = REPO_ROOT / "benchmarks" / "customer_escalation" / "err-provenance-01"
+    checks = {p.stem: p.read_text() for p in sorted((task_dir / "checks").glob("*.sh"))}
+
+    result = run_test_runner(
+        tmp_path,
+        checks,
+        real_path,
+        answer=json.dumps({"source_files": ["wrong/file.py"]}),
+        task_dir=task_dir,
+    )
+    guarded = guard_verifier_output(json.dumps(result), returncode=1)
+    assert isinstance(guarded, dict)
+    for cp in result["checkpoints"]:
+        assert "not a JSON object" not in cp["detail"], "the checks must do the judging"
+
+
+class TestInfraSignalsOutrankTheAgentAttribution:
+    """A garbage answer must not become a laundering channel for real harness
+    failures: every never-ran signal still wins, even when the answer is invalid.
+    """
+
+    def test_missing_command_still_wins(self, tmp_path: Path, real_path: str) -> None:
+        result = run_test_runner(
+            tmp_path, {"broken": LOUD_MISSING_TOOL}, real_path, answer="not json {{{"
+        )
+        cp = checkpoint(result, "broken")
+        assert cp["verifier_ran"] is False
+        guarded = guard_verifier_output(json.dumps(result), returncode=1)
+        assert isinstance(guarded, InfraError), "a missing command is the harness's fault"
+        assert guarded.reason == "verifier_did_not_run"
+
+    def test_verifier_that_exits_zero_without_a_verdict_still_wins(
+        self, tmp_path: Path, real_path: str
+    ) -> None:
+        """The attribution demands a nonzero exit. A check that exits 0 printing
+        nothing did not die on the answer — it is simply broken, and its silence
+        must not be read as a considered 0.0."""
+        result = run_test_runner(
+            tmp_path, {"silent": "#!/usr/bin/env bash\nexit 0\n"}, real_path,
+            answer="not json {{{",
+        )
+        assert checkpoint(result, "silent")["verifier_ran"] is False
+        assert isinstance(
+            guard_verifier_output(json.dumps(result), returncode=0), InfraError
+        )
+
+    def test_harness_side_crash_under_a_valid_answer_still_wins(
+        self, tmp_path: Path, real_path: str
+    ) -> None:
+        """The bead's own case, unbroken: a verifier that dies for a reason the
+        agent did not cause is still an infra error, not a 0.0."""
+        crasher = """\
+#!/usr/bin/env bash
+set -euo pipefail
+cat /nonexistent/ground_truth.json
+printf '{"score": 1.0, "passed": true}\\n'
+"""
+        result = run_test_runner(
+            tmp_path, {"crasher": crasher}, real_path, answer=json.dumps({"files": []})
+        )
+        assert checkpoint(result, "crasher")["verifier_ran"] is False
+        guarded = guard_verifier_output(json.dumps(result), returncode=1)
+        assert isinstance(guarded, InfraError)
+        assert guarded.reason == "verifier_did_not_run"

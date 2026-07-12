@@ -178,6 +178,27 @@ silently corrupts results. Three rules follow:
 is treated as an infra failure, not as a score. Do not rely on the exit code to
 mean pass or fail — the runner no longer reads it that way.
 
+The one exception is the agent's own artifact. Most checks read `answer.json`
+through a command substitution, so under `set -euo pipefail` an answer they
+cannot parse aborts them before their final `printf` — no verdict, and from the
+outside indistinguishable from a verifier that never ran. Treating that as infra
+would hand the agent a re-run for emitting garbage, so the runner checks the
+artifact itself: if `agent_output/answer.json` is not a JSON object, a check that
+dies with a nonzero exit is scored 0.0 and told why. Everything else — a missing
+command, a nonexistent interpreter, a check that exits 0 in silence — is still an
+infra error. An answer that *is* a JSON object is never short-circuited: your
+check does the judging, however wrong the contents.
+
+You do not need to defend against a malformed answer, then. You do still owe the
+reader a verdict for every failure you can describe better than the runner can:
+
+```bash
+if [[ ! -f "$ANSWER_FILE" ]]; then
+  printf '{"score": 0.0, "passed": false, "detail": "no answer.json"}\n'
+  exit 1
+fi
+```
+
 **Probe optional tools with `command -v`, never by running them.** The runner
 installs a `command_not_found_handle` in every verifier shell, so *any* command
 bash cannot find marks the checkpoint as never-run — even one whose failure your

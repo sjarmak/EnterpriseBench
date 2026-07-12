@@ -120,9 +120,23 @@ run_verifier() {
         # non-bash interpreter in the chain.
         infra_detail="$INFRA_SENTINEL: verifier exited 127 (command not found)"
     elif ! printf '%s' "$raw_stdout" | grep -q '^{'; then
-        # No JSON on stdout: the verifier died before reaching its verdict.
         local stderr_content
         stderr_content=$(cat "$raw_stderr" 2>/dev/null || true)
+
+        if [ -n "$AGENT_OUTPUT_INVALID" ] && [ "$VERIFIER_EXIT" -ne 0 ]; then
+            # The verifier RAN; the agent's own malformed artifact killed it
+            # mid-flight (see AGENT_OUTPUT_INVALID). A bad answer is the agent's
+            # failure, so it is scored 0.0 — routing it to the infra re-run
+            # channel would let an agent escape a deserved 0.0 by emitting
+            # garbage. Requires a nonzero exit: a verifier that exits 0 without
+            # printing anything is broken irrespective of the answer.
+            VERIFIER_JSON="{\"score\": 0.0, \"passed\": false, \"detail\": \"$(json_escape "$AGENT_OUTPUT_INVALID (exit $VERIFIER_EXIT): ${stderr_content:-no output}")\"}"
+            rm -f "$raw_stderr"
+            return
+        fi
+
+        # No JSON, and nothing about the agent's answer explains it: the verifier
+        # died before reaching its verdict.
         infra_detail="$INFRA_SENTINEL: verifier produced no JSON verdict (exit $VERIFIER_EXIT): ${stderr_content:-no output}"
     fi
 
@@ -135,6 +149,36 @@ run_verifier() {
 
     rm -f "$raw_stderr"
 }
+
+# --- is the agent's own answer artifact structurally unusable? ----------------
+#
+# A check script that dies parsing a malformed answer.json produced no verdict,
+# but it did not fail to RUN: it ran, and the agent's output killed it. Without
+# this distinction the runner reads every garbage answer as "the verifier never
+# ran" and routes a deserved 0.0 into the infra re-run channel — an agent could
+# evade its score by emitting garbage. 104 of the 132 corpus check scripts that
+# read answer.json abort under `set -e` on an answer that is not a JSON object,
+# so this is the common case, not an edge one.
+#
+# Structural only, and deliberately narrow: an answer that IS a JSON object never
+# trips this, however wrong its contents — wrongness is what the checks are for.
+# Unparseable, and parseable-but-not-an-object, are the only two shapes the corpus
+# cannot survive (measured: {}, wrong value types, and hostile nesting all still
+# reach a verdict).
+#
+# Ahead of the mode split: run_verifier reads this, so under `set -u` every mode
+# must cross the assignment, and both modes owe the agent the same attribution.
+AGENT_OUTPUT_INVALID=""
+AGENT_ANSWER="$WORKSPACE/agent_output/answer.json"
+if [ -f "$AGENT_ANSWER" ] && command -v python3 >/dev/null 2>&1; then
+    if ! python3 -c "
+import json, sys
+with open(sys.argv[1]) as fh:
+    sys.exit(0 if isinstance(json.load(fh), dict) else 1)
+" "$AGENT_ANSWER" >/dev/null 2>&1; then
+        AGENT_OUTPUT_INVALID="agent_output/answer.json is not a JSON object, so no check could read it"
+    fi
+fi
 
 # --- single checkpoint mode ---
 
