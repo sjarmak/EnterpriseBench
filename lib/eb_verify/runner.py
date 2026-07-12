@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Optional, Protocol, cast
 
 from eb_verify.task_parser import TaskDefinition, Checkpoint
+from eb_verify.scorer_guard import INFRA_SENTINEL
 from eb_verify.scoring import (
     CheckpointResult,
     VerificationResult,
@@ -400,12 +401,25 @@ class CheckpointRunner:
             # Tier 2: LLM judge (if active and agent output available)
             final_score = grep_score
             if agent_output and self._judge is not None:
-                judge_score = self._run_judge_checkpoint(cp, agent_output)
-                if judge_score is not None:
-                    final_score = min(grep_score, judge_score)
-                    detail_parts.append(
-                        f"grep={grep_score:.2f} judge={judge_score:.2f} final={final_score:.2f}"
-                    )
+                try:
+                    judge_score = self._run_judge_checkpoint(cp, agent_output)
+                except Exception as exc:
+                    # The judge reached no verdict (backend outage, or it
+                    # returned a non-score). The Tier-2 ceiling therefore cannot
+                    # be applied, and neither available number is a measurement:
+                    # keeping grep alone records an un-capped score, and 0.0
+                    # blames the agent for our outage. Declare the infra failure
+                    # instead — scorer_guard reads INFRA_SENTINEL back out of
+                    # the detail and routes the run to the re-run channel.
+                    logger.warning("LLM judge failed for %s: %s", cp.name, exc)
+                    detail_parts.append(f"{INFRA_SENTINEL}: LLM judge failed: {exc}")
+                    final_score = 0.0
+                else:
+                    if judge_score is not None:
+                        final_score = min(grep_score, judge_score)
+                        detail_parts.append(
+                            f"grep={grep_score:.2f} judge={judge_score:.2f} final={final_score:.2f}"
+                        )
 
             result = CheckpointResult(
                 name=cp.name,

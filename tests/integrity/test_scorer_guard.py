@@ -22,8 +22,40 @@ from eb_verify.scorer_guard import (  # noqa: E402
     DiffProbeError,
     InfraError,
     guard_verifier_output,
+    is_valid_score,
 )
 from eb_verify.plugins.code_patch import CodePatchValidator  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# is_valid_score — the shared predicate behind every scoring entry point
+# ---------------------------------------------------------------------------
+
+
+class TestIsValidScore:
+    @pytest.mark.parametrize("value", [0.0, 0.5, 1.0, 0, 1, 1.0 + 1e-9, -1e-9])
+    def test_real_scores_and_bound_slop_accepted(self, value: object) -> None:
+        assert is_valid_score(value) is True
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            float("nan"),  # min(1.0, nan) is 1.0 in CPython → a naive clamp gives full marks
+            float("inf"),
+            float("-inf"),
+            True,          # float(True) == 1.0 → {"score": true} gives full marks
+            False,
+            999,
+            1.5,
+            -0.3,
+            "1.0",         # a string is not a score, even when it parses
+            "abc",
+            None,
+            object(),
+        ],
+    )
+    def test_non_scores_rejected(self, value: object) -> None:
+        assert is_valid_score(value) is False
 
 
 # ---------------------------------------------------------------------------

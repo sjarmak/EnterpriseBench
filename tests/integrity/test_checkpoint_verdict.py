@@ -122,7 +122,7 @@ class TestGuardCheckpointVerdict:
 
     # -- the free-1.0 vectors: values that a naive max(0,min(1,float(x))) clamp
     # -- silently converts into FULL CREDIT. Each was empirically confirmed to
-    # -- score 1.0 before _is_valid_score existed (bead kyo34 review).
+    # -- score 1.0 before is_valid_score existed (bead kyo34 review).
     @pytest.mark.parametrize(
         "raw,label",
         [

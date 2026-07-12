@@ -92,6 +92,57 @@ class TestJudgeOutageRouting:
         assert err is not None, "per-checkpoint judge exception must not keep un-capped grep"
         assert err["reason"] == "judge_checkpoint_failed"
 
+    def test_judge_returning_a_non_score_flags_infra(self, tmp_path: Path) -> None:
+        """Over-credit regression (fi9mm): the judge returns NaN — which the old
+        clamp turned into a free 1.0, making the Tier-2 cap a silent no-op and
+        leaving the un-capped grep 1.0 standing as the final measurement."""
+        _write_expected(tmp_path, _valid_expected())
+        sys.path.insert(0, str(REPO_ROOT / "lib"))
+        from eb_verify.judge import LLMJudge as RealJudge
+
+        judge = RealJudge.__new__(RealJudge)  # bypass backend construction
+        judge.model = "cc:haiku"
+        judge.pass_threshold = 0.5
+        judge._backend = MagicMock()
+        judge._backend.call.return_value = {"score": float("nan")}
+
+        with _agent_output_present(), patch(
+            "eb_verify.judge.LLMJudge", return_value=judge
+        ):
+            scores = _apply_llm_judge(_uncapped_scores(), tmp_path, "cid", {})
+
+        err = scores.get("verifier_infra_error")
+        assert err is not None, "a NaN judge score must not become a free 1.0"
+        assert err["reason"] == "judge_checkpoint_failed"
+        assert "non-score" in err["detail"]
+
+    def test_judge_backend_outage_flags_infra_not_zero(self, tmp_path: Path) -> None:
+        """Under-credit regression (fi9mm): a judge OUTAGE used to be recorded as
+        a legitimate 0.0, which min(grep, judge) then propagated to every
+        checkpoint. It is our infra failing, not the agent."""
+        _write_expected(tmp_path, _valid_expected())
+        sys.path.insert(0, str(REPO_ROOT / "lib"))
+        from eb_verify.judge import JudgeBackendError, LLMJudge as RealJudge
+
+        judge = RealJudge.__new__(RealJudge)
+        judge.model = "cc:haiku"
+        judge.pass_threshold = 0.5
+        judge._backend = MagicMock()
+        judge._backend.call.side_effect = JudgeBackendError("judge 503")
+
+        with _agent_output_present(), patch(
+            "eb_verify.judge.LLMJudge", return_value=judge
+        ):
+            scores = _apply_llm_judge(_uncapped_scores(), tmp_path, "cid", {})
+
+        err = scores.get("verifier_infra_error")
+        assert err is not None, "a judge outage must not be scored 0.0"
+        assert err["reason"] == "judge_checkpoint_failed"
+        assert scores["checkpoints"][0]["score"] == 1.0, (
+            "the outage must not have overwritten the checkpoint with a false zero; "
+            "the run is flagged for re-run, not scored"
+        )
+
     def test_healthy_judge_caps_and_does_not_flag(self, tmp_path: Path) -> None:
         """Negative control: a healthy judge applies min(grep, judge) and does
         NOT raise a spurious infra error."""

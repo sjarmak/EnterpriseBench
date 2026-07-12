@@ -4,6 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from eb_verify.scorer_guard import is_valid_score
+
+
+class JudgeScoreError(Exception):
+    """The judge returned something that is not a score.
+
+    Not a zero and not full marks — no verdict at all. The caller must route it
+    to the re-run channel rather than record a number the judge never gave.
+    """
+
 
 @dataclass
 class CheckpointJudgeInput:
@@ -31,10 +41,17 @@ class CheckpointJudgeResult:
     raw_response: dict = field(default_factory=dict)
 
 
-def normalize_score(val: object) -> float:
-    """Clamp a value to [0.0, 1.0]."""
-    try:
-        f = float(val)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return 0.0
-    return max(0.0, min(1.0, f))
+def validate_score(val: object) -> float:
+    """Return the judge's score, or raise :class:`JudgeScoreError`.
+
+    The judge is the third scoring entry point, and it enforces the same
+    invariant as the other two (see :mod:`eb_verify.scorer_guard`): a value that
+    is not a score never becomes one. This function used to clamp instead, which
+    handed full marks to ``{"score": true}``, ``NaN`` and ``999``, and a false
+    zero to ``"abc"``.
+    """
+    if not is_valid_score(val):
+        raise JudgeScoreError(f"judge returned a non-score: {val!r}")
+    # is_valid_score already rejected everything genuinely out of range, so this
+    # only trims the float slop it tolerates at the bounds.
+    return min(1.0, max(0.0, float(val)))  # type: ignore[arg-type]

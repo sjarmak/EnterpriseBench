@@ -96,25 +96,30 @@ class DiffProbeError(Exception):
 
 GuardResult = Union[dict, InfraError]
 
-# Float slop tolerated around the [0, 1] bounds. A verifier computing
-# `round(hits / total, 2)` can land a hair outside; a verifier emitting 999
-# cannot. Anything past this is a broken verifier, not a score.
+# Float slop tolerated around the [0, 1] bounds. A scorer computing
+# ``round(hits / total, 2)`` can land a hair outside; a scorer emitting 999
+# cannot. Anything past this is broken, not a score.
 _SCORE_EPSILON = 1e-6
 
 
-def _is_valid_score(value: object) -> bool:
+def is_valid_score(value: object) -> bool:
     """Is ``value`` a real, finite number inside [0, 1]?
 
-    Rejects three values that a naive ``max(0.0, min(1.0, float(value)))`` clamp
-    silently turns into a FREE 1.0 — the exact over-credit this module exists to
-    prevent (bead kyo34). All three are reachable from a real verifier, because
-    ``json.loads`` parses bare ``NaN``/``Infinity`` by default:
+    The one definition of "this is a score" — shared by every scoring entry
+    point (verifier, checkpoint, judge — bead kyo34), so none of them has to
+    re-derive it from a naive ``max(0.0, min(1.0, float(value)))`` clamp. That
+    clamp is what this predicate exists to replace: it silently converts four
+    different non-scores into a FREE 1.0 or a false zero, and each is reachable
+    from a real verifier or judge response because ``json.loads`` parses bare
+    ``NaN``/``Infinity`` by default.
 
-    * ``nan`` — ``min(1.0, nan)`` is 1.0 in CPython, so a verifier whose
-      arithmetic divided by zero scores FULL MARKS.
+    * ``nan`` — ``min(1.0, nan)`` is 1.0 in CPython, so arithmetic that divided
+      by zero scores FULL MARKS.
     * ``inf`` — clamps to 1.0.
-    * ``True`` — ``float(True) == 1.0`` and ``isinstance(True, int)``, so a
-      verifier emitting ``{"score": true}`` to mean "passed" scores 1.0.
+    * ``True`` — ``float(True) == 1.0``, so a judge emitting ``{"score": true}``
+      to mean "passed" scores 1.0.
+    * ``"1.0"`` / ``"abc"`` — a string is not a score. Coercing it gives full
+      marks for the first and a false zero for the second.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
@@ -205,7 +210,7 @@ def guard_verifier_output(
         # Same rule as guard_checkpoint_verdict. `run_task` sums `score * weight`
         # with no clamp, so a NaN/Infinity here writes a nan/inf task_score
         # straight into published results, and a 999 writes a 999.
-        if "score" in cp and not _is_valid_score(cp["score"]):
+        if "score" in cp and not is_valid_score(cp["score"]):
             bad_score = repr(cp["score"])[:_EVIDENCE_CHARS]
             return InfraError(
                 reason="malformed_verifier_output",
@@ -334,7 +339,7 @@ def guard_checkpoint_verdict(
             raw_output=raw,
         )
 
-    if not _is_valid_score(verdict["score"]):
+    if not is_valid_score(verdict["score"]):
         return did_not_run(
             "non_numeric_score",
             "verifier 'score' was not a real number in [0.0, 1.0]: "
