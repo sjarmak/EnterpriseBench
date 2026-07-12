@@ -75,27 +75,35 @@ if TYPE_CHECKING:  # numpy/sklearn are imported lazily — see below.
 # scope. `eb_verify/__init__` re-exports the runner, which reaches this module, so a
 # module-scope import made *every* importer of eb_verify (including the chain runner,
 # which never scores facts) pay ~0.7s and ~100MB of TF-IDF machinery at startup.
+# Because of that deferral, importing this module no longer proves the stack is
+# usable, so callers who need to know must ask: scoring_deps_available (cheap, does
+# not execute) or load_scoring_deps (definitive, does).
+
+# Calibrated on the labeled pair set in fact_coverage_calibration.py:
+# best F1 = 0.828 at threshold 0.40 for the TF-IDF char 3-5-gram default
+# embedder (perfect recall of paraphrase pairs; 5/12 near-miss false
+# positives, dominated by order-blind cases — see calibration module).
+DEFAULT_THRESHOLD = 0.40
+
+
+class ScoringDepsUnavailable(RuntimeError):
+    """The deferred scoring stack is missing, or installed but unusable."""
+
+
 def scoring_deps_available() -> bool:
-    """Whether the deferred scoring stack can actually be imported.
+    """Whether the scoring stack looks importable, without importing it.
 
-    Because the imports above are deferred, importing this module no longer proves
-    numpy and sklearn are installed — it only proves nothing has needed them yet.
-    Anything deciding *whether fact scoring is possible at all* must ask here rather
-    than infer it from a successful import; `plugins/__init__` keys the fact_triples
-    registration off this, so a numpy-less sandbox drops the validator up front
-    instead of raising ImportError from inside a scoring call.
+    `plugins/__init__` keys the fact_triples registration off this, so a sandbox that
+    ships no numpy drops the validator up front rather than discovering it mid-score.
+    The check must not execute what it is checking for: it sits on the chain runner's
+    import path, and paying ~0.8s there is the cost the deferral exists to avoid. Only
+    top-level names are probed, since find_spec on a dotted path imports the parents.
 
-    scipy is in the list because sklearn's TfidfVectorizer pulls it in; it is never
-    imported by name here, but an install without it fails just as hard.
+    scipy is included because sklearn's TfidfVectorizer pulls it in; it is never named
+    in an import here, but an install without it fails just as hard.
 
-    Resolves the modules without executing them, which is what keeps the deferral
-    worth having: the check itself must not drag in the stack it is checking for.
-    Only top-level names are probed — find_spec on a dotted path executes the parent
-    packages, which would re-import the very stack this is trying to avoid.
-
-    Because it does not execute them, this cannot detect a module that is present but
-    broken (ABI mismatch, truncated wheel). That case is caught by load_scoring_deps at
-    the scoring call; this probe is the cheap fast path, not the only guard.
+    Resolving without executing is also the limit of this check: a module that is
+    present but broken looks fine here. load_scoring_deps is what settles that.
     """
     try:
         return all(
@@ -107,39 +115,29 @@ def scoring_deps_available() -> bool:
         return False
 
 
-class ScoringDepsUnavailable(RuntimeError):
-    """The deferred scoring stack is installed-but-unusable, or not installed."""
-
-
 def load_scoring_deps() -> None:
-    """Import the deferred scoring stack, or raise ScoringDepsUnavailable.
+    """Import the scoring stack, or raise ScoringDepsUnavailable.
 
-    A broken dependency is under no obligation to raise ImportError. An ABI mismatch
-    raises RuntimeError, a truncated shared object raises OSError, and a bad C
-    extension can raise SystemError — module-level code may raise anything at all.
-    Enumerating those types is a losing game, so this catches everything the import
-    can throw and re-raises the one type callers can guard on.
+    A broken dependency is under no obligation to raise ImportError: an ABI mismatch
+    raises RuntimeError, a truncated shared object raises OSError, a bad C extension
+    raises SystemError, and module-level code may raise anything at all. Enumerating
+    those types is a losing game, so this catches whatever the import throws and
+    re-raises the one type callers can guard on.
 
     The broad catch is safe precisely because the try block holds nothing but the
-    import: a genuine bug in the scoring logic still propagates as itself rather than
-    being laundered into "dependency missing".
+    import. Scoring runs outside it, so a genuine bug in the scoring logic still
+    propagates as itself instead of being laundered into "dependency missing".
 
-    Callers pay the real import cost (~0.8s) only here, inside a scoring call that
-    needs the stack anyway. The chain runner never reaches this.
+    The real import cost lands here, inside a scoring call that needs the stack
+    anyway. The chain runner never reaches it.
     """
     try:
         import numpy  # noqa: F401
         from sklearn.feature_extraction.text import TfidfVectorizer  # noqa: F401
-    except Exception as exc:  # noqa: BLE001 — see docstring: the body is one import
+    except Exception as exc:  # noqa: BLE001 — the try block is a single import
         raise ScoringDepsUnavailable(
             f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
         ) from exc
-
-# Calibrated on the labeled pair set in fact_coverage_calibration.py:
-# best F1 = 0.828 at threshold 0.40 for the TF-IDF char 3-5-gram default
-# embedder (perfect recall of paraphrase pairs; 5/12 near-miss false
-# positives, dominated by order-blind cases — see calibration module).
-DEFAULT_THRESHOLD = 0.40
 
 
 @dataclass(frozen=True)
