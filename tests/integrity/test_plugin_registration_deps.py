@@ -22,6 +22,7 @@ suite reaches this module.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -50,9 +51,17 @@ BLOCK_HEAVY_DEPS = """
 """
 
 
-def run_in_fresh_interpreter(body: str, *, block_deps: bool) -> str:
-    """Run ``body`` in a new interpreter, optionally with numpy/sklearn unimportable."""
+def run_in_fresh_interpreter(
+    body: str, *, block_deps: bool, extra_path: Path | None = None
+) -> str:
+    """Run ``body`` in a new interpreter, optionally with numpy/sklearn unimportable.
+
+    ``extra_path`` is prepended to sys.path, which is how the broken-install tests
+    shadow numpy with a module that raises on import.
+    """
     prelude = textwrap.dedent(BLOCK_HEAVY_DEPS) if block_deps else ""
+    if extra_path is not None:
+        prelude += f"sys.path.insert(0, {str(extra_path)!r})\n"
     script = (
         f"import sys\nsys.path.insert(0, {str(LIB)!r})\n"
         + prelude
@@ -66,6 +75,61 @@ def run_in_fresh_interpreter(body: str, *, block_deps: bool) -> str:
         f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
     )
     return proc.stdout
+
+
+def _fact_triples_workspace(tmp_path: Path) -> Path:
+    """A schema-valid, groundedness-passing workspace that reaches the embedder.
+
+    The candidate statement deliberately does not exact-match the ground truth, so
+    scoring must fall through to TF-IDF similarity — the lazy-import site. A workspace
+    that short-circuits earlier (no facts.json, bad schema) would never touch numpy and
+    would make these tests pass for the wrong reason.
+    """
+    workspace = tmp_path / "ws"
+    (workspace / "repo").mkdir(parents=True)
+    (workspace / "ground_truth").mkdir()
+
+    span = "score = 1.0 if passed else 0.0"
+    (workspace / "repo" / "milestone.py").write_text(f"def run():\n    {span}\n")
+    (workspace / "facts.json").write_text(
+        json.dumps(
+            {
+                "facts": [
+                    {
+                        "subject": "milestone.py",
+                        "predicate": "fabricates",
+                        "object": "scores",
+                        "statement": (
+                            "milestone.py fabricates a score from the process exit code"
+                        ),
+                        "evidence": {
+                            "repo": "repo",
+                            "file": "milestone.py",
+                            "span": span,
+                        },
+                        "confidence": 90,
+                    }
+                ]
+            }
+        )
+    )
+    (workspace / "ground_truth" / "expected_facts.json").write_text(
+        json.dumps(
+            {
+                "facts": [
+                    {
+                        "subject": "milestone.py",
+                        "predicate": "invents",
+                        "object": "scores",
+                        "statement": (
+                            "The third runner invents a score from the process exit status"
+                        ),
+                    }
+                ]
+            }
+        )
+    )
+    return workspace
 
 
 class TestRegistrationRequiresUsableDeps:
@@ -128,22 +192,7 @@ class TestNoImportErrorReachesScoring:
         validator is absent (the runner reports the unknown type and scores on),
         or it is present and must not raise ImportError.
         """
-        span = "score = 1.0 if passed else 0.0"
-        (tmp_path / "repo").mkdir()
-        (tmp_path / "repo" / "milestone.py").write_text(f"def run():\n    {span}\n")
-        (tmp_path / "facts.json").write_text(
-            '{"facts": [{"subject": "milestone.py", "predicate": "fabricates",'
-            ' "object": "scores", "statement": "milestone.py fabricates a score'
-            ' from the process exit code", "evidence": {"repo": "repo", "file":'
-            f' "milestone.py", "span": "{span}"}}, "confidence": 90}}]}}'
-        )
-        (tmp_path / "ground_truth").mkdir()
-        (tmp_path / "ground_truth" / "expected_facts.json").write_text(
-            '{"facts": [{"subject": "milestone.py", "predicate": "invents",'
-            ' "object": "scores", "statement": "The third runner invents a score'
-            ' from the process exit status"}]}'
-        )
-
+        workspace = _fact_triples_workspace(tmp_path)
         out = run_in_fresh_interpreter(
             f"""
             import pathlib
@@ -154,7 +203,7 @@ class TestNoImportErrorReachesScoring:
                 print("NO_VALIDATOR")  # runner reports the unknown type; run survives
             else:
                 try:
-                    validator.validate(pathlib.Path({str(tmp_path)!r}))
+                    validator.validate(pathlib.Path({str(workspace)!r}))
                     print("SCORED")
                 except ImportError as exc:
                     print(f"IMPORTERROR_ESCAPED {{exc}}")
@@ -166,6 +215,83 @@ class TestNoImportErrorReachesScoring:
             "runner.py calls validate() unguarded, so this kills the entire run"
         )
         assert "NO_VALIDATOR" in out
+
+
+class TestBrokenInstallCannotKillTheRun:
+    """A dependency can be findable and still unusable, and the probe cannot tell.
+
+    ``find_spec`` resolves a module without executing it — that is precisely why the
+    probe is cheap enough to sit on the chain-runner import path. The cost is that a
+    *present but broken* numpy (ABI mismatch, half-installed, corrupt .so) satisfies
+    the probe and only fails when something finally imports it, inside validate().
+
+    The old module-scope probe caught that case for free, because it really did run
+    the import. So the probe alone is a narrower version of the same regression, and
+    the runner must hold the line: a validator that raises ImportError yields a
+    record, not a dead process.
+    """
+
+    def _shadow_broken_numpy(self, tmp_path: Path) -> Path:
+        """A numpy that find_spec resolves happily and that explodes on execution."""
+        shadow = tmp_path / "shadow"
+        shadow.mkdir()
+        (shadow / "numpy.py").write_text(
+            'raise ImportError("numpy: libopenblas.so: cannot open shared object '
+            'file (simulated ABI break)")\n'
+        )
+        return shadow
+
+    def test_broken_numpy_is_findable_but_unimportable(self, tmp_path: Path) -> None:
+        """Guard the premise: a vacuous shadow would make the next test meaningless."""
+        out = run_in_fresh_interpreter(
+            """
+            import importlib.util
+            print("FOUND" if importlib.util.find_spec("numpy") else "NOTFOUND")
+            try:
+                import numpy  # noqa: F401
+                print("IMPORTED")
+            except ImportError:
+                print("IMPORT_RAISES")
+            """,
+            block_deps=False,
+            extra_path=self._shadow_broken_numpy(tmp_path),
+        )
+        assert "FOUND" in out and "IMPORT_RAISES" in out, (
+            f"the broken-numpy shadow does not exercise the gap it exists to test: {out}"
+        )
+
+    def test_broken_numpy_yields_a_record_not_a_dead_process(
+        self, tmp_path: Path
+    ) -> None:
+        """validate() must absorb its own dependency fault, for every caller.
+
+        runner.validate_artifacts() and cli both call validate() unguarded, so the
+        guard belongs in the validator rather than at each call site.
+        """
+        workspace = _fact_triples_workspace(tmp_path)
+        out = run_in_fresh_interpreter(
+            f"""
+            import pathlib
+            from eb_verify.plugins import get_validator
+
+            validator = get_validator("fact_triples")
+            print(f"REGISTERED={{validator is not None}}")
+            if validator is not None:
+                try:
+                    result = validator.validate(pathlib.Path({str(workspace)!r}))
+                    print(f"RECORDED valid={{result.valid}} :: {{result.detail}}")
+                except ImportError as exc:
+                    print(f"IMPORTERROR_ESCAPED {{exc}}")
+            """,
+            block_deps=False,
+            extra_path=self._shadow_broken_numpy(tmp_path),
+        )
+        assert "IMPORTERROR_ESCAPED" not in out, (
+            "a broken numpy escaped validate() as an ImportError. runner.py and cli.py "
+            "call validate() unguarded, so this aborts the entire verification run over "
+            f"a dependency fault that is not the agent's doing. Got: {out.strip()}"
+        )
+        assert "RECORDED" in out, out
 
 
 class TestProbeStaysCheap:

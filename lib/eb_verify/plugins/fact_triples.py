@@ -395,7 +395,19 @@ class FactTriplesValidator:
                 detail=f"expected_facts.json failed schema validation: {preview}",
             )
 
-        score = score_fact_triples(data["facts"], gt_data["facts"], workspace)
+        try:
+            score = score_fact_triples(data["facts"], gt_data["facts"], workspace)
+        except ImportError as exc:
+            # numpy/sklearn are imported at the scoring call sites, and registration
+            # probes them with find_spec, which resolves without executing. A present
+            # but broken install (ABI mismatch, truncated wheel) therefore survives
+            # registration and only fails here. Callers -- runner.validate_artifacts
+            # and cli -- invoke validate() unguarded, so raising would abort the whole
+            # verification run over a dependency fault that is not the agent's doing.
+            return ValidationResult(
+                valid=False,
+                detail=f"fact scoring unavailable (missing dependency: {exc})",
+            )
 
         mechanisms = ",".join(
             f"gt{m.gt_index}={m.mechanism or 'unmatched'}" for m in score.gt_matches

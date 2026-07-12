@@ -85,12 +85,23 @@ def scoring_deps_available() -> bool:
     registration off this, so a numpy-less sandbox drops the validator up front
     instead of raising ImportError from inside a scoring call.
 
+    scipy is in the list because sklearn's TfidfVectorizer pulls it in; it is never
+    imported by name here, but an install without it fails just as hard.
+
     Resolves the modules without executing them, which is what keeps the deferral
     worth having: the check itself must not drag in the stack it is checking for.
+    Only top-level names are probed — find_spec on a dotted path executes the parent
+    packages, which would re-import the very stack this is trying to avoid.
+
+    Because it does not execute them, this cannot detect a module that is present but
+    broken (ABI mismatch, truncated wheel). That case surfaces as an ImportError from
+    the deferred import inside the scoring call, which FactTriplesValidator.validate
+    catches; this probe is the cheap fast path for the common case, not the only guard.
     """
     try:
         return all(
-            importlib.util.find_spec(m) is not None for m in ("numpy", "sklearn")
+            importlib.util.find_spec(m) is not None
+            for m in ("numpy", "scipy", "sklearn")
         )
     except (ImportError, ValueError):
         # A blocked or half-installed module can raise here rather than return None.
