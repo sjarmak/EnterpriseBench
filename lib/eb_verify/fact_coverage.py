@@ -94,9 +94,8 @@ def scoring_deps_available() -> bool:
     packages, which would re-import the very stack this is trying to avoid.
 
     Because it does not execute them, this cannot detect a module that is present but
-    broken (ABI mismatch, truncated wheel). That case surfaces as an ImportError from
-    the deferred import inside the scoring call, which FactTriplesValidator.validate
-    catches; this probe is the cheap fast path for the common case, not the only guard.
+    broken (ABI mismatch, truncated wheel). That case is caught by load_scoring_deps at
+    the scoring call; this probe is the cheap fast path, not the only guard.
     """
     try:
         return all(
@@ -106,6 +105,35 @@ def scoring_deps_available() -> bool:
     except (ImportError, ValueError):
         # A blocked or half-installed module can raise here rather than return None.
         return False
+
+
+class ScoringDepsUnavailable(RuntimeError):
+    """The deferred scoring stack is installed-but-unusable, or not installed."""
+
+
+def load_scoring_deps() -> None:
+    """Import the deferred scoring stack, or raise ScoringDepsUnavailable.
+
+    A broken dependency is under no obligation to raise ImportError. An ABI mismatch
+    raises RuntimeError, a truncated shared object raises OSError, and a bad C
+    extension can raise SystemError — module-level code may raise anything at all.
+    Enumerating those types is a losing game, so this catches everything the import
+    can throw and re-raises the one type callers can guard on.
+
+    The broad catch is safe precisely because the try block holds nothing but the
+    import: a genuine bug in the scoring logic still propagates as itself rather than
+    being laundered into "dependency missing".
+
+    Callers pay the real import cost (~0.8s) only here, inside a scoring call that
+    needs the stack anyway. The chain runner never reaches this.
+    """
+    try:
+        import numpy  # noqa: F401
+        from sklearn.feature_extraction.text import TfidfVectorizer  # noqa: F401
+    except Exception as exc:  # noqa: BLE001 — see docstring: the body is one import
+        raise ScoringDepsUnavailable(
+            f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+        ) from exc
 
 # Calibrated on the labeled pair set in fact_coverage_calibration.py:
 # best F1 = 0.828 at threshold 0.40 for the TF-IDF char 3-5-gram default

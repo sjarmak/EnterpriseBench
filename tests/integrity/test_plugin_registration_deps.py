@@ -231,13 +231,13 @@ class TestBrokenInstallCannotKillTheRun:
     record, not a dead process.
     """
 
-    def _shadow_broken_numpy(self, tmp_path: Path) -> Path:
+    def _shadow_broken_numpy(self, tmp_path: Path, exc: str = "ImportError") -> Path:
         """A numpy that find_spec resolves happily and that explodes on execution."""
-        shadow = tmp_path / "shadow"
+        shadow = tmp_path / f"shadow_{exc}"
         shadow.mkdir()
         (shadow / "numpy.py").write_text(
-            'raise ImportError("numpy: libopenblas.so: cannot open shared object '
-            'file (simulated ABI break)")\n'
+            f'raise {exc}("numpy: libopenblas.so: cannot open shared object file '
+            '(simulated corrupt install)")\n'
         )
         return shadow
 
@@ -290,6 +290,41 @@ class TestBrokenInstallCannotKillTheRun:
             "a broken numpy escaped validate() as an ImportError. runner.py and cli.py "
             "call validate() unguarded, so this aborts the entire verification run over "
             f"a dependency fault that is not the agent's doing. Got: {out.strip()}"
+        )
+        assert "RECORDED" in out, out
+
+    # A broken dependency is under no obligation to raise ImportError: an ABI mismatch
+    # raises RuntimeError, a truncated .so raises OSError, a bad C extension raises
+    # SystemError. Guarding only ImportError leaves the run just as dead.
+    @pytest.mark.parametrize(
+        "exc", ["ImportError", "OSError", "SystemError", "RuntimeError", "ValueError"]
+    )
+    def test_any_import_failure_yields_a_record_not_a_dead_process(
+        self, tmp_path: Path, exc: str
+    ) -> None:
+        workspace = _fact_triples_workspace(tmp_path)
+        out = run_in_fresh_interpreter(
+            f"""
+            import pathlib
+            from eb_verify.plugins import get_validator
+
+            validator = get_validator("fact_triples")
+            if validator is None:
+                print("NO_VALIDATOR")
+            else:
+                try:
+                    result = validator.validate(pathlib.Path({str(workspace)!r}))
+                    print(f"RECORDED valid={{result.valid}} :: {{result.detail}}")
+                except BaseException as exc:  # noqa: BLE001 — anything escaping is the bug
+                    print(f"ESCAPED {{type(exc).__name__}}: {{exc}}")
+            """,
+            block_deps=False,
+            extra_path=self._shadow_broken_numpy(tmp_path, exc),
+        )
+        assert "ESCAPED" not in out, (
+            f"a numpy raising {exc} on import escaped validate() and killed the run. "
+            "Only ImportError is guarded, but module-level code can raise anything; "
+            f"the dependency load must be guarded on failure, not on type. Got: {out.strip()}"
         )
         assert "RECORDED" in out, out
 

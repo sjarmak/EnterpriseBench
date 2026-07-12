@@ -43,7 +43,12 @@ from jsonschema import Draft202012Validator
 if TYPE_CHECKING:  # numpy is imported lazily at its one runtime use site below.
     import numpy as np
 
-from eb_verify.fact_coverage import Embedder, TfidfCharNgramEmbedder
+from eb_verify.fact_coverage import (
+    Embedder,
+    ScoringDepsUnavailable,
+    TfidfCharNgramEmbedder,
+    load_scoring_deps,
+)
 from eb_verify.groundedness import Citation, check_groundedness
 from eb_verify.plugins import ValidationResult, safe_read
 
@@ -395,19 +400,21 @@ class FactTriplesValidator:
                 detail=f"expected_facts.json failed schema validation: {preview}",
             )
 
+        # Registration probes the deps with find_spec, which resolves without executing,
+        # so a present-but-broken install (ABI mismatch, truncated wheel) survives it and
+        # fails here instead. Load the stack behind one guard before scoring: callers
+        # (runner.validate_artifacts, cli) invoke validate() unguarded, so letting this
+        # escape would abort the whole verification run over a dependency fault that is
+        # not the agent's doing.
         try:
-            score = score_fact_triples(data["facts"], gt_data["facts"], workspace)
-        except ImportError as exc:
-            # numpy/sklearn are imported at the scoring call sites, and registration
-            # probes them with find_spec, which resolves without executing. A present
-            # but broken install (ABI mismatch, truncated wheel) therefore survives
-            # registration and only fails here. Callers -- runner.validate_artifacts
-            # and cli -- invoke validate() unguarded, so raising would abort the whole
-            # verification run over a dependency fault that is not the agent's doing.
+            load_scoring_deps()
+        except ScoringDepsUnavailable as exc:
             return ValidationResult(
                 valid=False,
-                detail=f"fact scoring unavailable (missing dependency: {exc})",
+                detail=f"fact scoring unavailable (dependency: {exc})",
             )
+
+        score = score_fact_triples(data["facts"], gt_data["facts"], workspace)
 
         mechanisms = ",".join(
             f"gt{m.gt_index}={m.mechanism or 'unmatched'}" for m in score.gt_matches
