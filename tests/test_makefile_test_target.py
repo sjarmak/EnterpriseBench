@@ -4,14 +4,12 @@ Regression guard for a target that pointed at a directory holding no tests, so
 `make test` collected nothing on every invocation. A command that runs zero
 tests must never be mistakable for a passing suite.
 
-Every subprocess here is either `--collect-only` or aimed at a path with no
+Every `make test` below is either `--collect-only` or aimed at a path with no
 tests in it. None of them executes the real suite, which contains this file.
 """
 
 from __future__ import annotations
 
-import os
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -24,8 +22,6 @@ pytestmark = pytest.mark.skipif(
     shutil.which("make") is None, reason="make is not installed"
 )
 
-COLLECTED_RE = re.compile(r"(\d+)/?\d* tests collected|collected (\d+) items")
-
 
 def _make(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -33,54 +29,31 @@ def _make(*args: str) -> subprocess.CompletedProcess[str]:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=60,
     )
 
 
-def _configured(var: str) -> str:
-    """Read a variable straight off the Makefile, no regex-scraping."""
-    result = _make("-s", f"print-{var}")
-    assert result.returncode == 0, (
-        f"`make print-{var}` failed; the Makefile must expose its test "
-        f"configuration for introspection.\n{result.stdout}{result.stderr}"
-    )
-    return result.stdout.strip()
+def _output(result: subprocess.CompletedProcess[str]) -> str:
+    return f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
 
 
-def test_configured_test_paths_collect_at_least_one_test() -> None:
-    """The paths `make test` hands pytest must contain tests.
+def test_make_test_collects_at_least_one_test() -> None:
+    """`make test` must reach tests. Collect them, but do not run them.
 
-    This is the bug in one assertion: the target used to point at a directory
-    with zero test files, so the suite silently never ran.
+    Overriding only PYTEST_ARGS exercises the real recipe — its paths, its
+    PYTHONPATH, its zero-collection guard. pytest exits 5 when it collects
+    nothing, which the target turns into a failure, so a clean exit here is
+    itself the proof that the configured paths hold tests.
     """
-    paths = _configured("PYTEST_PATHS").split()
-    assert paths, "PYTEST_PATHS is empty; `make test` would scan the whole repo"
+    result = _make("test", "PYTEST_ARGS=-q --collect-only")
 
-    result = subprocess.run(
-        ["python3", "-m", "pytest", *paths, "-q", "--collect-only"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=300,
-        env={**os.environ, "PYTHONPATH": "lib"},
-    )
     assert result.returncode == 0, (
-        f"pytest could not collect from PYTEST_PATHS={paths!r}\n"
-        f"{result.stdout[-3000:]}{result.stderr[-2000:]}"
+        f"`make test` collected no tests, or could not collect at all\n{_output(result)}"
     )
-
-    match = COLLECTED_RE.search(result.stdout)
-    assert match, f"could not parse a collection count from:\n{result.stdout[-2000:]}"
-    collected = int(match.group(1) or match.group(2))
-    assert collected > 0, f"`make test` collects {collected} tests from {paths!r}"
 
 
 def test_zero_collection_fails_loudly(tmp_path: Path) -> None:
-    """Pointed at a directory with no tests, `make test` must fail and say so.
-
-    pytest exits 5 on zero collection, which surfaces as a bare `Error 5`. The
-    target has to translate that into a message naming the real problem.
-    """
+    """Pointed at a directory with no tests, `make test` must fail and say so."""
     empty = tmp_path / "no_tests_here"
     empty.mkdir()
 
@@ -89,7 +62,7 @@ def test_zero_collection_fails_loudly(tmp_path: Path) -> None:
     assert result.returncode != 0, "a run that collected 0 tests reported success"
     assert "collected 0 tests" in (result.stdout + result.stderr).lower(), (
         "zero-collection must be reported explicitly, not as a bare `Error 5`\n"
-        f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
+        f"{_output(result)}"
     )
 
 
@@ -104,6 +77,5 @@ def test_empty_test_paths_is_rejected() -> None:
 
     assert result.returncode != 0, "empty PYTEST_PATHS was accepted"
     assert "pytest_paths is empty" in (result.stdout + result.stderr).lower(), (
-        "an empty PYTEST_PATHS must be named as the failure\n"
-        f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
+        f"an empty PYTEST_PATHS must be named as the failure\n{_output(result)}"
     )

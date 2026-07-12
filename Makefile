@@ -14,9 +14,6 @@
 #
 # Phase 8 deliverable: paper-figures is the single command that regenerates
 # every figure used in paper/paper.md from the raw run data under results/.
-#
-# Any variable below can be read back with `make -s print-<VAR>`, e.g.
-#   make -s print-PYTEST_PATHS
 
 PYTHON ?= python3
 
@@ -91,11 +88,7 @@ paper: paper-figures ## Alias: regenerate paper figures (paper.md is hand-writte
 
 .PHONY: test
 test: ## Run the test suite (override PYTEST_PATHS / PYTEST_ARGS)
-	@if [ -z "$(strip $(PYTEST_PATHS))" ]; then \
-		echo "[test] ERROR: PYTEST_PATHS is empty; refusing to run."; \
-		echo "[test] With no paths pytest walks the whole repo root. Name the test directories explicitly."; \
-		exit 1; \
-	fi
+	$(if $(strip $(PYTEST_PATHS)),,$(error PYTEST_PATHS is empty; with no paths pytest walks the whole repo root. Name the test directories explicitly))
 	@PYTHONPATH=lib$${PYTHONPATH:+:$$PYTHONPATH} $(PYTHON) -m pytest $(PYTEST_PATHS) $(PYTEST_ARGS); \
 	status=$$?; \
 	if [ $$status -eq 5 ]; then \
@@ -104,13 +97,6 @@ test: ## Run the test suite (override PYTEST_PATHS / PYTEST_ARGS)
 		exit 1; \
 	fi; \
 	exit $$status
-
-# Introspection: `make -s print-PYTEST_PATHS` prints a variable's value, so
-# tooling can read the test configuration instead of scraping this file.
-# $(info) prints without a shell, so values containing quotes survive intact.
-print-%:
-	$(info $($*))
-	@:
 
 .PHONY: clean
 clean: ## Remove generated analysis artifacts (does NOT touch raw runs)
