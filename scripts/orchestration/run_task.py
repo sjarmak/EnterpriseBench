@@ -207,6 +207,11 @@ GIT_SCORING_ENV = " ".join(
     ]
 )
 
+# Where Claude Code writes session JSONL inside the container. The agent
+# controls this filesystem, so any trace path that claims to sit outside this
+# root is rejected rather than copied out.
+TRACE_ROOT = "/home/agent/.claude/projects"
+
 
 @dataclass
 class TaskRunResult:
@@ -1343,6 +1348,86 @@ def _route_integrity_violation(result: "TaskRunResult", scores: dict) -> None:
     )
 
 
+def _route_zero_mcp_run(result: "TaskRunResult", mode: str) -> None:
+    """Record MCP usage for an MCP-mode run, and gate ``mcp_only`` on zero calls.
+
+    ``mcp_only`` is enforced only by a prompt preamble — local Read/Grep/Bash
+    stay available in the container. An ``mcp_only`` run that made 0 MCP calls
+    therefore delivered *baseline* tool access under an MCP label; scoring it
+    into the mcp_only mean contaminates every MCP-vs-baseline comparison. Route
+    it to the infra-error re-run channel instead.
+
+    ``hybrid`` grants both toolsets by design, so 0 MCP calls there is a
+    legitimate agent choice, not an infra failure: it is flagged and still
+    scored. Gating it would drop exactly the runs where the agent preferred
+    local tools and bias the hybrid arm upward.
+    """
+    if mode not in ("mcp_only", "hybrid"):
+        return
+
+    mcp_calls = result.tool_usage.get("mcp_tool_calls", 0)
+    result.tool_usage["mcp_used"] = mcp_calls > 0
+
+    if mcp_calls > 0:
+        logger.info("Agent made %d MCP tool calls", mcp_calls)
+        return
+
+    if mode == "hybrid":
+        logger.warning(
+            "mode=hybrid but agent made 0 MCP tool calls — flagged as a "
+            "local-tools run, still scored"
+        )
+        return
+
+    # Either way the run is not a valid MCP measurement, so it stops being
+    # scored. What it gets *labelled* depends on whether something else already
+    # explains the silence.
+    result.status = RUN_STATUS_INVALID
+    result.phase = "agent_infra_error"
+    result.success = False
+
+    if result.failure_class is not None:
+        # An OOM kill, a timeout, a crashed agent or a broken MCP config all
+        # produce 0 MCP calls as a *symptom*. Relabelling the run
+        # infra_mcp_unused would bury the actual cause and send triage chasing
+        # a phantom MCP problem, so keep the more specific classification.
+        logger.info(
+            "mode=mcp_only with 0 MCP tool calls, but the run already failed "
+            "as %s — keeping that classification",
+            result.failure_class,
+        )
+        return
+
+    logger.error(
+        "mode=mcp_only but agent made 0 MCP tool calls — the run had baseline "
+        "tool access under an MCP label. Run is INVALID, recording as infra "
+        "error for re-run"
+    )
+    result.failure_class = "infra_mcp_unused"
+    result.error = (
+        "mode=mcp_only but the agent made 0 MCP tool calls: the run used only "
+        "local tools, so it is not a valid MCP measurement. Recorded as infra "
+        "error for re-run."
+    )
+
+
+def _record_agent_trace(
+    result: "TaskRunResult", container_id: str, output_dir: Path
+) -> None:
+    """Copy the conversation trace and record whether it landed.
+
+    The capture result is what any trace-based audit (retrieval recall, tool
+    telemetry) rests on, so a missing trace has to be visible on the artifacts
+    rather than passing silently.
+    """
+    result.tool_usage["trace_captured"] = _copy_agent_trace(container_id, output_dir)
+    if not result.tool_usage["trace_captured"]:
+        logger.warning(
+            "No agent trace captured — trace-derived metrics for this run are "
+            "unavailable, not zero"
+        )
+
+
 def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
     """Run /workspace/test.sh and capture the JSON results.
 
@@ -1617,6 +1702,7 @@ def _save_results(
         "task_id": result.task_id,
         "success": result.success,
         "phase": result.phase,
+        "status": _effective_status(result),
         "error": result.error,
         "failure_class": result.failure_class,
         "image_tag": result.image_tag,
@@ -1659,6 +1745,7 @@ def _save_results(
         "task_id": result.task_id,
         "success": result.success,
         "phase": result.phase,
+        "status": _effective_status(result),
         "error": result.error,
         "failure_class": result.failure_class,
         "timing": result.timing,
@@ -1975,6 +2062,12 @@ def _extract_tool_usage(output_dir: Path) -> dict:
     if not content.strip():
         return usage
 
+    # Count MCP calls before branching on the output format. This used to sit
+    # after the --output-format json early-return, so a json-format run always
+    # reported 0 MCP calls no matter how many it made — which now would trip the
+    # zero-MCP gate and invalidate every such mcp_only run.
+    usage["mcp_tool_calls"] = content.count("mcp__sourcegraph__")
+
     # Claude Code --output-format json produces a JSON object on stdout.
     # Try to parse the entire output as JSON first.
     try:
@@ -2007,10 +2100,62 @@ def _extract_tool_usage(output_dir: Path) -> dict:
         except (json.JSONDecodeError, ValueError):
             continue
 
-    # Count MCP tool calls by scanning for mcp__sourcegraph in the raw log
-    usage["mcp_tool_calls"] = content.count("mcp__sourcegraph__")
-
     return usage
+
+
+def _effective_status(result: "TaskRunResult") -> str:
+    """The status to persist: INVALID for any run that failed short of complete.
+
+    Most infra paths set only ``phase``/``success``, not ``status`` (the OOM,
+    timeout, build-failed and setup-failed branches all do), so reading the raw
+    field would let an INVALID run look scoreable on disk. A run counts as a
+    valid measurement only when it reached ``phase == "complete"`` with
+    ``success`` — the exact condition downstream analysis scores on. Everything
+    else is an infra failure bound for the re-run channel. ``dry_run_complete``
+    is deliberately excluded: it sets ``success=True`` and is not a failure, so
+    it stays non-INVALID even though it never scores.
+
+    Deriving the marker from ``phase``/``success`` here means a new failure
+    branch cannot forget to flag its run — there is no allow-list to keep in
+    sync, which is the drift that let build/setup/preflight failures slip
+    through the first version of this field.
+    """
+    if result.status:
+        return result.status
+    if result.success or result.phase == "complete":
+        return ""
+    return RUN_STATUS_INVALID
+
+
+def _newest_trace_path(find_stdout: str) -> str | None:
+    """Pick the newest trace path from NUL-delimited ``<mtime> <path>`` records.
+
+    Returns None when no well-formed record survives validation. A record is
+    dropped unless its mtime parses as a float and its path sits under
+    ``TRACE_ROOT`` — the container is agent-controlled, so a path that claims to
+    live elsewhere is treated as hostile rather than copied out.
+    """
+    candidates: list[tuple[float, str]] = []
+
+    for record in find_stdout.split("\0"):
+        if not record or " " not in record:
+            continue
+        raw_mtime, path = record.split(" ", 1)
+        try:
+            mtime = float(raw_mtime)
+        except ValueError:
+            logger.warning("Skipping trace record with unparseable mtime")
+            continue
+        if not path.startswith(f"{TRACE_ROOT}/"):
+            logger.warning("Skipping trace path outside %s", TRACE_ROOT)
+            continue
+        candidates.append((mtime, path))
+
+    if not candidates:
+        return None
+
+    # max() beats sorting: one pass, and it needs no reverse-ordering argument.
+    return max(candidates, key=lambda candidate: candidate[0])[1]
 
 
 def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
@@ -2024,7 +2169,14 @@ def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
     Never raises — failures are logged and the run continues.
     """
     try:
-        # Find JSONL conversation files, sorted newest-first
+        # NUL-delimit the records. The agent under test controls this filesystem
+        # and a newline is a legal character in a filename, so a newline-
+        # delimited `-printf '%T@ %p\n'` lets a crafted filename forge an extra
+        # "<mtime> <path>" record — with a huge mtime it would sort first and be
+        # copied out as the authoritative trace, i.e. the subject of the
+        # measurement choosing its own evidence. NUL cannot occur in a filename,
+        # so a NUL-delimited record is unforgeable. Sorting moves to Python for
+        # the same reason: `sort -rn` would rank the forged field.
         find_result = subprocess.run(
             [
                 "docker",
@@ -2032,8 +2184,8 @@ def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
                 container_id,
                 "bash",
                 "-c",
-                "find /home/agent/.claude/projects -name '*.jsonl' -type f "
-                "2>/dev/null | head -20",
+                f"find {TRACE_ROOT} -name '*.jsonl' -type f "
+                "-printf '%T@ %p\\0' 2>/dev/null",
             ],
             capture_output=True,
             text=True,
@@ -2044,15 +2196,11 @@ def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
             logger.info("No agent conversation trace found in container")
             return False
 
-        # Take the first (or newest) file
-        trace_files = [
-            f.strip() for f in find_result.stdout.strip().splitlines() if f.strip()
-        ]
-        if not trace_files:
+        trace_path = _newest_trace_path(find_result.stdout)
+        if trace_path is None:
             logger.info("No agent conversation trace found in container")
             return False
 
-        trace_path = trace_files[0]
         dest = str(output_dir / "agent_trace.jsonl")
 
         cp_result = subprocess.run(
@@ -2364,22 +2512,13 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                     "INVALID, recording as infra error for re-run"
                 )
 
-            # Flag hybrid runs where MCP wasn't used — these don't count
-            # as valid MCP comparison data
-            mcp_calls = result.tool_usage.get("mcp_tool_calls", 0)
-            if config.mode in ("mcp_only", "hybrid") and mcp_calls == 0:
-                logger.warning(
-                    "MCP mode=%s but agent made 0 MCP tool calls — "
-                    "run is not a valid MCP comparison",
-                    config.mode,
-                )
-                result.tool_usage["mcp_used"] = False
-            elif config.mode in ("mcp_only", "hybrid"):
-                result.tool_usage["mcp_used"] = True
-                logger.info("Agent made %d MCP tool calls", mcp_calls)
+            # An mcp_only run that made 0 MCP calls is an infra failure, not a
+            # score (bead EnterpriseBench-e08u4); hybrid is flagged, not gated.
+            _route_zero_mcp_run(result, config.mode)
 
-            # Copy full conversation trace from container
-            _copy_agent_trace(container_id, output_dir)
+            # Copy full conversation trace from container, recording whether it
+            # landed — trace-derived audits must not treat "missing" as "empty".
+            _record_agent_trace(result, container_id, output_dir)
         else:
             logger.info("No agent command specified, skipping agent phase")
 
@@ -2402,6 +2541,10 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         result.scores = scores
 
         # --- Save ---
+        # Phases flagged *inline* during the agent/scoring stages reach here
+        # without an early return; every other failure has already returned.
+        # Those inline-flagged phases (agent/verifier infra errors, and a broken
+        # grading-asset seal) must never be overwritten with complete/success.
         if result.phase not in NON_COMPLETE_PHASES:
             result.phase = "complete"
             result.success = True
