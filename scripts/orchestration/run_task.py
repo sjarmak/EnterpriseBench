@@ -1361,6 +1361,10 @@ def _route_zero_mcp_run(result: "TaskRunResult", mode: str) -> None:
     legitimate agent choice, not an infra failure: it is flagged and still
     scored. Gating it would drop exactly the runs where the agent preferred
     local tools and bias the hybrid arm upward.
+
+    The gate is zero-vs-nonzero only. It catches a run that used no MCP at all;
+    it does not make the arm clean, since an ``mcp_only`` run that made one MCP
+    call and 300 local ones still passes.
     """
     if mode not in ("mcp_only", "hybrid"):
         return
@@ -1379,9 +1383,6 @@ def _route_zero_mcp_run(result: "TaskRunResult", mode: str) -> None:
         )
         return
 
-    # Either way the run is not a valid MCP measurement, so it stops being
-    # scored. What it gets *labelled* depends on whether something else already
-    # explains the silence.
     result.status = RUN_STATUS_INVALID
     result.phase = "agent_infra_error"
     result.success = False
@@ -1398,17 +1399,14 @@ def _route_zero_mcp_run(result: "TaskRunResult", mode: str) -> None:
         )
         return
 
-    logger.error(
-        "mode=mcp_only but agent made 0 MCP tool calls — the run had baseline "
-        "tool access under an MCP label. Run is INVALID, recording as infra "
-        "error for re-run"
+    reason = (
+        "mode=mcp_only but the agent made 0 MCP tool calls: the run had "
+        "baseline tool access under an MCP label, so it is not a valid MCP "
+        "measurement. Recorded as infra error for re-run."
     )
+    logger.error(reason)
     result.failure_class = "infra_mcp_unused"
-    result.error = (
-        "mode=mcp_only but the agent made 0 MCP tool calls: the run used only "
-        "local tools, so it is not a valid MCP measurement. Recorded as infra "
-        "error for re-run."
-    )
+    result.error = reason
 
 
 def _record_agent_trace(
@@ -1696,13 +1694,16 @@ def _save_results(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Derived once so the two artifacts below cannot disagree.
+    status = _effective_status(result)
+
     # --- results.json (backward compatible) ---
     results_path = output_dir / "results.json"
     payload = {
         "task_id": result.task_id,
         "success": result.success,
         "phase": result.phase,
-        "status": _effective_status(result),
+        "status": status,
         "error": result.error,
         "failure_class": result.failure_class,
         "image_tag": result.image_tag,
@@ -1745,7 +1746,7 @@ def _save_results(
         "task_id": result.task_id,
         "success": result.success,
         "phase": result.phase,
-        "status": _effective_status(result),
+        "status": status,
         "error": result.error,
         "failure_class": result.failure_class,
         "timing": result.timing,
@@ -2062,10 +2063,8 @@ def _extract_tool_usage(output_dir: Path) -> dict:
     if not content.strip():
         return usage
 
-    # Count MCP calls before branching on the output format. This used to sit
-    # after the --output-format json early-return, so a json-format run always
-    # reported 0 MCP calls no matter how many it made — which now would trip the
-    # zero-MCP gate and invalidate every such mcp_only run.
+    # Counted on the raw log, before the format branch below: the count must
+    # not depend on --output-format, since the zero-MCP gate reads it.
     usage["mcp_tool_calls"] = content.count("mcp__sourcegraph__")
 
     # Claude Code --output-format json produces a JSON object on stdout.
@@ -2106,19 +2105,15 @@ def _extract_tool_usage(output_dir: Path) -> dict:
 def _effective_status(result: "TaskRunResult") -> str:
     """The status to persist: INVALID for any run that failed short of complete.
 
-    Most infra paths set only ``phase``/``success``, not ``status`` (the OOM,
-    timeout, build-failed and setup-failed branches all do), so reading the raw
-    field would let an INVALID run look scoreable on disk. A run counts as a
-    valid measurement only when it reached ``phase == "complete"`` with
-    ``success`` — the exact condition downstream analysis scores on. Everything
-    else is an infra failure bound for the re-run channel. ``dry_run_complete``
-    is deliberately excluded: it sets ``success=True`` and is not a failure, so
-    it stays non-INVALID even though it never scores.
+    An explicitly-set ``status`` wins; otherwise it is derived, because most
+    infra branches (OOM, timeout, build-failed, setup-failed) set only
+    ``phase``/``success`` and reading the raw field would let those runs look
+    scoreable on disk. Deriving means a new failure branch cannot forget to
+    flag its run: there is no allow-list to drift out of sync.
 
-    Deriving the marker from ``phase``/``success`` here means a new failure
-    branch cannot forget to flag its run — there is no allow-list to keep in
-    sync, which is the drift that let build/setup/preflight failures slip
-    through the first version of this field.
+    A run is INVALID unless it succeeded or reached ``phase == "complete"``.
+    The disjunction is what keeps ``dry_run_complete`` non-INVALID — it sets
+    ``success=True`` and is not a failure, though it never scores.
     """
     if result.status:
         return result.status
@@ -2154,7 +2149,6 @@ def _newest_trace_path(find_stdout: str) -> str | None:
     if not candidates:
         return None
 
-    # max() beats sorting: one pass, and it needs no reverse-ordering argument.
     return max(candidates, key=lambda candidate: candidate[0])[1]
 
 
@@ -2169,26 +2163,19 @@ def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
     Never raises — failures are logged and the run continues.
     """
     try:
-        # NUL-delimit the records. The agent under test controls this filesystem
-        # and a newline is a legal character in a filename, so a newline-
-        # delimited `-printf '%T@ %p\n'` lets a crafted filename forge an extra
-        # "<mtime> <path>" record — with a huge mtime it would sort first and be
-        # copied out as the authoritative trace, i.e. the subject of the
-        # measurement choosing its own evidence. NUL cannot occur in a filename,
-        # so a NUL-delimited record is unforgeable. Sorting moves to Python for
-        # the same reason: `sort -rn` would rank the forged field.
-        find_result = subprocess.run(
+        # Records are NUL-delimited and ranked in Python, not by `sort -rn`. A
+        # newline is a legal filename character and the agent owns this
+        # filesystem, so newline-framed `-printf '%T@ %p\n'` output lets a
+        # crafted filename emit what looks like a second "<mtime> <path>"
+        # record; a NUL cannot appear in a filename, so it cannot.
+        find_result = _docker_exec(
+            container_id,
             [
-                "docker",
-                "exec",
-                container_id,
                 "bash",
                 "-c",
                 f"find {TRACE_ROOT} -name '*.jsonl' -type f "
                 "-printf '%T@ %p\\0' 2>/dev/null",
             ],
-            capture_output=True,
-            text=True,
             timeout=30,
         )
 
@@ -2202,17 +2189,7 @@ def _copy_agent_trace(container_id: str, output_dir: Path) -> bool:
             return False
 
         dest = str(output_dir / "agent_trace.jsonl")
-
-        cp_result = subprocess.run(
-            ["docker", "cp", f"{container_id}:{trace_path}", dest],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-
-        if cp_result.returncode != 0:
-            logger.warning("Failed to copy agent trace: %s", cp_result.stderr.strip())
-            return False
+        _docker_cp(f"{container_id}:{trace_path}", dest)
 
         logger.info("Copied agent conversation trace to %s", dest)
         return True
@@ -2512,12 +2489,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                     "INVALID, recording as infra error for re-run"
                 )
 
-            # An mcp_only run that made 0 MCP calls is an infra failure, not a
-            # score (bead EnterpriseBench-e08u4); hybrid is flagged, not gated.
             _route_zero_mcp_run(result, config.mode)
-
-            # Copy full conversation trace from container, recording whether it
-            # landed — trace-derived audits must not treat "missing" as "empty".
             _record_agent_trace(result, container_id, output_dir)
         else:
             logger.info("No agent command specified, skipping agent phase")

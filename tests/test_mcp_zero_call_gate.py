@@ -1,15 +1,8 @@
 """Tests for the zero-MCP-call gate and trace/status integrity in run_task.py.
 
-Bead EnterpriseBench-e08u4. Three coupled defects let a run that used no MCP
-at all be scored into the mcp_only mean:
-
-* an ``mcp_only`` run with 0 MCP tool calls delivered baseline tool access
-  under an MCP label, and was scored anyway (only an unread
-  ``tool_usage["mcp_used"]`` flag marked it);
-* the trace-capture return was discarded, so a missing agent trace passed
-  silently and any trace-based audit was unsound;
-* ``TaskRunResult.status`` was never serialized, so even an INVALID run
-  looked scoreable on disk.
+An ``mcp_only`` run that made 0 MCP tool calls had baseline tool access under
+an MCP label, so it is routed to the infra-error re-run channel rather than
+scored into the mcp_only mean.
 
 ``hybrid`` is deliberately NOT gated: that mode grants both toolsets, so 0 MCP
 calls is a legitimate agent choice. Invalidating those runs would delete

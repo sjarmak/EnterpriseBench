@@ -4,10 +4,8 @@ Covers the _copy_agent_trace() function that extracts Claude Code session
 JSONL from /home/agent/.claude/projects/ inside the Docker container.
 
 The container-side find emits NUL-delimited `<mtime> <path>` records and the
-newest is chosen in Python, so these mocks use that shape. A newline-delimited
-payload is not a valid response: the agent under test controls that filesystem
-and a newline is a legal character in a filename, so newline framing would let
-a crafted filename forge a record (see TestTraceRecordForgery).
+newest is chosen in Python, so these mocks use that shape. Newline framing is
+not a valid payload to mock — see TestTraceRecordForgery for why.
 """
 
 import subprocess
@@ -227,7 +225,9 @@ class TestNewestTracePath:
         assert _newest_trace_path(stdout) == f"{TRACE_ROOT}/real/conversation.jsonl"
 
     def test_skips_record_with_no_separator(self) -> None:
-        stdout = f"garbage-with-no-space\0" f"1720000000.0 {TRACE_ROOT}/a/c.jsonl\0"
+        stdout = "garbage-with-no-space\0" + _find_stdout(
+            ("1720000000.0", f"{TRACE_ROOT}/a/c.jsonl")
+        )
 
         assert _newest_trace_path(stdout) == f"{TRACE_ROOT}/a/c.jsonl"
 
@@ -247,48 +247,41 @@ class TestNewestTracePath:
         assert _newest_trace_path(stdout) is None
 
 
+# A filename whose own bytes spell out a second, newer-looking find record.
+# Legal on Linux (every byte but NUL and '/' is), and the agent under test owns
+# the directory it would live in.
+HOSTILE_NAME = f"real.jsonl\n9999999999.0 {TRACE_ROOT}/x/fabricated.jsonl"
+FABRICATED = f"{TRACE_ROOT}/x/fabricated.jsonl"
+
+
 class TestTraceRecordForgery:
     """The agent under test must not be able to choose its own trace.
 
-    The container filesystem belongs to the agent being measured, and on Linux
-    every byte except NUL and '/' is legal in a filename. Under the old
-    newline-delimited `-printf '%T@ %p\\n' | sort -rn` pipeline, a filename
-    containing a literal newline emitted a *second* line that was
-    indistinguishable from a genuine find record. Pairing it with a huge mtime
-    made it sort first, so the forged path was the one copied out and treated as
-    the authoritative trace — the subject of the measurement supplying its own
-    evidence. NUL framing removes the ambiguity; the prefix check is the backstop.
+    Newline-framed records let a crafted filename smuggle in an extra
+    `<mtime> <path>` record; a huge mtime then made it sort first, so the
+    forged path was copied out as the authoritative trace. NUL framing removes
+    the ambiguity, and the TRACE_ROOT prefix check is the backstop.
     """
 
-    def test_newline_in_filename_cannot_forge_a_record(self) -> None:
-        # One real directory entry whose *name* embeds a newline plus a
-        # plausible-looking forged record with a far-future mtime.
-        hostile_name = (
-            f"real.jsonl\n9999999999.0 {TRACE_ROOT}/x/fabricated.jsonl"
-        )
+    def test_forged_record_loses_to_the_genuine_newest(self) -> None:
         stdout = _find_stdout(
-            ("1720000000.0", f"{TRACE_ROOT}/x/{hostile_name}"),
+            ("1720000000.0", f"{TRACE_ROOT}/x/{HOSTILE_NAME}"),
             ("1720000001.0", f"{TRACE_ROOT}/x/genuine.jsonl"),
         )
 
         picked = _newest_trace_path(stdout)
 
-        # The forged path must never be selected. Under NUL framing the hostile
-        # entry stays a single record whose mtime is its real one (1720000000.0),
-        # so the genuine newer session wins.
+        # The hostile entry stays one record carrying its real mtime, so the
+        # genuine newer session wins and the smuggled path is never selected.
         assert picked == f"{TRACE_ROOT}/x/genuine.jsonl"
-        assert picked != f"{TRACE_ROOT}/x/fabricated.jsonl"
+        assert picked != FABRICATED
 
-    def test_forged_high_mtime_record_does_not_outrank_genuine(self) -> None:
-        """Even alone, the embedded forgery is not extractable as its own record."""
-        hostile_name = (
-            f"real.jsonl\n9999999999.0 {TRACE_ROOT}/x/fabricated.jsonl"
-        )
-        stdout = _find_stdout(("1720000000.0", f"{TRACE_ROOT}/x/{hostile_name}"))
+    def test_forged_record_is_not_extractable_when_alone(self) -> None:
+        stdout = _find_stdout(("1720000000.0", f"{TRACE_ROOT}/x/{HOSTILE_NAME}"))
 
         picked = _newest_trace_path(stdout)
 
-        # It resolves to the single real (weirdly-named) file, never to the
-        # fabricated path the name was trying to smuggle in.
-        assert picked == f"{TRACE_ROOT}/x/{hostile_name}"
-        assert picked != f"{TRACE_ROOT}/x/fabricated.jsonl"
+        # Resolves to the single real (weirdly-named) file, never to the path
+        # its name was trying to smuggle in.
+        assert picked == f"{TRACE_ROOT}/x/{HOSTILE_NAME}"
+        assert picked != FABRICATED
