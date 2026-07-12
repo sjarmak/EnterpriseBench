@@ -23,13 +23,18 @@ from unittest.mock import patch
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "orchestration"))
 
-from orchestration.run_task import (  # noqa: E402
+import run_task as rt  # noqa: E402
+from run_task import (  # noqa: E402
+    AGENT_INSTRUCTION,
+    AGENT_OUTPUT_DIR,
     GRADING_PATHS,
+    GROUND_TRUTH,
     SCORING_WORKDIR,
     WORKSPACE_DIR,
     _assert_grading_assets_sealed,
+    _chown_to_agent,
     _run_scoring,
     _seal_grading_assets,
 )
@@ -71,8 +76,6 @@ class TestSetupChownSite:
     """SITE 1 — setup_container must not hand the grader to the agent."""
 
     def test_setup_chowns_instruction_but_no_grading_asset(self) -> None:
-        from orchestration import run_task as rt
-
         captured: list[list[str]] = []
 
         with patch.object(rt, "_chown_to_agent") as chown:
@@ -100,8 +103,6 @@ class TestInstallClaudeCliChownSite:
     """
 
     def test_shell_command_touches_no_grading_asset(self) -> None:
-        from orchestration import run_task as rt
-
         shell_cmds: list[str] = []
 
         def fake_exec(container_id, cmd, **kwargs):
@@ -119,10 +120,44 @@ class TestInstallClaudeCliChownSite:
         assert "/home/agent" in joined
 
 
+class TestChownGuard:
+    """The invariant, enforced once, instead of per-site vigilance.
+
+    Both known holes were a caller handing _chown_to_agent (or an inline
+    `chown -R`) a grading path. The guard makes that unrepresentable, so a THIRD
+    site cannot quietly reopen it.
+    """
+
+    @pytest.mark.parametrize("path", GRADING_PATHS)
+    def test_refuses_a_grading_asset(self, path: str) -> None:
+        with patch.object(rt, "_docker_exec") as exec_:
+            with pytest.raises(ValueError, match="never own the grader"):
+                _chown_to_agent("cid", [path])
+        exec_.assert_not_called()
+
+    def test_refuses_the_workspace_root(self) -> None:
+        """chowning the parent is enough: POSIX unlink/rename keys off its write
+        bit, so the agent could move the sealed assets aside without touching
+        them."""
+        with pytest.raises(ValueError, match="never own the grader"):
+            _chown_to_agent("cid", [WORKSPACE_DIR])
+
+    def test_refuses_a_path_inside_a_grading_asset(self) -> None:
+        with pytest.raises(ValueError, match="never own the grader"):
+            _chown_to_agent("cid", [GROUND_TRUTH])
+
+    def test_refuses_a_grading_asset_hidden_among_legitimate_paths(self) -> None:
+        with pytest.raises(ValueError, match="never own the grader"):
+            _chown_to_agent("cid", [AGENT_INSTRUCTION, "/workspace/.task"])
+
+    def test_allows_the_paths_the_agent_legitimately_owns(self) -> None:
+        with patch.object(rt, "_docker_exec", return_value=_ok()) as exec_:
+            _chown_to_agent("cid", [AGENT_INSTRUCTION, AGENT_OUTPUT_DIR, "/home/agent"])
+        exec_.assert_called_once()
+
+
 class TestSealGradingAssets:
     def test_seal_runs_as_root_and_strips_agent_access(self) -> None:
-        from orchestration import run_task as rt
-
         with patch.object(rt, "_docker_exec", return_value=_ok()) as exec_:
             _seal_grading_assets("cid")
 
@@ -142,8 +177,6 @@ class TestSealGradingAssets:
     def test_seal_failure_raises_loud(self) -> None:
         """An unsealed run is unscoreable — never silently continue (s58f: a
         masked chown failure is what produced fake-0 no-op runs)."""
-        from orchestration import run_task as rt
-
         with patch.object(rt, "_docker_exec", return_value=_fail("chown: denied")):
             with pytest.raises(RuntimeError, match="seal"):
                 _seal_grading_assets("cid")
@@ -151,8 +184,6 @@ class TestSealGradingAssets:
 
 class TestAssertGradingAssetsSealed:
     def test_clean_seal_passes(self) -> None:
-        from orchestration import run_task as rt
-
         def fake_exec(container_id, cmd, **kwargs):
             # find reports nothing; agent cannot read ground truth
             if kwargs.get("user") == "agent":
@@ -166,8 +197,6 @@ class TestAssertGradingAssetsSealed:
         assert err == ""
 
     def test_agent_owned_grading_file_is_a_breach(self) -> None:
-        from orchestration import run_task as rt
-
         def fake_exec(container_id, cmd, **kwargs):
             if kwargs.get("user") == "agent":
                 return _fail(returncode=1)
@@ -185,8 +214,6 @@ class TestAssertGradingAssetsSealed:
         """The parent governs unlink/rename. An agent-owned (or non-sticky)
         /workspace lets the agent move the sealed assets aside wholesale, no
         write to a sealed file required."""
-        from orchestration import run_task as rt
-
         def fake_exec(container_id, cmd, **kwargs):
             if kwargs.get("user") == "agent":
                 return _fail(returncode=1)
@@ -204,8 +231,6 @@ class TestAssertGradingAssetsSealed:
         """Fail CLOSED on absence. A deleted test.sh produces empty verifier
         output, which the scorer guard reads as verifier_infra_error — the
         re-run mulligan (g5k5s). An absent grader must never read as 'sealed'."""
-        from orchestration import run_task as rt
-
         def fake_exec(container_id, cmd, **kwargs):
             if kwargs.get("user") == "agent":
                 return _fail(returncode=1)
@@ -221,8 +246,6 @@ class TestAssertGradingAssetsSealed:
 
     def test_absent_path_emits_missing_marker(self) -> None:
         """The probe must report absence, not silently skip it (`[ ! -e ]`)."""
-        from orchestration import run_task as rt
-
         with patch.object(rt, "_docker_exec", return_value=_ok()) as exec_:
             _assert_grading_assets_sealed("cid")
 
@@ -236,8 +259,6 @@ class TestAssertGradingAssetsSealed:
 
     def test_agent_readable_ground_truth_is_a_breach(self) -> None:
         """Reading the answer key is as fatal as rewriting the checker."""
-        from orchestration import run_task as rt
-
         def fake_exec(container_id, cmd, **kwargs):
             if kwargs.get("user") == "agent":
                 return _ok(returncode=0)  # test -r succeeded
@@ -255,8 +276,6 @@ class TestRunScoringUnderTheSeal:
         """Ownership alone does not close the hole: 185 checks shell out to
         `python3 -c`, whose sys.path[0] is the cwd. Scoring from agent-owned
         /workspace lets a planted /workspace/json.py hijack the grader."""
-        from orchestration import run_task as rt
-
         with patch.object(rt, "_assert_grading_assets_sealed", return_value=(True, "")):
             with patch.object(
                 rt, "_docker_exec", return_value=_ok(stdout='{"task_score": 0.5}')
@@ -271,8 +290,6 @@ class TestRunScoringUnderTheSeal:
     def test_breach_yields_integrity_violation_not_a_rerun(self) -> None:
         """The re-run channel keys off verifier_infra_error. Routing a breach
         there would make tampering a free mulligan (the g5k5s inversion)."""
-        from orchestration import run_task as rt
-
         with patch.object(
             rt, "_assert_grading_assets_sealed", return_value=(False, "tampered")
         ):
@@ -340,8 +357,6 @@ class TestScoringDoesNotBreakTheChecks:
         required or `git diff` refuses (dubious ownership) and the check's
         `2>/dev/null || true` turns that into a false 'no code changes'. But
         trusting the repo must not let its config execute code as the scorer."""
-        from orchestration import run_task as rt
-
         with patch.object(rt, "_assert_grading_assets_sealed", return_value=(True, "")):
             with patch.object(
                 rt, "_docker_exec", return_value=_ok(stdout='{"task_score": 1.0}')
@@ -358,8 +373,6 @@ class TestScoringDoesNotBreakTheChecks:
 
 class TestIntegrityViolationRouting:
     def test_router_marks_run_invalid_and_never_succeeds(self) -> None:
-        from orchestration import run_task as rt
-
         result = rt.TaskRunResult(task_id="t")
         rt._route_integrity_violation(
             result, {"integrity_violation": {"reason": "grading_assets_tampered"}}
@@ -371,8 +384,6 @@ class TestIntegrityViolationRouting:
         assert result.success is False
 
     def test_clean_scores_leave_the_result_untouched(self) -> None:
-        from orchestration import run_task as rt
-
         result = rt.TaskRunResult(task_id="t")
         rt._route_integrity_violation(result, {"task_score": 1.0})
 
