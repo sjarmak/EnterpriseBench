@@ -60,10 +60,19 @@ class VerificationResult:
             lines.append("")
         lines.append("checkpoints:")
         for cr in self.checkpoint_results:
-            status = "PASS" if cr.passed else "FAIL"
-            lines.append(
-                f"  - {cr.name}: {status} (score={cr.score:.2f}, weight={cr.weight:.2f})"
-            )
+            if cr.infra_error is not None:
+                # Same rule as total_score above, at the element: this
+                # checkpoint's 0.0 is a placeholder, so printing it as a number
+                # would hand a reader (or a per-checkpoint parser) a false zero
+                # attributable to the agent.
+                lines.append(
+                    f"  - {cr.name}: INFRA_ERROR (no score, weight={cr.weight:.2f})"
+                )
+            else:
+                status = "PASS" if cr.passed else "FAIL"
+                lines.append(
+                    f"  - {cr.name}: {status} (score={cr.score:.2f}, weight={cr.weight:.2f})"
+                )
             if cr.detail:
                 lines.append(f"    detail: {cr.detail}")
         if self.artifact_results:

@@ -42,14 +42,13 @@ _HARNESS_IMPORT_FAILURE = "No module named 'eb_verify"
 # occur legitimately in error-provenance task subjects.
 _INFRA_DETAIL_SIGNATURES = (INFRA_SENTINEL, _HARNESS_IMPORT_FAILURE)
 
-# Machine key for the no-verdict rule below. Shared verbatim with the
-# test_runner.sh attestation path (bead glka.2) so both scoring paths route the
-# same failure under one key instead of forking two vocabularies.
+# Machine key for the no-verdict rule below. The shell scoring path
+# (test_runner.sh, bead glka.2) emits this same string, so the re-run channel
+# filters both paths on one key. Change it here and there together.
 NO_VERDICT_REASON = "verifier_did_not_run"
 
-# How much raw stdout/stderr an InfraError carries as evidence. Enough for an
-# operator to see the traceback; bounded so a runaway verifier cannot flood the
-# reward artifact.
+# Cap on evidence copied into an InfraError, so a runaway verifier cannot flood
+# reward.txt and the results payload.
 _EVIDENCE_CHARS = 2000
 
 
@@ -89,20 +88,16 @@ _SCORE_EPSILON = 1e-6
 def _is_valid_score(value: object) -> bool:
     """Is ``value`` a real, finite number inside [0, 1]?
 
-    Guards three ways a non-score becomes a FREE 1.0 once the caller clamps it
-    with ``max(0.0, min(1.0, float(value)))`` — the exact over-credit this
-    module exists to prevent (bead kyo34):
+    Rejects three values that a naive ``max(0.0, min(1.0, float(value)))`` clamp
+    silently turns into a FREE 1.0 — the exact over-credit this module exists to
+    prevent (bead kyo34). All three are reachable from a real verifier, because
+    ``json.loads`` parses bare ``NaN``/``Infinity`` by default:
 
-    * ``float('nan')`` — ``min(1.0, nan)`` is 1.0 in CPython, so a verifier
-      whose arithmetic divided by zero scores FULL MARKS. ``json.loads`` parses
-      a bare ``NaN`` token by default, so this is reachable from a real verifier.
-    * ``float('inf')`` — clamps to 1.0. Same story, same default json extension.
-    * ``True`` — ``isinstance(True, int)`` and ``float(True) == 1.0``, so a
-      verifier emitting ``{"score": true}`` (meaning "passed") scores 1.0.
-
-    Strings are rejected too: the schema says ``"type": "number"``, and no
-    active verifier emits a quoted score. ``float("1.0")`` would otherwise
-    succeed while ``float("high")`` raised — an arbitrary line.
+    * ``nan`` — ``min(1.0, nan)`` is 1.0 in CPython, so a verifier whose
+      arithmetic divided by zero scores FULL MARKS.
+    * ``inf`` — clamps to 1.0.
+    * ``True`` — ``float(True) == 1.0`` and ``isinstance(True, int)``, so a
+      verifier emitting ``{"score": true}`` to mean "passed" scores 1.0.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
@@ -190,25 +185,22 @@ def guard_verifier_output(
                 context={"checkpoint": cp.get("name", ""), "signature": sig},
             )
 
-        # Same rule as guard_checkpoint_verdict, enforced here because this is
-        # the OTHER entry point the module docstring promises to guard
-        # identically. run_task sums `score * weight` with no clamp at all, so a
-        # test.sh emitting NaN/Infinity (json.loads parses both by default)
-        # writes a nan/inf task_score straight into published results, and 999
-        # writes a 999. A score outside [0, 1] is a broken verifier, not a
-        # verdict (bead kyo34).
+        # Same rule as guard_checkpoint_verdict. `run_task` sums `score * weight`
+        # with no clamp, so a NaN/Infinity here writes a nan/inf task_score
+        # straight into published results, and a 999 writes a 999.
         if "score" in cp and not _is_valid_score(cp["score"]):
+            bad_score = repr(cp["score"])[:_EVIDENCE_CHARS]
             return InfraError(
                 reason="malformed_verifier_output",
                 stage=stage,
                 detail=(
                     f"checkpoint {cp.get('name', '?')!r} score was not a real "
-                    f"number in [0.0, 1.0]: {cp['score']!r}"
+                    f"number in [0.0, 1.0]: {bad_score}"
                 ),
                 context={
                     "checkpoint": cp.get("name", ""),
                     "returncode": returncode,
-                    "score": repr(cp["score"]),
+                    "score": bad_score,
                 },
             )
 
@@ -230,19 +222,17 @@ def no_verdict(
     :data:`NO_VERDICT_REASON`, so the re-run channel can filter on one key while
     an operator still sees which way the verifier died.
 
-    ``evidence`` (stderr, raw_output, returncode, ...) is passed as an explicit
-    dict rather than ``**kwargs``. A ``**context`` splat let an evidence key
-    named ``checkpoint`` or ``stage`` collide with the named parameters and
-    raise ``TypeError: got multiple values`` from inside the guard — the one
-    code path whose entire job is to not blow up when a verifier misbehaves.
+    ``evidence`` (stderr, raw_output, returncode, ...) is an explicit dict, not
+    ``**kwargs``: a verifier-supplied key named ``checkpoint`` or ``stage`` would
+    otherwise collide with the named parameters and raise ``TypeError`` from
+    inside the one code path whose job is to not blow up on a broken verifier.
     """
     return InfraError(
         reason=NO_VERDICT_REASON,
         stage=stage,
         detail=detail,
-        # Evidence first: the named params are the authoritative provenance and
-        # must win, so a stray evidence key cannot rewrite which checkpoint or
-        # failure cause this error is about.
+        # Evidence first so the named params win: a stray evidence key must not
+        # rewrite which checkpoint or cause this error is about.
         context={**(evidence or {}), "cause": cause, "checkpoint": checkpoint},
     )
 
@@ -274,7 +264,6 @@ def guard_checkpoint_verdict(
     """
 
     def did_not_run(cause: str, detail: str, **evidence: object) -> InfraError:
-        """Every exit below shares this provenance; only `cause` + evidence differ."""
         return no_verdict(
             cause,
             detail,
@@ -332,7 +321,7 @@ def guard_checkpoint_verdict(
         return did_not_run(
             "non_numeric_score",
             "verifier 'score' was not a real number in [0.0, 1.0]: "
-            f"{verdict['score']!r}",
+            f"{repr(verdict['score'])[:_EVIDENCE_CHARS]}",
             raw_output=raw,
         )
 
@@ -344,4 +333,7 @@ def guard_checkpoint_verdict(
             signature=sig,
         )
 
+    # Absorb the ±_SCORE_EPSILON slop admitted above, so the caller reads a score
+    # already inside [0, 1] and no second clamp has to know this epsilon exists.
+    verdict["score"] = max(0.0, min(1.0, float(verdict["score"])))
     return verdict

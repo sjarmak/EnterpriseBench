@@ -5,6 +5,14 @@ Usage:
     python -m eb_verify.cli run <task.toml>
     python -m eb_verify.cli check <checkpoint_name> <task.toml>
     python -m eb_verify.cli validate-artifact <type> <path>
+
+Exit codes for `run` and `check`:
+    0  the agent scored above zero
+    1  the agent scored zero (a real, measured failure)
+    2  no score exists — a verifier never reached a verdict (infra error).
+
+A caller must not fold 2 into 1. They are opposite claims: 1 says the agent
+failed, 2 says the harness did and the run has to be re-run.
 """
 
 from __future__ import annotations

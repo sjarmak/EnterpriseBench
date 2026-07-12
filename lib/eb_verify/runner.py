@@ -194,7 +194,6 @@ class CheckpointRunner:
         def did_not_run(
             cause: str, detail: str, **evidence: object
         ) -> CheckpointResult:
-            """No verdict was reached before the verifier even produced output."""
             return self._infra_result(
                 checkpoint,
                 no_verdict(
@@ -248,7 +247,7 @@ class CheckpointRunner:
         if isinstance(verdict, InfraError):
             return self._infra_result(checkpoint, verdict)
 
-        score = max(0.0, min(1.0, float(verdict["score"])))
+        score = float(verdict["score"])  # guard_checkpoint_verdict clamped it
         return CheckpointResult(
             name=checkpoint.name,
             weight=checkpoint.weight,
@@ -423,10 +422,8 @@ class CheckpointRunner:
         artifact_results = self.validate_artifacts()
 
         # A checkpoint that never reached a verdict has no score, so the run has
-        # no total. Averaging its placeholder 0.0 against the checkpoints that
-        # DID run yields a plausible number indistinguishable from a real one —
-        # which is exactly how a never-ran verifier gets banked as a result.
-        # Report the failure instead and let the re-run channel own it. Every
+        # no total: averaging its placeholder against the checkpoints that DID
+        # run yields a plausible number indistinguishable from a real one. Every
         # failure is in checkpoint_results (and reward.txt); the routed dict
         # names the first, which is what the re-run channel triages on.
         infra_errors = [
@@ -459,9 +456,6 @@ class CheckpointRunner:
             task_id=self.task.id,
             checkpoint_results=checkpoint_results,
             artifact_results=artifact_results,
-            # On an invalid run this 0.0 is a placeholder, never a measurement —
-            # `summary()` refuses to print it as a number while
-            # verifier_infra_error is set.
             total_score=total,
             score_gates=score_gates,
             verifier_infra_error=(

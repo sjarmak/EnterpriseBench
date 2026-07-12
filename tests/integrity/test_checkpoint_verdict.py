@@ -304,6 +304,41 @@ class TestRunAllRefusesFabricatedTotal:
         assert "total_score: 1.0" not in text
         assert "total_score: 0.0" not in text
 
+    def test_infra_checkpoint_line_carries_no_score(self, dirs, tmp_path):
+        """The no-score rule holds at the ELEMENT, not just the aggregate.
+
+        Guarding only `total_score` still left the per-checkpoint line printing
+        the placeholder as `FAIL (score=0.00)` — a false zero attributable to
+        the agent, one level down, in the same machine-read artifact.
+        """
+        task_dir, workspace = dirs
+        good = write_verifier(
+            task_dir, "good.sh", '#!/bin/bash\necho \'{"score": 1.0}\'\n'
+        )
+        broken = write_verifier(task_dir, "broken.sh", "#!/bin/bash\nexit 0\n")
+        task = make_task(
+            [
+                Checkpoint(name="good", weight=0.6, verifier=good, timeout_seconds=30),
+                Checkpoint(
+                    name="broken", weight=0.4, verifier=broken, timeout_seconds=30
+                ),
+            ]
+        )
+        runner = CheckpointRunner(task=task, task_dir=task_dir, workspace=workspace)
+
+        reward = tmp_path / "reward.txt"
+        runner.run_all(output_path=reward)
+
+        lines = reward.read_text().splitlines()
+        broken_line = next(ln for ln in lines if ln.startswith("  - broken:"))
+        assert "INFRA_ERROR" in broken_line
+        assert "no score" in broken_line
+        assert "score=" not in broken_line  # neither a free 1.00 nor a false 0.00
+
+        # The checkpoint that DID reach a verdict still reports its real score.
+        good_line = next(ln for ln in lines if ln.startswith("  - good:"))
+        assert "PASS (score=1.00" in good_line
+
     def test_cli_run_exits_2_on_no_verdict(self, dirs, tmp_path, monkeypatch, capsys):
         """Exit 2 == 'this run produced no score'. A caller that reads any
         nonzero exit as 'the agent failed' would otherwise bank a broken
