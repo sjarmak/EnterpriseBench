@@ -4,24 +4,42 @@ Bead: `EnterpriseBench-jn73.13` (epic `EnterpriseBench-jn73`)
 
 ## Verdict: NO-GO on a codenav-inclusive (`all` endpoint) MCP arm
 
-NO-GO, but for the opposite reason to the one the epic assumed.
+NO-GO, but for the opposite reason to the one the epic assumed — and the real
+problem is bigger than the question that was asked.
 
 The epic's premise was that codenav might be inert over our mirrors — that
 `go_to_definition` returning empty meant SCIP indexes were absent, so an `all`
 arm would add nothing. That premise is **refuted**. The mirrors *are* precisely
-indexed, codenav works, and it works well enough to be the problem: precise
-cross-repo linking resolves references **out of the pinned mirror** and into
-other revisions of the same project. Agents then follow those references and
-read wrong-revision source.
+indexed and codenav works (Finding 1).
 
-Codenav is not inert. It is a live contamination vector against the revision
-pin that the mirrors exist to provide.
+But the finding that matters is not about codenav at all. **The MCP arms already
+in the study are contaminated**: agents see, and read, source from a *different
+pinned revision of the same project* than the one their task pins. 15 runs across
+10 tasks, in **both** `mcp_only` and `hybrid` (Finding 2). Codenav accounts for
+only ~2% of the leaking calls; ordinary `keyword_search` and `read_file` over a
+global index full of near-duplicate mirrors account for the rest — and 8 tasks
+ship a preamble that points the agent at the wrong mirror outright.
+
+So: NO-GO on adding a codenav-inclusive arm, because the revision-pinning
+guarantee the mirrors exist to provide is **already broken** in the arms we
+shipped, and adding a fourth arm on top of an unsound base would compound it.
+Fixing the pin leak is the prerequisite, not the codenav decision.
+
+This flips to GO once MCP results are constrained to the authorized mirror set —
+server-side scoping, or a harness-side filter — and the mis-pinned preambles are
+corrected.
+
+> **Correction.** An earlier revision of this document reported the leak as
+> `mcp_only`-only, credited codenav as its driver, and reported `hybrid` as
+> clean. All three were artifacts of deriving the authorized mirror set from the
+> MCP preamble — which is the very artifact that is mis-pinned. The authorized
+> set now comes from the task config. See "What counts as the authorized set".
 
 ## How to regenerate every number here
 
 ```bash
-# Contamination audit over the trace corpus (results/runs is gitignored;
-# point --runs-dir at wherever the corpus lives).
+# Contamination audit + exposure surface over the trace corpus (results/runs is
+# gitignored; point --runs-dir at wherever the corpus lives).
 python scripts/analysis/audit_mirror_contamination.py --runs-dir results/runs
 python scripts/analysis/audit_mirror_contamination.py --runs-dir results/runs --json
 
@@ -29,11 +47,37 @@ python scripts/analysis/audit_mirror_contamination.py --runs-dir results/runs --
 python scripts/infra/verify_sg_indexing.py --check-api
 ```
 
-Corpus as audited: 408 traces, 273 of them scored (a run is scorable only if it
-has an MCP preamble declaring an authorized mirror set). Runs under
-`_invalidated/` (12) are excluded — they are already withdrawn from analysis.
-Replicates (`<task>/<mode>/repN/`) are counted under the mode they repeat, not
-as modes of their own.
+Every number in this document is emitted by those commands. Nothing here is
+hand-counted.
+
+### What counts as the authorized set
+
+**The task's own config, never the rendered MCP preamble.** This distinction is
+load-bearing and an earlier draft of this assessment got it wrong.
+
+`configs/sg_mirrors/<task>.json` (or, failing that, the task's `[[repos]]`) is the
+pin of record; `derive_mirror_name` maps it to the mirror name on the instance.
+The preamble is a *rendered artifact* and is itself mis-pinned for 8 tasks. An
+audit that reads the authorized set off the preamble asks only "did the agent
+obey its instructions?" — so when the instruction is the thing at fault, a real
+pin violation scores AUTHORIZED and the auditor certifies the contamination it
+exists to catch. Correcting this moved the headline (see Finding 2).
+
+Corpus as audited: 408 traces, **261 scored**. A run is scorable only if it was
+MCP-armed *and* its pin resolves. Excluded, loudly rather than silently:
+
+- **147 unscored** — no MCP preamble (baseline, `ablate-*`). Structurally
+  incapable of this leak; not "clean".
+- **12 MCP runs (6 tasks) with no resolvable pin** — reported as
+  `PIN UNRESOLVED`, never as clean. `ansible-abc-imports-fix-001`,
+  `beam-pipeline-builder-refac-001`, and the three `dep-graph-tri-*` tasks have
+  no task config on disk. `bustub-hyperloglog-impl-001` has one, but it is the
+  placeholder `unknown/repo@HEAD` — and `HEAD` is the absence of a pin, not a
+  pin; deriving `sg-evals/repo--HEAD` from it would score every real mirror the
+  agent touched as a violation.
+- **12 runs under `_invalidated/`** — already withdrawn from analysis.
+
+Replicates (`<task>/<mode>/repN/`) are counted under the mode they repeat.
 
 ## Finding 1 — the mirrors ARE precisely indexed (SCIP present)
 
@@ -65,71 +109,99 @@ premise rather than establishing a rate.) The codenav null the epic set out to
 explain has a different cause, and `find_references`' 5/16 Cloudflare transport
 failures (filed separately) are a more likely contributor than indexing.
 
-## Finding 2 — cross-revision contamination, and it is MCP-arm-only
+## Finding 2 — cross-revision contamination, in BOTH MCP-armed arms
 
 Because ~22 projects sit on the instance at several pinned revisions, precise
 linking walks between them. Per-mode, over the scored runs:
 
 | Mode | Runs | Wrong-rev in results | Wrong-rev ACTIVELY READ | Foreign-repo bleed |
 |---|---|---|---|---|
-| `mcp_only` | 136 | 21 | **11** | 22 |
-| `hybrid` | 136 | 1 | 0 | 0 |
-| `baseline` | 123 | n/a — unscored | n/a | n/a |
-| `ablate-*` | 12 | n/a — unscored | n/a | n/a |
+| `mcp_only` | 130 | 23 | **13** | 23 |
+| `hybrid` | 130 | 3 | **2** | 0 |
+| `baseline` + `ablate-*` | 147 | n/a — unscored | n/a | n/a |
 | no mode dir | 1 | 0 | 0 | 0 |
 
-Eleven `mcp_only` runs, spanning **eight distinct tasks**, pulled wrong-revision
-source into context: `dead-code-003`, `schema-evolution-002`,
-`schema-evolution-005`, `api-contract-gocp-module-007`,
-`dep-graph-tri-prometheus-alertmanager-grafana-001`,
-`incident-investigation-quad-containerd-001`, `error-trace-k8s-nftables-sync-001`,
-and `incident-inv-docker-shutdown-004` (the last two contaminated across
-several replicates each, which is why the run count exceeds the task count).
+**15 runs across 10 distinct tasks** pulled wrong-revision source into context:
+`ansible-galaxy-tar-regression-prove-001` (×`mcp_only`+`hybrid`),
+`ccx-dep-trace-106` (×`mcp_only`+`hybrid`), `api-contract-gocp-module-007`,
+`ceph-rgw-auth-secure-001`, `dead-code-003`, `schema-evolution-002`,
+`schema-evolution-005`, `incident-investigation-quad-containerd-001`,
+`error-trace-k8s-nftables-sync-001` (2 replicates), and
+`incident-inv-docker-shutdown-004` (3 replicates).
 
-`dead-code-003` is the clean illustration: the task pins
-`react--ab18f33d`, `find_references` returned hits in `react--56408a5b`
-(`dead-code-002`'s pin), and the agent then issued `read_file` **against
-`react--56408a5b`**. Source at the wrong revision entered the transcript.
+### "MCP-arm-only" is retracted
 
-Two caveats on this table, stated rather than smoothed over:
+An earlier draft of this document reported `hybrid` as **0 actively-read** and
+titled this finding "and it is MCP-arm-only". Both claims were artifacts of
+deriving the authorized set from the MCP preamble. `hybrid` actively read
+wrong-revision source in **2 runs**. The contamination is not confined to the
+`mcp_only` arm, and any rescore decision must cover `hybrid` too.
 
-- **Baseline is unscored, not clean.** Baseline runs carry no MCP preamble and
-  therefore no authorized set, so there is nothing to violate. This is the point:
-  baseline has `/workspace` at the pinned revision and no cross-repo index to
-  traverse, so it is *structurally* incapable of this leak. Counting it as "0
-  violations" would wrongly imply it was tested and passed.
-- **The one hybrid hit is weaker than the mcp_only ones.** `refactor-orch-002`
-  cites upstream `spf13/cobra` inside a *subagent's* report, not from a direct
-  MCP call, and no hybrid run actively read wrong-revision source.
-- **12 runs (6 tasks) have an ambiguous authorized set, and are reported as
-  such rather than counted as clean.** `ansible-abc-imports-fix-001`,
-  `ansible-galaxy-tar-regression-prove-001`, `beam-pipeline-builder-refac-001`,
-  `camel-routing-arch-001`, `ccx-dep-trace-106`, `ceph-rgw-auth-secure-001`
-  (each ×`mcp_only`+`hybrid`) carry a generic scoping block *and* a
-  task-specific one naming a **different revision of the same project**. Only
-  one is the task's real pin; the other is boilerplate bleed. Both land in the
-  authorized set, so a reference escaping into the wrong one would score
-  AUTHORIZED — a false negative. Checked by hand: in all 12, the agent only
-  ever touched the correct mirror, **so the table above is unaffected**. The
-  auditor now prints an `AMBIGUOUS AUTHORIZED SET` warning for them, because a
-  "clean" verdict there is *unsound*, not negative. Fixing the preambles is
-  filed as its own bead.
+Concretely, `ccx-dep-trace-106` pins `gcc@releases/gcc-14.2.0`, but its
+`instruction_mcp.md` tells the agent to filter on `sg-evals/gcc--96dfb333` — a
+mirror that appears nowhere in the registry. Its `hybrid` run duly addressed
+`gcc--96dfb333` and read from it. Under the old preamble-derived audit that
+scored as **AUTHORIZED**, because the preamble was both the instruction and the
+answer key.
 
-Leaks by tool (calls whose results carried a wrong-revision repo): `keyword_search`
-66, `read_file` 56, `find_references` 4, `Agent` (subagent report) 1. These are
-corpus-wide call tallies over the scored runs, so they are unaffected by the
-per-mode attribution. Two distinct modes hide in that spread, and they are not
-equally serious:
+### Two mechanisms, not one
+
+The pin-violating leaks divide by cause, and the distinction decides the fix:
+
+- **Mis-pinned instruction (14 runs, 7 tasks).** The preamble names a mirror the
+  task does not pin; the agent obeys and reads the wrong revision. This is a
+  **task-authoring bug**, not a codenav failure — it would happen with codenav
+  disabled. Affected: `ansible-galaxy-tar-regression-prove-001`,
+  `camel-routing-arch-001`, `ccx-compliance-052`, `ccx-compliance-053`,
+  `ccx-dep-trace-106`, `ccx-incident-032`, `ceph-rgw-auth-secure-001` (each
+  ×`mcp_only`+`hybrid`). The auditor prints a `MIS-PINNED PREAMBLE` block naming
+  each. Filed as its own bead.
+- **Index-mediated drift.** Results cite a sibling mirror the agent never asked
+  for, and the agent then follows the reference. `dead-code-003` is the clean
+  illustration: the task pins `react--ab18f33d`, `find_references` returned hits
+  in `react--56408a5b` (`dead-code-002`'s pin), and the agent issued `read_file`
+  **against `react--56408a5b`**.
+
+Baseline remains **unscored, not clean**: no MCP preamble, no authorized set,
+nothing to violate. It has `/workspace` at the pinned revision and no cross-repo
+index to traverse, so it is *structurally* incapable of this leak. Counting it as
+"0 violations" would imply it was tested and passed.
+
+### Codenav does not drive the leak
+
+Leaks by tool (calls whose results carried a wrong-revision repo):
+
+| Tool | Leaking calls |
+|---|---|
+| `read_file` | 95 |
+| `keyword_search` | 93 |
+| `find_references` (codenav) | **4** |
+| `commit_search` | 1 |
+| `Agent` (subagent report) | 1 |
+
+Codenav is **4 of 194 leaking calls — about 2%**. An earlier draft asserted that
+"codenav drives" the pin-violating mode while publishing a table that said
+otherwise; that claim is withdrawn as self-contradictory.
+
+This *strengthens* the NO-GO rather than weakening it. The leak is not a property
+of the one endpoint we were deciding whether to add — it is already present in
+the MCP arms as shipped, and it is driven by ordinary search and read calls over
+a global index that contains near-duplicate mirrors. **Remediation scoped to
+codenav would miss ~98% of it.**
+
+Two escape modes remain worth keeping apart, because their severity differs:
 
 - **Pin-violating** — a different revision of the *same* project. Breaks the
-  revision pin. This is the acute mode, and codenav drives it.
+  revision pin. The acute mode.
 - **Global-index bleed** — an unrelated third-party repo. Widens context and adds
   noise, but does not violate the pin.
 
-The auditor keeps them apart deliberately; collapsing them would overstate the
-harm.
+Collapsing them would overstate the harm.
 
 ### Exposure surface
+
+Emitted by the auditor (`--- Exposure surface ---`), computed from the mirror
+registry rather than counted by hand:
 
 | | |
 |---|---|
@@ -139,7 +211,9 @@ harm.
 | Mirrors belonging to a multi-rev project | **84 (63%)** |
 
 Worst offenders: `grpc-go` ×12, `kubernetes` ×10, `etcd` ×9. Any MCP-arm task on
-those projects is exposed.
+those projects is exposed. A project pinned at a single revision cannot be
+escaped into a sibling, so the 49 mirrors outside a multi-rev project are not at
+risk from this mechanism.
 
 ## Finding 3 — the preamble promises scoping that codenav cannot honor
 
@@ -169,11 +243,22 @@ of UNKNOWNs:
 What ships instead is the *instrument*: `verify_sg_indexing.py --check-api` now
 performs a real GraphQL query per mirror and reports one of
 `PRECISE | NONE | ABSENT | UNKNOWN`. Its load-bearing invariant is that a
-failure to determine status (auth, transport, schema drift) yields **UNKNOWN and
-never NONE** — reporting "not indexed" when we mean "could not tell" would
-fabricate the very finding the tool exists to establish. With no token it exits
-non-zero rather than printing a table of zeroes. Run it when a valid token
-exists; the answer today is UNKNOWN for all 133 mirrors.
+failure to determine status yields **UNKNOWN, never NONE or ABSENT** — reporting
+"not indexed" when we mean "could not tell" would fabricate the very finding the
+tool exists to establish. Enforced for all of:
+
+- auth failure (401/403), transport error, timeout;
+- a body that is not JSON, and a body that *is* valid JSON but the wrong shape
+  (`{"data": []}`, a string where an object belongs, a top-level list or null) —
+  only an explicit `repository: null`, the instance answering "no such repo", is
+  allowed to mean `ABSENT`;
+- GraphQL schema drift (a renamed field).
+
+Failures are also contained *per mirror*: one malformed response degrades that
+mirror to UNKNOWN instead of aborting the run and taking the other 132 statuses
+with it. With no token the report is inconclusive and exits non-zero rather than
+printing a table of zeroes. Run it when a valid token exists; the answer today is
+UNKNOWN for all 133 mirrors.
 
 It keys on `repos[].sg_name` (the mirror). The per-suite view carries only
 *upstream* names, and querying those would ask about `github.com/ansible/ansible`

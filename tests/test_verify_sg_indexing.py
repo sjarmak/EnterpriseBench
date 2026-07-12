@@ -411,6 +411,42 @@ class TestCheckRepoIndex:
         assert "lsifUploads" in r.detail
 
 
+def _returns(raw: bytes):
+    """Transport returning a fixed raw body — used for bodies that are valid
+    JSON but the wrong *shape*, which `_graphql` cannot express."""
+
+    def fetch(url, body, headers, timeout) -> bytes:
+        return raw
+
+    return fetch
+
+
+class TestWrongShapeIsUnknown:
+    """Valid JSON of an unexpected shape is still a failure to *ask*.
+
+    `_malformed` only covers a non-JSON body. A response that parses but does
+    not match the schema — a proxy error page rendered as JSON, schema drift, a
+    truncated envelope — must land in UNKNOWN. ABSENT and NONE are definite
+    findings about the corpus and may never be manufactured from a response we
+    could not read.
+    """
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            b'{"data": []}',
+            b'{"data": {"repository": "a string"}}',
+            b'{"data": {"repository": {"lsifUploads": "a string"}}}',
+            b"[]",
+            b"null",
+            b'"a string"',
+        ],
+    )
+    def test_wrong_shape_never_yields_a_definite_finding(self, raw) -> None:
+        status = vsi.check_repo_index("sg-evals/x--1", fetch=_returns(raw)).status
+        assert status == vsi.UNKNOWN, f"{raw!r} was read as a definite {status}"
+
+
 class TestRequestShape:
     def test_sends_non_default_user_agent(self) -> None:
         """sourcegraph.com 403s the default Python-urllib UA."""
@@ -467,6 +503,38 @@ class TestCheckAll:
         report = vsi.check_all(data, fetch=_raising(_http_error(401, "Unauthorized")))
         assert report.counts[vsi.UNKNOWN] == 2
         assert report.counts[vsi.NONE] == 0
+
+    def test_one_bad_response_does_not_destroy_the_other_statuses(self) -> None:
+        """Failure must be contained per mirror. Unguarded, one bad reply raises
+        out of `pool.map` and takes every other mirror's status with it — at
+        corpus scale, all 133 lost to a single malformed response."""
+        data = {"repos": [{"sg_name": f"sg-evals/r{i}--a"} for i in range(5)]}
+
+        def fetch(url, body, headers, timeout):
+            name = json.loads(body)["variables"]["name"]
+            if name == "sg-evals/r2--a":
+                return b"null"  # valid JSON, unusable shape
+            return b'{"data": {"repository": {"lsifUploads": {"totalCount": 1}}}}'
+
+        report = vsi.check_all(data, fetch=fetch)
+        assert len(report.results) == 5
+        assert report.counts[vsi.PRECISE] == 4  # the healthy four survive
+        assert report.counts[vsi.UNKNOWN] == 1  # only the poisoned one degrades
+        assert report.conclusive is False
+
+    def test_unexpected_exception_on_one_mirror_is_contained(self) -> None:
+        """Belt and braces: even a parser bug degrades that one mirror to
+        UNKNOWN rather than aborting the report."""
+        data = {"repos": [{"sg_name": "sg-evals/a--1"}, {"sg_name": "sg-evals/b--2"}]}
+
+        def fetch(url, body, headers, timeout):
+            if json.loads(body)["variables"]["name"] == "sg-evals/b--2":
+                raise RuntimeError("boom")
+            return b'{"data": {"repository": {"lsifUploads": {"totalCount": 1}}}}'
+
+        report = vsi.check_all(data, fetch=fetch)
+        assert report.counts[vsi.PRECISE] == 1
+        assert report.counts[vsi.UNKNOWN] == 1
         assert report.conclusive is False
 
     def test_zero_repos_checked_is_not_conclusive(self) -> None:

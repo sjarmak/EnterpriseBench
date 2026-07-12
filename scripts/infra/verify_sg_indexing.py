@@ -259,23 +259,61 @@ def check_repo_index(
     except (json.JSONDecodeError, UnicodeDecodeError):
         return RepoIndexStatus(name, UNKNOWN, "malformed response body")
 
+    # Every shape check below funnels to UNKNOWN. ABSENT and NONE are definite
+    # findings about the corpus; neither may be manufactured from a response we
+    # could not read. Only an explicit `repository: null` — the instance
+    # answering "no such repo" — is allowed to mean ABSENT.
+    if not isinstance(payload, dict):
+        return RepoIndexStatus(name, UNKNOWN, "response is not a JSON object")
+
     if payload.get("errors"):
         messages = "; ".join(
             e.get("message", "?") for e in payload["errors"] if isinstance(e, dict)
         )
         return RepoIndexStatus(name, UNKNOWN, f"graphql: {messages}")
 
-    repo = (payload.get("data") or {}).get("repository")
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return RepoIndexStatus(name, UNKNOWN, "no `data` object in response")
+
+    if "repository" not in data:
+        return RepoIndexStatus(name, UNKNOWN, "no `repository` field in response")
+
+    repo = data["repository"]
     if repo is None:
         return RepoIndexStatus(name, ABSENT, "repository not found on instance")
+    if not isinstance(repo, dict):
+        return RepoIndexStatus(name, UNKNOWN, "`repository` is not an object")
 
-    uploads = (repo.get("lsifUploads") or {}).get("totalCount")
-    if not isinstance(uploads, int):
+    uploads_field = repo.get("lsifUploads")
+    if not isinstance(uploads_field, dict):
+        return RepoIndexStatus(name, UNKNOWN, "no `lsifUploads` object in response")
+
+    uploads = uploads_field.get("totalCount")
+    # `bool` is an `int` subclass, and a JSON `true` would sail through as
+    # "1 completed upload(s)" — a false GREEN, the one thing this module refuses.
+    if not isinstance(uploads, int) or isinstance(uploads, bool):
         return RepoIndexStatus(name, UNKNOWN, "no totalCount in response")
 
     if uploads > 0:
         return RepoIndexStatus(name, PRECISE, f"{uploads} completed upload(s)")
     return RepoIndexStatus(name, NONE, "no completed precise-index uploads")
+
+
+def _check_one(
+    name: str, endpoint: str, token: str | None, fetch
+) -> RepoIndexStatus:
+    """Per-mirror containment. Not a swallow: the failure is *promoted* into the
+    report as UNKNOWN with its cause attached, which makes the report
+    inconclusive and exits non-zero. Unguarded, one bad reply raises out of
+    `pool.map` and every other mirror's status dies with it.
+    """
+    try:
+        return check_repo_index(name, endpoint=endpoint, token=token, fetch=fetch)
+    except Exception as exc:  # noqa: BLE001 — containment is the point
+        return RepoIndexStatus(
+            name, UNKNOWN, f"check failed: {type(exc).__name__}: {exc}"
+        )
 
 
 def check_all(
@@ -293,9 +331,7 @@ def check_all(
     """
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CHECKS) as pool:
         results = pool.map(
-            lambda name: check_repo_index(
-                name, endpoint=endpoint, token=token, fetch=fetch
-            ),
+            lambda name: _check_one(name, endpoint, token, fetch),
             mirror_names(data),
         )
         return IndexReport(results=tuple(results))

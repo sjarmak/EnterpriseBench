@@ -42,7 +42,7 @@ These repos are indexed on Sourcegraph under `sg-evals/` mirrors.
 
 class TestParseAuthorizedMirrors:
     def test_extracts_mirror_upstream_and_project(self):
-        mirrors = amc.parse_authorized_mirrors(PREAMBLE)
+        mirrors = amc.parse_preamble_mirrors(PREAMBLE)
         assert len(mirrors) == 1
         m = mirrors[0]
         assert m.mirror == "sg-evals/react--ab18f33d"
@@ -55,14 +55,14 @@ class TestParseAuthorizedMirrors:
   - MCP filter: `repo:^github.com/sg-evals/grpc-go--deadbeef$`
   - Upstream: `grpc/grpc-go@deadbeefcafe`
 """
-        mirrors = amc.parse_authorized_mirrors(text)
+        mirrors = amc.parse_preamble_mirrors(text)
         assert {m.mirror for m in mirrors} == {
             "sg-evals/react--ab18f33d",
             "sg-evals/grpc-go--deadbeef",
         }
 
     def test_no_scoping_block_yields_empty(self):
-        assert amc.parse_authorized_mirrors("no repos here") == ()
+        assert amc.parse_preamble_mirrors("no repos here") == ()
 
     def test_round_trips_the_preamble_the_harness_actually_builds(self):
         """The parser reads a format `mcp/sourcegraph.py` writes, and nothing but
@@ -81,7 +81,7 @@ class TestParseAuthorizedMirrors:
             ]
         )
 
-        mirrors = amc.parse_authorized_mirrors(preamble)
+        mirrors = amc.parse_preamble_mirrors(preamble)
 
         assert [m.mirror for m in mirrors] == ["sg-evals/react--ab18f33d"]
         assert mirrors[0].upstream == "facebook/react"
@@ -90,7 +90,7 @@ class TestParseAuthorizedMirrors:
 class TestClassifyRepo:
     @pytest.fixture
     def authorized(self):
-        return amc.parse_authorized_mirrors(PREAMBLE)
+        return amc.parse_preamble_mirrors(PREAMBLE)
 
     def test_authorized_mirror(self, authorized):
         assert (
@@ -172,6 +172,56 @@ def _trace(tmp_path: Path, lines: list, rel: str = "agent_trace.jsonl") -> Path:
     return p
 
 
+TASK = "dead-code-003"
+# derive_mirror_name() turns this into `sg-evals/react--ab18f33d` — the mirror
+# PREAMBLE above also names, so a well-pinned task and its preamble agree.
+REACT_PIN = {
+    "url": "https://github.com/facebook/react",
+    "rev": "ab18f33d46171ed1963ae1ac955c5110bb1eb199",
+}
+
+
+def _pin(tmp_path: Path, repos: list[dict] | None = None, task: str = TASK) -> Path:
+    """Write the task's config — the pin of record — and return the benchmarks dir.
+
+    The authorized set is resolved from HERE, never from the preamble. The
+    preamble is a rendered artifact that is itself mis-pinned for some real tasks
+    (ccx-dep-trace-106), so deriving the authorized set from it would let the
+    auditor certify the very contamination it exists to catch.
+    """
+    task_dir = tmp_path / "benchmarks" / "suite" / task
+    task_dir.mkdir(parents=True, exist_ok=True)
+    blocks = [f'[task]\nid = "{task}"']
+    for r in repos if repos is not None else [REACT_PIN]:
+        blocks.append(f'[[repos]]\nurl = "{r["url"]}"\nrev = "{r["rev"]}"')
+    task_dir.joinpath("task.toml").write_text("\n\n".join(blocks) + "\n")
+    return tmp_path / "benchmarks"
+
+
+def _mirrors(tmp_path: Path) -> Path:
+    """An empty per-task mirrors dir, so a fixture never silently resolves
+    against the REPO's real `configs/sg_mirrors/<task>.json` — which shares task
+    ids with these fixtures and would make a test pass for the wrong reason."""
+    d = tmp_path / "configs" / "sg_mirrors"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _audit(
+    tmp_path: Path,
+    lines: list,
+    *,
+    task: str = TASK,
+    mode: str = "mcp_only",
+    repos: list[dict] | None = None,
+):
+    """Audit one synthetic run whose task config exists on disk."""
+    benchmarks = _pin(tmp_path, repos, task)
+    root = tmp_path / "runs"
+    trace = _trace(root, lines, f"{task}/{mode}/agent_trace.jsonl")
+    return amc.audit_run(trace, root, benchmarks, _mirrors(tmp_path))
+
+
 class TestAuditRun:
     """End-to-end over a fixture trace modelled on dead-code-003/mcp_only.
 
@@ -181,8 +231,8 @@ class TestAuditRun:
     """
 
     @pytest.fixture
-    def trace(self, tmp_path):
-        return _trace(
+    def audit(self, tmp_path):
+        return _audit(
             tmp_path,
             [
                 _msg("user", PREAMBLE),
@@ -218,34 +268,29 @@ class TestAuditRun:
             ],
         )
 
-    def test_authorized_set_is_recovered(self, trace):
-        audit = amc.audit_run(trace)
+    def test_authorized_set_comes_from_the_task_config(self, audit):
         assert [m.mirror for m in audit.authorized] == ["sg-evals/react--ab18f33d"]
 
-    def test_local_symbol_reference_does_not_leak(self, trace):
-        audit = amc.audit_run(trace)
+    def test_local_symbol_reference_does_not_leak(self, audit):
         local = next(c for c in audit.calls if c.args.get("symbol") == "retryErrors")
         assert local.leaked_repos == ()
 
-    def test_exported_symbol_reference_leaks_sibling_mirror(self, trace):
-        audit = amc.audit_run(trace)
+    def test_exported_symbol_reference_leaks_sibling_mirror(self, audit):
         exported = next(
             c for c in audit.calls if c.args.get("symbol") == "transformProgram"
         )
         assert "sg-evals/react--56408a5b" in exported.leaked_repos
 
-    def test_pin_violating_repo_appears_in_results(self, trace):
-        audit = amc.audit_run(trace)
+    def test_pin_violating_repo_appears_in_results(self, audit):
         assert "sg-evals/react--56408a5b" in audit.pin_violating_cited
 
-    def test_actively_read_wrong_revision_is_flagged(self, trace):
+    def test_actively_read_wrong_revision_is_flagged(self, audit):
         """The acute finding: wrong-rev source actually entered the context."""
-        audit = amc.audit_run(trace)
         assert "sg-evals/react--56408a5b" in audit.pin_violating_called
         assert audit.actively_read_wrong_revision is True
 
     def test_clean_run_reports_no_contamination(self, tmp_path):
-        clean = _trace(
+        audit = _audit(
             tmp_path,
             [
                 _msg("user", PREAMBLE),
@@ -257,21 +302,144 @@ class TestAuditRun:
                 ),
             ],
         )
-        audit = amc.audit_run(clean)
         assert audit.pin_violating_cited == ()
         assert audit.pin_violating_called == ()
         assert audit.actively_read_wrong_revision is False
+        assert audit.trustworthy is True
 
-    def test_run_without_authorized_set_is_not_scored(self, tmp_path):
-        """A baseline run has no MCP preamble. It must not be silently reported
-        as 'clean' — with no authorized set there is nothing to violate, and
-        counting it as clean would dilute the mcp_only rate."""
-        no_preamble = _trace(
-            tmp_path, [_msg("user", "Solve the task using files in /workspace.")]
+    def test_run_without_a_preamble_is_not_scored(self, tmp_path):
+        """A baseline run has no MCP preamble and only /workspace at the pin, so
+        it cannot leak. Counting it as 'clean' would dilute the mcp_only rate
+        with runs that were never at risk."""
+        audit = _audit(
+            tmp_path,
+            [_msg("user", "Solve the task using files in /workspace.")],
+            mode="baseline",
         )
-        audit = amc.audit_run(no_preamble)
-        assert audit.authorized == ()
+        assert audit.has_mcp is False
         assert audit.scored is False
+
+    def test_mcp_run_with_no_task_config_is_unresolved_not_clean(self, tmp_path):
+        """The pin cannot be established, so there is nothing to judge against.
+        Such a run must be excluded loudly, never counted as a clean MCP run."""
+        root = tmp_path / "runs"
+        trace = _trace(
+            root, [_msg("user", PREAMBLE)], "ghost-task/mcp_only/agent_trace.jsonl"
+        )
+        audit = amc.audit_run(
+            trace, root, _pin(tmp_path), _mirrors(tmp_path)
+        )  # config for TASK only
+
+        assert audit.has_mcp is True
+        assert audit.authorized == ()
+        assert audit.config_missing is True
+        assert audit.scored is False
+        assert audit.trustworthy is False
+
+
+class TestMispinnedPreamble:
+    """The defect that made the preamble-derived audit circular.
+
+    Some tasks render an instruction naming a mirror the task never pinned
+    (ccx-dep-trace-106 pins `releases/gcc-14.2.0` but instructs the agent to
+    filter on `gcc--96dfb333`). If the authorized set is read off that
+    instruction, the agent obeying it scores AUTHORIZED and the auditor
+    certifies the contamination — a leak is laundered into a clean verdict
+    exactly when the preamble is the thing at fault.
+    """
+
+    MISPINNED = PREAMBLE.replace("react--ab18f33d", "react--96dfb333")
+
+    def test_leak_the_preamble_authorized_is_still_a_pin_violation(self, tmp_path):
+        audit = _audit(
+            tmp_path,
+            [
+                _msg("user", self.MISPINNED),
+                _tool_use(
+                    "t1",
+                    "read_file",
+                    repo="github.com/sg-evals/react--96dfb333",
+                    path="Pipeline.ts",
+                ),
+                _tool_result("t1", "# github.com/sg-evals/react--96dfb333 - Pipeline.ts"),
+            ],
+        )
+
+        # The task pins ab18f33d. The agent was TOLD 96dfb333 and obeyed.
+        assert [m.mirror for m in audit.authorized] == ["sg-evals/react--ab18f33d"]
+        assert "sg-evals/react--96dfb333" in audit.pin_violating_cited
+        assert audit.actively_read_wrong_revision is True
+
+    def test_the_mispin_itself_is_reported(self, tmp_path):
+        audit = _audit(tmp_path, [_msg("user", self.MISPINNED)])
+        assert audit.mispinned == ("sg-evals/react--96dfb333",)
+
+    def test_a_correctly_pinned_preamble_reports_no_mispin(self, tmp_path):
+        audit = _audit(tmp_path, [_msg("user", PREAMBLE)])
+        assert audit.mispinned == ()
+
+    def test_head_is_not_a_pin(self, tmp_path):
+        """A stub config (`unknown/repo` @ `HEAD`) pins nothing. Deriving
+        `sg-evals/repo--HEAD` from it would score every real mirror the agent
+        touched as a violation — findings manufactured from a placeholder."""
+        audit = _audit(
+            tmp_path,
+            [
+                _msg("user", PREAMBLE),
+                _tool_use("t1", "read_file", repo="github.com/sg-evals/react--ab18f33d"),
+                _tool_result("t1", "# github.com/sg-evals/react--ab18f33d - a.ts"),
+            ],
+            repos=[{"url": "https://github.com/unknown/repo", "rev": "HEAD"}],
+        )
+        assert audit.authorized == ()
+        assert audit.config_missing is True
+        assert audit.scored is False
+        assert audit.pin_violating_cited == ()
+
+    def test_report_names_the_mispinned_runs(self, tmp_path):
+        _audit(tmp_path, [_msg("user", self.MISPINNED)])
+        audits = amc.audit_corpus(
+            tmp_path / "runs", tmp_path / "benchmarks", _mirrors(tmp_path)
+        )
+        report = amc.format_report(audits)
+        assert "MIS-PINNED PREAMBLE" in report
+        assert "sg-evals/react--96dfb333" in report
+
+
+class TestExposureSurface:
+    """The exposure table is the denominator behind the audit. It used to be
+    counted by hand, so the doc's "how to regenerate every number here" was not
+    satisfiable and the table could drift from the corpus silently.
+    """
+
+    REGISTRY = {
+        "repos": [
+            {"sg_name": "sg-evals/grpc-go--v1.4.0"},
+            {"sg_name": "sg-evals/grpc-go--v1.5.0"},
+            {"sg_name": "sg-evals/grpc-go--v1.6.0"},
+            {"sg_name": "sg-evals/etcd--v3.3.0"},
+            {"sg_name": "sg-evals/etcd--v3.4.0"},
+            {"sg_name": "sg-evals/react--ab18f33d"},  # single revision: not exposed
+        ]
+    }
+
+    def _registry(self, tmp_path: Path) -> Path:
+        p = tmp_path / "sg_indexing_list.json"
+        p.write_text(json.dumps(self.REGISTRY))
+        return p
+
+    def test_counts_only_multi_revision_projects_as_exposed(self, tmp_path):
+        exp = amc.exposure(self._registry(tmp_path))
+        assert exp.mirrors == 6
+        assert exp.projects == 3
+        assert exp.multi_rev_projects == 2  # grpc-go, etcd — react is pinned once
+        assert exp.exposed_mirrors == 5  # the single-revision react is NOT at risk
+        assert round(exp.exposed_pct) == 83
+        assert exp.worst[0] == ("grpc-go", 3)
+
+    def test_missing_registry_is_none_not_a_zeroed_table(self, tmp_path):
+        """A zeroed table would read as 'no exposure' — a false all-clear."""
+        assert amc.exposure(tmp_path / "nope.json") is None
 
 
 class TestProvenanceNotMereMention:
@@ -281,7 +449,7 @@ class TestProvenanceNotMereMention:
     """
 
     def _audit_with_result(self, tmp_path, text):
-        trace = _trace(
+        return _audit(
             tmp_path,
             [
                 _msg("user", PREAMBLE),
@@ -294,7 +462,6 @@ class TestProvenanceNotMereMention:
                 _tool_result("t1", text),
             ],
         )
-        return amc.audit_run(trace)
 
     def test_upstream_url_in_file_content_is_not_a_leak(self, tmp_path):
         """Regression: a changelog line linking to the project's own GitHub issue
@@ -359,7 +526,7 @@ class TestCalledRepos:
         assert amc._called_repos({"query": "useState"}) == ()
 
     def test_wrong_revision_in_repos_list_is_a_pin_violating_call(self, tmp_path):
-        trace = _trace(
+        audit = _audit(
             tmp_path,
             [
                 _msg("user", PREAMBLE),
@@ -371,13 +538,12 @@ class TestCalledRepos:
                 ),
             ],
         )
-        audit = amc.audit_run(trace)
         assert audit.pin_violating_called == ("sg-evals/react--56408a5b",)
 
 
 class TestForeignBleed:
     def test_foreign_repo_in_results_is_bleed_not_pin_violation(self, tmp_path):
-        trace = _trace(
+        audit = _audit(
             tmp_path,
             [
                 _msg("user", PREAMBLE),
@@ -385,7 +551,6 @@ class TestForeignBleed:
                 _tool_result("t1", "# github.com/vercel/next.js - index.js"),
             ],
         )
-        audit = amc.audit_run(trace)
         assert "vercel/next.js" in audit.foreign_cited
         assert audit.pin_violating_cited == ()
         assert audit.actively_read_wrong_revision is False
@@ -427,14 +592,11 @@ class TestTaskAndMode:
 
 
 class TestAmbiguousAuthorizedSet:
-    """A preamble that names two mirrors of the SAME project cannot define a
-    revision pin — and a leak into the second one would score AUTHORIZED.
+    """A task that pins the SAME project at two revisions has no revision pin,
+    so a leak into the second mirror would score AUTHORIZED.
 
-    Real: 12 traces in the corpus (ansible, beam, gcc, ceph, camel) carry a
-    generic scoping block plus a task-specific one naming a different revision.
-    Only one is the task's true pin; the other is boilerplate bleed. Unioning
-    both silently widens the authorized set, so the run's 'clean' verdict is
-    unsound rather than merely uncertain. It must not pass as clean.
+    The tool has no grounds for a clean verdict there: the result is unsound
+    rather than merely negative, and must not pass as clean.
     """
 
     AMBIGUOUS = """
@@ -446,25 +608,37 @@ class TestAmbiguousAuthorizedSet:
   - Upstream: `ansible/ansible@v2.16.0`
 """
 
+    TWO_REVS_OF_ONE_PROJECT = [
+        {"url": "https://github.com/facebook/react", "rev": "ab18f33d4617aaaa"},
+        {"url": "https://github.com/facebook/react", "rev": "56408a5bcafebabe"},
+    ]
+
     def test_two_mirrors_of_one_project_are_flagged_ambiguous(self):
-        mirrors = amc.parse_authorized_mirrors(self.AMBIGUOUS)
+        mirrors = amc.parse_preamble_mirrors(self.AMBIGUOUS)
         assert amc.ambiguous_projects(mirrors) == ("ansible",)
 
     def test_single_mirror_per_project_is_not_ambiguous(self):
-        mirrors = amc.parse_authorized_mirrors(PREAMBLE)
+        mirrors = amc.parse_preamble_mirrors(PREAMBLE)
         assert amc.ambiguous_projects(mirrors) == ()
 
+    def test_a_task_pinning_one_project_twice_is_ambiguous(self, tmp_path):
+        audit = _audit(
+            tmp_path, [_msg("user", PREAMBLE)], repos=self.TWO_REVS_OF_ONE_PROJECT
+        )
+        assert audit.ambiguous_projects == ("react",)
+        assert audit.trustworthy is False
+
     def test_report_warns_that_an_ambiguous_run_is_not_clean(self, tmp_path):
-        _trace(
-            tmp_path,
-            [_msg("user", self.AMBIGUOUS)],
-            rel="t/mcp_only/agent_trace.jsonl",
+        _audit(
+            tmp_path, [_msg("user", PREAMBLE)], repos=self.TWO_REVS_OF_ONE_PROJECT
         )
 
-        audits = amc.audit_corpus(tmp_path)
+        audits = amc.audit_corpus(
+            tmp_path / "runs", tmp_path / "benchmarks", _mirrors(tmp_path)
+        )
 
-        assert audits[0].ambiguous_projects == ("ansible",)
-        assert "AMBIGUOUS" in amc.format_report(audits)
+        assert audits[0].ambiguous_projects == ("react",)
+        assert "AMBIGUOUS PIN" in amc.format_report(audits)
 
 
 class TestDiffProvenanceIsNotMissed:
@@ -521,7 +695,7 @@ class TestUpstreamPairing:
   - MCP filter: `repo:^github.com/sg-evals/b--2$`
   - Upstream: `borg/b@2`
 """
-        by = {m.mirror: m for m in amc.parse_authorized_mirrors(preamble)}
+        by = {m.mirror: m for m in amc.parse_preamble_mirrors(preamble)}
 
         assert by["sg-evals/a--1"].upstream is None
         assert by["sg-evals/b--2"].upstream == "borg/b"
@@ -602,28 +776,38 @@ class TestReplicateIdentity:
     def test_report_distinguishes_two_replicates_of_the_same_task(self, tmp_path):
         """Two contaminated replicates of one task must render as two
         distinguishable lines, not two identical ones."""
+        benchmarks = _pin(tmp_path)
         for rep in ("rep1", "rep2"):
             _trace(
-                tmp_path,
+                tmp_path / "runs",
                 [
                     _msg("user", PREAMBLE),
                     _tool_use("x", "keyword_search", query="q"),
                     _tool_result("x", "# github.com/sg-evals/react--56408a5b - a.ts"),
                 ],
-                rel=f"t/mcp_only/{rep}/agent_trace.jsonl",
+                rel=f"{TASK}/mcp_only/{rep}/agent_trace.jsonl",
             )
 
-        report = amc.format_report(amc.audit_corpus(tmp_path))
-
-        assert "t (mcp_only/rep1)" in report
-        assert "t (mcp_only/rep2)" in report
-
-    def test_json_carries_the_replicate(self, tmp_path):
-        _trace(
-            tmp_path, [_msg("user", PREAMBLE)], rel="t/mcp_only/rep3/agent_trace.jsonl"
+        report = amc.format_report(
+            amc.audit_corpus(tmp_path / "runs", benchmarks, _mirrors(tmp_path))
         )
 
-        payload = json.loads(amc.format_json(amc.audit_corpus(tmp_path)))
+        assert f"{TASK} (mcp_only/rep1)" in report
+        assert f"{TASK} (mcp_only/rep2)" in report
+
+    def test_json_carries_the_replicate(self, tmp_path):
+        benchmarks = _pin(tmp_path)
+        _trace(
+            tmp_path / "runs",
+            [_msg("user", PREAMBLE)],
+            rel=f"{TASK}/mcp_only/rep3/agent_trace.jsonl",
+        )
+
+        payload = json.loads(
+            amc.format_json(
+                amc.audit_corpus(tmp_path / "runs", benchmarks, _mirrors(tmp_path))
+            )
+        )
 
         assert payload["runs"][0]["replicate"] == "rep3"
 
