@@ -145,19 +145,24 @@ def _sub_command_read_files(sub: list[Token], depth: int) -> list[str]:
         if token.kind == SUBST
         for f in bash_read_files(token.text, depth + 1)
     ]
+    files.extend(_program_read_files(_command_words(sub), depth))
+    return files
 
-    words = _strip_wrappers(_command_words(sub))
+
+def _program_read_files(words: list[str], depth: int) -> list[str]:
+    """Files read by a single program invocation, given its words."""
+    words = _strip_wrappers(words)
     if not words:
-        return files
+        return []
     cmd = words[0].rsplit("/", 1)[-1]
 
     if cmd in _SHELL_CMDS:
-        files.extend(_shell_c_read_files(words, depth))
-    elif cmd == "find":
-        files.extend(_find_exec_read_files(words, depth))
-    elif cmd in _BASH_READ_CMDS:
-        files.extend(_read_command_args(cmd, words[1:]))
-    return files
+        return _shell_c_read_files(words, depth)
+    if cmd == "find":
+        return _find_exec_read_files(words, depth)
+    if cmd in _BASH_READ_CMDS:
+        return _read_command_args(cmd, words[1:])
+    return []
 
 
 def _command_words(sub: list[Token]) -> list[str]:
@@ -226,11 +231,11 @@ def _find_exec_read_files(words: list[str], depth: int) -> list[str]:
     while i < len(words):
         if words[i] in ("-exec", "-execdir"):
             i += 1
-            body = []
+            body: list[str] = []
             while i < len(words) and words[i] not in (";", "+"):
-                body.append(Token(words[i], WORD))
+                body.append(words[i])
                 i += 1
-            files.extend(_sub_command_read_files(body, depth + 1))
+            files.extend(_program_read_files(body, depth + 1))
         else:
             i += 1
     return files

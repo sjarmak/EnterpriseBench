@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["OP", "SUBST", "WORD", "SEPARATORS", "REDIRECTS", "HEREDOC_OPS", "Token", "lex"]
+__all__ = ["OP", "SUBST", "WORD", "SEPARATORS", "HEREDOC_OPS", "Token", "lex"]
 
 WORD = "word"
 OP = "op"
@@ -55,17 +55,16 @@ class Token:
 # quoted `|` cannot reach them.
 SEPARATORS = frozenset({"|", "||", "|&", "&", "&&", ";", ";;", "(", ")", "\n"})
 
-# Redirects. Operators, but NOT separators: `cat a.py > out.txt` is one command,
-# and its `out.txt` stays an argument of that command. That keeps the
-# redirect-target false positive (EnterpriseBench-qefr) exactly as it was rather
-# than silently fixing it here, on a different axis than this module's change.
-REDIRECTS = frozenset({"<", ">", ">>", ">&", "&>", "<<", "<<-", "<<<"})
-
 # Redirects whose operand is *content*, not a path: the here-doc delimiter and
 # the here-string body. The caller drops the word that follows one of these.
 HEREDOC_OPS = frozenset({"<<", "<<-", "<<<"})
 
-# Longest-first: `<<<` must win over `<<`, `&&` over `&`, and so on.
+# Every operator the lexer emits, longest-first: `<<<` must win over `<<`, `&&`
+# over `&`, and so on. The redirects here are operators but deliberately NOT in
+# SEPARATORS: `cat a.py > out.txt` stays one command, so `out.txt` stays an
+# argument of it. That keeps the redirect-target false positive
+# (EnterpriseBench-qefr) exactly as it was rather than silently fixing it here,
+# on a different axis than this module's change.
 _OPERATORS = (
     "<<<", "<<-", "<<", "&&", "||", "|&", ";;", ">>", ">&", "&>",
     ";", "&", "|", "(", ")", "<", ">",
@@ -284,7 +283,10 @@ def _match_paren(command: str, i: int) -> int | None:
                 return None
             j = k + 1
         elif c == '"':
-            k = _skip_double(command, j)
+            # Scan the quoted run only to step over it — its content and any
+            # substitution inside it are re-lexed when the caller recurses into
+            # this substitution's text, so both outputs are discarded here.
+            k = _scan_double(command, j, [], [])
             if k is None:
                 return None
             j = k
@@ -296,17 +298,6 @@ def _match_paren(command: str, i: int) -> int | None:
                 if depth == 0:
                     return j
             j += 1
-    return None
-
-
-def _skip_double(command: str, i: int) -> int | None:
-    """Index after the ``"`` closing the one at ``i``, or ``None`` if unbalanced."""
-    n = len(command)
-    j = i + 1
-    while j < n:
-        if command[j] == '"':
-            return j + 1
-        j += 2 if command[j] == "\\" and j + 1 < n else 1
     return None
 
 
