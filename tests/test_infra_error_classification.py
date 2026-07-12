@@ -144,7 +144,10 @@ class TestRunTaskSourceLogic:
 
     def test_phase_guard_prevents_complete_override(self) -> None:
         # The success/complete override must be skipped for any infra-error
-        # phase (agent- or verifier-side), so infra errors route to re-run.
-        assert 'result.phase not in ("agent_infra_error", "verifier_infra_error")' in (
-            self.source
-        )
+        # phase (agent- or verifier-side), so infra errors route to re-run —
+        # and for a grading-asset integrity violation, which must never be
+        # recorded as a completed run (bead EnterpriseBench-8krz5).
+        guard = self.source.split("# --- Save ---", 1)[1].split("result.timing", 1)[0]
+        assert "result.phase not in" in guard
+        for phase in ("agent_infra_error", "verifier_infra_error", "integrity_violation"):
+            assert f'"{phase}"' in guard

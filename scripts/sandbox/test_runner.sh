@@ -52,11 +52,19 @@ run_verifier() {
     local raw_stdout_file
     raw_stdout_file=$(mktemp)
 
+    # Pass the workspace explicitly as $1. Several checks document "Receives
+    # workspace path as $1" and resolve WORKSPACE="${1:-.}", but this runner
+    # never actually passed it — they only worked because the scoring exec's cwd
+    # happened to be /workspace, so the "." fallback landed in the right place.
+    # Scoring now runs from a root-owned cwd (so the agent cannot hijack
+    # sys.path[0] for the checks' `python3 -c` calls), which would silently zero
+    # every such check. Honour the documented contract instead of depending on
+    # the cwd.
     if command -v timeout >/dev/null 2>&1; then
-        timeout "$timeout_sec" bash "$verifier_path" >"$raw_stdout_file" 2>"$raw_stderr"
+        timeout "$timeout_sec" bash "$verifier_path" "$WORKSPACE" >"$raw_stdout_file" 2>"$raw_stderr"
         VERIFIER_EXIT=$?
     else
-        bash "$verifier_path" >"$raw_stdout_file" 2>"$raw_stderr"
+        bash "$verifier_path" "$WORKSPACE" >"$raw_stdout_file" 2>"$raw_stderr"
         VERIFIER_EXIT=$?
     fi
 
@@ -148,10 +156,11 @@ for verifier in "$VERIFIER_DIR"/*.sh; do
     TOTAL=$((TOTAL + 1))
 
     # Read weight from companion .meta file if present, else default 1.0.
-    # .verifiers/ is agent-writable (chowned before the agent's session
-    # starts), so validate the value is a plain number before trusting it —
-    # it is interpolated unquoted into both the result JSON and an awk
-    # expression below, and either is an injection point for anything else.
+    # .verifiers/ is now sealed root-only, so the agent can no longer write this
+    # value. Keep validating it as a plain number anyway: it is interpolated
+    # unquoted into both the result JSON and an awk expression below, so a
+    # malformed weight is an injection point, and this check is the layer that
+    # does not depend on the seal holding.
     weight="1.0"
     meta_file="$VERIFIER_DIR/${name}.meta"
     if [ -f "$meta_file" ]; then

@@ -108,6 +108,44 @@ class TaskRunConfig:
 # failure): the run is routed to the infra-error re-run channel.
 RUN_STATUS_INVALID = "invalid"
 
+# The directory holding both the agent's tree and the grading assets. It must be
+# root-owned so the agent cannot unlink/rename the sealed entries inside it.
+WORKSPACE_DIR = "/workspace"
+
+# The grader, the answer key, and the harness the checks import. The agent under
+# test has no legitimate need for any of them (no task instruction references
+# them), so they are sealed root-only rather than merely read-only: that closes
+# the ground_truth.json read leak as well as the tamper vector.
+GRADING_PATHS = [
+    "/workspace/.verifiers",
+    "/workspace/.task",
+    "/workspace/.eb_verify",
+    "/workspace/test.sh",
+]
+
+# Root-owned, empty cwd for the scoring exec. Ownership alone would not close
+# the hole: the checks shell out to `python3 -c`, whose sys.path[0] is the cwd,
+# so scoring from agent-owned /workspace lets a planted /workspace/json.py
+# hijack the grader.
+SCORING_WORKDIR = "/opt/eb_scoring"
+
+# Git config for the scoring exec. The repos under /workspace are agent-owned
+# (cloned as USER agent), so git run by the scorer refuses them as "dubious
+# ownership" — which a check like chain-err-flask-import-001's `git diff ...
+# 2>/dev/null || true` silently swallows into a false "no code changes".
+# safe.directory fixes that, but it alone would let the agent's own repo-local
+# config execute code as the scorer (core.fsmonitor / core.hooksPath run
+# commands during `git diff`), which would hand the agent the grader by another
+# door. GIT_CONFIG_* env entries carry `git -c` precedence — above repo-local
+# config — so pinning those two knobs here neutralizes them. Verified: a planted
+# core.fsmonitor payload does not execute under this env.
+GIT_SCORING_ENV = (
+    "GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=3 "
+    "GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*' "
+    "GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false "
+    "GIT_CONFIG_KEY_2=core.hooksPath GIT_CONFIG_VALUE_2=/dev/null"
+)
+
 
 @dataclass
 class TaskRunResult:
@@ -455,6 +493,122 @@ def _chown_to_agent(container_id: str, paths: list[str]) -> None:
         )
 
 
+def _seal_grading_assets(container_id: str) -> None:
+    """Make the grading assets root-owned and unreachable by the agent user.
+
+    The agent under test previously owned its own verifiers, ground truth and
+    harness library, so it could overwrite a check with a forged verdict, read
+    the answer key, or delete the harness to convert a scored 0.0 into a free
+    re-run (beads EnterpriseBench-8krz5, -g5k5s).
+
+    Also hardens /workspace itself and creates the root-owned scoring cwd, so
+    the scoring exec never starts in a directory the agent can write to.
+
+    Raises:
+        RuntimeError: if the seal cannot be applied. An unsealed run is
+            unscoreable, so this fails loud rather than silently producing a
+            number nobody can trust (the s58f masked-chown lesson).
+    """
+    quoted = " ".join(shlex.quote(p) for p in GRADING_PATHS)
+    script = (
+        f"set -e; "
+        f"mkdir -p {shlex.quote(SCORING_WORKDIR)}; "
+        f"chown root:root {shlex.quote(SCORING_WORKDIR)}; "
+        f"chmod 700 {shlex.quote(SCORING_WORKDIR)}; "
+        # Root-owned + sticky + world-writable, exactly like /tmp. Sealing the
+        # assets alone is NOT enough: POSIX governs unlink/rename by the PARENT
+        # directory's write bit, and the image ships /workspace agent-owned
+        # (dockerfile_generator: `chown agent:agent /workspace`). Without this,
+        # the agent can `rm /workspace/test.sh` or `mv` .verifiers aside and
+        # drop in forgeries while never writing to a sealed file — both attacks
+        # were confirmed against an earlier version of this seal. The sticky bit
+        # by itself does not close it either, because sticky also permits the
+        # DIRECTORY's owner to unlink; ownership of /workspace must move to root
+        # too. The agent keeps write access, so it can still create its own
+        # artifacts and delete its own files — it just cannot touch root-owned
+        # entries.
+        f"chown root:root {shlex.quote(WORKSPACE_DIR)}; "
+        f"chmod 1777 {shlex.quote(WORKSPACE_DIR)}; "
+        f"for f in {quoted}; do "
+        'if [ -e "$f" ]; then chown -R root:root "$f"; chmod -R go-rwx "$f"; fi; '
+        "done"
+    )
+    result = _docker_exec(container_id, ["bash", "-c", script], user="root")
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"failed to seal grading assets {GRADING_PATHS}: "
+            f"{result.stderr.strip() or 'unknown error'}"
+        )
+    logger.info("Sealed grading assets root-only: %s", ", ".join(GRADING_PATHS))
+
+
+def _assert_grading_assets_sealed(container_id: str) -> tuple[bool, str]:
+    """Verify the agent could not have tampered with, or read, the grader.
+
+    Returns (ok, error_message). Checks three independent breaches: a /workspace
+    the agent could unlink/rename the sealed entries out of, any grading path
+    that is not root-owned or is group/other-writable, and a ground truth the
+    agent user can read. Cheap enough to re-run immediately before scoring, which
+    is what makes a reused or hand-modified container fail loud instead of
+    producing a forged score.
+    """
+    # The parent must be root-owned and sticky, else the sealed entries can be
+    # renamed or unlinked wholesale regardless of their own mode.
+    parent = _docker_exec(
+        container_id,
+        ["bash", "-c", f"find {shlex.quote(WORKSPACE_DIR)} -maxdepth 0 "
+                       "\\( ! -user root -o ! -perm -1000 \\) -print"],
+        user="root",
+    )
+    if parent.returncode != 0:
+        return False, (
+            f"could not verify the {WORKSPACE_DIR} seal: "
+            f"{parent.stderr.strip() or 'unknown error'}"
+        )
+    if parent.stdout.strip():
+        return False, (
+            f"{WORKSPACE_DIR} is agent-owned or not sticky — the agent can "
+            "unlink/rename the sealed grading assets out of it"
+        )
+
+    # A MISSING grading asset is a breach, not a pass. _setup_container creates
+    # all four unconditionally, so absence at scoring time means something
+    # removed them. Skipping absent paths would fail OPEN: a deleted test.sh
+    # yields empty verifier output, which guard_verifier_output classifies as a
+    # verifier_infra_error — handing the saboteur the re-run mulligan this seal
+    # exists to deny (bead g5k5s).
+    quoted = " ".join(shlex.quote(p) for p in GRADING_PATHS)
+    script = (
+        f"for f in {quoted}; do "
+        'if [ ! -e "$f" ]; then echo "MISSING:$f"; '
+        'else find "$f" \\( ! -user root -o -perm /go+w \\) -print; fi; '
+        "done"
+    )
+    result = _docker_exec(container_id, ["bash", "-c", script], user="root")
+    if result.returncode != 0:
+        return False, (
+            f"could not verify the grading-asset seal: "
+            f"{result.stderr.strip() or 'unknown error'}"
+        )
+    breached = result.stdout.strip()
+    if breached:
+        return False, (
+            "grading assets are missing, agent-owned, or agent-writable: "
+            + ", ".join(breached.splitlines())
+        )
+
+    readable = _docker_exec(
+        container_id,
+        ["test", "-r", "/workspace/.task/ground_truth.json"],
+        timeout=30,
+        user="agent",
+    )
+    if readable.returncode == 0:
+        return False, "ground_truth.json is readable by the agent user"
+
+    return True, ""
+
+
 def _assert_agent_readable(container_id: str, paths: list[str]) -> tuple[bool, str]:
     """Verify the AGENT user can read each path inside the container.
 
@@ -650,16 +804,10 @@ def _setup_container(
     # _configure_mcp; agent_output is created by the agent step — both are
     # intentionally omitted here (s58f design intent: don't chown stale
     # leftovers from a reused container).
-    _chown_to_agent(
-        container_id,
-        [
-            "/workspace/instruction.md",
-            "/workspace/.verifiers",
-            "/workspace/.task",
-            "/workspace/.eb_verify",
-            "/workspace/test.sh",
-        ],
-    )
+    # GRADING_PATHS are deliberately absent: the party being graded must never
+    # own the grader (bead EnterpriseBench-8krz5).
+    _chown_to_agent(container_id, ["/workspace/instruction.md"])
+    _seal_grading_assets(container_id)
 
 
 def _install_claude_cli(container_id: str) -> bool:
@@ -706,14 +854,17 @@ def _install_claude_cli(container_id: str) -> bool:
     # user owning /workspace (USER agent before git clone), so cloned repos are
     # correctly owned. For older images we still create the user and fix up
     # output dirs only (never chown -R on /workspace — too slow for large repos).
+    # This site once also mkdir'd and chowned .task/.verifiers, which silently
+    # re-granted the agent ownership of the grader even after setup_container
+    # stopped doing so (bead EnterpriseBench-8krz5).
     _docker_exec(
         container_id,
         [
             "bash",
             "-c",
             "id agent >/dev/null 2>&1 || useradd -m -s /bin/bash agent; "
-            "mkdir -p /workspace/agent_output /workspace/.task /workspace/.verifiers; "
-            "chown -R agent:agent /home/agent /workspace/agent_output /workspace/.task /workspace/.verifiers",
+            "mkdir -p /workspace/agent_output; "
+            "chown -R agent:agent /home/agent /workspace/agent_output",
         ],
     )
 
@@ -865,20 +1016,64 @@ def _route_verifier_infra_error(result: "TaskRunResult", scores: dict) -> None:
     )
 
 
+def _route_integrity_violation(result: "TaskRunResult", scores: dict) -> None:
+    """Route a broken grading-asset seal to the INVALID (never-scored) channel.
+
+    Deliberately NOT the ``verifier_infra_error`` re-run channel: that channel
+    grants a fresh attempt, which would make sabotaging the harness a free
+    mulligan — exactly the incentive inversion in bead EnterpriseBench-g5k5s.
+    A tampered run is invalid and stays invalid.
+    """
+    violation = scores.get("integrity_violation")
+    if not violation:
+        return
+    result.failure_class = "integrity_violation"
+    result.phase = "integrity_violation"
+    result.status = RUN_STATUS_INVALID
+    result.success = False
+    logger.error(
+        "GRADING ASSET INTEGRITY VIOLATION (%s): %s",
+        violation.get("reason", "?"),
+        violation.get("detail", ""),
+    )
+
+
 def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
-    """Run /workspace/test.sh and capture the JSON results."""
+    """Run /workspace/test.sh and capture the JSON results.
+
+    Refuses to run at all if the grading-asset seal is broken: a verifier the
+    agent could have rewritten produces a number, not a measurement.
+    """
+    sealed, seal_err = _assert_grading_assets_sealed(container_id)
+    if not sealed:
+        return {
+            "task_score": 0.0,
+            "all_passed": False,
+            "integrity_violation": {
+                "reason": "grading_assets_tampered",
+                "detail": seal_err,
+            },
+        }
+
     logger.info("Running checkpoint verifiers (timeout=%ds)...", verifier_timeout)
 
+    # Scoring runs as root from a root-owned cwd: the image ends with
+    # `USER agent`, so an exec without -u would run the grader as the very user
+    # it is grading, and the checks' `python3 -c` calls put the cwd on
+    # sys.path[0]. PYTHONSAFEPATH is defence-in-depth on py>=3.11 images.
     result = _docker_exec(
         container_id,
         [
             "bash",
             "-c",
             "export WORKSPACE=/workspace TASK_DIR=/workspace/.task "
-            "PYTHONPATH=/workspace/.eb_verify:${PYTHONPATH:-}; "
-            "bash /workspace/test.sh",
+            "PYTHONPATH=/workspace/.eb_verify:${PYTHONPATH:-} PYTHONSAFEPATH=1 "
+            + GIT_SCORING_ENV
+            + "; bash /workspace/test.sh",
         ],
         timeout=verifier_timeout,
+        workdir=SCORING_WORKDIR,
+        user="root",
     )
 
     # test.sh outputs JSON to stdout, diagnostics to stderr
@@ -1873,20 +2068,29 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         scores = _run_scoring(container_id, config.verifier_timeout)
         timings["scoring"] = time.monotonic() - t0
         _route_verifier_infra_error(result, scores)
+        _route_integrity_violation(result, scores)
 
         # --- Phase 5b: Score (Tier 2 — LLM curator) ---
         # Skip the judge if the deterministic stage already flagged an infra
         # error — the run is already routed to re-run, and the judge would run
-        # against un-guarded scores.
+        # against un-guarded scores. A tampered run is skipped for the same
+        # reason: there is nothing trustworthy left to put a ceiling on.
         verification_modes = task_data.get("verification_modes", ["deterministic"])
-        if "llm_curator" in verification_modes and result.phase != "verifier_infra_error":
+        if "llm_curator" in verification_modes and result.phase not in (
+            "verifier_infra_error",
+            "integrity_violation",
+        ):
             scores = _apply_llm_judge(scores, task_dir, container_id, task_data)
             _route_verifier_infra_error(result, scores)
 
         result.scores = scores
 
         # --- Save ---
-        if result.phase not in ("agent_infra_error", "verifier_infra_error"):
+        if result.phase not in (
+            "agent_infra_error",
+            "verifier_infra_error",
+            "integrity_violation",
+        ):
             result.phase = "complete"
             result.success = True
         result.timing = timings
