@@ -202,6 +202,36 @@ if [ ! -d "$VERIFIER_DIR" ]; then
     exit 1
 fi
 
+# --- preflight: an interpreter the check scripts need must actually exist -----
+#
+# command_not_found_handle only fires when BASH performs the PATH lookup itself.
+# It is blind to `env python3`, `/usr/bin/env python3`, and absolute-path
+# invocations, where the lookup happens in another process or not at all — and a
+# verifier that wraps any of those in `if ... 2>/dev/null` swallows the failure
+# and goes on to print a well-formed 0.0, exactly as in the bug this guards.
+#
+# No in-bash signal can see those forms, so detection alone cannot close them.
+# The precondition can: if a check script needs an interpreter the image does not
+# have, no verifier depending on it can reach a verdict, whatever syntax it uses
+# to invoke it. Refuse to score the task at all rather than emit numbers that
+# only look like measurements.
+#
+# Gated on the interpreter actually being referenced, so a task whose checks are
+# pure bash is never failed for lacking one it does not use.
+REQUIRED_INTERPRETERS="python3"
+MISSING_INTERPRETERS=""
+for interp in $REQUIRED_INTERPRETERS; do
+    if grep -qF -- "$interp" "$VERIFIER_DIR"/*.sh 2>/dev/null \
+       && ! command -v "$interp" >/dev/null 2>&1; then
+        MISSING_INTERPRETERS="$MISSING_INTERPRETERS $interp"
+    fi
+done
+if [ -n "$MISSING_INTERPRETERS" ]; then
+    printf '{"task_score": 0.0, "all_passed": false, "checkpoints": [], "error": "%s: check scripts require interpreter(s) not installed in this image:%s"}\n' \
+        "$INFRA_SENTINEL" "$(json_escape "$MISSING_INTERPRETERS")"
+    exit 1
+fi
+
 TOTAL=0
 PASSED=0
 CHECKPOINT_RESULTS=""

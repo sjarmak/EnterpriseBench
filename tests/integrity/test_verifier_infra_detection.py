@@ -11,8 +11,17 @@ that was indistinguishable from a genuine wrong answer:
 * LOUD   — a bare ``python3`` under ``set -euo pipefail`` exits 127.
 * SILENT — ``if python3 ... 2>/dev/null`` swallows the failure, so the verifier
   exits 0 and prints a well-formed ``{"score": 0.0}``. No exit code, no score,
-  and no detail string distinguishes it from a real failure; only bash's
-  command_not_found_handle side channel can see it.
+  and no detail string distinguishes it from a real failure.
+
+Two mechanisms, because neither covers the other's ground:
+
+* command_not_found_handle catches a missing command per checkpoint, in any
+  context — but ONLY when bash itself performs the PATH lookup. It is blind to
+  ``env python3`` and to absolute paths, where the lookup happens in another
+  process or not at all.
+* The preflight refuses to score the task at all when an interpreter the check
+  scripts reference is absent. That closes every invocation form, because no
+  verifier runs — but it only knows about interpreters named up front.
 
 The genuine-score controls are the point of the exercise: a wrong answer must
 still be a 0.0 and a correct one still a 1.0, or the fix has merely traded a
@@ -111,31 +120,29 @@ def checkpoint(result: dict, name: str) -> dict:
     return next(cp for cp in result["checkpoints"] if cp["name"] == name)
 
 
-class TestNeverRanVerifierIsNotScored:
-    def test_loud_missing_interpreter_is_not_attested(
-        self, tmp_path: Path, sanitized_path: str
-    ) -> None:
-        """exit 127: the verifier died before reaching a verdict."""
-        result = run_test_runner(
-            tmp_path, {"loud": LOUD_MISSING_INTERPRETER}, sanitized_path
-        )
-        cp = checkpoint(result, "loud")
-        assert cp["verifier_ran"] is False
-        assert "python3" in cp["detail"]
+# A missing command that is NOT a preflighted interpreter, so it reaches the
+# verifier and exercises the per-checkpoint attestation rather than the preflight.
+LOUD_MISSING_TOOL = """\
+#!/usr/bin/env bash
+set -euo pipefail
+eb_missing_tool --check
+printf '{"score": 1.0, "passed": true, "detail": "ok"}\\n'
+"""
 
-    def test_silent_swallowed_interpreter_is_not_attested(
-        self, tmp_path: Path, sanitized_path: str
-    ) -> None:
-        """The crux of the bead. The verifier exits 0 and prints a well-formed
-        0.0, so exit code, score, and detail are all indistinguishable from a
-        genuine wrong answer. Only the side channel sees the missing python3."""
-        result = run_test_runner(
-            tmp_path, {"silent": SILENT_SWALLOWED_INTERPRETER}, sanitized_path
-        )
-        cp = checkpoint(result, "silent")
-        assert cp["exit_code"] == 0, "precondition: the failure IS swallowed"
-        assert cp["verifier_ran"] is False, "a swallowed missing interpreter must still surface"
-        assert "python3" in cp["detail"]
+SILENT_MISSING_TOOL = """\
+#!/usr/bin/env bash
+set -euo pipefail
+if eb_missing_tool --check 2>/dev/null; then
+  printf '{"score": 1.0, "passed": true, "detail": "ok"}\\n'
+else
+  printf '{"score": 0.0, "passed": false, "detail": "check failed"}\\n'
+fi
+exit 0
+"""
+
+
+class TestNeverRanVerifierIsNotScored:
+    """Acceptance for the two proven variants (bead glka.2)."""
 
     @pytest.mark.parametrize(
         "name,body",
@@ -144,12 +151,34 @@ class TestNeverRanVerifierIsNotScored:
     def test_never_ran_routes_to_infra_error_not_zero(
         self, tmp_path: Path, sanitized_path: str, name: str, body: str
     ) -> None:
-        """Acceptance: a check script that shells a missing binary yields
-        verifier_infra_error (the re-run channel), never a task_score of 0.0."""
+        """A check script that shells a missing binary yields verifier_infra_error
+        (the re-run channel), never a task_score of 0.0."""
         result = run_test_runner(tmp_path, {name: body}, sanitized_path)
         guarded = guard_verifier_output(json.dumps(result), returncode=1)
         assert isinstance(guarded, InfraError), f"{name} variant must not be scored"
-        assert guarded.reason == "verifier_did_not_run"
+
+    def test_loud_missing_tool_is_not_attested(
+        self, tmp_path: Path, sanitized_path: str
+    ) -> None:
+        """Per-checkpoint attestation, for a missing command the preflight does
+        not know about: exit 127, the verifier died before reaching a verdict."""
+        result = run_test_runner(tmp_path, {"loud": LOUD_MISSING_TOOL}, sanitized_path)
+        cp = checkpoint(result, "loud")
+        assert cp["verifier_ran"] is False
+        assert "eb_missing_tool" in cp["detail"]
+
+    def test_silent_missing_tool_is_not_attested(
+        self, tmp_path: Path, sanitized_path: str
+    ) -> None:
+        """The crux: the verifier swallows the failure, exits 0, and prints a
+        well-formed 0.0. Exit code, score and detail are all indistinguishable
+        from a genuine wrong answer — only the side channel sees the miss."""
+        result = run_test_runner(tmp_path, {"silent": SILENT_MISSING_TOOL}, sanitized_path)
+        cp = checkpoint(result, "silent")
+        assert cp["exit_code"] == 0, "precondition: the failure IS swallowed"
+        assert cp["verifier_ran"] is False, "a swallowed missing command must still surface"
+        assert "eb_missing_tool" in cp["detail"]
+        assert isinstance(guard_verifier_output(json.dumps(result), returncode=0), InfraError)
 
     def test_no_verdict_is_never_fabricated_into_a_pass(
         self, tmp_path: Path, sanitized_path: str
@@ -204,7 +233,7 @@ class TestGenuineScoresSurvive:
             {
                 "pass": GENUINE_PASS,
                 "wrong": GENUINE_WRONG_ANSWER,
-                "silent": SILENT_SWALLOWED_INTERPRETER,
+                "silent": SILENT_MISSING_TOOL,
             },
             sanitized_path,
         )
@@ -214,6 +243,65 @@ class TestGenuineScoresSurvive:
 
         guarded = guard_verifier_output(json.dumps(result), returncode=1)
         assert isinstance(guarded, InfraError)
+
+
+# Every way a check script can reach an interpreter. Only the first has its PATH
+# lookup performed by bash itself, so command_not_found_handle sees only that one
+# — the rest are closed by the preflight, not by detection.
+SWALLOWED_INVOCATIONS = {
+    "bare": "python3",
+    "env": "env python3",
+    "usr_bin_env": "/usr/bin/env python3",
+    "absolute": "/usr/bin/python3",
+}
+
+
+@pytest.mark.parametrize("label,invocation", sorted(SWALLOWED_INVOCATIONS.items()))
+def test_missing_interpreter_is_caught_however_it_is_invoked(
+    tmp_path: Path, sanitized_path: str, label: str, invocation: str
+) -> None:
+    """The SILENT variant, reached through every idiom a check script might use.
+
+    `env python3` and absolute paths do their PATH lookup outside bash, so
+    command_not_found_handle never fires for them — and the verifier swallows the
+    127 and prints a clean 0.0. Each of these must still refuse to be scored.
+    """
+    body = f"""\
+#!/usr/bin/env bash
+set -euo pipefail
+if {invocation} -c "pass" 2>/dev/null; then
+  printf '{{"score": 1.0, "passed": true, "reason": "ok"}}\\n'
+else
+  printf '{{"score": 0.0, "passed": false, "reason": "drift"}}\\n'
+fi
+exit 0
+"""
+    result = run_test_runner(tmp_path, {f"cp_{label}": body}, sanitized_path)
+    guarded = guard_verifier_output(json.dumps(result), returncode=1)
+    assert isinstance(guarded, InfraError), (
+        f"a missing interpreter invoked as `{invocation}` was scored as a real 0.0"
+    )
+
+
+def test_preflight_does_not_fire_when_checks_do_not_need_the_interpreter(
+    tmp_path: Path, sanitized_path: str
+) -> None:
+    """The preflight is gated on the interpreter actually being referenced: a
+    pure-bash check must still score normally in an image without python3."""
+    result = run_test_runner(tmp_path, {"pure_bash": GENUINE_PASS}, sanitized_path)
+    guarded = guard_verifier_output(json.dumps(result), returncode=0)
+    assert isinstance(guarded, dict), "a pure-bash check must not need python3"
+    assert guarded["task_score"] == 1.0
+
+
+def test_empty_verifiers_dir_is_infra_not_zero(tmp_path: Path, sanitized_path: str) -> None:
+    """An existing-but-empty .verifiers/ ran no verifiers, so its 0.0 measures
+    nothing. An empty checkpoint list must not pass through as a real score."""
+    result = run_test_runner(tmp_path, {}, sanitized_path)
+    assert result["checkpoints"] == []
+    guarded = guard_verifier_output(json.dumps(result), returncode=1)
+    assert isinstance(guarded, InfraError)
+    assert guarded.reason == "no_checkpoints_run"
 
 
 def test_attestation_cannot_be_forged_by_a_check_script(
@@ -226,7 +314,7 @@ def test_attestation_cannot_be_forged_by_a_check_script(
     """
     forger = """\
 #!/usr/bin/env bash
-if python3 -c "pass" 2>/dev/null; then :; fi
+if eb_missing_tool --check 2>/dev/null; then :; fi
 printf '{"score": 1.0, "passed": true, "verifier_ran": true, "detail": "legit"}\\n'
 exit 0
 """
@@ -234,7 +322,7 @@ exit 0
     cp = checkpoint(result, "forger")
     assert cp["verifier_ran"] is False, "a script must not be able to attest for itself"
     assert cp["score"] == 0.0, "the score printed alongside a forged attestation is discarded"
-    assert "python3" in cp["detail"]
+    assert "eb_missing_tool" in cp["detail"]
     assert isinstance(guard_verifier_output(json.dumps(result), returncode=0), InfraError)
 
 

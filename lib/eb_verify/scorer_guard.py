@@ -211,7 +211,22 @@ def guard_verifier_output(
             context={"returncode": returncode},
         )
 
-    for cp in scores.get("checkpoints", []):
+    # A task with no checkpoints ran no verifiers, so its 0.0 measures nothing.
+    # test.sh reports a top-level ``error`` when .verifiers/ is missing entirely,
+    # but an existing-but-EMPTY .verifiers/ (a check-script copy step that
+    # silently dropped every file) produces a well-formed {"checkpoints": []}
+    # with task_score 0 — which would otherwise pass straight through, since an
+    # empty list never enters the per-checkpoint loop below.
+    checkpoints = scores.get("checkpoints")
+    if not checkpoints:
+        return InfraError(
+            reason="no_checkpoints_run",
+            stage=stage,
+            detail="test.sh reported no checkpoints — no verifier ran, so there is nothing to score",
+            context={"returncode": returncode},
+        )
+
+    for cp in checkpoints:
         if not isinstance(cp, dict):
             continue
         name = cp.get("name", "?")
