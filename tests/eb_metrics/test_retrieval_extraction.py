@@ -292,6 +292,19 @@ def test_bash_read_files_survives_shell_metacharacters(
         pytest.param(
             "grep -q $'\\t' a/first.py", ["a/first.py"], id="ansi-c-tab-pattern"
         ),
+        # `--` ends the options. Without it, a dash-shaped pattern reads as one
+        # more flag, `pattern_seen` never flips, and the *file* is swallowed as
+        # the pattern — the file vanishes entirely.
+        pytest.param(
+            "grep -- '--verbose' src/cli.py", ["src/cli.py"], id="end-of-options-dash-pattern"
+        ),
+        pytest.param(
+            "grep -rn -- -foo.py src/handler.go",
+            ["src/handler.go"],
+            id="end-of-options-filename-pattern",
+        ),
+        pytest.param("grep -- pat src/x.py", ["src/x.py"], id="end-of-options-plain-pattern"),
+        pytest.param("cat -- src/normal.py", ["src/normal.py"], id="end-of-options-cat"),
     ],
 )
 def test_bash_read_files_recovers_hidden_reads(

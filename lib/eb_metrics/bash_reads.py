@@ -107,6 +107,7 @@ _GLOB_CHARS = "*?"
 # exotic. The bound just stops a pathological trace from recursing without end.
 _MAX_SUBST_DEPTH = 4
 
+
 def bash_read_files(command: str, depth: int = 0) -> list[str]:
     """Extract the files a shell command reads, in the order it reads them.
 
@@ -250,11 +251,17 @@ def _read_command_args(cmd: str, args: list[str]) -> list[str]:
     takes_pattern = cmd in _PATTERN_CMDS
     value_flags = _VALUE_FLAGS.get(cmd, frozenset())
     pattern_seen = not takes_pattern
+    end_of_options = False
     files: list[str] = []
     i = 0
     while i < len(args):
         arg = args[i]
-        if _is_flag(arg):
+        if not end_of_options and arg == "--":
+            # Everything after `--` is an operand, however dash-shaped. Reading
+            # it as one more flag would leave `pattern_seen` unset, and the file
+            # after it would then be swallowed as the pattern and never counted.
+            end_of_options = True
+        elif not end_of_options and _is_flag(arg):
             if takes_pattern and arg in _PATTERN_FLAGS:
                 pattern_seen = True  # the pattern came from here, not a positional
                 i += 1
