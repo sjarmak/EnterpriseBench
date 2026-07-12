@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 
@@ -38,8 +38,13 @@ from orchestration.milestone import (
 )
 
 
-def write_verifier(tmp_path: Path, body: str, name: str = "check.sh") -> Path:
-    """Write an executable stub verifier emitting *body* on stdout."""
+def write_stub_verifier(tmp_path: Path, body: str, name: str = "check.sh") -> Path:
+    """Write an executable stub verifier; return its absolute path.
+
+    Distinct from ``test_checkpoint_verdict.write_verifier``, which writes into a
+    task dir's ``checks/`` and returns a *task-relative* path. Named apart so the
+    two are not mistaken for one another in this directory.
+    """
     script = tmp_path / name
     script.write_text(body)
     script.chmod(0o755)
@@ -61,7 +66,7 @@ class TestNoVerdictIsNeverAScore:
 
     def test_exit0_without_json_is_infra_not_a_free_1_0(self, tmp_path):
         """THE OVER-CREDIT. A verifier that printed nothing and exited 0 scored 1.0."""
-        v = write_verifier(tmp_path, "#!/bin/sh\nexit 0\n")
+        v = write_stub_verifier(tmp_path, "#!/bin/sh\nexit 0\n")
 
         result = run(v, tmp_path)
 
@@ -74,7 +79,7 @@ class TestNoVerdictIsNeverAScore:
 
     def test_exit1_without_json_is_infra_not_a_false_0_0(self, tmp_path):
         """THE FALSE ZERO. A broken harness scored the agent 0.0 and looked legitimate."""
-        v = write_verifier(tmp_path, "#!/bin/sh\necho 'Traceback: boom' >&2\nexit 1\n")
+        v = write_stub_verifier(tmp_path, "#!/bin/sh\necho 'Traceback: boom' >&2\nexit 1\n")
 
         result = run(v, tmp_path)
 
@@ -90,7 +95,7 @@ class TestNoVerdictIsNeverAScore:
         assert result.score is None
 
     def test_timeout_is_infra_not_a_0_0(self, tmp_path):
-        v = write_verifier(tmp_path, "#!/bin/sh\nsleep 5\n")
+        v = write_stub_verifier(tmp_path, "#!/bin/sh\nsleep 5\n")
 
         result = run(v, tmp_path, timeout_seconds=1)
 
@@ -119,7 +124,7 @@ class TestMalformedVerdicts:
         """The subtle one: stdout IS valid JSON, but carries no 'score'. The old
         `output.get("score", score)` silently fell back to the fabricated
         exit-code score — so exit 0 still bought a free 1.0."""
-        v = write_verifier(tmp_path, "#!/bin/sh\necho '{\"message\": \"ok\"}'\nexit 0\n")
+        v = write_stub_verifier(tmp_path, "#!/bin/sh\necho '{\"message\": \"ok\"}'\nexit 0\n")
 
         result = run(v, tmp_path)
 
@@ -128,29 +133,25 @@ class TestMalformedVerdicts:
         assert result.score != 1.0
         assert result.score is None
 
-    @pytest.mark.parametrize(
-        "literal,cause",
-        [
-            ("NaN", "non_numeric_score"),  # min(1.0, nan) is 1.0 -> free full marks
-            ("Infinity", "non_numeric_score"),
-            ("true", "non_numeric_score"),  # float(True) == 1.0
-            ("999", "non_numeric_score"),
-            ("-5", "non_numeric_score"),
-        ],
-    )
-    def test_score_outside_a_real_0_1_number_is_infra(self, tmp_path, literal, cause):
-        """json.loads parses bare NaN/Infinity, and each of these clamps or casts
-        to a 1.0 under a naive max/min — the exact over-credit being closed."""
-        v = write_verifier(tmp_path, f"#!/bin/sh\necho '{{\"score\": {literal}}}'\nexit 0\n")
+    def test_score_that_is_not_a_real_0_1_number_is_infra(self, tmp_path):
+        """NaN is the representative over-credit: json.loads parses bare NaN, and
+        min(1.0, nan) is nan -> a naive clamp hands out full marks.
+
+        The full rejection table (Infinity, true, 999, -5, "1.0", ...) is asserted
+        directly against ``guard_checkpoint_verdict`` in test_checkpoint_verdict.py.
+        milestone.py has no per-literal logic — it delegates to the guard and
+        branches once on the result — so this asserts the wiring, not the table.
+        """
+        v = write_stub_verifier(tmp_path, "#!/bin/sh\necho '{\"score\": NaN}'\nexit 0\n")
 
         result = run(v, tmp_path)
 
-        assert result.infra_error is not None, f"{literal} is not a score"
-        assert result.infra_error.context["cause"] == cause
+        assert result.infra_error is not None, "NaN is not a score"
+        assert result.infra_error.context["cause"] == "non_numeric_score"
         assert result.score is None
 
     def test_non_json_stdout_is_infra(self, tmp_path):
-        v = write_verifier(tmp_path, "#!/bin/sh\necho 'PASS'\nexit 0\n")
+        v = write_stub_verifier(tmp_path, "#!/bin/sh\necho 'PASS'\nexit 0\n")
 
         result = run(v, tmp_path)
 
@@ -163,7 +164,7 @@ class TestRealVerdictsPassThroughUnchanged:
     score on every path (including their failure paths, with a nonzero exit)."""
 
     def test_valid_partial_score_survives(self, tmp_path):
-        v = write_verifier(
+        v = write_stub_verifier(
             tmp_path, "#!/bin/sh\necho '{\"score\": 0.6, \"message\": \"partial\"}'\nexit 0\n"
         )
 
@@ -178,7 +179,7 @@ class TestRealVerdictsPassThroughUnchanged:
         """check_investigation.sh emits {"score": 0.6} and exits 1. That is a
         genuine partial-credit FAIL verdict, not a broken harness: the score is
         honored and `passed` stays exit-code-derived."""
-        v = write_verifier(
+        v = write_stub_verifier(
             tmp_path, "#!/bin/sh\necho '{\"score\": 0.6, \"message\": \"partial\"}'\nexit 1\n"
         )
 
@@ -191,7 +192,7 @@ class TestRealVerdictsPassThroughUnchanged:
     def test_zero_score_from_a_real_verdict_is_still_a_zero(self, tmp_path):
         """A legitimate 0.0 (verifier ran, agent failed) must survive. The point
         is to stop *inventing* zeros, not to stop recording earned ones."""
-        v = write_verifier(
+        v = write_stub_verifier(
             tmp_path, "#!/bin/sh\necho '{\"score\": 0.0, \"message\": \"no report\"}'\nexit 1\n"
         )
 
@@ -308,7 +309,9 @@ class TestChainResultCarriesNoNumberForAnInvalidRun:
         chain = ChainResult(task_id="t", total_sessions=1)
         chain.total_score = None
         chain.final_score = None
-        chain.verifier_infra_error = {"reason": NO_VERDICT_REASON, "detail": "boom"}
+        chain.verifier_infra_error = InfraError(
+            NO_VERDICT_REASON, "milestone", "boom"
+        ).as_verifier_error()
 
         text = chain.summary()
 
@@ -351,7 +354,7 @@ class TestChainResultJsonContract:
         checks = tmp_path / "checks"
         checks.mkdir()
         # Exits 0 and prints nothing: under the old code, a free 1.0.
-        write_verifier(checks, "#!/bin/sh\nexit 0\n", name="broken.sh")
+        write_stub_verifier(checks, "#!/bin/sh\nexit 0\n", name="broken.sh")
 
         proc = subprocess.run(
             [sys.executable, "-m", "orchestration.chain_runner", str(task_toml), "--simulate"],

@@ -65,10 +65,15 @@ Example::
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, Sequence
+from typing import TYPE_CHECKING, Protocol, Sequence
 
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
+if TYPE_CHECKING:  # numpy/sklearn are imported lazily — see below.
+    import numpy as np
+
+# numpy and sklearn are imported inside the functions that use them, not at module
+# scope. `eb_verify/__init__` re-exports the runner, which reaches this module, so a
+# module-scope import made *every* importer of eb_verify (including the chain runner,
+# which never scores facts) pay ~0.7s and ~100MB of TF-IDF machinery at startup.
 
 # Calibrated on the labeled pair set in fact_coverage_calibration.py:
 # best F1 = 0.828 at threshold 0.40 for the TF-IDF char 3-5-gram default
@@ -107,6 +112,9 @@ class TfidfCharNgramEmbedder:
         self.ngram_range = ngram_range
 
     def embed(self, texts: list[str]) -> np.ndarray:
+        import numpy as np
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
         if not texts:
             return np.zeros((0, 0))
         vectorizer = TfidfVectorizer(
@@ -190,6 +198,8 @@ def coverage(
             for i in range(len(gt_facts))
         )
         return CoverageResult(recall=0.0, threshold=threshold, matches=miss_matches)
+
+    import numpy as np
 
     emb = (embedder or TfidfCharNgramEmbedder()).embed(
         [f.statement for f in gt_facts] + [f.statement for f in candidate_facts]

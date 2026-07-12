@@ -21,7 +21,6 @@ from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-sys.path.insert(0, str(REPO_ROOT / "lib"))
 
 # Support both toml (Python 3.11+) and tomli
 try:
@@ -90,9 +89,8 @@ class ChainResult:
             for m in ms.milestones:
                 if m.infra_error is not None:
                     lines.append(
-                        f"    {m.milestone_name}: INVALID (no verdict: "
-                        f"{m.infra_error.context.get('cause', m.infra_error.reason)}) "
-                        f"{m.message}"
+                        f"    {m.milestone_name}: INVALID "
+                        f"(no verdict: {m.infra_error.cause}) {m.infra_error.detail}"
                     )
                     continue
                 status = "PASS" if m.passed else "FAIL"
@@ -103,20 +101,18 @@ class ChainResult:
         if self.verifier_infra_error is not None:
             lines.append(
                 f"\nINVALID RUN — a milestone verifier never reached a verdict "
-                f"({self.verifier_infra_error.get('cause', self.verifier_infra_error['reason'])}); "
-                f"this chain has no score and must be re-run."
+                f"({self.verifier_infra_error['cause']}); this chain has no score "
+                f"and must be re-run."
             )
             lines.append(f"  {self.verifier_infra_error['detail']}")
             return "\n".join(lines)
 
-        # None here (with no infra error) means the chain produced no milestone
-        # results at all — nothing was scored. Say so; the score fields used to
-        # default to 0.0 and printed that absence as an earned zero.
-        def render(score: Optional[float]) -> str:
-            return "NOT SCORED" if score is None else f"{score:.2f}"
-
-        lines.append(f"\nFinal score: {render(self.final_score)}")
-        lines.append(f"Total score: {render(self.total_score)}")
+        # A None score with no infra error means no milestone ran at all. Render it
+        # as unscored — the fields used to default to 0.0 and print that as earned.
+        final = "NOT SCORED" if self.final_score is None else f"{self.final_score:.2f}"
+        total = "NOT SCORED" if self.total_score is None else f"{self.total_score:.2f}"
+        lines.append(f"\nFinal score: {final}")
+        lines.append(f"Total score: {total}")
         return "\n".join(lines)
 
 
@@ -270,6 +266,9 @@ def run_chain(
             "Chain INVALID — a milestone verifier never reached a verdict: %s",
             chain_result.verifier_infra_error["detail"],
         )
+    elif chain_result.total_score is None:
+        # No milestone ran (e.g. session 1 failed and broke the loop). Not a score.
+        logger.info("Chain complete. No milestones scored.")
     else:
         logger.info("Chain complete. Total score: %.2f", chain_result.total_score)
     return chain_result
@@ -279,9 +278,8 @@ def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinitio
     """Compute weighted total score from milestone results and final checkpoints.
 
     Short-circuits to ``verifier_infra_error`` if ANY milestone never reached a
-    verdict. Folding such a milestone into the weighted sum is what made the bug
-    invisible: whatever placeholder it carried (a free 1.0, a false 0.0) became a
-    real numeric total that no downstream reader could tell apart from a scored run.
+    verdict: folding a placeholder into the weighted sum is what turned a broken
+    verifier into a real-looking numeric total.
     """
     # Milestone scores contribute proportionally
     all_milestone_results = []

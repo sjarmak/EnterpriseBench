@@ -24,6 +24,10 @@ blocker (`.github/workflows/ci.yml` → "Scoring-integrity corpus").
 | malformed `expected_solution.json` → un-capped grep | over-credit | apfp #3 | `test_malformed_expected_solution_flags_infra` |
 | judge-init failure → un-capped grep | over-credit | apfp #3 | `test_judge_init_failure_flags_infra` |
 | per-checkpoint judge exception → un-capped grep | over-credit | apfp #3 | `test_per_checkpoint_judge_exception_flags_infra` |
+| milestone verifier exit 0 + no verdict → free 1.0 | over-credit | chc2z | `test_exit0_without_json_is_infra_not_a_free_1_0` |
+| milestone verifier exit 1 + no verdict → false 0.0 | under-credit | chc2z | `test_exit1_without_json_is_infra_not_a_false_0_0` |
+| missing / timed-out / unexecutable milestone verifier → 0.0 | under-credit | chc2z | `test_missing_verifier_is_infra_not_a_0_0`, `test_timeout_is_infra_not_a_0_0`, `test_unexecutable_verifier_is_infra_not_a_crash` |
+| infra milestone averaged into `chain_result.json` total | both | chc2z | `test_chain_result_json_total_score_is_null_and_exit_is_nonzero` |
 
 ### Negative controls (guard must not over-flag)
 

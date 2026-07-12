@@ -61,9 +61,26 @@ class InfraError:
     detail: str  # human-readable explanation
     context: dict = field(default_factory=dict)
 
+    @property
+    def cause(self) -> str:
+        """The narrowest machine key this error carries.
+
+        ``no_verdict`` errors all share one ``reason`` (NO_VERDICT_REASON), so the
+        sub-classification that actually names the failure lives in
+        ``context["cause"]``. Errors built directly (run_task's judge paths) carry
+        no cause and fall back to ``reason``. Every reader wants this one string,
+        so it is derived here rather than at each call site.
+        """
+        return self.context.get("cause", self.reason)
+
     def as_verifier_error(self) -> dict:
         """The dict shape ``run_task`` stores under ``verifier_infra_error``."""
-        payload = {"reason": self.reason, "stage": self.stage, "detail": self.detail}
+        payload = {
+            "reason": self.reason,
+            "stage": self.stage,
+            "detail": self.detail,
+            "cause": self.cause,
+        }
         payload.update(self.context)
         return payload
 

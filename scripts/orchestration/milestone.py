@@ -44,16 +44,13 @@ class MilestoneResult:
     infra_error: Optional[InfraError] = None
 
     def __post_init__(self) -> None:
-        # Enforced, not merely documented: the aggregators below multiply and sum
-        # `score` unguarded, so a result that carried neither a score nor an error
-        # would crash the chain, and one that carried both would let a placeholder
-        # be averaged in as if it were real. Neither may be constructible.
+        # The aggregators sum `score` unguarded, so an ill-formed result is either a
+        # crash or a laundered placeholder. Neither may be constructible.
         if (self.score is None) != (self.infra_error is not None):
             raise ValueError(
-                f"milestone {self.milestone_name!r}: score and infra_error are "
-                "mutually exclusive and jointly exhaustive — a verifier either "
-                f"reached a verdict or it did not (score={self.score!r}, "
-                f"infra_error={self.infra_error!r})"
+                f"milestone {self.milestone_name!r}: exactly one of score/infra_error "
+                f"must be set — a verifier either reached a verdict or it did not "
+                f"(score={self.score!r}, infra_error={self.infra_error!r})"
             )
 
 
@@ -65,10 +62,6 @@ class SessionScore:
     milestones: list[MilestoneResult] = field(default_factory=list)
 
     @property
-    def infra_errors(self) -> list[InfraError]:
-        return [m.infra_error for m in self.milestones if m.infra_error is not None]
-
-    @property
     def total_score(self) -> Optional[float]:
         """The mean milestone score, or None if any milestone never scored.
 
@@ -76,7 +69,7 @@ class SessionScore:
         is deliberate: a partial mean silently reweights the surviving milestones
         and reads downstream as a legitimate result.
         """
-        if not self.milestones or self.infra_errors:
+        if not self.milestones or any(m.infra_error for m in self.milestones):
             return None
         return sum(m.score for m in self.milestones) / len(self.milestones)
 
@@ -98,11 +91,8 @@ def run_milestone_verifier(
 
     The verifier receives the workspace path as its first argument and MUST print
     a JSON object carrying a numeric ``score`` in [0.0, 1.0]; ``message`` is
-    optional. It signals pass/fail with its exit code, which is read as pass/fail
-    ONLY — never as a score. There is deliberately no exit-code score fallback:
-    reading ``exit 0`` as a 1.0 hands full credit to a verifier that crashed
-    before scoring anything, and ``exit 1`` as a 0.0 blames the agent for a broken
-    harness (beads glka.2, kyo34, chc2z).
+    optional. Its exit code is read as pass/fail only, never as a score — see
+    ``guard_checkpoint_verdict``, which owns that rule for every runner.
     """
     logger.info(
         "Running milestone '%s' for session %d: %s",
@@ -115,7 +105,7 @@ def run_milestone_verifier(
         logger.error(
             "Milestone '%s' did not reach a verdict (%s): %s",
             milestone_name,
-            error.context.get("cause", error.reason),
+            error.cause,
             error.detail,
         )
         return MilestoneResult(
@@ -219,18 +209,13 @@ def run_session_milestones(
             milestone_name=milestone["name"],
         )
         session_score.milestones.append(result)
+        # An infra result is already logged, with its cause, by run_milestone_verifier.
         if result.infra_error is None:
             logger.info(
                 "  Milestone '%s': %s (score=%.2f)",
                 result.milestone_name,
                 "PASS" if result.passed else "FAIL",
                 result.score,
-            )
-        else:
-            logger.warning(
-                "  Milestone '%s': INVALID (no verdict: %s)",
-                result.milestone_name,
-                result.infra_error.context.get("cause", result.infra_error.reason),
             )
 
     return session_score

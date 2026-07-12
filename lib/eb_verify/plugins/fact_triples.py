@@ -36,10 +36,12 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Protocol, Sequence
+from typing import TYPE_CHECKING, Optional, Protocol, Sequence
 
-import numpy as np
 from jsonschema import Draft202012Validator
+
+if TYPE_CHECKING:  # numpy is imported lazily at its one runtime use site below.
+    import numpy as np
 
 from eb_verify.fact_coverage import Embedder, TfidfCharNgramEmbedder
 from eb_verify.groundedness import Citation, check_groundedness
@@ -271,6 +273,8 @@ def score_fact_triples(
     unmatched_gt = [i for i in range(len(gt_facts)) if i not in matches]
     free_candidates = [p for p in range(n_grounded) if p not in used_candidates]
     if unmatched_gt and free_candidates:
+        import numpy as np
+
         backend = similarity if similarity is not None else TfidfStatementSimilarity()
         sims = np.asarray(
             backend.pairwise(

@@ -170,7 +170,7 @@ class CheckpointRunner:
         logger.error(
             "Checkpoint %r: verifier did not run (%s) — %s",
             checkpoint.name,
-            error.context.get("cause", "?"),
+            error.cause,
             error.detail,
         )
         return CheckpointResult(
