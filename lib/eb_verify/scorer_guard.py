@@ -105,13 +105,11 @@ _SCORE_EPSILON = 1e-6
 def is_valid_score(value: object) -> bool:
     """Is ``value`` a real, finite number inside [0, 1]?
 
-    The one definition of "this is a score" — shared by every scoring entry
-    point (verifier, checkpoint, judge — bead kyo34), so none of them has to
-    re-derive it from a naive ``max(0.0, min(1.0, float(value)))`` clamp. That
-    clamp is what this predicate exists to replace: it silently converts four
-    different non-scores into a FREE 1.0 or a false zero, and each is reachable
-    from a real verifier or judge response because ``json.loads`` parses bare
-    ``NaN``/``Infinity`` by default.
+    A ``max(0.0, min(1.0, float(value)))`` clamp does not answer this question.
+    It turns each of the values below into a free 1.0 or a false zero, and each
+    is reachable from a real verifier or judge response because ``json.loads``
+    parses bare ``NaN``/``Infinity`` by default. The bool and non-finite checks
+    are load-bearing for exactly that reason:
 
     * ``nan`` — ``min(1.0, nan)`` is 1.0 in CPython, so arithmetic that divided
       by zero scores FULL MARKS.
@@ -120,6 +118,12 @@ def is_valid_score(value: object) -> bool:
       to mean "passed" scores 1.0.
     * ``"1.0"`` / ``"abc"`` — a string is not a score. Coercing it gives full
       marks for the first and a false zero for the second.
+
+    Callers: all three scoring entry points, so the invariant has one
+    definition — ``guard_checkpoint_verdict`` (the Tier-1 verifier path, which
+    ``runner.py`` now trusts instead of clamping on its own), the per-checkpoint
+    guard above, and the judge path
+    (:func:`eb_verify.judge.models.validate_score`).
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False

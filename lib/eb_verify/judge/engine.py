@@ -55,11 +55,8 @@ class LLMJudge:
                 could not be parsed.
             JudgeScoreError: the judge responded, but with a non-score.
 
-        Both mean the judge reached no verdict on this checkpoint, so neither
-        may be turned into a number here. The caller routes them to the re-run
-        channel — recording a 0.0 for a judge OUTAGE blames the agent for our
-        infrastructure (false zero), which is the under-credit half of the same
-        bug the score validation blocks on the over-credit side.
+        Both mean the judge reached no verdict, so neither may be turned into a
+        number here. The caller routes them to the re-run channel.
         """
         criteria_text = (
             "\n".join(f"- {c}" for c in judge_input.evaluation_criteria)

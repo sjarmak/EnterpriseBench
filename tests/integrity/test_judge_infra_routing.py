@@ -59,6 +59,20 @@ def _agent_output_present():
     return patch.object(run_task, "_docker_exec", return_value=ok)
 
 
+def _judge_whose_backend(*, returns: dict | None = None, raises: Exception | None = None):
+    """A real LLMJudge wired to a mock backend, bypassing backend construction."""
+    sys.path.insert(0, str(REPO_ROOT / "lib"))
+    from eb_verify.judge import LLMJudge
+
+    judge = LLMJudge.__new__(LLMJudge)
+    judge.model = "cc:haiku"
+    judge.pass_threshold = 0.5
+    judge._backend = MagicMock()
+    judge._backend.call.return_value = returns
+    judge._backend.call.side_effect = raises
+    return judge
+
+
 class TestJudgeOutageRouting:
     def test_malformed_expected_solution_flags_infra(self, tmp_path: Path) -> None:
         _write_expected(tmp_path, "{ this is not valid json ]")
@@ -93,18 +107,11 @@ class TestJudgeOutageRouting:
         assert err["reason"] == "judge_checkpoint_failed"
 
     def test_judge_returning_a_non_score_flags_infra(self, tmp_path: Path) -> None:
-        """Over-credit regression (fi9mm): the judge returns NaN — which the old
-        clamp turned into a free 1.0, making the Tier-2 cap a silent no-op and
-        leaving the un-capped grep 1.0 standing as the final measurement."""
+        """A NaN judge score is not a verdict. A clamp would make it a free 1.0,
+        turning the Tier-2 cap into a no-op and leaving the un-capped grep 1.0
+        standing as the final measurement."""
         _write_expected(tmp_path, _valid_expected())
-        sys.path.insert(0, str(REPO_ROOT / "lib"))
-        from eb_verify.judge import LLMJudge as RealJudge
-
-        judge = RealJudge.__new__(RealJudge)  # bypass backend construction
-        judge.model = "cc:haiku"
-        judge.pass_threshold = 0.5
-        judge._backend = MagicMock()
-        judge._backend.call.return_value = {"score": float("nan")}
+        judge = _judge_whose_backend(returns={"score": float("nan")})
 
         with _agent_output_present(), patch(
             "eb_verify.judge.LLMJudge", return_value=judge
@@ -117,18 +124,12 @@ class TestJudgeOutageRouting:
         assert "non-score" in err["detail"]
 
     def test_judge_backend_outage_flags_infra_not_zero(self, tmp_path: Path) -> None:
-        """Under-credit regression (fi9mm): a judge OUTAGE used to be recorded as
-        a legitimate 0.0, which min(grep, judge) then propagated to every
-        checkpoint. It is our infra failing, not the agent."""
+        """A judge OUTAGE is our infra failing, not the agent. Scoring it 0.0
+        would propagate through min(grep, judge) to every checkpoint."""
         _write_expected(tmp_path, _valid_expected())
-        sys.path.insert(0, str(REPO_ROOT / "lib"))
-        from eb_verify.judge import JudgeBackendError, LLMJudge as RealJudge
+        from eb_verify.judge import JudgeBackendError
 
-        judge = RealJudge.__new__(RealJudge)
-        judge.model = "cc:haiku"
-        judge.pass_threshold = 0.5
-        judge._backend = MagicMock()
-        judge._backend.call.side_effect = JudgeBackendError("judge 503")
+        judge = _judge_whose_backend(raises=JudgeBackendError("judge 503"))
 
         with _agent_output_present(), patch(
             "eb_verify.judge.LLMJudge", return_value=judge

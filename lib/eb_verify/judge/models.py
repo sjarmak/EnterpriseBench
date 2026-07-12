@@ -44,14 +44,10 @@ class CheckpointJudgeResult:
 def validate_score(val: object) -> float:
     """Return the judge's score, or raise :class:`JudgeScoreError`.
 
-    The judge is the third scoring entry point, and it enforces the same
-    invariant as the other two (see :mod:`eb_verify.scorer_guard`): a value that
-    is not a score never becomes one. This function used to clamp instead, which
-    handed full marks to ``{"score": true}``, ``NaN`` and ``999``, and a false
-    zero to ``"abc"``.
+    A value that is not a score never becomes one — see
+    :func:`eb_verify.scorer_guard.is_valid_score` for what that rules out.
     """
     if not is_valid_score(val):
         raise JudgeScoreError(f"judge returned a non-score: {val!r}")
-    # is_valid_score already rejected everything genuinely out of range, so this
-    # only trims the float slop it tolerates at the bounds.
+    # Already in range; this only trims the bound slop is_valid_score tolerates.
     return min(1.0, max(0.0, float(val)))  # type: ignore[arg-type]

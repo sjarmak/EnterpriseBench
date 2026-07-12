@@ -381,6 +381,11 @@ class CheckpointRunner:
 
         # Run checkpoints in order
         checkpoint_results = []
+        # Set once the judge reaches no verdict. The first such failure already
+        # routes the whole run to the re-run channel, so every later judge call
+        # would return a number nobody reads — and a backend outage fails all of
+        # them anyway, at a 120s timeout plus retries each.
+        judge_failure: Optional[str] = None
         for cp in self.task.checkpoints:
             print(f"[runner] Running checkpoint: {cp.name}")
 
@@ -401,25 +406,28 @@ class CheckpointRunner:
             # Tier 2: LLM judge (if active and agent output available)
             final_score = grep_score
             if agent_output and self._judge is not None:
-                try:
-                    judge_score = self._run_judge_checkpoint(cp, agent_output)
-                except Exception as exc:
-                    # The judge reached no verdict (backend outage, or it
-                    # returned a non-score). The Tier-2 ceiling therefore cannot
-                    # be applied, and neither available number is a measurement:
-                    # keeping grep alone records an un-capped score, and 0.0
-                    # blames the agent for our outage. Declare the infra failure
-                    # instead — scorer_guard reads INFRA_SENTINEL back out of
-                    # the detail and routes the run to the re-run channel.
-                    logger.warning("LLM judge failed for %s: %s", cp.name, exc)
-                    detail_parts.append(f"{INFRA_SENTINEL}: LLM judge failed: {exc}")
+                judge_score = None
+                if judge_failure is None:
+                    try:
+                        judge_score = self._run_judge_checkpoint(cp, agent_output)
+                    except Exception as exc:
+                        logger.warning("LLM judge failed for %s: %s", cp.name, exc)
+                        judge_failure = str(exc)
+
+                if judge_failure is not None:
+                    # No verdict, so the Tier-2 ceiling cannot be applied. Grep
+                    # alone would stand as an un-capped score, so declare the
+                    # infra failure: INFRA_SENTINEL in the detail is what routes
+                    # the run, not the score below.
+                    detail_parts.append(
+                        f"{INFRA_SENTINEL}: LLM judge failed: {judge_failure}"
+                    )
                     final_score = 0.0
-                else:
-                    if judge_score is not None:
-                        final_score = min(grep_score, judge_score)
-                        detail_parts.append(
-                            f"grep={grep_score:.2f} judge={judge_score:.2f} final={final_score:.2f}"
-                        )
+                elif judge_score is not None:
+                    final_score = min(grep_score, judge_score)
+                    detail_parts.append(
+                        f"grep={grep_score:.2f} judge={judge_score:.2f} final={final_score:.2f}"
+                    )
 
             result = CheckpointResult(
                 name=cp.name,

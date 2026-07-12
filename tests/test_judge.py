@@ -90,28 +90,21 @@ class TestValidateScore:
     @pytest.mark.parametrize(
         "val",
         [
-            float("nan"),  # min(1.0, nan) is 1.0 in CPython → was a free 1.0
-            float("inf"),  # → was a free 1.0
-            True,          # float(True) == 1.0 → {"score": true} was a free 1.0
-            999,           # → was a free 1.0
-            1.5,           # → was clamped to a free 1.0
-            "1.0",         # a string is not a score → was a free 1.0
-        ],
-    )
-    def test_over_credit_vectors_raise(self, val):
-        with pytest.raises(JudgeScoreError):
-            validate_score(val)
-
-    @pytest.mark.parametrize(
-        "val",
-        [
-            None,             # judge response had no "score" key → was a false 0.0
-            "not a number",   # → was a false 0.0
-            -0.3,             # → was clamped to a false 0.0
+            # Over-credit: a clamp turns each of these into a free 1.0.
+            float("nan"),  # min(1.0, nan) is 1.0 in CPython
+            float("inf"),
+            True,          # float(True) == 1.0, i.e. {"score": true}
+            999,
+            1.5,
+            "1.0",         # a string is not a score, even when it parses
+            # Under-credit: a clamp turns each of these into a false 0.0.
+            None,          # judge response carried no "score" key
+            "not a number",
+            -0.3,
             object(),
         ],
     )
-    def test_under_credit_vectors_raise(self, val):
+    def test_non_score_raises(self, val):
         with pytest.raises(JudgeScoreError):
             validate_score(val)
 

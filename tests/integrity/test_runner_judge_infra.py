@@ -37,8 +37,16 @@ from eb_verify.task_parser import (  # noqa: E402
 )
 
 
-def _runner_with_judge(tmp_path: Path, judge_error: Exception) -> CheckpointRunner:
-    """A runner whose grep verifier scores 1.0 and whose judge always fails."""
+def _runner_with_judge(
+    tmp_path: Path,
+    judge_error: Exception | None = None,
+    checkpoint_names: tuple[str, ...] = ("root_cause",),
+) -> CheckpointRunner:
+    """A runner whose grep verifier scores 1.0 on every checkpoint.
+
+    With ``judge_error`` the judge always raises it; without, the caller wires
+    ``runner._judge.evaluate_checkpoint.return_value`` itself.
+    """
     task_dir = tmp_path / "task"
     task_dir.mkdir()
     workspace = tmp_path / "ws"
@@ -51,10 +59,11 @@ def _runner_with_judge(tmp_path: Path, judge_error: Exception) -> CheckpointRunn
             {
                 "task_id": "fi9mm-001",
                 "checkpoints": {
-                    "root_cause": {
+                    name: {
                         "expected_solution": "the answer is X",
                         "evaluation_criteria": ["mentions X"],
                     }
+                    for name in checkpoint_names
                 },
             }
         )
@@ -72,8 +81,9 @@ def _runner_with_judge(tmp_path: Path, judge_error: Exception) -> CheckpointRunn
         repos=[RepoSpec(url="http://x", rev="main", path="repo1")],
         checkpoints=[
             Checkpoint(
-                name="root_cause", weight=1.0, verifier="check.sh", timeout_seconds=60
+                name=name, weight=1.0, verifier="check.sh", timeout_seconds=60
             )
+            for name in checkpoint_names
         ],
         artifacts=ArtifactSpec(),
         verification_modes=["llm_curator"],
@@ -81,7 +91,8 @@ def _runner_with_judge(tmp_path: Path, judge_error: Exception) -> CheckpointRunn
 
     runner = CheckpointRunner(task=task, task_dir=task_dir, workspace=workspace)
     judge = MagicMock()
-    judge.evaluate_checkpoint.side_effect = judge_error
+    if judge_error is not None:
+        judge.evaluate_checkpoint.side_effect = judge_error
     runner._judge = judge
     return runner
 
@@ -89,8 +100,8 @@ def _runner_with_judge(tmp_path: Path, judge_error: Exception) -> CheckpointRunn
 @pytest.mark.parametrize(
     "judge_error",
     [
-        JudgeBackendError("judge 503"),  # outage → was a false 0.0
-        JudgeScoreError("judge returned a non-score: nan"),  # → was a free 1.0
+        JudgeBackendError("judge 503"),
+        JudgeScoreError("judge returned a non-score: nan"),
     ],
 )
 def test_judge_failure_declares_infra_and_routes_to_rerun(
@@ -117,10 +128,33 @@ def test_judge_failure_declares_infra_and_routes_to_rerun(
     assert guarded.reason == "verifier_crash"
 
 
+def test_a_dead_judge_is_not_called_again_for_later_checkpoints(tmp_path: Path) -> None:
+    """The first no-verdict already routes the run to re-run, and an outage fails
+    every later call anyway — at a 120s timeout plus retries each. Later
+    checkpoints must still declare infra, without paying for the call."""
+    runner = _runner_with_judge(
+        tmp_path,
+        JudgeBackendError("judge 503"),
+        checkpoint_names=("root_cause", "blast_radius", "remediation"),
+    )
+
+    result = runner.run_all(output_path=tmp_path / "reward.txt")
+
+    assert runner._judge.evaluate_checkpoint.call_count == 1, (
+        "the judge was already known to be down; re-calling it burns a network "
+        "timeout per checkpoint for a number the re-run channel discards"
+    )
+    assert len(result.checkpoint_results) == 3
+    for cp in result.checkpoint_results:
+        assert INFRA_SENTINEL in cp.detail, (
+            f"{cp.name}: skipping the judge call must not skip the declaration — "
+            "the un-capped grep 1.0 would otherwise stand"
+        )
+
+
 def test_healthy_judge_still_caps_without_declaring_infra(tmp_path: Path) -> None:
     """Negative control: a judge that returns a verdict caps grep as before."""
-    runner = _runner_with_judge(tmp_path, JudgeBackendError("unused"))
-    runner._judge.evaluate_checkpoint.side_effect = None
+    runner = _runner_with_judge(tmp_path)
     runner._judge.evaluate_checkpoint.return_value = MagicMock(
         score=0.25, confidence="high", reasoning="partial"
     )
