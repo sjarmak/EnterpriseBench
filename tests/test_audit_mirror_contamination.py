@@ -21,9 +21,11 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "analysis"))
 
 import audit_mirror_contamination as amc  # noqa: E402
+from agents.harnesses.claude.mcp.sourcegraph import _build_repo_scope  # noqa: E402
 
 PREAMBLE = """
 **IMPORTANT: Local source files are not present in /workspace.**
@@ -61,6 +63,28 @@ class TestParseAuthorizedMirrors:
 
     def test_no_scoping_block_yields_empty(self):
         assert amc.parse_authorized_mirrors("no repos here") == ()
+
+    def test_round_trips_the_preamble_the_harness_actually_builds(self):
+        """The parser reads a format `mcp/sourcegraph.py` writes, and nothing but
+        this test binds the two. Reformat `_build_repo_scope`'s `MCP filter:` or
+        `Upstream:` line and every MCP run parses as having no authorized set —
+        i.e. as unscored, so the audit reports a corpus-wide clean bill of health.
+        Round-trip the real builder so a format change breaks a test instead.
+        """
+        preamble = _build_repo_scope(
+            [
+                {
+                    "url": "https://github.com/facebook/react",
+                    "rev": "ab18f33d46171ed1963ae1ac955c5110bb1eb199",
+                    "path": "react",
+                }
+            ]
+        )
+
+        mirrors = amc.parse_authorized_mirrors(preamble)
+
+        assert [m.mirror for m in mirrors] == ["sg-evals/react--ab18f33d"]
+        assert mirrors[0].upstream == "facebook/react"
 
 
 class TestClassifyRepo:
@@ -135,9 +159,16 @@ def _tool_result(use_id: str, text: str) -> dict:
     )
 
 
-def _trace(tmp_path: Path, lines: list[dict]) -> Path:
-    p = tmp_path / "agent_trace.jsonl"
-    p.write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+def _trace(tmp_path: Path, lines: list, rel: str = "agent_trace.jsonl") -> Path:
+    """Write a trace at `rel` under tmp_path.
+
+    A `str` line is written verbatim rather than JSON-encoded — that is how the
+    truncated-line tests inject a line `json.loads` cannot parse.
+    """
+    p = tmp_path / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    body = "\n".join(x if isinstance(x, str) else json.dumps(x) for x in lines)
+    p.write_text(body + "\n")
     return p
 
 
@@ -424,10 +455,10 @@ class TestAmbiguousAuthorizedSet:
         assert amc.ambiguous_projects(mirrors) == ()
 
     def test_report_warns_that_an_ambiguous_run_is_not_clean(self, tmp_path):
-        p = tmp_path / "t" / "mcp_only" / "agent_trace.jsonl"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(
-            json.dumps({"type": "user", "message": {"content": self.AMBIGUOUS}}) + "\n"
+        _trace(
+            tmp_path,
+            [_msg("user", self.AMBIGUOUS)],
+            rel="t/mcp_only/agent_trace.jsonl",
         )
 
         audits = amc.audit_corpus(tmp_path)
@@ -468,9 +499,11 @@ class TestCorpusRootIsNotHardcoded:
         corpus at any other path returned (task, mode) SWAPPED — inventing a
         mode bucket named after the real task. results/runs is gitignored, so
         re-running against an archived copy is the expected case, not exotic."""
-        p = tmp_path / "prod_runs" / "cal-drift-flask-config-001" / "agent_trace.jsonl"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"type": "user", "message": {"content": PREAMBLE}}) + "\n")
+        _trace(
+            tmp_path,
+            [_msg("user", PREAMBLE)],
+            rel="prod_runs/cal-drift-flask-config-001/agent_trace.jsonl",
+        )
 
         audits = amc.audit_corpus(tmp_path / "prod_runs")
 
@@ -500,12 +533,11 @@ class TestNeverSilentlyClean:
     """
 
     def test_unparseable_line_is_counted_not_silently_dropped(self, tmp_path):
-        p = tmp_path / "t" / "mcp_only" / "agent_trace.jsonl"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(
-            json.dumps({"type": "user", "message": {"content": PREAMBLE}})
-            + "\n"
-            + '{"truncated": mid-writ\n'  # a crashed run's last line
+        p = _trace(
+            tmp_path,
+            # The second line is a crashed run's truncated last write.
+            [_msg("user", PREAMBLE), '{"truncated": mid-writ'],
+            rel="t/mcp_only/agent_trace.jsonl",
         )
 
         audit = amc.audit_run(p)
@@ -513,12 +545,10 @@ class TestNeverSilentlyClean:
         assert audit.unparseable_lines == 1
 
     def test_report_surfaces_unparseable_lines(self, tmp_path):
-        p = tmp_path / "t" / "mcp_only" / "agent_trace.jsonl"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(
-            json.dumps({"type": "user", "message": {"content": PREAMBLE}})
-            + "\n"
-            + "{oops\n"
+        _trace(
+            tmp_path,
+            [_msg("user", PREAMBLE), "{oops"],
+            rel="t/mcp_only/agent_trace.jsonl",
         )
 
         report = amc.format_report(amc.audit_corpus(tmp_path))
@@ -526,9 +556,9 @@ class TestNeverSilentlyClean:
         assert "UNPARSEABLE" in report
 
     def test_clean_trace_reports_no_unparseable_lines(self, tmp_path):
-        p = tmp_path / "t" / "mcp_only" / "agent_trace.jsonl"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"type": "user", "message": {"content": PREAMBLE}}) + "\n")
+        p = _trace(
+            tmp_path, [_msg("user", PREAMBLE)], rel="t/mcp_only/agent_trace.jsonl"
+        )
 
         assert amc.audit_run(p).unparseable_lines == 0
         assert "UNPARSEABLE" not in amc.format_report(amc.audit_corpus(tmp_path))
@@ -573,32 +603,14 @@ class TestReplicateIdentity:
         """Two contaminated replicates of one task must render as two
         distinguishable lines, not two identical ones."""
         for rep in ("rep1", "rep2"):
-            p = tmp_path / "t" / "mcp_only" / rep / "agent_trace.jsonl"
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(
-                json.dumps({"type": "user", "message": {"content": PREAMBLE}})
-                + "\n"
-                + json.dumps(
-                    {
-                        "type": "assistant",
-                        "message": {
-                            "content": [
-                                {
-                                    "type": "tool_use",
-                                    "id": "x",
-                                    "name": "mcp__sourcegraph__keyword_search",
-                                    "input": {"query": "q"},
-                                },
-                                {
-                                    "type": "tool_result",
-                                    "tool_use_id": "x",
-                                    "content": "# github.com/sg-evals/react--56408a5b - a.ts",
-                                },
-                            ]
-                        },
-                    }
-                )
-                + "\n"
+            _trace(
+                tmp_path,
+                [
+                    _msg("user", PREAMBLE),
+                    _tool_use("x", "keyword_search", query="q"),
+                    _tool_result("x", "# github.com/sg-evals/react--56408a5b - a.ts"),
+                ],
+                rel=f"t/mcp_only/{rep}/agent_trace.jsonl",
             )
 
         report = amc.format_report(amc.audit_corpus(tmp_path))
@@ -607,9 +619,9 @@ class TestReplicateIdentity:
         assert "t (mcp_only/rep2)" in report
 
     def test_json_carries_the_replicate(self, tmp_path):
-        p = tmp_path / "t" / "mcp_only" / "rep3" / "agent_trace.jsonl"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"type": "user", "message": {"content": PREAMBLE}}) + "\n")
+        _trace(
+            tmp_path, [_msg("user", PREAMBLE)], rel="t/mcp_only/rep3/agent_trace.jsonl"
+        )
 
         payload = json.loads(amc.format_json(amc.audit_corpus(tmp_path)))
 
@@ -617,26 +629,25 @@ class TestReplicateIdentity:
 
 
 class TestCorpusDiscovery:
-    def _write(self, root: Path, rel: str) -> None:
-        p = root / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"type": "message", "role": "user", "content": PREAMBLE}) + "\n")
-
     def test_invalidated_runs_are_excluded(self, tmp_path):
         """`_invalidated/` holds runs already withdrawn from analysis.
 
         Auditing them would report contamination for runs nobody scores.
         """
-        self._write(tmp_path, "good-task/mcp_only/agent_trace.jsonl")
-        self._write(tmp_path, "_invalidated/old-task_20260405/rep1/agent_trace.jsonl")
+        _trace(tmp_path, [_msg("user", PREAMBLE)], rel="good-task/mcp_only/agent_trace.jsonl")
+        _trace(
+            tmp_path,
+            [_msg("user", PREAMBLE)],
+            rel="_invalidated/old-task_20260405/rep1/agent_trace.jsonl",
+        )
 
         audits = amc.audit_corpus(tmp_path)
 
         assert [a.task for a in audits] == ["good-task"]
 
     def test_replicates_roll_up_into_their_real_mode(self, tmp_path):
-        self._write(tmp_path, "t/mcp_only/rep1/agent_trace.jsonl")
-        self._write(tmp_path, "t/mcp_only/rep2/agent_trace.jsonl")
+        _trace(tmp_path, [_msg("user", PREAMBLE)], rel="t/mcp_only/rep1/agent_trace.jsonl")
+        _trace(tmp_path, [_msg("user", PREAMBLE)], rel="t/mcp_only/rep2/agent_trace.jsonl")
 
         audits = amc.audit_corpus(tmp_path)
 

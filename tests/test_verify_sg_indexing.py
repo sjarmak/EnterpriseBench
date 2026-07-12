@@ -371,32 +371,37 @@ class TestMirrorNames:
         assert vsi.mirror_names(data) == []
 
 
+def _malformed(url, body, headers, timeout) -> bytes:
+    return b"<html>gateway timeout</html>"
+
+
 class TestCheckRepoIndex:
-    def test_completed_upload_is_precise(self) -> None:
-        fetch = _graphql({"data": {"repository": {"lsifUploads": {"totalCount": 3}}}})
-        assert vsi.check_repo_index("sg-evals/react--ab18f33d", fetch=fetch).status == vsi.PRECISE
-
-    def test_zero_uploads_is_none(self) -> None:
-        fetch = _graphql({"data": {"repository": {"lsifUploads": {"totalCount": 0}}}})
-        assert vsi.check_repo_index("sg-evals/react--ab18f33d", fetch=fetch).status == vsi.NONE
-
-    def test_null_repository_is_absent(self) -> None:
-        fetch = _graphql({"data": {"repository": None}})
-        assert vsi.check_repo_index("sg-evals/nope--0000", fetch=fetch).status == vsi.ABSENT
+    @pytest.mark.parametrize(
+        "fetch, expected",
+        [
+            # A completed upload is the only thing that means PRECISE...
+            (_graphql({"data": {"repository": {"lsifUploads": {"totalCount": 3}}}}), vsi.PRECISE),
+            # ...zero uploads on a repo that EXISTS is a real negative...
+            (_graphql({"data": {"repository": {"lsifUploads": {"totalCount": 0}}}}), vsi.NONE),
+            # ...and a repo the instance has never heard of is ABSENT, not NONE.
+            (_graphql({"data": {"repository": None}}), vsi.ABSENT),
+            # Everything below is a failure to ASK. None of it may read as
+            # 'not indexed' — that is the false-negative this module refuses.
+            (_raising(_http_error(403, "Forbidden")), vsi.UNKNOWN),
+            (_raising(urllib.error.URLError("connection reset")), vsi.UNKNOWN),
+            (_malformed, vsi.UNKNOWN),
+        ],
+    )
+    def test_response_maps_to_status(self, fetch, expected) -> None:
+        assert vsi.check_repo_index("sg-evals/react--ab18f33d", fetch=fetch).status == expected
 
     def test_auth_failure_is_unknown_not_none(self) -> None:
+        """The live case (the token 401s). The detail must name the cause, or a
+        dead token is indistinguishable from a genuinely unindexed corpus."""
         fetch = _raising(_http_error(401, "Unauthorized"))
         r = vsi.check_repo_index("sg-evals/react--ab18f33d", fetch=fetch)
         assert r.status == vsi.UNKNOWN
         assert "401" in r.detail
-
-    def test_forbidden_is_unknown_not_none(self) -> None:
-        fetch = _raising(_http_error(403, "Forbidden"))
-        assert vsi.check_repo_index("sg-evals/react--ab18f33d", fetch=fetch).status == vsi.UNKNOWN
-
-    def test_transport_error_is_unknown(self) -> None:
-        fetch = _raising(urllib.error.URLError("connection reset"))
-        assert vsi.check_repo_index("sg-evals/react--ab18f33d", fetch=fetch).status == vsi.UNKNOWN
 
     def test_graphql_schema_error_is_unknown_not_none(self) -> None:
         """Schema drift (field renamed on a newer SG) must not read as 'no index'."""
@@ -404,12 +409,6 @@ class TestCheckRepoIndex:
         r = vsi.check_repo_index("sg-evals/react--ab18f33d", fetch=fetch)
         assert r.status == vsi.UNKNOWN
         assert "lsifUploads" in r.detail
-
-    def test_malformed_body_is_unknown(self) -> None:
-        def fetch(url, body, headers, timeout):
-            return b"<html>gateway timeout</html>"
-
-        assert vsi.check_repo_index("sg-evals/react--ab18f33d", fetch=fetch).status == vsi.UNKNOWN
 
 
 class TestRequestShape:

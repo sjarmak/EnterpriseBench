@@ -37,11 +37,16 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "infra"))
+
+from mirror_naming import ORG  # noqa: E402
+
 AUTHORIZED = "authorized"
 PIN_VIOLATING = "pin_violating"
 FOREIGN = "foreign"
 
-MIRROR_PREFIX = "sg-evals/"
+MIRROR_PREFIX = f"{ORG}/"
 
 # Runs withdrawn from analysis. Auditing them would report contamination for
 # runs nobody scores.
@@ -51,7 +56,7 @@ INVALIDATED_DIR = "_invalidated"
 _REPLICATE_DIR = re.compile(r"rep\d+")
 
 # `MCP filter: `repo:^github.com/sg-evals/react--ab18f33d$``
-_MIRROR_RE = re.compile(r"repo:\^github\.com/(sg-evals/[\w.\-]+)\$")
+_MIRROR_RE = re.compile(rf"repo:\^github\.com/({re.escape(ORG)}/[\w.\-]+)\$")
 # `Upstream: `facebook/react@ab18f33d...``
 _UPSTREAM_RE = re.compile(r"Upstream:\s*`?([\w.\-]+/[\w.\-]+)@")
 # Where a result declares the repo its content CAME FROM. Both markers are
@@ -288,6 +293,11 @@ def _called_repos(args: dict) -> tuple[str, ...]:
 
 def _cited_repos(result_text: str) -> tuple[str, ...]:
     """Repos a result declares its content came from."""
+    # Every provenance pattern requires the literal `github.com/`; two thirds of
+    # results in the corpus never contain it, and this skips the MULTILINE scans
+    # over them.
+    if "github.com/" not in result_text:
+        return ()
     found: set[str] = set()
     for pattern in _PROVENANCE_RES:
         found.update(normalize_repo(m) for m in pattern.findall(result_text))
@@ -366,22 +376,31 @@ def audit_run(path: Path, root: Path | None = None) -> RunAudit:
         elif kind == "tool_result":
             results[block.get("tool_use_id", "")] = _text_of(block.get("content"))
 
+    # classify_repo is a pure function of (repo, authorized), and the same repo
+    # recurs across calls and across every bucket below. Classify each distinct
+    # repo once.
+    kinds: dict[str, str] = {}
+
+    def _kind(repo: str) -> str:
+        if repo not in kinds:
+            kinds[repo] = classify_repo(repo, authorized)
+        return kinds[repo]
+
     calls: list[ToolCall] = []
     for use_id, (tool, args) in uses.items():
         cited = _cited_repos(results.get(use_id, ""))
-        leaked = tuple(r for r in cited if classify_repo(r, authorized) != AUTHORIZED)
         calls.append(
             ToolCall(
                 tool=tool,
                 args={k: v for k, v in args.items() if k in _INTERESTING_ARGS},
                 called_repos=_called_repos(args),
                 cited_repos=cited,
-                leaked_repos=leaked,
+                leaked_repos=tuple(r for r in cited if _kind(r) != AUTHORIZED),
             )
         )
 
     def _bucket(repos, kind: str) -> tuple[str, ...]:
-        return tuple(sorted({r for r in repos if classify_repo(r, authorized) == kind}))
+        return tuple(sorted({r for r in repos if _kind(r) == kind}))
 
     all_cited = [r for c in calls for r in c.cited_repos]
     all_called = [r for c in calls for r in c.called_repos]
@@ -451,14 +470,13 @@ def format_report(audits: list[RunAudit]) -> str:
     scored = [a for a in audits if a.scored]
     skipped = len(audits) - len(scored)
 
-    lines = [
+    header = [
         "=== Mirror Contamination Audit ===",
         "",
         f"Traces found:      {len(audits)}",
         f"Scored (have an authorized mirror set): {len(scored)}",
         f"Unscored (no MCP preamble — nothing to violate): {skipped}",
         "",
-        "--- Per-Mode Rollup ---",
     ]
 
     warnings: list[str] = []
@@ -486,7 +504,7 @@ def format_report(audits: list[RunAudit]) -> str:
             "",
         ]
 
-    lines[4:4] = warnings
+    lines = [*header, *warnings, "--- Per-Mode Rollup ---"]
 
     by_mode: dict[str, list[RunAudit]] = defaultdict(list)
     for a in scored:
@@ -521,8 +539,6 @@ def format_report(audits: list[RunAudit]) -> str:
         lines.append("  (* = agent issued a tool call directly against this repo)")
         lines.append("")
 
-    # A leaked repo is pin-violating exactly when it is in the run's
-    # pin_violating_cited set, which audit_run already classified.
     leak_tools = Counter(
         c.tool
         for a in scored

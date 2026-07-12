@@ -17,6 +17,7 @@ import sys
 import urllib.error
 import urllib.request
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
@@ -151,6 +152,10 @@ DEFAULT_ENDPOINT = "https://demo.sourcegraph.com"
 # sourcegraph.com rejects the stock Python-urllib User-Agent with a 403.
 USER_AGENT = "EnterpriseBench-verify-sg-indexing/1.0"
 REQUEST_TIMEOUT = 20
+# Each repo is an independent round-trip. Run serially, a dead token (every
+# request burning REQUEST_TIMEOUT) takes 133 * 20s ≈ 45 minutes to report
+# UNKNOWN for all of them.
+MAX_CONCURRENT_CHECKS = 8
 
 INDEX_QUERY = """
 query RepoPreciseIndex($name: String!) {
@@ -281,13 +286,19 @@ def check_all(
 ) -> IndexReport:
     """Check every mirror. `_indexed` in the config is ignored — it is a
     hardcoded placeholder written by generate_sg_index.py, so reading it back as
-    evidence would be circular."""
-    return IndexReport(
-        results=tuple(
-            check_repo_index(name, endpoint=endpoint, token=token, fetch=fetch)
-            for name in mirror_names(data)
+    evidence would be circular.
+
+    Checks run concurrently: `check_repo_index` holds no shared state, and
+    `pool.map` yields in input order, so the report is identical to a serial run.
+    """
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CHECKS) as pool:
+        results = pool.map(
+            lambda name: check_repo_index(
+                name, endpoint=endpoint, token=token, fetch=fetch
+            ),
+            mirror_names(data),
         )
-    )
+        return IndexReport(results=tuple(results))
 
 
 def format_index_report(report: IndexReport) -> str:
