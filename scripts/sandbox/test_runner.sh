@@ -37,23 +37,20 @@ discover_repos() {
     printf '%s\n' "${repos[@]}"
 }
 
-# Sentinel that declares a verifier-harness failure rather than an agent
-# failure. Mirrors eb_verify.scorer_guard.INFRA_SENTINEL — the scorer trust
-# boundary greps for this string, so the two must stay in lockstep.
+# Declares a verifier-harness failure rather than an agent failure. Must stay in
+# lockstep with eb_verify.scorer_guard.INFRA_SENTINEL, which greps for it.
 INFRA_SENTINEL="VERIFIER_INFRA_ERROR"
 
-# Preamble sourced (via BASH_ENV) by every verifier shell.
-#
-# Bash calls command_not_found_handle for ANY command it cannot find, in ANY
-# context — including inside `if python3 ... 2>/dev/null`, where the verifier's
-# own control flow would otherwise swallow the failure and go on to print a
-# perfectly well-formed 0.0. The handler records the name to EB_INFRA_LOG, a
-# side channel the verifier cannot redirect away, which is what makes a missing
-# interpreter unswallowable. Returning 127 reproduces bash's native exit status
-# for an unfindable command, so `set -e` and every exit-code test behave exactly
-# as they did before the handler existed.
+# Sourced (via BASH_ENV) by every verifier shell. Bash calls
+# command_not_found_handle for any command it cannot find in ANY context —
+# including inside `if python3 ... 2>/dev/null`, where the verifier's own
+# control flow would otherwise swallow the failure. EB_INFRA_LOG is a side
+# channel the verifier cannot redirect away. Returning 127 reproduces bash's
+# native exit status for an unfindable command, so `set -e` and every exit-code
+# test behave as they would without the handler.
 INFRA_PREAMBLE=$(mktemp)
-trap 'rm -f "$INFRA_PREAMBLE"' EXIT
+INFRA_LOG=$(mktemp)
+trap 'rm -f "$INFRA_PREAMBLE" "$INFRA_LOG"' EXIT
 cat >"$INFRA_PREAMBLE" <<'PREAMBLE'
 command_not_found_handle() {
     printf '%s\n' "$1" >>"${EB_INFRA_LOG:-/dev/null}"
@@ -65,37 +62,29 @@ PREAMBLE
 # Run a single verifier, capture JSON output and exit code.
 # Returns: sets VERIFIER_EXIT, VERIFIER_JSON, VERIFIER_DURATION_MS, VERIFIER_RAN
 #
-# A verifier that never ran must never be scored. Absence of a verdict is not a
-# verdict of 0.0 (nor of 1.0) — so this function NEVER fabricates a score from
-# an exit code. It attests, per checkpoint, whether the verifier actually
-# produced a verdict (VERIFIER_RAN); the scorer trust boundary refuses to score
-# any checkpoint that did not.
+# Never fabricates a score from an exit code: absence of a verdict is not a
+# verdict of 0.0, nor of 1.0. VERIFIER_RAN attests whether the verifier actually
+# reached one; the scorer refuses to score any checkpoint that did not.
 run_verifier() {
     local verifier_path="$1"
     local timeout_sec="${2:-120}"
-    local start end
+    local start end raw_stdout raw_stderr raw_stdout_file
 
     start=$(now_ms)
-
-    # Run with timeout; capture stdout (expected JSON), stderr for diagnostics
-    local raw_stdout raw_stderr
     raw_stderr=$(mktemp)
-
-    # Capture exit code before || true to avoid masking real failures
-    local raw_stdout_file infra_log
     raw_stdout_file=$(mktemp)
-    infra_log=$(mktemp)
+    : >"$INFRA_LOG"
 
     # Pass the workspace explicitly as $1: several checks resolve
     # WORKSPACE="${1:-.}", which shadows the exported env var. Scoring runs from
     # a cwd outside the workspace (the agent must not control the checks'
     # sys.path[0]), so the "." fallback would silently zero every such check.
     if command -v timeout >/dev/null 2>&1; then
-        BASH_ENV="$INFRA_PREAMBLE" EB_INFRA_LOG="$infra_log" \
+        BASH_ENV="$INFRA_PREAMBLE" EB_INFRA_LOG="$INFRA_LOG" \
             timeout "$timeout_sec" bash "$verifier_path" "$WORKSPACE" >"$raw_stdout_file" 2>"$raw_stderr"
         VERIFIER_EXIT=$?
     else
-        BASH_ENV="$INFRA_PREAMBLE" EB_INFRA_LOG="$infra_log" \
+        BASH_ENV="$INFRA_PREAMBLE" EB_INFRA_LOG="$INFRA_LOG" \
             bash "$verifier_path" "$WORKSPACE" >"$raw_stdout_file" 2>"$raw_stderr"
         VERIFIER_EXIT=$?
     fi
@@ -103,13 +92,11 @@ run_verifier() {
     raw_stdout=$(cat "$raw_stdout_file")
     rm -f "$raw_stdout_file"
 
-    # Dedupe with awk, not `sort -u`: this runs in whatever minimal image the
-    # task ships, and a detector that itself depends on a possibly-absent
-    # command would fail exactly when it is needed most. awk is already a hard
-    # dependency of this script (weighted-score math below).
-    local missing_cmds
-    missing_cmds=$(awk '!seen[$0]++ { printf "%s%s", (c++ ? " " : ""), $0 }' "$infra_log" 2>/dev/null)
-    rm -f "$infra_log"
+    # awk, not `sort -u`: awk is already a hard dependency of this script (the
+    # weighted-score math below), and a missing-command detector must not itself
+    # depend on a command the image may lack.
+    local missing_cmds=""
+    [ -s "$INFRA_LOG" ] && missing_cmds=$(awk '!seen[$0]++ { printf "%s%s", (c++ ? " " : ""), $0 }' "$INFRA_LOG")
 
     end=$(now_ms)
     VERIFIER_DURATION_MS=$(( end - start ))
@@ -117,30 +104,23 @@ run_verifier() {
 
     local infra_detail=""
     if [ -n "$missing_cmds" ]; then
-        # Checked ahead of the timeout below: a command that does not exist is an
-        # infra failure whether or not the verifier also ran out the clock.
-        #
-        # Fires even when the verifier redirected the failure to /dev/null and
-        # carried on to print a legitimate-looking score — that printed score is
-        # a fiction and is discarded here.
+        # Ahead of the timeout check: a command that does not exist is an infra
+        # failure whether or not the verifier also ran out the clock. Fires even
+        # when the verifier swallowed the failure and went on to print a
+        # legitimate-looking score.
         infra_detail="$INFRA_SENTINEL: verifier shelled a command that does not exist: $missing_cmds"
     elif [ "$VERIFIER_EXIT" -eq 124 ]; then
-        # Timeout: the verifier DID run, it just did not finish. Left as a scored
-        # 0.0 — unchanged from before — because a hang is as often the subject
-        # code's fault as the harness's, and reclassifying it is a separate
-        # judgement call from "the verifier never ran".
+        # A timeout means the verifier ran but did not finish, so it stays a
+        # scored 0.0: a hang is as often the subject code's fault as the harness's.
         VERIFIER_JSON="{\"score\": 0.0, \"passed\": false, \"detail\": \"Timed out after ${timeout_sec}s\"}"
         rm -f "$raw_stderr"
         return
     elif [ "$VERIFIER_EXIT" -eq 127 ]; then
-        # Belt and braces: covers a not-found command raised by something other
-        # than the handler (e.g. a non-bash interpreter in the chain).
+        # A not-found command raised by something other than the handler, e.g. a
+        # non-bash interpreter in the chain.
         infra_detail="$INFRA_SENTINEL: verifier exited 127 (command not found)"
     elif ! printf '%s' "$raw_stdout" | grep -q '^{'; then
-        # No JSON on stdout means the verifier died before reaching its verdict.
-        # Previously this was fabricated into a score from the exit code alone:
-        # nonzero became a false 0.0 (under-credit) and — worse — zero became a
-        # free 1.0 (over-credit) for a verifier that printed nothing at all.
+        # No JSON on stdout: the verifier died before reaching its verdict.
         local stderr_content
         stderr_content=$(cat "$raw_stderr" 2>/dev/null || true)
         infra_detail="$INFRA_SENTINEL: verifier produced no JSON verdict (exit $VERIFIER_EXIT): ${stderr_content:-no output}"
@@ -204,25 +184,23 @@ fi
 
 # --- preflight: an interpreter the check scripts need must actually exist -----
 #
-# command_not_found_handle only fires when BASH performs the PATH lookup itself.
-# It is blind to `env python3`, `/usr/bin/env python3`, and absolute-path
-# invocations, where the lookup happens in another process or not at all — and a
-# verifier that wraps any of those in `if ... 2>/dev/null` swallows the failure
-# and goes on to print a well-formed 0.0, exactly as in the bug this guards.
-#
-# No in-bash signal can see those forms, so detection alone cannot close them.
-# The precondition can: if a check script needs an interpreter the image does not
-# have, no verifier depending on it can reach a verdict, whatever syntax it uses
-# to invoke it. Refuse to score the task at all rather than emit numbers that
-# only look like measurements.
+# command_not_found_handle only fires when BASH performs the PATH lookup itself,
+# so it is blind to `env python3` and absolute-path invocations. No in-bash
+# signal can see those, so detection alone cannot close them — but the
+# precondition can: if a check script needs an interpreter the image lacks, no
+# verifier depending on it can reach a verdict, whatever syntax it uses. Refuse
+# to score the task at all rather than emit numbers that only look like
+# measurements.
 #
 # Gated on the interpreter actually being referenced, so a task whose checks are
 # pure bash is never failed for lacking one it does not use.
 REQUIRED_INTERPRETERS="python3"
 MISSING_INTERPRETERS=""
 for interp in $REQUIRED_INTERPRETERS; do
-    if grep -qF -- "$interp" "$VERIFIER_DIR"/*.sh 2>/dev/null \
-       && ! command -v "$interp" >/dev/null 2>&1; then
+    # `command -v` (a builtin) first: it short-circuits the grep, which forks and
+    # reads every check script, in the common case where the interpreter is present.
+    if ! command -v "$interp" >/dev/null 2>&1 \
+       && grep -qF -- "$interp" "$VERIFIER_DIR"/*.sh 2>/dev/null; then
         MISSING_INTERPRETERS="$MISSING_INTERPRETERS $interp"
     fi
 done
@@ -292,10 +270,9 @@ for verifier in "$VERIFIER_DIR"/*.sh; do
     # string). name comes from an agent-writable filename in .verifiers/ —
     # escape it the same way repo basenames are escaped above.
     #
-    # verifier_ran is the positive attestation the scorer trust boundary gates
-    # on: it is emitted here, by the only component that can actually observe
-    # whether the verifier reached a verdict. A checkpoint without a true
-    # attestation is refused a score rather than given a 0.0.
+    # verifier_ran is the attestation the scorer gates on. It is emitted here
+    # because this is the only component that can observe whether the verifier
+    # reached a verdict.
     entry=$(printf '{"name": "%s", "weight": %s, "score": %s, "passed": %s, "verifier_ran": %s, "detail": %s, "duration_ms": %d, "exit_code": %d}' \
         "$(json_escape "$name")" "$weight" "$checkpoint_score" "$checkpoint_passed" "$VERIFIER_RAN" "$checkpoint_detail" "$VERIFIER_DURATION_MS" "$VERIFIER_EXIT")
 

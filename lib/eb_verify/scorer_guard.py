@@ -41,10 +41,10 @@ _HARNESS_IMPORT_FAILURE = "No module named 'eb_verify"
 # really run". Deliberately NOT a generic traceback/ImportError match — those
 # occur legitimately in error-provenance task subjects.
 #
-# These are a SECONDARY net only. A denylist can only ever name the never-ran
-# modes we have already been burned by (s58f, then hktt/pt0n, then the missing
-# interpreter) — it is silent on the next one. The primary gate is the positive
-# attestation below.
+# A secondary net only: it catches a verifier that reached a verdict and declared
+# its own harness failure. It can never catch a verifier that never ran at all —
+# a denylist only names the modes we have already been burned by (s58f, then
+# hktt/pt0n, then the missing interpreter). That is the attestation's job.
 _INFRA_DETAIL_SIGNATURES = (INFRA_SENTINEL, _HARNESS_IMPORT_FAILURE)
 
 # Machine key for the no-verdict rule below. The shell scoring path
@@ -58,11 +58,8 @@ _EVIDENCE_CHARS = 2000
 
 # Positive attestation, emitted per checkpoint by test_runner.sh: "this verifier
 # reached a verdict". Its ABSENCE — not the presence of any known-bad string —
-# is what routes a checkpoint to an infra error, so an unrecognised never-ran
-# mode fails closed (loudly, into the re-run channel) instead of open (silently,
-# into a false 0.0). test_runner.sh is docker-cp'd fresh over /workspace/test.sh
-# on every run, so it is the sole producer of the JSON parsed here and the two
-# cannot drift apart.
+# routes a checkpoint to an infra error, so an unrecognised never-ran mode fails
+# closed (into the re-run channel) instead of open (into a false 0.0).
 _ATTESTATION = "verifier_ran"
 
 
@@ -170,8 +167,8 @@ def guard_verifier_output(
       for "cannot access repo" / "no .verifiers/ directory" (previously read by
       no caller, so it became a false 0.0);
     * a checkpoint does not attest ``verifier_ran: true`` — the primary gate;
-    * a checkpoint exited 127, or its ``detail`` carries an explicit infra
-      signature (:data:`INFRA_SENTINEL` / the docker-cp harness-import failure).
+    * a checkpoint's ``detail`` carries an explicit infra signature
+      (:data:`INFRA_SENTINEL` / the docker-cp harness-import failure).
 
     Otherwise the parsed scores dict is returned unchanged.
     """
@@ -213,10 +210,8 @@ def guard_verifier_output(
 
     # A task with no checkpoints ran no verifiers, so its 0.0 measures nothing.
     # test.sh reports a top-level ``error`` when .verifiers/ is missing entirely,
-    # but an existing-but-EMPTY .verifiers/ (a check-script copy step that
-    # silently dropped every file) produces a well-formed {"checkpoints": []}
-    # with task_score 0 — which would otherwise pass straight through, since an
-    # empty list never enters the per-checkpoint loop below.
+    # but an existing-but-EMPTY .verifiers/ yields a well-formed
+    # {"checkpoints": []} with task_score 0, which never enters the loop below.
     checkpoints = scores.get("checkpoints")
     if not checkpoints:
         return InfraError(
@@ -232,7 +227,10 @@ def guard_verifier_output(
         name = cp.get("name", "?")
 
         # PRIMARY GATE — positive attestation. A checkpoint that cannot state it
-        # reached a verdict does not get scored, whatever number it carries.
+        # reached a verdict does not get scored, whatever number it carries. Any
+        # never-ran mode the runner detects (missing command, exit 127, no JSON
+        # verdict) arrives here as a false attestation, so this one gate covers
+        # them all — including modes not yet named.
         if cp.get(_ATTESTATION) is not True:
             return InfraError(
                 reason="verifier_did_not_run",
@@ -245,17 +243,10 @@ def guard_verifier_output(
                 context={"checkpoint": cp.get("name", "")},
             )
 
-        # SECONDARY — a not-found command surfaced by something outside bash's
-        # command_not_found_handle, so the runner could not attest against it.
-        if cp.get("exit_code") == 127:
-            return InfraError(
-                reason="verifier_command_not_found",
-                stage=stage,
-                detail=f"checkpoint {name!r} exited 127 (command not found)",
-                context={"checkpoint": cp.get("name", ""), "returncode": 127},
-            )
-
-        # TERTIARY — a verifier that explicitly declared its own harness failure.
+        # SECONDARY — a verifier that ran to a verdict but declared its own
+        # harness failure in the detail. The runner cannot see this: to it, the
+        # checkpoint produced well-formed JSON and exited 0. Reached today by
+        # plugins.code_patch, which emits INFRA_SENTINEL on a diff-probe failure.
         sig = _detail_infra_signature(str(cp.get("detail", "")))
         if sig is not None:
             return InfraError(
