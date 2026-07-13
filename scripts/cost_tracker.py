@@ -813,7 +813,11 @@ def main(argv: list[str] | None = None) -> None:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w") as fh:
-        json.dump(report, fh, indent=2)
+        # allow_nan=False: a NaN/Infinity that slipped past the upstream _finite
+        # guards must raise here, not emit non-standard JSON a downstream reader
+        # would choke on. Enforces at the serialization boundary the same
+        # strict-JSON guarantee the tests already assert.
+        json.dump(report, fh, indent=2, allow_nan=False)
     logger.info("Report written to %s", output_path)
 
 
