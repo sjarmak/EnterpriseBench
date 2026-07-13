@@ -297,9 +297,11 @@ Until one lands, an `all`-endpoint arm would amplify a known contamination path.
 ## Consequences for the current 3-arm study
 
 Cross-revision contamination is a confound in the **MCP-vs-baseline headline**:
-it affects `mcp_only` runs only, so it is asymmetric across arms, and it is the
-same class of problem as the `docker-cp`/`pt0n` contamination already tracked.
-Eleven runs across eight tasks demonstrably read wrong-revision source. Whether
-to rescore or exclude them is filed as its own bead — it is a scoring-integrity
-decision, not an indexing one, and it should not be settled inside this
-assessment.
+it affects both MCP arms (`mcp_only` and `hybrid`) while leaving `baseline`
+untouched, so it is asymmetric across arms, and it is the same class of problem
+as the `docker-cp`/`pt0n` contamination already tracked. Fifteen runs across ten
+tasks demonstrably read wrong-revision source — the earlier "`mcp_only`-only"
+framing is retracted above (it was an artifact of the preamble-derived audit;
+`hybrid` read wrong-revision source in 2 runs). Whether to rescore or exclude
+them is filed as its own bead — it is a scoring-integrity decision, not an
+indexing one, and it should not be settled inside this assessment.
