@@ -117,10 +117,21 @@ def test_judge_failure_declares_infra_and_routes_to_rerun(
     )
 
     # The declaration is not decoration: scorer_guard must route on it.
+    # verifier_ran=true is set so the checkpoint clears the PRIMARY attestation
+    # gate (bead glka.2) and reaches the SECONDARY detail-signature net this test
+    # is about: a verifier that reached a verdict yet declared its own harness
+    # failure in the detail must still route as verifier_crash, not be scored.
     stdout = json.dumps(
         {
             "task_score": result.total_score,
-            "checkpoints": [{"name": cp.name, "score": cp.score, "detail": cp.detail}],
+            "checkpoints": [
+                {
+                    "name": cp.name,
+                    "score": cp.score,
+                    "detail": cp.detail,
+                    "verifier_ran": True,
+                }
+            ],
         }
     )
     guarded = guard_verifier_output(stdout, returncode=1)

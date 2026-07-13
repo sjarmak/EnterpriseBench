@@ -417,8 +417,11 @@ class TestProductionPathScoreValidity:
     def test_invalid_checkpoint_score_is_infra_not_a_task_score(
         self, score_token, label
     ):
+        # verifier_ran=true so the checkpoint clears the attestation gate (bead
+        # glka.2) and this test actually exercises the score-validity check it
+        # pins — without it the gate would fire first and mask a broken score.
         stdout = (
-            '{"checkpoints": [{"name": "x", "score": '
+            '{"checkpoints": [{"name": "x", "verifier_ran": true, "score": '
             + score_token
             + ', "weight": 1.0}]}'
         )
@@ -426,9 +429,13 @@ class TestProductionPathScoreValidity:
         assert isinstance(result, InfraError), f"{label} reached task_score"
 
     def test_real_scores_still_pass_through(self):
+        # verifier_ran=true is the per-checkpoint attestation test_runner.sh (the
+        # sole producer of this JSON) now emits for every verifier that reached a
+        # verdict (bead glka.2). A real scores payload always carries it; its
+        # absence is what routes to an infra error.
         stdout = (
-            '{"checkpoints": [{"name": "a", "score": 0.5, "weight": 0.5},'
-            ' {"name": "b", "score": 0.0, "weight": 0.5}]}'
+            '{"checkpoints": [{"name": "a", "score": 0.5, "weight": 0.5, "verifier_ran": true},'
+            ' {"name": "b", "score": 0.0, "weight": 0.5, "verifier_ran": true}]}'
         )
         result = guard_verifier_output(stdout, 0)
         assert not isinstance(result, InfraError)
