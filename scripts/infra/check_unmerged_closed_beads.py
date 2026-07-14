@@ -41,8 +41,7 @@ DEFAULT_INTEGRATION_REF = "main"
 DEFAULT_PREFIX = "work/"
 CLOSED = "closed"
 NO_MERGE_LABEL = "no-merge"
-GIT_TIMEOUT_SECONDS = 60
-BD_TIMEOUT_SECONDS = 60
+SUBPROCESS_TIMEOUT_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -64,16 +63,10 @@ class BranchState:
     no_merge: bool = False
 
 
-@dataclass(frozen=True)
-class Violation:
-    """A closed bead whose work is unreachable from the integration ref."""
-
-    branch: str
-    bead_id: str
-    unlanded_commits: int
+UNKNOWN_BEAD = Bead(status="", no_merge=False)
 
 
-def find_violations(states: list[BranchState]) -> list[Violation]:
+def find_violations(states: list[BranchState]) -> list[BranchState]:
     """Return the closed beads that still owe commits to main, worst first.
 
     Three kinds of branch are left alone. An open bead is work in progress. A
@@ -81,16 +74,16 @@ def find_violations(states: list[BranchState]) -> list[Violation]:
     A branch with no bead in the store cannot be a close-without-merge, and
     policing other people's branches is not this check's job.
     """
-    violations = [
-        Violation(
-            branch=state.branch,
-            bead_id=state.bead_id,
-            unlanded_commits=state.unlanded_commits,
-        )
-        for state in states
-        if state.status == CLOSED and state.unlanded_commits > 0 and not state.no_merge
-    ]
-    return sorted(violations, key=lambda v: (-v.unlanded_commits, v.bead_id))
+    return sorted(
+        (
+            state
+            for state in states
+            if state.status == CLOSED
+            and state.unlanded_commits > 0
+            and not state.no_merge
+        ),
+        key=lambda state: (-state.unlanded_commits, state.bead_id),
+    )
 
 
 def bead_id_for_branch(branch: str, prefix: str) -> str:
@@ -117,7 +110,7 @@ def list_work_branches(prefix: str, cwd: pathlib.Path) -> list[str]:
     result = _run(
         ["git", "for-each-ref", "--format=%(refname:short)", f"refs/heads/{prefix}"],
         cwd,
-        GIT_TIMEOUT_SECONDS,
+        SUBPROCESS_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
         raise RuntimeError(f"git for-each-ref failed: {result.stderr.strip()}")
@@ -131,7 +124,9 @@ def count_unlanded_commits(branch: str, integration_ref: str, cwd: pathlib.Path)
     ref through a rebase or cherry-pick is reported as landed ('-') rather than
     unlanded ('+'). See the module docstring on squash merges.
     """
-    result = _run(["git", "cherry", integration_ref, branch], cwd, GIT_TIMEOUT_SECONDS)
+    result = _run(
+        ["git", "cherry", integration_ref, branch], cwd, SUBPROCESS_TIMEOUT_SECONDS
+    )
     if result.returncode != 0:
         raise RuntimeError(
             f"git cherry failed for {branch} against {integration_ref}: "
@@ -186,7 +181,7 @@ def fetch_beads(bead_ids: list[str], cwd: pathlib.Path) -> dict[str, Bead]:
     result = _run(
         ["bd", "list", "--id", ",".join(bead_ids), "--all", "--json"],
         cwd,
-        BD_TIMEOUT_SECONDS,
+        SUBPROCESS_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
         raise RuntimeError(f"bd list failed: {result.stderr.strip()}")
@@ -201,21 +196,23 @@ def collect_states(
     branches = list_work_branches(prefix, cwd)
     bead_ids = [bead_id_for_branch(branch, prefix) for branch in branches]
     beads = fetch_beads(bead_ids, cwd)
-    unknown = Bead(status="", no_merge=False)
 
-    return [
-        BranchState(
-            branch=branch,
-            bead_id=bead_id,
-            status=beads.get(bead_id, unknown).status,
-            unlanded_commits=count_unlanded_commits(branch, integration_ref, cwd),
-            no_merge=beads.get(bead_id, unknown).no_merge,
+    states = []
+    for branch, bead_id in zip(branches, bead_ids):
+        bead = beads.get(bead_id, UNKNOWN_BEAD)
+        states.append(
+            BranchState(
+                branch=branch,
+                bead_id=bead_id,
+                status=bead.status,
+                unlanded_commits=count_unlanded_commits(branch, integration_ref, cwd),
+                no_merge=bead.no_merge,
+            )
         )
-        for branch, bead_id in zip(branches, bead_ids)
-    ]
+    return states
 
 
-def format_report(states: list[BranchState], violations: list[Violation]) -> str:
+def format_report(states: list[BranchState], violations: list[BranchState]) -> str:
     """Render the human-readable report."""
     if not states:
         return "No work branches found."
@@ -288,7 +285,14 @@ def main() -> int:
                 "integration_ref": args.integration_ref,
                 "branches_checked": len(states),
                 "violation_count": len(violations),
-                "violations": [asdict(v) for v in violations],
+                "violations": [
+                    {
+                        "branch": v.branch,
+                        "bead_id": v.bead_id,
+                        "unlanded_commits": v.unlanded_commits,
+                    }
+                    for v in violations
+                ],
                 "branches": [asdict(s) for s in states],
             },
             sys.stdout,

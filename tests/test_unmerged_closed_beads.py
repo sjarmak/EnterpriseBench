@@ -40,27 +40,32 @@ def _state(
 
 
 class TestFindViolations:
-    def test_closed_and_unlanded_is_a_violation(self) -> None:
+    @pytest.mark.parametrize(
+        ("status", "unlanded", "no_merge", "expected"),
+        [
+            # The defect: the store says done, the commits are not on main.
+            ("closed", 3, False, ["EB-a"]),
+            ("closed", 0, False, []),
+            # An open bead is work in progress, not stranded work.
+            ("open", 5, False, []),
+            ("blocked", 5, False, []),
+            # A branch with no bead in the store cannot be a close-without-merge.
+            ("", 4, False, []),
+            # A bead closed as superseded or rejected owes main nothing.
+            ("closed", 2, True, []),
+        ],
+    )
+    def test_only_an_unlabelled_closed_bead_with_unlanded_commits_violates(
+        self, status: str, unlanded: int, no_merge: bool, expected: list[str]
+    ) -> None:
+        states = [_state("EB-a", status, unlanded, no_merge=no_merge)]
+        assert [v.bead_id for v in find_violations(states)] == expected
+
+    def test_violation_carries_the_branch_and_the_commit_count(self) -> None:
         violations = find_violations([_state("EB-a", "closed", 3)])
-        assert [(v.bead_id, v.unlanded_commits) for v in violations] == [("EB-a", 3)]
-
-    def test_closed_and_landed_is_clean(self) -> None:
-        assert find_violations([_state("EB-a", "closed", 0)]) == []
-
-    def test_open_and_unlanded_is_clean(self) -> None:
-        """Open beads are work in progress, not stranded work."""
-        assert find_violations([_state("EB-a", "open", 5)]) == []
-
-    def test_blocked_and_unlanded_is_clean(self) -> None:
-        assert find_violations([_state("EB-a", "blocked", 5)]) == []
-
-    def test_unknown_bead_is_not_a_violation(self) -> None:
-        """A branch with no bead in the store cannot be a close-without-merge."""
-        assert find_violations([_state("EB-gone", "", 4)]) == []
-
-    def test_no_merge_label_exempts_a_closed_unlanded_bead(self) -> None:
-        """A bead closed as superseded or rejected owes main nothing."""
-        assert find_violations([_state("EB-a", "closed", 2, no_merge=True)]) == []
+        assert [(v.branch, v.bead_id, v.unlanded_commits) for v in violations] == [
+            ("work/EB-a", "EB-a", 3)
+        ]
 
     def test_no_merge_label_does_not_exempt_an_unlabelled_sibling(self) -> None:
         states = [
@@ -139,16 +144,18 @@ class TestParseBeads:
             parse_beads('[{"id": "EB-a", "status": "closed", "labels": "no-merge"}]')
 
 
-@pytest.fixture
-def git_repo(tmp_path: pathlib.Path) -> pathlib.Path:
+@pytest.fixture(scope="module")
+def git_repo(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     """A real git repo with a main branch and three work/ branches.
 
     work/EB-landed   — merged into main (0 unlanded)
     work/EB-stranded — 2 commits never merged
     work/EB-picked   — 1 commit cherry-picked onto main (0 unlanded by patch-id)
+    unrelated        — outside the work/ prefix; the check must ignore it
+
+    Module-scoped and read-only: every test reads this repo, none writes to it.
     """
-    repo = tmp_path / "repo"
-    repo.mkdir()
+    repo = tmp_path_factory.mktemp("repo")
 
     def git(*args: str) -> str:
         result = subprocess.run(
@@ -185,17 +192,13 @@ def git_repo(tmp_path: pathlib.Path) -> pathlib.Path:
     git("checkout", "-q", "main")
     git("cherry-pick", picked_sha)
 
+    git("branch", "unrelated")
+
     return repo
 
 
 class TestGitEdges:
     def test_lists_only_work_branches(self, git_repo: pathlib.Path) -> None:
-        subprocess.run(
-            ["git", "branch", "unrelated"],
-            cwd=git_repo,
-            check=True,
-            capture_output=True,
-        )
         assert list_work_branches("work/", git_repo) == [
             "work/EB-landed",
             "work/EB-picked",
@@ -219,14 +222,36 @@ class TestGitEdges:
             count_unlanded_commits("work/EB-stranded", "no-such-ref", git_repo)
 
 
-def _write_fake_bd(bin_dir: pathlib.Path, beads: list[dict] | None, exit_code: int = 0):
-    """Put a fake `bd` on PATH that echoes a canned --json payload."""
+def _write_fake_bd(
+    bin_dir: pathlib.Path, stdout: str = "", exit_code: int = 0
+) -> pathlib.Path:
+    """Put a fake `bd` on PATH that echoes canned stdout and exits with a code."""
     bin_dir.mkdir(parents=True, exist_ok=True)
-    payload = "" if beads is None else json.dumps(beads)
     bd = bin_dir / "bd"
-    bd.write_text("#!/bin/sh\n" f"printf '%s' '{payload}'\n" f"exit {exit_code}\n")
+    bd.write_text("#!/bin/sh\n" f"printf '%s' '{stdout}'\n" f"exit {exit_code}\n")
     bd.chmod(0o755)
     return bin_dir
+
+
+def _bd_payload(
+    overrides: dict[str, dict] | None = None, status: str = "closed"
+) -> str:
+    """A `bd list --json` payload for the three beads the git_repo fixture owns.
+
+    Each bead takes `status` and no labels; `overrides` replaces fields per bead.
+    """
+    overrides = overrides or {}
+    return json.dumps(
+        [
+            {
+                "id": bead_id,
+                "status": status,
+                "labels": [],
+                **overrides.get(bead_id, {}),
+            }
+            for bead_id in ("EB-landed", "EB-picked", "EB-stranded")
+        ]
+    )
 
 
 class TestFetchBeads:
@@ -237,7 +262,8 @@ class TestFetchBeads:
         self, git_repo: pathlib.Path, tmp_path: pathlib.Path, monkeypatch
     ) -> None:
         bin_dir = _write_fake_bd(
-            tmp_path / "bin", [{"id": "EB-a", "status": "closed", "labels": []}]
+            tmp_path / "bin",
+            json.dumps([{"id": "EB-a", "status": "closed", "labels": []}]),
         )
         monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
         assert fetch_beads(["EB-a"], git_repo) == {
@@ -247,7 +273,7 @@ class TestFetchBeads:
     def test_bd_failure_raises_rather_than_reporting_clean(
         self, git_repo: pathlib.Path, tmp_path: pathlib.Path, monkeypatch
     ) -> None:
-        bin_dir = _write_fake_bd(tmp_path / "bin", None, exit_code=1)
+        bin_dir = _write_fake_bd(tmp_path / "bin", exit_code=1)
         monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
         with pytest.raises(RuntimeError, match="bd list failed"):
             fetch_beads(["EB-a"], git_repo)
@@ -301,14 +327,7 @@ class TestCLI:
     def test_violation_exits_1_and_names_the_bead(
         self, git_repo: pathlib.Path, tmp_path: pathlib.Path
     ) -> None:
-        bin_dir = _write_fake_bd(
-            tmp_path / "bin",
-            [
-                {"id": "EB-landed", "status": "closed", "labels": []},
-                {"id": "EB-picked", "status": "closed", "labels": []},
-                {"id": "EB-stranded", "status": "closed", "labels": []},
-            ],
-        )
+        bin_dir = _write_fake_bd(tmp_path / "bin", _bd_payload())
         result = _run_cli(git_repo, bin_dir)
 
         assert result.returncode == 1
@@ -320,11 +339,7 @@ class TestCLI:
     ) -> None:
         bin_dir = _write_fake_bd(
             tmp_path / "bin",
-            [
-                {"id": "EB-landed", "status": "closed", "labels": []},
-                {"id": "EB-picked", "status": "closed", "labels": []},
-                {"id": "EB-stranded", "status": "closed", "labels": ["no-merge"]},
-            ],
+            _bd_payload({"EB-stranded": {"labels": ["no-merge"]}}),
         )
         result = _run_cli(git_repo, bin_dir)
 
@@ -334,21 +349,14 @@ class TestCLI:
     def test_open_beads_exit_0(
         self, git_repo: pathlib.Path, tmp_path: pathlib.Path
     ) -> None:
-        bin_dir = _write_fake_bd(
-            tmp_path / "bin",
-            [
-                {"id": "EB-landed", "status": "open", "labels": []},
-                {"id": "EB-picked", "status": "open", "labels": []},
-                {"id": "EB-stranded", "status": "open", "labels": []},
-            ],
-        )
+        bin_dir = _write_fake_bd(tmp_path / "bin", _bd_payload(status="open"))
         assert _run_cli(git_repo, bin_dir).returncode == 0
 
     def test_bd_failure_exits_2_not_1(
         self, git_repo: pathlib.Path, tmp_path: pathlib.Path
     ) -> None:
         """An infra failure must not masquerade as a violation, or as clean."""
-        bin_dir = _write_fake_bd(tmp_path / "bin", None, exit_code=1)
+        bin_dir = _write_fake_bd(tmp_path / "bin", exit_code=1)
         result = _run_cli(git_repo, bin_dir)
 
         assert result.returncode == 2
@@ -357,11 +365,7 @@ class TestCLI:
     def test_malformed_bd_json_exits_2(
         self, git_repo: pathlib.Path, tmp_path: pathlib.Path
     ) -> None:
-        bin_dir = tmp_path / "bin"
-        bin_dir.mkdir()
-        bd = bin_dir / "bd"
-        bd.write_text("#!/bin/sh\nprintf 'garbage'\n")
-        bd.chmod(0o755)
+        bin_dir = _write_fake_bd(tmp_path / "bin", "garbage")
         result = _run_cli(git_repo, bin_dir)
 
         assert result.returncode == 2
@@ -370,9 +374,7 @@ class TestCLI:
     def test_missing_integration_ref_exits_2(
         self, git_repo: pathlib.Path, tmp_path: pathlib.Path
     ) -> None:
-        bin_dir = _write_fake_bd(
-            tmp_path / "bin", [{"id": "EB-stranded", "status": "closed", "labels": []}]
-        )
+        bin_dir = _write_fake_bd(tmp_path / "bin", _bd_payload())
         result = _run_cli(git_repo, bin_dir, "--integration-ref", "no-such-ref")
 
         assert result.returncode == 2
@@ -381,14 +383,7 @@ class TestCLI:
     def test_json_output_shape(
         self, git_repo: pathlib.Path, tmp_path: pathlib.Path
     ) -> None:
-        bin_dir = _write_fake_bd(
-            tmp_path / "bin",
-            [
-                {"id": "EB-landed", "status": "closed", "labels": []},
-                {"id": "EB-picked", "status": "closed", "labels": []},
-                {"id": "EB-stranded", "status": "closed", "labels": []},
-            ],
-        )
+        bin_dir = _write_fake_bd(tmp_path / "bin", _bd_payload())
         result = _run_cli(git_repo, bin_dir, "--json")
         payload = json.loads(result.stdout)
 
