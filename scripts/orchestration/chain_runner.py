@@ -15,7 +15,7 @@ import json
 import logging
 import sys
 import tempfile
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -33,31 +33,26 @@ except ImportError:
 
 from orchestration.session import SessionConfig, SessionResult, run_session
 from orchestration.milestone import SessionScore, run_session_milestones
+from eb_verify.scorer_guard import InfraError
 
 logger = logging.getLogger(__name__)
 
 SESSION_FAILURE_REASON = "session_failed"
 
 
-@dataclass(frozen=True)
-class SessionFailure:
+def _session_failure(session_number: int, detail: str) -> dict:
     """A configured session never completed, so the chain has no score.
 
-    Deliberately not an ``InfraError``: the verifiers were fine, the agent's
-    session was not. Laundering an agent failure through the verifier-infra
-    channel would send an operator to re-run destination with the wrong cause.
-    ``reason``/``stage``/``detail`` mirror that type's JSON shape so a reader of
-    ``chain_result.json`` parses both channels the same way.
+    A distinct CAUSE from a verifier failure, carried in the same shape and kept
+    in its own ``ChainResult`` field: an operator sent to re-run must be told the
+    agent died, not that a verifier broke.
     """
-
-    session_number: int
-    detail: str
-    reason: str = SESSION_FAILURE_REASON
-    stage: str = "session"
-
-    def as_dict(self) -> dict:
-        """The shape written to ``chain_result.json``."""
-        return asdict(self)
+    return InfraError(
+        reason=SESSION_FAILURE_REASON,
+        stage="session",
+        detail=detail,
+        context={"session_number": session_number},
+    ).as_verifier_error()
 
 
 @dataclass
@@ -88,9 +83,7 @@ class ChainResult:
     * ``session_failure`` — a configured session never completed, so the agent
       never did the work the checkpoints would be scoring.
 
-    They are independent, and both are reported when both occur: fixing a broken
-    verifier would not make an aborted chain scoreable, and re-running the agent
-    would not fix the verifier.
+    They are independent, and both are reported when both occur.
     """
 
     task_id: str
@@ -100,25 +93,15 @@ class ChainResult:
     final_score: Optional[float] = None
     total_score: Optional[float] = None
     verifier_infra_error: Optional[dict] = None
-    session_failure: Optional[SessionFailure] = None
+    session_failure: Optional[dict] = None
 
     @property
     def is_invalid(self) -> bool:
-        """True if this chain has no score, for either reason.
-
-        The scorer, the run log, the summary, and the process exit code must agree
-        on that question — a run that exits 0 is recorded as ``completed`` by
-        ``run_benchmark`` no matter what the score field says.
-        """
+        """True if this chain has no score, for either reason."""
         return self.session_failure is not None or self.verifier_infra_error is not None
 
     @property
     def sessions_completed(self) -> int:
-        """How many sessions actually finished.
-
-        The final-checkpoint gate and the result JSON must count this the same way;
-        they used to derive it separately, in two different idioms.
-        """
         return sum(1 for sr in self.session_results if sr.success)
 
     def summary(self) -> str:
@@ -150,12 +133,12 @@ class ChainResult:
 
         if self.session_failure is not None:
             lines.append(
-                f"\nINVALID RUN — session {self.session_failure.session_number} of "
-                f"{self.total_sessions} never completed; the agent did not do the work "
-                f"the checkpoints would score, so this chain has no score and must be "
-                f"re-run."
+                f"\nINVALID RUN — session "
+                f"{self.session_failure['session_number']} of {self.total_sessions} "
+                f"never completed; the agent did not do the work the checkpoints "
+                f"would score, so this chain has no score and must be re-run."
             )
-            lines.append(f"  {self.session_failure.detail}")
+            lines.append(f"  {self.session_failure['detail']}")
         if self.verifier_infra_error is not None:
             lines.append(
                 f"\nINVALID RUN — a milestone verifier never reached a verdict "
@@ -164,9 +147,6 @@ class ChainResult:
             )
             lines.append(f"  {self.verifier_infra_error['detail']}")
 
-        # Return on is_invalid, not on "did I render an invalidity block above" — a
-        # future third channel that nobody taught summary() to render must still
-        # suppress the score line rather than fall through and print a number.
         if self.is_invalid:
             return "\n".join(lines)
 
@@ -215,13 +195,7 @@ def parse_chain_task(toml_path: str) -> ChainTaskDefinition:
             )
         )
 
-    # Validate session count matches
-    if len(sessions) != session_count:
-        raise ValueError(
-            f"session_count={session_count} but found {len(sessions)} [[sessions]] entries"
-        )
-
-    return ChainTaskDefinition(
+    task_def = ChainTaskDefinition(
         task_id=task["id"],
         suite=task["suite"],
         difficulty=task["difficulty"],
@@ -232,6 +206,8 @@ def parse_chain_task(toml_path: str) -> ChainTaskDefinition:
         metadata=data.get("metadata", {}),
         simulation=data.get("simulation", {}),
     )
+    _validate_chain_task(task_def)
+    return task_def
 
 
 def _validate_chain_task(task_def: ChainTaskDefinition) -> None:
@@ -240,9 +216,7 @@ def _validate_chain_task(task_def: ChainTaskDefinition) -> None:
     The final-checkpoint gate compares completed sessions against ``session_count``,
     so a count that lies defeats it silently: ``session_count == 0`` satisfies the
     gate vacuously and scores a workspace no agent touched, and a count higher than
-    the sessions defined gates every healthy chain to no score. ``parse_chain_task``
-    already rejects both, but ``run_chain`` is the library entry point and cannot
-    assume its caller came through the parser.
+    the sessions defined gates every healthy chain to no score.
     """
     if task_def.session_count < 1:
         raise ValueError(
@@ -257,17 +231,14 @@ def _validate_chain_task(task_def: ChainTaskDefinition) -> None:
         )
 
 
-def _log_invalidity(chain_result: ChainResult) -> None:
-    """Log every invalidity channel that fired, not just the first.
-
-    An operator who fixes only the one they heard about would re-run straight into
-    the other.
-    """
+def _log_chain_outcome(chain_result: ChainResult) -> None:
+    """Log every invalidity channel that fired, not just the first: an operator who
+    fixes only the one they heard about would re-run straight into the other."""
     if chain_result.session_failure is not None:
         logger.error(
             "Chain INVALID — session %d never completed, so it has no score: %s",
-            chain_result.session_failure.session_number,
-            chain_result.session_failure.detail,
+            chain_result.session_failure["session_number"],
+            chain_result.session_failure["detail"],
         )
     if chain_result.verifier_infra_error is not None:
         logger.error(
@@ -277,7 +248,6 @@ def _log_invalidity(chain_result: ChainResult) -> None:
     if chain_result.is_invalid:
         return
     if chain_result.total_score is None:
-        # No milestone ran at all. That is unscored, not a zero.
         logger.info("Chain complete. No milestones scored.")
     else:
         logger.info("Chain complete. Total score: %.2f", chain_result.total_score)
@@ -300,9 +270,6 @@ def run_chain(
        d. Run milestone verifiers (if not the last session)
     2. Only once EVERY configured session has succeeded: run the final checkpoints
        and compute the total score.
-
-    A chain that did not complete every session has no score, so the checkpoints do
-    not run at all and the result carries a ``session_failure`` instead of a number.
     """
     _validate_chain_task(task_def)
 
@@ -349,7 +316,7 @@ def run_chain(
 
         if not session_result.success:
             logger.error("Session %d failed, aborting chain.", session_num)
-            chain_result.session_failure = SessionFailure(
+            chain_result.session_failure = _session_failure(
                 session_number=session_num,
                 detail=session_result.error or "session did not complete",
             )
@@ -367,9 +334,8 @@ def run_chain(
             )
             chain_result.milestone_scores.append(milestone_score)
 
-    # Only once EVERY configured session completed. The checkpoints score whatever
-    # is on disk, so against a workspace the agent never worked in they still reach
-    # real verdicts rather than failing.
+    # Gated on every session: the checkpoints score whatever is on disk, so on a
+    # workspace the agent never worked in they reach real verdicts, not failures.
     if (
         task_def.final_checkpoints
         and chain_result.sessions_completed == task_def.session_count
@@ -386,37 +352,31 @@ def run_chain(
         chain_result.milestone_scores.append(final_milestone)
 
     _compute_total_score(chain_result, task_def)
-    _log_invalidity(chain_result)
+    _log_chain_outcome(chain_result)
     return chain_result
 
 
 def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinition):
     """Compute weighted total score from milestone results and final checkpoints.
 
-    Yields no score at all if either invalidity channel is set:
-
-    * ANY milestone never reached a verdict — folding a placeholder into the
-      weighted sum is what turned a broken verifier into a real-looking total;
-    * a session never completed — the milestones of the sessions that DID run are
-      already in ``milestone_scores``, so a 3-session chain dying at session 2
-      would otherwise compute a total out of session 1's milestone alone.
+    No score at all if either invalidity channel is set: a partial chain's
+    surviving milestones are still in ``milestone_scores``, and a milestone with no
+    verdict has no number to fold into the weighted sum.
     """
-    # Milestone scores contribute proportionally
-    all_milestone_results = []
-    for ms in chain_result.milestone_scores:
-        all_milestone_results.extend(ms.milestones)
+    all_milestone_results = [
+        mr for ms in chain_result.milestone_scores for mr in ms.milestones
+    ]
 
-    for mr in all_milestone_results:
-        if mr.infra_error is not None:
-            chain_result.verifier_infra_error = mr.infra_error.as_verifier_error()
-            break
+    infra = next(
+        (mr.infra_error for mr in all_milestone_results if mr.infra_error is not None),
+        None,
+    )
+    if infra is not None:
+        chain_result.verifier_infra_error = infra.as_verifier_error()
 
-    if chain_result.is_invalid:
+    if chain_result.is_invalid or not all_milestone_results:
         chain_result.total_score = None
         chain_result.final_score = None
-        return
-
-    if not all_milestone_results:
         return
 
     # Final checkpoints have explicit weights; milestones are equal-weighted
@@ -492,14 +452,12 @@ def main():
         "task_id": result.task_id,
         "total_score": result.total_score,
         "sessions_completed": result.sessions_completed,
-        # The CONFIGURED count, not len(session_results) — reporting sessions
-        # attempted hides the missing ones behind a plausible 0/1.
         "sessions_total": result.total_sessions,
     }
     if result.verifier_infra_error is not None:
         payload["verifier_infra_error"] = result.verifier_infra_error
     if result.session_failure is not None:
-        payload["session_failure"] = result.session_failure.as_dict()
+        payload["session_failure"] = result.session_failure
 
     with open(result_path, "w") as f:
         json.dump(payload, f, indent=2)

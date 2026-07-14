@@ -1,21 +1,19 @@
 """A chain whose sessions did not all complete has no score.
 
-The same over-credit as bead chc2z, one level up. chc2z closed fabrication
-*inside* the verifier (an exit code is not a score). This closes fabrication
-*around* it: when a session fails, ``run_chain`` used to break out of the loop
-and then run the final checkpoints anyway, against a workspace the agent never
-worked in. Those checkpoints reach real verdicts — they score whatever is on
-disk — so nothing downstream looked broken:
+The same over-credit as bead chc2z, one level up: chc2z closed fabrication
+*inside* the verifier (an exit code is not a score), this closes it *around* the
+verifier. A failed session broke out of the session loop, and the final
+checkpoints then ran anyway against a workspace the agent never worked in. They
+score whatever is on disk, so they reached real verdicts and nothing downstream
+looked broken:
 
     Session 1: FAIL (list index out of range) -> N/A
     Session 2 milestones: 1.00
     Total score: 1.00
     exit 0  ->  run_benchmark records status="completed"
 
-Zero sessions completed, the agent did no work, and the chain reported a
-perfect 1.0. A failed session is not a verifier failure, so it gets its own
-channel (``session_failure``) rather than being laundered through
-``verifier_infra_error``: same re-run destination, honest cause.
+A failed session is not a verifier failure, so it reports through its own
+``session_failure`` channel: same re-run destination, honest cause.
 """
 
 from __future__ import annotations
@@ -31,20 +29,22 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 
-from eb_verify.scorer_guard import NO_VERDICT_REASON, InfraError
+from eb_verify.scorer_guard import NO_VERDICT_REASON
 from orchestration.chain_runner import (
     SESSION_FAILURE_REASON,
-    ChainResult,
     ChainTaskDefinition,
-    SessionFailure,
     run_chain,
 )
 from orchestration.session import SessionConfig
 
 
-def write_verifier(task_dir: Path, body: str, name: str) -> str:
+def write_verifier(task_dir: Path, name: str, body: str) -> str:
     """Write an executable verifier under ``task_dir/checks``; return its
-    task-relative path (the form a task.toml carries)."""
+    task-relative path (the form a task.toml carries).
+
+    Same name and signature as ``test_checkpoint_verdict.write_verifier`` so that a
+    call copied between the two modules keeps working.
+    """
     checks = task_dir / "checks"
     checks.mkdir(exist_ok=True)
     script = checks / name
@@ -54,16 +54,15 @@ def write_verifier(task_dir: Path, body: str, name: str) -> str:
 
 
 def scoring_verifier(task_dir: Path, score: float, name: str = "final.sh") -> str:
-    """A verifier that always scores, and leaves proof that it ran.
+    """A verifier that always scores, and leaves a sentinel proving it ran.
 
-    The sentinel is the point: a chain that aborted still scored 1.0 off these
-    checkpoints, so the test has to assert they never executed — asserting only
-    on the resulting score would pass for a fix that merely zeroed it.
+    Asserting only on the resulting score would also pass for a fix that merely
+    zeroed it; these tests have to show the checkpoints never executed at all.
     """
     return write_verifier(
         task_dir,
-        f'#!/bin/sh\ntouch "{task_dir}/{name}.ran"\necho \'{{"score": {score}}}\'\nexit 0\n',
         name,
+        f'#!/bin/sh\ntouch "{task_dir}/{name}.ran"\necho \'{{"score": {score}}}\'\nexit 0\n',
     )
 
 
@@ -71,12 +70,7 @@ def verifier_ran(task_dir: Path, name: str = "final.sh") -> bool:
     return (task_dir / f"{name}.ran").exists()
 
 
-def boom(_workspace: str, _prompt: str) -> str:
-    raise RuntimeError("agent died")
-
-
 def task_def(
-    task_dir: Path,
     session_count: int,
     final_checkpoints: list[dict] | None = None,
     session_milestones: dict[int, list[dict]] | None = None,
@@ -100,8 +94,11 @@ def task_def(
     )
 
 
-def agent_failing_at(session_number: int):
-    """An agent that works normally until ``session_number``, then dies."""
+def agent_failing_at(session_number: int | None):
+    """An agent that works normally until ``session_number``, then dies.
+
+    ``None`` never fails — the healthy agent the negative controls need.
+    """
     calls = {"n": 0}
 
     def agent(workspace: str, prompt: str) -> str:
@@ -114,6 +111,10 @@ def agent_failing_at(session_number: int):
     return agent
 
 
+def working_agent():
+    return agent_failing_at(None)
+
+
 class TestFailedSessionIsNeverAScore:
     def test_failed_first_session_scores_nothing_and_never_runs_the_checkpoints(
         self, tmp_path
@@ -122,7 +123,6 @@ class TestFailedSessionIsNeverAScore:
         final checkpoints used to run anyway and hand the chain a perfect 1.0."""
         verifier = scoring_verifier(tmp_path, 1.0)
         td = task_def(
-            tmp_path,
             session_count=2,
             final_checkpoints=[{"name": "cp", "weight": 1.0, "verifier": verifier}],
         )
@@ -130,13 +130,13 @@ class TestFailedSessionIsNeverAScore:
         result = run_chain(
             td,
             workspace_root=str(tmp_path / "ws"),
-            agent_callable=boom,
+            agent_callable=agent_failing_at(1),
             task_dir=str(tmp_path),
         )
 
         assert result.session_failure is not None
-        assert result.session_failure.reason == SESSION_FAILURE_REASON
-        assert result.session_failure.session_number == 1
+        assert result.session_failure["reason"] == SESSION_FAILURE_REASON
+        assert result.session_failure["session_number"] == 1
         assert result.total_score is None, "a chain that ran no session has no score"
         assert result.final_score is None
         assert not verifier_ran(tmp_path), (
@@ -152,7 +152,6 @@ class TestFailedSessionIsNeverAScore:
         chain that died at session 2."""
         milestone = scoring_verifier(tmp_path, 1.0, name="m1.sh")
         td = task_def(
-            tmp_path,
             session_count=2,
             session_milestones={1: [{"name": "m1", "verifier": milestone}]},
         )
@@ -166,15 +165,14 @@ class TestFailedSessionIsNeverAScore:
 
         assert verifier_ran(tmp_path, "m1.sh"), "session 1's milestone did run"
         assert result.milestone_scores[0].total_score == pytest.approx(1.0)
-        assert result.session_failure.session_number == 2
+        assert result.session_failure["session_number"] == 2
         assert result.total_score is None, "one passing milestone is not a chain score"
 
     def test_a_broken_verifier_and_a_failed_session_are_both_reported(self, tmp_path):
         """An operator needs both signals: fixing the verifier would not make this
         run scoreable, and re-running the agent would not fix the verifier."""
-        broken = write_verifier(tmp_path, "#!/bin/sh\nexit 0\n", "broken.sh")
+        broken = write_verifier(tmp_path, "broken.sh", "#!/bin/sh\nexit 0\n")
         td = task_def(
-            tmp_path,
             session_count=2,
             session_milestones={1: [{"name": "m1", "verifier": broken}]},
         )
@@ -193,7 +191,6 @@ class TestFailedSessionIsNeverAScore:
 
     def test_summary_renders_invalid_run_instead_of_a_number(self, tmp_path):
         td = task_def(
-            tmp_path,
             session_count=2,
             final_checkpoints=[
                 {"name": "cp", "weight": 1.0, "verifier": scoring_verifier(tmp_path, 1.0)}
@@ -203,7 +200,7 @@ class TestFailedSessionIsNeverAScore:
         text = run_chain(
             td,
             workspace_root=str(tmp_path / "ws"),
-            agent_callable=boom,
+            agent_callable=agent_failing_at(1),
             task_dir=str(tmp_path),
         ).summary()
 
@@ -223,7 +220,6 @@ class TestTheGateCannotBeSilentlyDefeated:
         the same fabrication, reached through a degenerate config instead of a
         failed session."""
         td = task_def(
-            tmp_path,
             session_count=0,
             final_checkpoints=[
                 {"name": "cp", "weight": 1.0, "verifier": scoring_verifier(tmp_path, 1.0)}
@@ -239,51 +235,25 @@ class TestTheGateCannotBeSilentlyDefeated:
         self, tmp_path
     ):
         """Otherwise every session passes, the gate still skips the checkpoints, and
-        the chain exits 0 with no score — recorded as a completed run. parse_chain_task
-        rejects this, but run_chain is the library entry point and must not assume its
-        caller went through the parser."""
-        td = task_def(tmp_path, session_count=2)
+        the chain exits 0 with no score — recorded as a completed run. Reachable
+        without the parser: ChainTaskDefinition is a mutable dataclass, and callers
+        (including tests in this repo) build one directly."""
+        td = task_def(session_count=2)
         td.sessions = td.sessions[:1]
 
         with pytest.raises(ValueError, match="session_count=2 but 1 session"):
             run_chain(
                 td,
                 workspace_root=str(tmp_path / "ws"),
-                agent_callable=agent_failing_at(99),
+                agent_callable=working_agent(),
                 task_dir=str(tmp_path),
             )
-
-
-class TestInvalidityIsOneQuestion:
-    """The scorer, the summary, and the exit code must agree on "is this run
-    scoreable" — a chain that exits 0 is recorded as completed regardless of what
-    its score field holds, which is how the fabricated 1.0 reached the results."""
-
-    @pytest.mark.parametrize(
-        "channel", ["session_failure", "verifier_infra_error", "both"]
-    )
-    def test_either_channel_makes_the_chain_invalid(self, channel):
-        chain = ChainResult(task_id="t", total_sessions=1)
-        if channel in ("session_failure", "both"):
-            chain.session_failure = SessionFailure(session_number=1, detail="agent died")
-        if channel in ("verifier_infra_error", "both"):
-            chain.verifier_infra_error = InfraError(
-                NO_VERDICT_REASON, "milestone", "boom"
-            ).as_verifier_error()
-
-        assert chain.is_invalid
-
-    def test_a_scored_chain_is_valid(self):
-        chain = ChainResult(task_id="t", total_sessions=1, total_score=1.0)
-
-        assert not chain.is_invalid
 
 
 class TestHealthyChainStillScores:
     def test_every_session_completing_scores_the_final_checkpoints(self, tmp_path):
         """The fix must not stop a real chain from scoring."""
         td = task_def(
-            tmp_path,
             session_count=2,
             final_checkpoints=[
                 {"name": "cp", "weight": 1.0, "verifier": scoring_verifier(tmp_path, 0.5)}
@@ -293,16 +263,17 @@ class TestHealthyChainStillScores:
         result = run_chain(
             td,
             workspace_root=str(tmp_path / "ws"),
-            agent_callable=agent_failing_at(99),  # never fails
+            agent_callable=working_agent(),
             task_dir=str(tmp_path),
         )
 
+        assert not result.is_invalid
         assert result.session_failure is None
         assert verifier_ran(tmp_path)
         assert result.total_score == pytest.approx(0.5)
 
 
-class TestChainResultJsonContract:
+class TestSessionFailureJsonContract:
     """End-to-end through the CLI: the file a downstream reader parses, and the
     exit code ``run_benchmark`` routes on."""
 
@@ -344,9 +315,10 @@ class TestChainResultJsonContract:
         payload = json.loads((tmp_path / "chain_result.json").read_text())
         assert payload["total_score"] is None, "no number for a chain that never ran"
         assert payload["sessions_completed"] == 0
-        # reason/stage/detail mirror the verifier_infra_error shape, so a reader of
-        # chain_result.json parses either invalidity channel the same way.
+        # Both invalidity channels are built from InfraError, so a reader of
+        # chain_result.json parses either one the same way — `cause` included.
         assert payload["session_failure"]["reason"] == SESSION_FAILURE_REASON
+        assert payload["session_failure"]["cause"] == SESSION_FAILURE_REASON
         assert payload["session_failure"]["stage"] == "session"
         assert payload["session_failure"]["session_number"] == 1
         assert payload["session_failure"]["detail"]
