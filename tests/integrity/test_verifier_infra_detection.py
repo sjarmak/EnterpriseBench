@@ -46,7 +46,11 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 
-from eb_verify.scorer_guard import InfraError, guard_verifier_output  # noqa: E402
+from eb_verify.scorer_guard import (  # noqa: E402
+    _SCORE_EPSILON,
+    InfraError,
+    guard_verifier_output,
+)
 
 TEST_RUNNER = REPO_ROOT / "scripts" / "sandbox" / "test_runner.sh"
 
@@ -415,10 +419,30 @@ NO_READABLE_SCORE = {
     # score key here is at depth 1 of its own root, so only "exactly one root"
     # rejects it.
     "second_root": '{"passed": false, "detail": "x"}\n{"score": 1.0}',
+    # The same rule pointed the other way. A byte BEFORE the root is the same
+    # class as a byte after it: the payload is not one verdict, and the score
+    # token sitting in it was never attested as one. Pinned in both directions
+    # because a walker that only guards the tail reads this as full marks.
+    "noise_before_root": 'INFO running checks\n{"score": 1.0, "passed": true}',
     # Anchored grammar: awk coerces "1.0abc" to 1.0, so an unanchored match would
     # score this. strtod takes 1e400 to +inf, which the range check then rejects.
     "trailing_junk": '{"score": 1.0abc, "passed": true}',
     "infinity": '{"score": 1e400, "passed": true}',
+    # strtod takes -1e400 to -inf down a separate branch from +inf, and only the
+    # low end of the range check stands between it and a credited score.
+    "negative_infinity": '{"score": -1e400, "passed": false}',
+    # A verifier that dropped a comma. The value scan runs THROUGH the quote and
+    # hands the grammar 1.0"passed":true, which it refuses. Pinned because the
+    # obvious "hardening" — adding the quote to the scan's stop set — truncates
+    # this to a clean 1.0 and awards the malformed payload full marks. Tightening
+    # the scan loosens the verdict; a reviewer proposed exactly that, and this
+    # vector is what caught it.
+    "glued_token": '{"score": 1.0"passed": true}',
+    # Two score keys at the SAME depth. The nested pair above cannot pin this:
+    # there, depth alone is enough to pick a winner, so a last-value-wins parser
+    # would still pass them. Here both keys are at depth 1 and neither is more
+    # the verdict than the other, so only counting the keys rejects it.
+    "duplicate_at_root": '{"score": 0.0, "score": 1.0, "passed": false}',
 }
 
 
@@ -467,6 +491,58 @@ def test_a_tiny_score_is_not_fabricated_into_full_marks(
     # awk's %.4f, so 1e-05 rounds to 0.0000. A looser bound would let a wrong
     # implementation that landed on, say, 0.3 pass.
     assert guarded["task_score"] == 0.0, "1e-05 was credited as full marks"
+
+
+# The awk cannot import a Python constant, so the [0, 1] tolerance is written out
+# twice — once here as _SCORE_EPSILON, once as the literal 1e-6 in test_runner.sh's
+# range check — and the shell's comment promises the two admit exactly the same
+# values. Nothing structural holds them together, so this derives its payloads FROM
+# the Python constant: widen the shell's literal and the just-outside vector starts
+# being credited, which fails here. Pinning literals instead would leave the
+# duplication free to drift, which is the whole risk.
+EPSILON_BOUNDARY = {
+    # json.dumps emits the exponent form for a float this small, and the shell
+    # prints the token back verbatim, so these round-trip as themselves.
+    "just_inside_high": (repr(1.0 + _SCORE_EPSILON / 2), True),
+    "just_inside_low": (repr(-_SCORE_EPSILON / 2), True),
+    # Two orders of magnitude outside — comfortably clear of float noise, and
+    # still far tighter than any plausible widening of the shell's literal.
+    "outside_high": (repr(1.0 + _SCORE_EPSILON * 100), False),
+    "outside_low": (repr(-_SCORE_EPSILON * 100), False),
+}
+
+
+@pytest.mark.parametrize("shape", sorted(EPSILON_BOUNDARY))
+def test_the_shell_admits_exactly_what_the_guard_admits(
+    shape: str, tmp_path: Path, real_path: str
+) -> None:
+    """The shell's tolerance is the guard's tolerance, not merely near it.
+
+    A score a hair outside [0, 1] is float slop from a verifier's own arithmetic
+    and is absorbed; one meaningfully outside is a verifier that has miscomputed,
+    and absence of a trustworthy verdict is not a verdict. The two must be told
+    apart at the same threshold on both sides of the boundary, or the shell hands
+    the guard a score the guard would have refused.
+    """
+    token, admitted = EPSILON_BOUNDARY[shape]
+    payload = f'{{"score": {token}, "passed": true, "detail": "boundary"}}'
+    result = run_test_runner(tmp_path, {"edge": verifier_printing(payload)}, real_path)
+
+    cp = checkpoint(result, "edge")
+    assert cp["verifier_ran"] is admitted, (
+        f"{payload}: the shell {'refused' if admitted else 'admitted'} a score the "
+        f"guard would have {'taken' if admitted else 'refused'} — the 1e-6 literal in "
+        f"test_runner.sh has drifted from scorer_guard._SCORE_EPSILON ({_SCORE_EPSILON})"
+    )
+
+    guarded = guard_verifier_output(json.dumps(result), returncode=0)
+    if admitted:
+        # The guard clamps the slop away, so the caller never sees the overshoot.
+        assert isinstance(guarded, dict)
+        assert 0.0 <= guarded["task_score"] <= 1.0
+    else:
+        assert isinstance(guarded, InfraError)
+        assert guarded.reason == "verifier_did_not_run"
 
 
 def test_partial_credit_survives_the_parse(tmp_path: Path, real_path: str) -> None:

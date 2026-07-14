@@ -42,14 +42,27 @@ now_ms() {
 #                                                  reads the 1.0 as the verdict
 #   second root       {"detail": "x"} {"score": 1}  a diagnostic object printed
 #                                                  beside the verdict is not it
+#   noise before it   INFO ok\n{"score": 1.0}       and neither is one printed
+#                                                  ahead of it — the rule is the
+#                                                  same in both directions
 #   unclosed root     {"score": 1.0, "passed": tr   a verifier killed mid-print
 #                                                  (OOM, SIGKILL, full disk) never
 #                                                  finished saying what it meant
 #
-# All three are payloads no verifier that reached a verdict can emit, so each
+# All four are payloads no verifier that reached a verdict can emit, so each
 # fails CLOSED to the infra chain — a re-run, never a grade. The value is then
 # held to the JSON number grammar (anchored, so "1.0abc" cannot coerce to 1.0)
 # and to the [0, 1] range (which also catches 1e400, whose strtod is +inf).
+#
+# What this is NOT is a JSON validator, and it does not claim to be one: it is a
+# structural scanner looking for one key. A payload whose detail string carries
+# stray unescaped quotes ("gap is 3" x 5" wide") can still walk to a closed root
+# and be credited, where json.loads would refuse it outright. That is a real
+# deviation, tracked separately; it is not a way to forge a score, because the
+# quotes cancel to the same token a reader would call the verdict, and any
+# desync that hides the real key also leaves the root unclosed. Nothing here
+# should be read as attesting the payload is well-formed JSON — only that the
+# score it credits is the one the verifier wrote at the root of it.
 #
 # LC_ALL=C is load-bearing twice. mawk (Debian's default, and the task images')
 # is byte-based, but gawk under a UTF-8 locale makes substr()/length()
@@ -73,8 +86,16 @@ parse_score() {
         i = 1
         while (i <= n) {
             c = substr(buf, i, 1)
-            # One root: once the root value closes, only whitespace may follow.
-            if (depth == 0 && rootClosed && c !~ /[ \t\r\n]/) { ok = 0; break }
+            # One root, and nothing beside it: at the payload own level only
+            # whitespace may sit next to the root value. A byte after it (a
+            # second object, a stray diagnostic) and a byte before it (a log
+            # line, the tail of a partial print) are the same class — a payload
+            # no verifier that reached a verdict emits — so both fail closed
+            # rather than crediting whichever score token they happen to carry.
+            # This is also what keeps depth from going negative on a stray
+            # closer: at the root level a "}" is not an opener, so it stops here.
+            if (depth == 0 && c !~ /[ \t\r\n]/ &&
+                (rootClosed || (c != "{" && c != "["))) { ok = 0; break }
 
             if (c == "\"") {
                 # Walk to the closing quote by INDEX, never accumulating the
@@ -100,6 +121,26 @@ parse_score() {
                     scoreCount++
                     if (scoreCount == 1) {
                         keyDepth = depth
+                        # The value is taken by a flat scan to the next
+                        # terminator, deliberately NOT re-walking strings or
+                        # containers the way the loop above does. It does not
+                        # need to: this only has to FIND the token, and the
+                        # anchored grammar below decides whether it is a score.
+                        # Anything that is not a bare JSON number — "1.0" with
+                        # its quotes, [0.5], {"a":1} — comes back garbled and is
+                        # rejected there, so a sloppier scan cannot widen what
+                        # gets credited, only what gets thrown away.
+                        #
+                        # The quote is deliberately NOT in the stop set, and this
+                        # is load-bearing in the opposite direction from how it
+                        # reads. {"score":1.0"passed":true} is a verifier that
+                        # dropped a comma; scanning THROUGH the quote yields the
+                        # token 1.0"passed":true, which the grammar refuses, and
+                        # the malformed payload fails closed. Add the quote here
+                        # and the token truncates to a clean 1.0 — the same
+                        # payload is then awarded FULL MARKS. Tightening the scan
+                        # loosens the verdict, so it stays loose on purpose;
+                        # NO_READABLE_SCORE["glued_token"] pins it.
                         v = k + 1
                         while (v <= n && substr(buf, v, 1) ~ /[ \t\r\n]/) v++
                         start = v
