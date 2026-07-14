@@ -288,12 +288,9 @@ def _load_oauth_token(account: int) -> str:
 
 DEFAULT_OAUTH_AGENT_COMMAND = "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json -p"
 
-# The sandbox registers one MCP server, `sourcegraph` (see _write_mcp_config), so
-# every genuine tool is named `mcp__sourcegraph__<tool>`. Matched by prefix rather
-# than an allow-list: a gate that invalidates on zero must not fire because the
-# agent reached for a sourcegraph tool added after this code shipped. The trailing
-# `__` is load-bearing — without it the prefix also spans a foreign server whose
-# name merely starts with `sourcegraph`.
+# The sandbox registers exactly one MCP server, `sourcegraph` (see _configure_mcp),
+# so every genuine tool is named `mcp__sourcegraph__<tool>`. Prefix, not allow-list:
+# a gate that invalidates on zero must not fire over a tool added after this shipped.
 _MCP_TOOL_PREFIX = "mcp__sourcegraph__"
 
 
@@ -2075,34 +2072,23 @@ def _iter_agent_records(content: str) -> Iterator[dict]:
             yield record
 
 
-def _is_mcp_tool_use(block: dict) -> bool:
-    """True for a tool_use block (or flat record) naming a Sourcegraph MCP tool."""
-    if block.get("type") != "tool_use":
-        return False
-    name = block.get("name") or block.get("tool_name")
-    return isinstance(name, str) and name.startswith(_MCP_TOOL_PREFIX)
-
-
 def _count_mcp_tool_calls(record: dict) -> int:
-    """Count Sourcegraph MCP tool-use blocks in one agent stdout record.
+    """Count Sourcegraph MCP tool_use blocks in one agent stdout record.
 
-    Only a genuine tool_use counts: a substring scan of the raw log also matches
-    the agent *narrating* a tool name or a tool_result echoing one back, and this
-    count gates mcp_only invalidation (:func:`_route_zero_mcp_run`), so a false
-    positive scores a run that made no MCP calls into the mcp_only mean.
-
-    Records come flat (top-level ``type=tool_use``) or nested (``type=assistant``
-    carrying ``message.content[]`` blocks).
+    Only a genuine tool_use counts. The name also appears where no call was made —
+    the agent narrating it, a tool_result echoing it back — and this count gates
+    mcp_only invalidation (:func:`_route_zero_mcp_run`).
     """
-    if _is_mcp_tool_use(record):
-        return 1
-
-    message = record.get("message", record)
+    message = record.get("message")
     blocks = message.get("content") if isinstance(message, dict) else None
     if not isinstance(blocks, list):
         return 0
     return sum(
-        1 for block in blocks if isinstance(block, dict) and _is_mcp_tool_use(block)
+        1
+        for block in blocks
+        if isinstance(block, dict)
+        and block.get("type") == "tool_use"
+        and str(block.get("name", "")).startswith(_MCP_TOOL_PREFIX)
     )
 
 

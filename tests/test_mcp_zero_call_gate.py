@@ -276,9 +276,13 @@ class TestStatusIsPersisted:
         assert results["status"] == ""
 
 
+def _record(kind: str, *blocks: dict) -> str:
+    """A stream-json record of the given type, carrying content blocks."""
+    return json.dumps({"type": kind, "message": {"content": list(blocks)}})
+
+
 def _assistant(*blocks: dict) -> str:
-    """A stream-json assistant record carrying content blocks."""
-    return json.dumps({"type": "assistant", "message": {"content": list(blocks)}})
+    return _record("assistant", *blocks)
 
 
 def _tool_use(name: str) -> dict:
@@ -291,51 +295,56 @@ def _usage(tmp_path: Path, stdout: str) -> dict:
 
 
 class TestMcpToolCallCounting:
-    """mcp_tool_calls counts genuine tool_use records — never prose.
+    """mcp_tool_calls counts genuine tool_use blocks — never a mention of one.
 
-    The count feeds _route_zero_mcp_run, which invalidates an mcp_only run with
-    0 MCP calls. A mere *mention* of the tool name — narration, an error string,
-    a tool_result echo — must not make a genuinely-zero-MCP run look non-zero:
-    that run would slip past the gate and into the mcp_only mean.
+    The count feeds _route_zero_mcp_run, which invalidates an mcp_only run that
+    made 0 MCP calls. Counting a mention would slip such a run past the gate.
     """
 
-    def test_prose_mention_in_assistant_text_is_not_a_call(
-        self, tmp_path: Path
-    ) -> None:
-        stream = _assistant(
-            {
-                "type": "text",
-                "text": "I could use mcp__sourcegraph__search_code, but Grep is faster.",
-            }
-        )
-
-        assert _usage(tmp_path, stream)["mcp_tool_calls"] == 0
-
-    def test_tool_result_echo_is_not_a_call(self, tmp_path: Path) -> None:
-        stream = json.dumps(
-            {
-                "type": "user",
-                "message": {
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": "toolu_1",
-                            "content": (
-                                "Error: mcp__sourcegraph__search_code is not "
-                                "available in this session"
-                            ),
-                        }
-                    ]
+    @pytest.mark.parametrize(
+        "stream",
+        [
+            _assistant(
+                {
+                    "type": "text",
+                    "text": "I could use mcp__sourcegraph__search_code, but Grep is faster.",
+                }
+            ),
+            _record(
+                "user",
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_1",
+                    "content": "Error: mcp__sourcegraph__search_code is not available",
                 },
-            }
-        )
-
+            ),
+        ],
+        ids=["narrated_in_text", "echoed_in_tool_result"],
+    )
+    def test_name_outside_a_tool_use_block_is_not_a_call(
+        self, tmp_path: Path, stream: str
+    ) -> None:
         assert _usage(tmp_path, stream)["mcp_tool_calls"] == 0
 
-    def test_nested_tool_use_block_counts(self, tmp_path: Path) -> None:
-        stream = _assistant(_tool_use("mcp__sourcegraph__search_code"))
+    @pytest.mark.parametrize(
+        "tool_name",
+        ["mcp__sourcegraph__search_code", "mcp__sourcegraph__brand_new_tool"],
+        ids=["known_tool", "tool_added_after_this_shipped"],
+    )
+    def test_sourcegraph_tool_use_counts(self, tmp_path: Path, tool_name: str) -> None:
+        assert _usage(tmp_path, _assistant(_tool_use(tool_name)))["mcp_tool_calls"] == 1
 
-        assert _usage(tmp_path, stream)["mcp_tool_calls"] == 1
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            "mcp__other__do_thing",
+            "mcp__sourcegraphql__query",
+            "mcp__sourcegraph_public__search",
+            "Grep",
+        ],
+    )
+    def test_other_tool_does_not_count(self, tmp_path: Path, tool_name: str) -> None:
+        assert _usage(tmp_path, _assistant(_tool_use(tool_name)))["mcp_tool_calls"] == 0
 
     def test_multiple_blocks_in_one_message_all_count(self, tmp_path: Path) -> None:
         stream = _assistant(
@@ -346,66 +355,12 @@ class TestMcpToolCallCounting:
 
         assert _usage(tmp_path, stream)["mcp_tool_calls"] == 2
 
-    def test_flat_tool_use_record_counts(self, tmp_path: Path) -> None:
-        """Some trace shapes emit tool_use as a top-level record, not nested."""
-        stream = json.dumps(
-            {"type": "tool_use", "name": "mcp__sourcegraph__nls_search", "input": {}}
-        )
-
-        assert _usage(tmp_path, stream)["mcp_tool_calls"] == 1
-
-    def test_unknown_sourcegraph_tool_still_counts(self, tmp_path: Path) -> None:
-        """Prefix match, not an allow-list.
-
-        A gate that INVALIDATES on zero must not invalidate a real MCP run just
-        because the agent used a sourcegraph tool added after this code shipped.
-        """
-        stream = _assistant(_tool_use("mcp__sourcegraph__brand_new_tool"))
-
-        assert _usage(tmp_path, stream)["mcp_tool_calls"] == 1
-
-    def test_non_sourcegraph_mcp_tool_does_not_count(self, tmp_path: Path) -> None:
-        stream = _assistant(_tool_use("mcp__other__do_thing"))
-
-        assert _usage(tmp_path, stream)["mcp_tool_calls"] == 0
-
-    @pytest.mark.parametrize(
-        "tool_name",
-        ["mcp__sourcegraphql__query", "mcp__sourcegraph_public__search"],
-    )
-    def test_foreign_server_sharing_the_name_prefix_does_not_count(
-        self, tmp_path: Path, tool_name: str
-    ) -> None:
-        """The server name must match whole, not as a prefix of a longer one.
-
-        The sandbox registers exactly one server, `sourcegraph`, so a tool from
-        any other server is not a Sourcegraph MCP call — even if that server's
-        name happens to start with `sourcegraph`.
-        """
-        stream = _assistant(_tool_use(tool_name))
-
-        assert _usage(tmp_path, stream)["mcp_tool_calls"] == 0
-
-    def test_local_tool_does_not_count(self, tmp_path: Path) -> None:
-        stream = _assistant(_tool_use("Grep"))
-
-        assert _usage(tmp_path, stream)["mcp_tool_calls"] == 0
-
 
 class TestUsageParsingAcrossOutputFormats:
-    """Token/turn accounting must survive whatever --output-format was used.
-
-    One record walk now serves both formats, where two duplicated parse paths
-    (whole-file early return plus per-line scan) used to.
-    """
+    """Token/turn accounting must survive whatever --output-format was used."""
 
     def test_whole_file_json_parses_usage(self, tmp_path: Path) -> None:
-        """--output-format json emits one result object and no tool records.
-
-        0 MCP calls is the correct count for it: tool_use records do not exist in
-        that format, and the tool names its result *text* mentions are exactly the
-        false positive being removed. The default agent command uses stream-json.
-        """
+        """--output-format json emits one result object and no tool_use records."""
         payload = json.dumps(
             {
                 "modelUsage": {"claude": {"inputTokens": 10, "outputTokens": 5}},
