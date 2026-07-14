@@ -50,6 +50,7 @@ from eb_verify.scorer_guard import (  # noqa: E402
     _SCORE_EPSILON,
     InfraError,
     guard_verifier_output,
+    is_valid_score,
 )
 
 TEST_RUNNER = REPO_ROOT / "scripts" / "sandbox" / "test_runner.sh"
@@ -424,12 +425,29 @@ NO_READABLE_SCORE = {
     # token sitting in it was never attested as one. Pinned in both directions
     # because a walker that only guards the tail reads this as full marks.
     "noise_before_root": 'INFO running checks\n{"score": 1.0, "passed": true}',
+    # The verdict FIRST, a diagnostic object after it. This is the payload that
+    # pins the walker's "ok" flag, and second_root does not: there the score sits
+    # in the trailing object, so counting the keys already rejects it. Here the
+    # score is real and at depth 1 of a properly closed root, and every other
+    # gate is satisfied — only "a byte followed the root" stands between it and
+    # full marks. Drop that flag and this credits 1.0.
+    "verdict_then_diagnostic": '{"score": 1.0}\n{"detail": "x"}',
+    # A bracket root, which parse_score scored 1.0 standalone until the root was
+    # required to be an object. Honest about what this vector does and does not
+    # prove: it passes either way, because the ^{ shape gate refuses a non-object
+    # root before parse_score's verdict is ever read, so it never pinned the
+    # walker. It pins the END-TO-END invariant — this payload is never a verdict,
+    # by whichever gate gets there first — and that is worth a row, as long as
+    # nobody reads it as covering the walker.
+    "array_root": '["score": 1.0]',
     # Anchored grammar: awk coerces "1.0abc" to 1.0, so an unanchored match would
     # score this. strtod takes 1e400 to +inf, which the range check then rejects.
     "trailing_junk": '{"score": 1.0abc, "passed": true}',
     "infinity": '{"score": 1e400, "passed": true}',
-    # strtod takes -1e400 to -inf down a separate branch from +inf, and only the
-    # low end of the range check stands between it and a credited score.
+    # -inf. Not a separate code path from +inf — there is one comparison, and
+    # -0.5 already exercises it — so this is redundant coverage, kept only
+    # because it costs 20ms and an infinite token is what a verifier that
+    # divided by zero actually prints.
     "negative_infinity": '{"score": -1e400, "passed": false}',
     # A verifier that dropped a comma. The value scan runs THROUGH the quote and
     # hands the grammar 1.0"passed":true, which it refuses. Pinned because the
@@ -438,10 +456,11 @@ NO_READABLE_SCORE = {
     # the scan loosens the verdict; a reviewer proposed exactly that, and this
     # vector is what caught it.
     "glued_token": '{"score": 1.0"passed": true}',
-    # Two score keys at the SAME depth. The nested pair above cannot pin this:
-    # there, depth alone is enough to pick a winner, so a last-value-wins parser
-    # would still pass them. Here both keys are at depth 1 and neither is more
-    # the verdict than the other, so only counting the keys rejects it.
+    # Two score keys at the SAME depth, neither more the verdict than the other.
+    # Redundant with nested_after_real, which already forces the key count to be
+    # global (drop that gate and it credits the 0.0 it must refuse). Kept as the
+    # plainest statement of the rule: a payload that says the score twice has not
+    # said it once.
     "duplicate_at_root": '{"score": 0.0, "score": 1.0, "passed": false}',
 }
 
@@ -503,12 +522,12 @@ def test_a_tiny_score_is_not_fabricated_into_full_marks(
 EPSILON_BOUNDARY = {
     # json.dumps emits the exponent form for a float this small, and the shell
     # prints the token back verbatim, so these round-trip as themselves.
-    "just_inside_high": (repr(1.0 + _SCORE_EPSILON / 2), True),
-    "just_inside_low": (repr(-_SCORE_EPSILON / 2), True),
+    "just_inside_high": repr(1.0 + _SCORE_EPSILON / 2),
+    "just_inside_low": repr(-_SCORE_EPSILON / 2),
     # Two orders of magnitude outside — comfortably clear of float noise, and
     # still far tighter than any plausible widening of the shell's literal.
-    "outside_high": (repr(1.0 + _SCORE_EPSILON * 100), False),
-    "outside_low": (repr(-_SCORE_EPSILON * 100), False),
+    "outside_high": repr(1.0 + _SCORE_EPSILON * 100),
+    "outside_low": repr(-_SCORE_EPSILON * 100),
 }
 
 
@@ -523,8 +542,14 @@ def test_the_shell_admits_exactly_what_the_guard_admits(
     and absence of a trustworthy verdict is not a verdict. The two must be told
     apart at the same threshold on both sides of the boundary, or the shell hands
     the guard a score the guard would have refused.
+
+    The expectation is not a hand-kept column: it is ``is_valid_score``, the same
+    predicate ``guard_verifier_output`` itself consults. So this asserts the two
+    implementations agree, rather than that each matches a third table that could
+    rot against both.
     """
-    token, admitted = EPSILON_BOUNDARY[shape]
+    token = EPSILON_BOUNDARY[shape]
+    admitted = is_valid_score(float(token))
     payload = f'{{"score": {token}, "passed": true, "detail": "boundary"}}'
     result = run_test_runner(tmp_path, {"edge": verifier_printing(payload)}, real_path)
 
@@ -537,8 +562,12 @@ def test_the_shell_admits_exactly_what_the_guard_admits(
 
     guarded = guard_verifier_output(json.dumps(result), returncode=0)
     if admitted:
-        # The guard clamps the slop away, so the caller never sees the overshoot.
         assert isinstance(guarded, dict)
+        # Not a clamp: guard_verifier_output validates and returns the score
+        # untouched (the clamp lives in guard_checkpoint_verdict). The overshoot
+        # is gone because the shell aggregates with awk's %.4f, which rounds
+        # 1.0000005 to 1.0000 — so an admitted hair over the line cannot reach a
+        # caller as a task_score above 1.
         assert 0.0 <= guarded["task_score"] <= 1.0
     else:
         assert isinstance(guarded, InfraError)

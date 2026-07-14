@@ -94,8 +94,17 @@ parse_score() {
             # rather than crediting whichever score token they happen to carry.
             # This is also what keeps depth from going negative on a stray
             # closer: at the root level a "}" is not an opener, so it stops here.
+            #
+            # The root must be an OBJECT. Allowing "[" bought nothing: valid JSON
+            # cannot put a bare key directly in an array, so a real score key can
+            # never sit at depth 1 of one. It did admit ["score": 1.0] — not JSON
+            # at all — which this function scored 1.0 standalone. run_verifier
+            # never handed it that payload (the ^{ shape gate above rejects a
+            # non-object root first), so this was defense in depth, not a live
+            # hole. It is still the right rule: the two gates now agree instead of
+            # one relying on the other to have already run.
             if (depth == 0 && c !~ /[ \t\r\n]/ &&
-                (rootClosed || (c != "{" && c != "["))) { ok = 0; break }
+                (rootClosed || c != "{")) { ok = 0; break }
 
             if (c == "\"") {
                 # Walk to the closing quote by INDEX, never accumulating the
