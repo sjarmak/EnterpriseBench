@@ -159,25 +159,22 @@ def run_session(
     Args:
         agent_callable: callable(workspace_path, prompt) -> str. Required unless
                        ``simulate`` is set.
-        simulate: run ``simulate_agent_work`` instead of an agent. Must be asked
-                 for out loud: a missing agent used to mean "simulate", so a
-                 caller that forgot to wire one got simulated work scored as the
-                 agent's.
+        simulate: run ``simulate_agent_work`` instead of an agent. Never inferred
+                 from a missing ``agent_callable`` — that would score simulated
+                 work as the agent's.
 
     Raises:
-        ValueError: neither an agent nor ``simulate`` (nothing would produce agent
-            work), or both (the agent would be silently discarded).
+        ValueError: neither an agent nor ``simulate``, or both.
     """
     if agent_callable is not None and simulate:
         raise ValueError(
-            "run_session: called with both an agent and simulate — the agent would "
-            "be discarded and the simulation scored in its place. Pick one."
+            "run_session: agent_callable and simulate are mutually exclusive — the "
+            "agent would be discarded and the simulation scored in its place."
         )
     if agent_callable is None and not simulate:
         raise ValueError(
-            "run_session: no agent_callable and simulate is not set — a session "
-            "with no agent produces no agent work. Pass an agent, or pass "
-            "simulate=True to run the simulation scaffold on purpose."
+            "run_session: no agent_callable and simulate is not set — pass an agent, "
+            "or simulate=True to run the simulation scaffold on purpose."
         )
 
     session_num = session_config.session_number

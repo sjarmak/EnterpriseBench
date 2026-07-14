@@ -57,20 +57,17 @@ def _session_failure(session_number: int, detail: str) -> dict:
 
 
 def _no_agent_configured() -> dict:
-    """No agent was wired into the chain, so it has no agent work to score.
+    """No agent was wired in, so the chain has no agent work to score.
 
-    Its own cause, not ``session_failure``: that channel tells an operator the
-    agent died and to re-run, and a re-run of a chain with no harness behind it
-    just reproduces this. The remedy is to wire one up.
+    Its own cause, not ``session_failure``: the remedy is a harness, not a re-run.
     """
     return InfraError(
         reason=NO_AGENT_REASON,
         stage="chain",
         detail=(
-            "chain invoked with no agent_callable and without simulate. The chain "
-            "runner has no agent harness yet, so --agent is accepted but cannot be "
-            "honoured: no chain run can be scored until one exists. Pass --simulate "
-            "to run the simulation scaffold on purpose."
+            "chain invoked with no agent_callable and without simulate — no agent "
+            "work was produced, so there is nothing to score. Pass simulate to run "
+            "the simulation scaffold on purpose."
         ),
     ).as_verifier_error()
 
@@ -107,10 +104,8 @@ class ChainResult:
 
     They are independent, and each is reported when it occurs.
 
-    ``simulated`` travels with the result rather than being re-derived by whoever
-    serializes it: a simulated chain scores marker files the scaffold wrote into
-    repos ``setup_workspace`` git-inits empty, and a reader handed the number
-    without that flag cannot tell it from a score an agent earned.
+    ``simulated`` records that the score came from marker files the scaffold wrote,
+    not from agent work; nothing else on the result distinguishes the two.
     """
 
     task_id: str
@@ -319,21 +314,18 @@ def run_chain(
     Simulation is opt-in, never a fallback: an absent ``agent_callable`` is an
     invalid run, not an invitation to simulate one and score it.
 
-    Returns a ChainResult carrying ``agent_not_configured`` when no agent was
-    wired in — deliberately NOT the ValueError ``run_session`` raises for the same
-    condition. It is the state every ``run_benchmark`` invocation of a chain task
-    is in today, and it has to reach disk as a result an operator can read, not as
-    a stack trace.
-
-    Raises ValueError when given both an agent and ``simulate`` (the agent would
-    be discarded and its stand-in scored in its place).
+    No agent and no ``simulate`` is an invalid run: returned as a ChainResult with
+    ``agent_not_configured`` set, not raised — it is the state every production
+    invocation is in, so the CLI has to write it to disk. Both together raises
+    ValueError: only a caller with a bug can ask for that.
     """
     _validate_chain_task(task_def)
 
     if agent_callable is not None and simulate:
         raise ValueError(
-            f"chain {task_def.task_id}: called with both an agent and simulate — "
-            f"the agent would be discarded and the simulation scored in its place."
+            f"chain {task_def.task_id}: agent_callable and simulate are mutually "
+            f"exclusive — the agent would be discarded and the simulation scored "
+            f"in its place."
         )
 
     chain_result = ChainResult(
@@ -342,9 +334,7 @@ def run_chain(
         simulated=simulate,
     )
 
-    # Fail closed before any session runs: simulated sessions genuinely succeed, so
-    # a silently simulating chain clears every downstream gate — the completed-session
-    # gate below included — and publishes a score no agent earned.
+    # The completed-session gate below cannot catch this: simulated sessions succeed.
     if agent_callable is None and not simulate:
         chain_result.agent_not_configured = _no_agent_configured()
         _log_chain_outcome(chain_result)
@@ -490,9 +480,8 @@ def main():
         "--workspace", default=None, help="Workspace root directory (default: temp dir)"
     )
     parser.add_argument("--verbose", "-v", action="store_true")
-    # Accepted from run_benchmark.py's passthrough, unused here. --agent must keep
-    # parsing even though no agent harness exists to honour it: rejecting it would
-    # exit at argparse, before the no-agent guard can write an honest invalid result.
+    # Passthrough from run_benchmark.py, unused here. --agent must keep PARSING:
+    # rejecting it would exit at argparse, before the guard can write a real result.
     parser.add_argument("--source", choices=["mirror", "upstream"])
     parser.add_argument("--agent", type=str)
     parser.add_argument("--timeout", type=int)
@@ -511,10 +500,8 @@ def main():
         print(f"[dry-run] would run chain task: {args.task_toml} (mode={args.mode})")
         return 0
 
-    # Clear the previous run's result before this one runs, not after it finishes:
-    # writing only on the way out leaves an earlier run's score on disk as the
-    # current answer whenever this run raises on the way in (an unparseable
-    # task.toml, a rejected session_count).
+    # Unlink before the run, not after: writing only on the way out leaves the
+    # previous run's score on disk as this run's answer whenever this one raises.
     result_path = Path(task_dir) / "chain_result.json"
     result_path.unlink(missing_ok=True)
 
@@ -540,17 +527,12 @@ def main():
         "total_score": result.total_score,
         "sessions_completed": result.sessions_completed,
         "sessions_total": result.total_sessions,
-        # A simulated run's score comes from marker files the scaffold wrote, so it
-        # measures the orchestrator, not an agent. This artifact lands in the tracked
-        # task directory next to the real ones and has to say which it is.
         "simulated": result.simulated,
     }
-    if result.verifier_infra_error is not None:
-        payload["verifier_infra_error"] = result.verifier_infra_error
-    if result.session_failure is not None:
-        payload["session_failure"] = result.session_failure
-    if result.agent_not_configured is not None:
-        payload["agent_not_configured"] = result.agent_not_configured
+    for channel in ("verifier_infra_error", "session_failure", "agent_not_configured"):
+        cause = getattr(result, channel)
+        if cause is not None:
+            payload[channel] = cause
 
     with open(result_path, "w") as f:
         json.dump(payload, f, indent=2)

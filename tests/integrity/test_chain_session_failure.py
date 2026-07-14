@@ -74,10 +74,11 @@ def task_def(
     session_count: int,
     final_checkpoints: list[dict] | None = None,
     session_milestones: dict[int, list[dict]] | None = None,
+    task_id: str = "chain-session-failure",
 ) -> ChainTaskDefinition:
     milestones = session_milestones or {}
     return ChainTaskDefinition(
-        task_id="chain-session-failure",
+        task_id=task_id,
         suite="customer_escalation",
         difficulty="medium",
         session_count=session_count,

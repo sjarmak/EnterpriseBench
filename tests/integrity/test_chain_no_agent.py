@@ -36,11 +36,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 
 from orchestration import session as session_mod
-from orchestration.chain_runner import (
-    NO_AGENT_REASON,
-    ChainTaskDefinition,
-    run_chain,
-)
+from orchestration.chain_runner import NO_AGENT_REASON, ChainTaskDefinition, run_chain
 from orchestration.session import SessionConfig, run_session
 
 from .test_chain_session_failure import (  # reuse the sentinel helpers
@@ -48,33 +44,25 @@ from .test_chain_session_failure import (  # reuse the sentinel helpers
     verifier_ran,
     working_agent,
 )
+from .test_chain_session_failure import task_def as _chain_task_def
 
 
 def task_def(
     final_checkpoints: list[dict] | None = None,
     session_milestones: dict[int, list[dict]] | None = None,
 ) -> ChainTaskDefinition:
-    milestones = session_milestones or {}
-    return ChainTaskDefinition(
-        task_id="chain-no-agent",
-        suite="customer_escalation",
-        difficulty="medium",
+    """The shared 2-session builder, under this module's task id."""
+    return _chain_task_def(
         session_count=2,
-        repos=[{"path": "repo-a"}],
-        sessions=[
-            SessionConfig(
-                session_number=n,
-                prompt=f"session {n}",
-                milestones=milestones.get(n, []),
-            )
-            for n in (1, 2)
-        ],
-        final_checkpoints=final_checkpoints or [],
+        final_checkpoints=final_checkpoints,
+        session_milestones=session_milestones,
+        task_id="chain-no-agent",
     )
 
 
-def chain_task_toml(task_dir: Path, verifier: str) -> Path:
+def chain_task_toml(task_dir: Path, verifier: str | None = None) -> Path:
     """A well-formed 2-session chain task — the shape a real benchmark task has."""
+    verifier = verifier or scoring_verifier(task_dir, 1.0)
     toml_path = task_dir / "task.toml"
     toml_path.write_text(
         "[task]\n"
@@ -235,8 +223,7 @@ class TestNoAgentJsonContract:
         --account and --timeout. --agent must stay ACCEPTED — rejecting it at
         argparse would exit 2 before the guard, write no chain_result.json, and
         leave a stale false score on disk."""
-        verifier = scoring_verifier(tmp_path, 1.0)
-        task_toml = chain_task_toml(tmp_path, verifier)
+        task_toml = chain_task_toml(tmp_path)
 
         proc = run_cli(
             task_toml,
@@ -272,7 +259,7 @@ class TestNoAgentJsonContract:
         false score sitting on disk as the current answer."""
         stale = tmp_path / "chain_result.json"
         stale.write_text(json.dumps({"task_id": "chain-no-agent", "total_score": 1.0}))
-        task_toml = chain_task_toml(tmp_path, scoring_verifier(tmp_path, 1.0))
+        task_toml = chain_task_toml(tmp_path)
 
         proc = run_cli(task_toml, "--workspace", str(tmp_path / "ws"))
 
@@ -283,7 +270,7 @@ class TestNoAgentJsonContract:
     def test_dry_run_does_not_execute_the_chain(self, tmp_path):
         """--dry-run was parsed and discarded, so a direct dry run executed the
         chain and wrote a result file."""
-        task_toml = chain_task_toml(tmp_path, scoring_verifier(tmp_path, 1.0))
+        task_toml = chain_task_toml(tmp_path)
 
         proc = run_cli(
             task_toml, "--dry-run", "--simulate", "--workspace", str(tmp_path / "ws")
@@ -303,7 +290,7 @@ class TestSimulationStaysAvailableButIsMarked:
         the (git-tracked) task directory with nothing recording that no agent ran.
         The number is real for what it measured; the artifact has to say what that
         was."""
-        task_toml = chain_task_toml(tmp_path, scoring_verifier(tmp_path, 1.0))
+        task_toml = chain_task_toml(tmp_path)
 
         proc = run_cli(task_toml, "--simulate", "--workspace", str(tmp_path / "ws"))
 
@@ -334,14 +321,6 @@ class TestSimulationStaysAvailableButIsMarked:
         assert simulated.simulated is True
         assert simulated.total_score == pytest.approx(1.0)
 
-        real = run_chain(
-            task_def(),
-            workspace_root=str(tmp_path / "ws-real"),
-            agent_callable=working_agent(),
-            task_dir=str(tmp_path),
-        )
-        assert real.simulated is False
-
     def test_a_real_agent_still_scores(self, tmp_path):
         """The fix must not stop a chain that HAS an agent from scoring."""
         result = run_chain(
@@ -361,6 +340,7 @@ class TestSimulationStaysAvailableButIsMarked:
 
         assert not result.is_invalid
         assert result.agent_not_configured is None
+        assert result.simulated is False, "an agent-earned score is not a simulated one"
         assert result.total_score == pytest.approx(0.5)
         assert verifier_ran(tmp_path)
 
@@ -372,7 +352,7 @@ class TestRunBenchmarkRecordsAnError:
     def test_a_chain_with_no_agent_is_recorded_as_error_not_completed(self, tmp_path):
         from run_benchmark import TaskInfo, run_task
 
-        task_toml = chain_task_toml(tmp_path, scoring_verifier(tmp_path, 1.0))
+        task_toml = chain_task_toml(tmp_path)
         task = TaskInfo(
             task_id="chain-no-agent",
             suite="customer_escalation",
