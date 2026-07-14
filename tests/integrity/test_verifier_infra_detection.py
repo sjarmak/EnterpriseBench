@@ -403,6 +403,22 @@ NO_READABLE_SCORE = {
     # the reading order — it is the vector a last-match "fix" would still fail.
     "nested_before_real": '{"detail": {"score": 1.0}, "score": 0.0, "passed": false}',
     "nested_after_real": '{"score": 0.0, "detail": {"score": 1.0}, "passed": false}',
+    # The same hole with the top-level key REMOVED. Counting score keys does not
+    # close it: there is only one, it is simply not the payload's verdict. Nothing
+    # short of tracking nesting depth can tell these from a real 1.0.
+    "nested_only": '{"passed": false, "detail": {"score": 1.0}}',
+    "nested_in_array": '{"evidence": [{"type": "x", "score": 1.0}], "passed": true}',
+    # A verifier killed mid-print (OOM, SIGKILL, a full disk) never finished
+    # saying what it meant, however complete the score token happens to look.
+    "unclosed_root": '{"score": 1.0, "passed": tr',
+    # A diagnostic object printed beside the verdict is not the verdict. The
+    # score key here is at depth 1 of its own root, so only "exactly one root"
+    # rejects it.
+    "second_root": '{"passed": false, "detail": "x"}\n{"score": 1.0}',
+    # Anchored grammar: awk coerces "1.0abc" to 1.0, so an unanchored match would
+    # score this. strtod takes 1e400 to +inf, which the range check then rejects.
+    "trailing_junk": '{"score": 1.0abc, "passed": true}',
+    "infinity": '{"score": 1e400, "passed": true}',
 }
 
 
@@ -466,6 +482,68 @@ def test_partial_credit_survives_the_parse(tmp_path: Path, real_path: str) -> No
     guarded = guard_verifier_output(json.dumps(result), returncode=0)
     assert isinstance(guarded, dict)
     assert guarded["task_score"] == 0.75
+
+
+# --- the detail string is attacker-controlled, and it is inside the payload ----
+#
+# Depth-tracking is only as good as its idea of where a string ends: every byte a
+# verifier echoes from the agent's answer lands in "detail", so a walker that
+# reads INTO strings can be fed a brace that moves the nesting depth or a quoted
+# "score" that forges a key. Each vector below carries a REAL score alongside the
+# hostile text, so the pin is two-sided — the walker must return the real score,
+# neither the forgery (over-credit) nor the empty string (over-reject).
+
+FORGERY_IN_A_STRING = {
+    # A quoted score key inside the detail text. Byte-for-byte identical to a real
+    # key once the surrounding \" are ignored, which is exactly what a regex does.
+    "forged_key": ('{"detail": "\\"score\\": 1.0", "score": 0.0}', 0.0),
+    # Braces inside the detail text. Read as structure, they move the depth and
+    # push the real key off the top level, where it stops being credited.
+    "braces": ('{"detail": "}{ unbalanced", "score": 0.5}', 0.5),
+    # A trailing backslash: \\ is an escaped backslash, so the quote AFTER it does
+    # close the string. Mishandled, the walker runs on and swallows the real key.
+    "trailing_backslash": ('{"detail": "C:\\\\", "score": 0.5}', 0.5),
+    # \\u007b is six bytes of text, not a brace. A walker that decodes escapes
+    # would open a nesting level here that the payload never closes.
+    "unicode_escape": (r'{"detail": "\u007b", "score": 0.5}', 0.5),
+    # An escape can only make a key LONGER than the five bytes of score, so the
+    # span check rejects the forgery without ever decoding it.
+    "escaped_key_bytes": (r'{"\score": 1.0, "score": 0.5}', 0.5),
+}
+
+
+@pytest.mark.parametrize("shape", sorted(FORGERY_IN_A_STRING))
+def test_a_string_cannot_forge_or_hide_the_score(
+    shape: str, tmp_path: Path, real_path: str
+) -> None:
+    """Hostile text in a string literal must not change which score is read."""
+    payload, expected = FORGERY_IN_A_STRING[shape]
+    result = run_test_runner(tmp_path, {"cp": verifier_printing(payload)}, real_path)
+
+    cp = checkpoint(result, "cp")
+    assert cp["verifier_ran"] is True, f"{payload} carries a real score at the top level"
+    assert cp["score"] == expected, (
+        f"{payload} was read as {cp['score']}: the string literal changed which "
+        f"score the runner credited"
+    )
+
+
+def test_a_pretty_printed_verdict_is_still_a_verdict(
+    tmp_path: Path, real_path: str
+) -> None:
+    """The over-reject direction, and the one legitimate shape most at risk.
+
+    ``json.dumps(..., indent=2)`` puts the closing brace of a trailing score on
+    its own line. A line-oriented reader sees no value terminator and scores
+    nothing, which would route an ordinary passing checkpoint to the re-run
+    channel — a false infra error is as wrong as a false 0.0.
+    """
+    payload = json.dumps({"passed": True, "score": 1.0, "detail": "ok"}, indent=2)
+    result = run_test_runner(tmp_path, {"pretty": verifier_printing(payload)}, real_path)
+
+    cp = checkpoint(result, "pretty")
+    assert cp["verifier_ran"] is True, "an indented verdict is a verdict"
+    assert cp["score"] == 1.0
 
 
 # --- the mirror image: a bad ANSWER must not be laundered into an infra error --
@@ -568,6 +646,43 @@ def test_a_valid_answer_object_still_reaches_the_checks(
     assert isinstance(guarded, dict)
     for cp in result["checkpoints"]:
         assert "not a JSON object" not in cp["detail"], "the checks must do the judging"
+
+
+def test_a_leaked_skeleton_does_not_buy_a_re_run(tmp_path: Path, real_path: str) -> None:
+    """The escape hatch the score check opens if it is not held to the same
+    policy as its sibling.
+
+    Requiring a READABLE score means a check that chokes on the agent's answer
+    and leaks a half-built ``{"score": null}`` on its way down now reaches "no
+    verdict" — the branch above, which attributes that to the agent, only looks
+    at payloads with no JSON at all. Left there, the two structurally identical
+    deaths (garbage answer, no verdict) would score oppositely on nothing but
+    whether a skeleton happened to print, and an agent could buy itself a re-run
+    by provoking one. Same cause, same attribution: a scored 0.0.
+    """
+    choker = """\
+#!/usr/bin/env bash
+set -euo pipefail
+printf '{"score": null, "passed": false}\\n'
+python3 -c 'import json; json.load(open("'"$WORKSPACE"'/agent_output/answer.json"))'
+printf '{"score": 1.0, "passed": true}\\n'
+"""
+    result = run_test_runner(
+        tmp_path, {"choker": choker}, real_path, answer="not json {{{"
+    )
+
+    cp = checkpoint(result, "choker")
+    assert cp["exit_code"] != 0, "precondition: the answer really does kill the check"
+    assert cp["verifier_ran"] is True, "the verifier ran; the agent's answer killed it"
+    assert cp["score"] == 0.0
+
+    guarded = guard_verifier_output(json.dumps(result), returncode=1)
+    assert not isinstance(guarded, InfraError), (
+        "a leaked JSON skeleton is no more a verdict than no output at all — "
+        "routing it to the re-run channel lets a garbage answer escape its 0.0"
+    )
+    assert guarded["task_score"] == 0.0
+    assert "not a JSON object" in cp["detail"], "the 0.0 must say where it came from"
 
 
 class TestInfraSignalsOutrankTheAgentAttribution:

@@ -29,34 +29,97 @@ now_ms() {
 }
 
 # The score a checkpoint actually earned, or the empty string if it earned none:
-# a string, null, NaN, a missing key or an out-of-range number all mean "no
+# a string, null, NaN, a missing key, an out-of-range or malformed number, a
+# nested-only key, an unclosed root, or a second top-level value all mean "no
 # verdict", which run_verifier routes to the infra chain rather than scoring.
 #
-# The exponent branch is not decoration: json.dumps emits 1e-05 for any small
-# float, and a [0-9.]+ pattern takes the leading "1" of it and credits full marks.
+# A single LC_ALL=C awk pass walks the payload byte by byte, skipping string
+# literals so a brace — or an escaped \"score\" — inside a string cannot move the
+# nesting depth or forge a key. A score is credited only when the payload is one
+# closed root value carrying exactly one "score" key, at the root's own level:
 #
-# The 1e-6 tolerance mirrors eb_verify.scorer_guard._SCORE_EPSILON, so the shell
-# and the guard admit exactly the same values.
+#   nested-only key   {"detail": {"score": 1.0}}   a regex cannot see nesting, and
+#                                                  reads the 1.0 as the verdict
+#   second root       {"detail": "x"} {"score": 1}  a diagnostic object printed
+#                                                  beside the verdict is not it
+#   unclosed root     {"score": 1.0, "passed": tr   a verifier killed mid-print
+#                                                  (OOM, SIGKILL, full disk) never
+#                                                  finished saying what it meant
 #
-# LC_ALL=C is load-bearing: mawk (Debian's default awk, and the one in the task
-# images) converts strings to numbers with strtod, which takes its decimal
-# separator from LC_NUMERIC. Under a comma locale "1.5" + 0 is 1, so the range
-# check would wave a 1.5 through. JSON's separator is always a period.
+# All three are payloads no verifier that reached a verdict can emit, so each
+# fails CLOSED to the infra chain — a re-run, never a grade. The value is then
+# held to the JSON number grammar (anchored, so "1.0abc" cannot coerce to 1.0)
+# and to the [0, 1] range (which also catches 1e400, whose strtod is +inf).
+#
+# LC_ALL=C is load-bearing twice. mawk (Debian's default, and the task images')
+# is byte-based, but gawk under a UTF-8 locale makes substr()/length()
+# character-based, and one multibyte byte in a detail string would then desync the
+# walk against the byte stream and void the string-skipping. It also fixes
+# strtod's separator: under a comma locale "1.5" + 0 is 1, so the range check
+# would wave a 1.5 through. JSON's separator is always a period.
+#
+# The exponent branch of the grammar is not decoration: json.dumps emits 1e-05 for
+# any small float, and the 1e-6 tolerance mirrors eb_verify.scorer_guard's
+# _SCORE_EPSILON so the shell and the guard admit exactly the same values. The
+# matched token is printed verbatim, never coerced through "+ 0", so it stays a
+# byte-faithful JSON number.
 parse_score() {
-    # Exactly one "score" key: a regex cannot see nesting, so
-    # {"detail": {"score": 1.0}, "score": 0.0} would award full marks on a failed
-    # checkpoint. Counted with grep -o piped to awk, not grep -c (which counts
-    # matching LINES, so a one-line payload carrying both keys would count 1) and
-    # not wc (not among this script's declared dependencies, while awk is).
-    printf '%s' "$1" | grep -oP '"score"\s*:' | awk 'END { exit NR != 1 }' || return 0
+    printf '%s' "$1" | LC_ALL=C awk '
+    { buf = buf $0 "\n" }
+    END {
+        n = length(buf)
+        depth = 0; rootClosed = 0; ok = 1
+        scoreCount = 0; keyDepth = -1; keyVal = ""
+        i = 1
+        while (i <= n) {
+            c = substr(buf, i, 1)
+            # One root: once the root value closes, only whitespace may follow.
+            if (depth == 0 && rootClosed && c !~ /[ \t\r\n]/) { ok = 0; break }
 
-    # The lookahead makes the number span the WHOLE value token: without it the
-    # invalid 00.5 matches its leading 0 and scores a fabricated 0.0. `$` is in the
-    # alternation because grep is line-oriented, and a pretty-printed payload puts
-    # the closing brace of a trailing "score" on the next line.
-    printf '%s' "$1" \
-      | grep -oP '"score"\s*:\s*\K-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?(?=\s*(?:[,}]|$))' \
-      | LC_ALL=C awk '$0 + 0 >= -1e-6 && $0 + 0 <= 1 + 1e-6'
+            if (c == "\"") {
+                # Walk to the closing quote by INDEX, never accumulating the
+                # bytes: a verifier that prints a megabyte of detail would make
+                # a char-by-char concat quadratic. A backslash escapes whatever
+                # byte follows, so \" does not close the string, \\ leaves the
+                # next quote free to, and { stays six bytes of text rather
+                # than a brace that could move the depth.
+                j = i + 1
+                while (j <= n) {
+                    d = substr(buf, j, 1)
+                    if (d == "\\") { j += 2; continue }
+                    if (d == "\"") break
+                    j++
+                }
+                # A string is a key iff the next non-space byte is a colon. It is
+                # THE key iff its bytes are exactly score — which an escape can
+                # only lengthen, so the span check alone rejects every forgery.
+                k = j + 1
+                while (k <= n && substr(buf, k, 1) ~ /[ \t\r\n]/) k++
+                if (k <= n && substr(buf, k, 1) == ":" &&
+                    j - i == 6 && substr(buf, i + 1, 5) == "score") {
+                    scoreCount++
+                    if (scoreCount == 1) {
+                        keyDepth = depth
+                        v = k + 1
+                        while (v <= n && substr(buf, v, 1) ~ /[ \t\r\n]/) v++
+                        start = v
+                        while (v <= n && substr(buf, v, 1) !~ /[]},\t\r\n ]/) v++
+                        keyVal = substr(buf, start, v - start)
+                    }
+                }
+                i = j + 1; continue
+            }
+
+            if (c == "{" || c == "[") { depth++; i++; continue }
+            if (c == "}" || c == "]") { depth--; if (depth == 0) rootClosed = 1; i++; continue }
+            i++
+        }
+        if (ok && rootClosed && scoreCount == 1 && keyDepth == 1 &&
+            keyVal ~ /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$/) {
+            x = keyVal + 0
+            if (x >= -1e-6 && x <= 1 + 1e-6) print keyVal
+        }
+    }'
 }
 
 # Discover repos in /workspace/ (directories with .git)
@@ -180,9 +243,23 @@ run_verifier() {
         # died before reaching its verdict.
         infra_detail="$INFRA_SENTINEL: verifier produced no JSON verdict (exit $VERIFIER_EXIT): ${stderr_content:-no output}"
     elif [ -z "$verdict_score" ]; then
-        # JSON, but no score the schema would accept. This belongs in the chain
-        # that decides whether a verdict was REACHED: an object whose score is a
-        # string has judged nothing, however well-formed the braces around it.
+        if [ -n "$AGENT_OUTPUT_INVALID" ] && [ "$VERIFIER_EXIT" -ne 0 ]; then
+            # Same attribution as the no-JSON branch above: the agent's own
+            # malformed artifact killed the verifier, and a leaked JSON skeleton
+            # on the way down ({"score": null}) is no more a verdict than no
+            # output at all. Scored 0.0, not an infra re-run — otherwise the two
+            # structurally identical failures (garbage answer, verifier dead
+            # without a score) would score oppositely on whether a skeleton
+            # happened to print, and an agent could buy a re-run by emitting one.
+            VERIFIER_JSON="{\"score\": 0.0, \"passed\": false, \"detail\": \"$(json_escape "$AGENT_OUTPUT_INVALID (exit $VERIFIER_EXIT): ${raw_stdout:0:200}")\"}"
+            rm -f "$raw_stderr"
+            return
+        fi
+
+        # JSON, but no score the schema would accept, and nothing about the
+        # agent's answer explains it. This belongs in the chain that decides
+        # whether a verdict was REACHED: an object whose score is a string has
+        # judged nothing, however well-formed the braces around it.
         infra_detail="$INFRA_SENTINEL: verifier emitted no score in [0, 1] (exit $VERIFIER_EXIT): ${raw_stdout:0:200}"
     fi
 
