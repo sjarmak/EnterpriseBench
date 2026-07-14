@@ -50,6 +50,17 @@ from create_sg_mirrors import parse_toml
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 from validation import validate_repo_entry
 
+# Tool-access arm enforcement — see mode_gate for why the ablation is a
+# filesystem permission rather than a prompt or a tool denylist.
+from mode_gate import (
+    AGENT_USER,
+    IneligibleTask,
+    check_eligibility,
+    lockdown_commands,
+    repo_dirs,
+    should_gate,
+)
+
 # Sourcegraph MCP preamble builder
 sys.path.insert(0, str(REPO_ROOT))
 from agents.harnesses.claude.mcp.sourcegraph import (
@@ -176,6 +187,13 @@ NON_COMPLETE_PHASES = UNTRUSTED_SCORE_PHASES | {"agent_infra_error"}
 SCORING_USER = "ebscorer"
 SCORING_GROUP = "ebscorer"
 SCORING_UID = 2000
+
+# The mode gate recurses chown/chmod over every cloned repo. Kubernetes- and
+# Terraform-sized trees are the reason this is minutes, not seconds: a gate that
+# times out half-applied is not a gate, so it must be allowed to finish or fail
+# loudly, never be silently cut short.
+GATE_CHOWN_TIMEOUT = 600
+GATE_PROBE_TIMEOUT = 60
 
 # Root-owned, scorer-unwritable cwd for the scoring exec. Ownership alone would
 # not close the hole: the checks shell out to `python3 -c`, whose sys.path[0] is
@@ -969,6 +987,95 @@ def _assert_agent_readable(container_id: str, paths: list[str]) -> tuple[bool, s
                 f"agent user cannot read {path} "
                 "(EACCES or missing) — run is INVALID, not a real 0.0 score"
             )
+    return True, ""
+
+
+def _gate_probe_file(container_id: str, repo_dir: str) -> str | None:
+    """One real file inside *repo_dir*, picked as root, to prove the gate against.
+
+    Probing the tree root alone would be a weaker claim than it looks: it is one
+    inode, and it is the one inode the chmod is most certain to have reached. A
+    file the recursion actually had to walk down to is what shows the whole tree
+    moved.
+    """
+    res = _docker_exec(
+        container_id,
+        ["find", repo_dir, "-type", "f", "-print", "-quit"],
+        timeout=GATE_PROBE_TIMEOUT,
+        user="root",
+    )
+    found = res.stdout.strip().splitlines()
+    return found[0] if res.returncode == 0 and found else None
+
+
+def _apply_mode_gate(
+    container_id: str, task_data: dict, mode: str
+) -> tuple[bool, str]:
+    """Deny the agent local source in gated arms, and PROVE it in both directions.
+
+    Returns (ok, error_message). A gate that silently failed to apply would
+    produce precisely the bug it exists to fix: an "mcp_only" run that quietly
+    read local files all along and was scored as an MCP measurement. So the
+    permissions are applied as root and then re-tested from both sides — the
+    agent must have LOST read, and the scorer must have KEPT it. Either half
+    failing aborts the run as infra, rather than scoring it (bead
+    EnterpriseBench-7rc1).
+    """
+    if not should_gate(mode):
+        return True, ""
+
+    try:
+        dirs = repo_dirs(task_data)
+    except ValueError as exc:
+        return False, f"mode gate cannot run: {exc} — run is INVALID, not a real score"
+    if not dirs:
+        return True, ""
+
+    for cmd in lockdown_commands(dirs, SCORING_GROUP):
+        printable = shlex.join(cmd)
+        try:
+            res = _docker_exec(
+                container_id, cmd, timeout=GATE_CHOWN_TIMEOUT, user="root"
+            )
+        except subprocess.TimeoutExpired:
+            # A recursive chown over a Kubernetes-sized tree can outlast a
+            # default timeout. Half-applied is not a gate.
+            return False, (
+                f"mode gate timed out running `{printable}` — run is INVALID, "
+                "not a real score"
+            )
+        if res.returncode != 0:
+            return False, (
+                f"mode gate failed running `{printable}`: {res.stderr.strip()} "
+                "— run is INVALID, not a real score"
+            )
+
+    for repo_dir in dirs:
+        probe = _gate_probe_file(container_id, repo_dir)
+        if probe is None:
+            return False, (
+                f"mode gate found no file under {repo_dir} to prove itself "
+                "against — run is INVALID, not a real score"
+            )
+        if _can_read(container_id, probe, user=AGENT_USER):
+            return False, (
+                f"mode gate did not hold: agent can still read {probe} — run is "
+                "INVALID, not a real score"
+            )
+        if not _can_read(container_id, probe, user=SCORING_USER):
+            return False, (
+                f"mode gate blinded the scorer: {SCORING_USER} cannot read "
+                f"{probe}, so its checkpoints would score a tree they cannot see "
+                "— run is INVALID, not a real score"
+            )
+
+    logger.info(
+        "Mode gate applied for mode=%s: agent denied local source on %s; "
+        "%s retains read",
+        mode,
+        ", ".join(dirs),
+        SCORING_USER,
+    )
     return True, ""
 
 
@@ -2437,6 +2544,27 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         output_dir.mkdir(parents=True, exist_ok=True)
         result.output_dir = str(output_dir)
 
+        # --- Arm eligibility: refuse the task, do not score it near zero ---
+        # A code_patch task cannot be solved by an agent forbidden to read the
+        # source it must patch. Scoring it anyway would drag the arm's mean down
+        # with a number that measures the gate rather than the agent, so the task
+        # is excluded from the arm and the headline compared on the subset every
+        # arm can actually run (bead EnterpriseBench-7rc1).
+        try:
+            check_eligibility(task_data, config.mode)
+        except IneligibleTask as exc:
+            logger.error(
+                "Task %s is ineligible for mode=%s: %s", task_id, config.mode, exc
+            )
+            result.phase = "ineligible_for_mode"
+            result.status = RUN_STATUS_INVALID
+            result.success = False
+            result.failure_class = "task_ineligible"
+            result.error = str(exc)
+            result.timing = timings
+            _save_results(result, task_data, output_dir, config)
+            return result
+
         logger.info(
             "Task: %s (suite=%s, type=%s)",
             task_id,
@@ -2648,6 +2776,23 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 result.success = False
                 result.failure_class = "infra_perms"
                 result.error = read_err
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
+
+            # --- Mode gate: deny local source for gated arms, and prove it ---
+            # Applied last, after every setup step that needs the repos readable
+            # (clone, health check, MCP config) and immediately before the agent
+            # starts, so the ablation is a kernel-enforced fact for every tool the
+            # agent has, including ones a future CLI release adds.
+            gated, gate_err = _apply_mode_gate(container_id, task_data, config.mode)
+            if not gated:
+                logger.error("Mode gate FAILED: %s", gate_err)
+                result.phase = "mode_gate_failed"
+                result.status = RUN_STATUS_INVALID
+                result.success = False
+                result.failure_class = "infra_perms"
+                result.error = gate_err
                 result.timing = timings
                 _save_results(result, task_data, output_dir, config)
                 return result

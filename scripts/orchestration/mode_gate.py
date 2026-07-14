@@ -1,0 +1,151 @@
+"""Filesystem-level enforcement of the ``mcp_only`` tool-access arm.
+
+The arm must vary exactly one thing against baseline: whether the agent can read
+repository source from local disk. Two obvious mechanisms both fail:
+
+* A ``--disallowed-tools`` denylist (Read/Grep/Glob/Bash/Task/...) strips the
+  agent's shell along with its search tools, so the baseline-minus-mcp_only delta
+  would partly measure "lost a shell" rather than "lost local search". It is also
+  fail-open: it cannot deny a tool name that does not exist yet.
+* Omitting the repos from the image blinds the scorer too, because checkpoints
+  score against ``/workspace`` in the same container -- some checks then return 0
+  and others award full credit for a missing file.
+
+So the repos stay on disk and the toolset stays identical across every arm; only
+the directory permissions differ. The kernel, not an enumerated list, is what
+says no, which is why a tool the agent acquires in a future CLI release is gated
+too.
+
+Three identities share the container, and the gate has to keep all three intact
+(see ``run_task.SCORING_USER`` for the reasoning behind the split):
+
+* ``agent`` runs the agent. Under this gate it must NOT reach repo source.
+* ``ebscorer`` runs the checks. It MUST still read the repo source it scores
+  against, or the gate would merely relocate the blindness it exists to avoid.
+* ``root`` owns everything and is never denied.
+
+Hence ``chown root:ebscorer`` + ``chmod o-rwx``: root owns, the scoring group
+reads, and ``agent`` (which is in neither) is "other" and gets nothing. Granting
+the scorer *read* rather than *ownership* mirrors how ``_seal_grading_assets``
+treats the graders themselves: the scorer may read what it scores, never rewrite
+it.
+
+Commands are argv lists, never shell strings: nothing here needs a shell, and a
+repo path that reaches a chmod target should not be one quoting bug away from
+being reinterpreted as syntax.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from validation import validate_repo_entry
+
+WORKSPACE = "/workspace"
+
+#: The agent process runs as this unprivileged user (``docker exec -u agent``).
+AGENT_USER = "agent"
+
+#: Arms whose agent is denied local source. ``hybrid`` is MCP *plus* local by
+#: definition, and ``baseline`` is local-only, so neither is gated.
+GATED_MODES = frozenset({"mcp_only"})
+
+#: Artifacts the agent can only produce by reading and writing inside a repo
+#: tree. Under the gate that tree is unreadable, so such a task is not merely
+#: harder -- it is impossible, and must be declared ineligible rather than
+#: silently scored near zero.
+LOCAL_WRITE_ARTIFACTS = frozenset({"code_patch"})
+
+
+class IneligibleTask(Exception):
+    """Raised when a task cannot coherently run in the requested arm."""
+
+
+def should_gate(mode: str) -> bool:
+    """Whether *mode* denies the agent local source access."""
+    return mode in GATED_MODES
+
+
+def repo_dirs(task_data: dict) -> list[str]:
+    """Absolute container paths of the cloned repo trees.
+
+    Mirrors ``dockerfile_generator._clone_commands``, which clones each repo into
+    ``/workspace/{path}``.
+
+    ``validate_repo_entry`` is the codebase's one definition of a safe repo entry
+    (no slashes, no ``..``) and ``_parse_task`` already applied it to this same
+    dict. It is re-applied rather than assumed because the path selects a chmod
+    target: a second opinion here is cheap, and a *divergent* second opinion --
+    an inline rule that drifts from the shared one -- is how a traversal
+    eventually relabels something outside the workspace.
+    """
+    dirs: list[str] = []
+    for repo in task_data.get("repos", []):
+        validate_repo_entry(repo)
+        dirs.append(f"{WORKSPACE}/{repo['path']}")
+    return dirs
+
+
+def lockdown_commands(dirs: list[str], scoring_group: str) -> list[list[str]]:
+    """Commands (run as root) that deny the agent read on each repo tree.
+
+    Both halves are load-bearing, and the chown is the half that is easy to talk
+    yourself out of:
+
+    * ``chown`` -- the Dockerfile switches to ``USER agent`` *before* it clones
+      (``dockerfile_generator`` emits the clone RUNs after that line), so the
+      agent starts out as the OWNER of every repo file, and an owner may always
+      chmod its own files back. Stripping mode bits without taking ownership away
+      leaves a gate the agent can simply undo. Ownership moves to root, and the
+      group moves to the scoring group so the scorer keeps the read access the
+      checkpoints need.
+    * ``chmod o-rwx,g-w`` -- OSS trees are checked out world-readable, so
+      re-owning alone would still leave ``agent`` reading through the "other"
+      bits. ``o-rwx`` strips those. The group bits are NOT stripped (``go-rwx``
+      would blind the scorer instead of the agent), but group *write* is, and
+      that half is easy to miss:
+
+      The scorer's access must not change between arms, or the gate has varied
+      two things. In an ungated arm the tree is ``agent``-owned and the scorer
+      reaches it as "other" -- ``r--`` on files, ``r-x`` on dirs, i.e. read-only.
+      Under a container umask of 002 the clone is 0664/0775, so ``chown`` +
+      ``o-rwx`` alone would leave the scoring group at ``rw-``, handing the
+      scorer write access to the very tree it grades, which it never had in
+      baseline. ``g-w`` puts it back to read-only, so the ONE thing this gate
+      changes is the agent's access.
+
+    ``/workspace`` itself is deliberately untouched: the agent still has to
+    traverse it to reach ``instruction.md`` and to write ``agent_output/``.
+    Locking the workspace root would zero the arm instead of gating it.
+
+    Recursion is batched across every path: ``chown``/``chmod`` take many
+    operands, so this is one exec each no matter how many repos a task has.
+    """
+    if not dirs:
+        return []
+    return [
+        ["chown", "-R", f"root:{scoring_group}", *dirs],
+        ["chmod", "-R", "o-rwx,g-w", *dirs],
+    ]
+
+
+def check_eligibility(task_data: dict, mode: str) -> None:
+    """Raise :class:`IneligibleTask` if *task_data* cannot run in *mode*.
+
+    Only ``required`` artifacts are consulted. ``required=["answer"],
+    optional=["code_patch"]`` is a common and perfectly gate-able shape: the
+    answer is deliverable without ever opening the repo tree.
+    """
+    if not should_gate(mode):
+        return
+
+    required = set(task_data.get("artifacts", {}).get("required", []))
+    blocked = sorted(required & LOCAL_WRITE_ARTIFACTS)
+    if blocked:
+        raise IneligibleTask(
+            f"task requires artifact(s) {blocked} that can only be produced by "
+            f"reading and writing local source, which mode={mode!r} denies. "
+            "Exclude this task from the arm rather than scoring it."
+        )
