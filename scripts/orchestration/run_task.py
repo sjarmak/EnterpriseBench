@@ -2044,9 +2044,10 @@ def _install_sgx(container_id: str, mode: str) -> bool:
     plain executable (/usr/local/bin/sgx) instead of registered MCP tools — NO
     .mcp.json is written, which keeps the agent's tool prefix lean and is the
     whole experimental point. sgx is stateless: each invocation is a JSON-RPC
-    tools/call POST to the baked SG_URL. The /bin/sh wrapper bakes the endpoint
-    and token defaults (env-overridable) so sgx works even inside Task subagents
-    whose process env is not inherited.
+    tools/call POST to SG_URL. The /bin/sh wrapper bakes only the SG_URL default
+    (not secret); the token is NOT baked into the world-readable wrapper — it
+    rides the container env (env_extra sets SOURCEGRAPH_ACCESS_TOKEN), matching
+    the MCP arm's 0600 posture. sg_cli.py reads the token from the env per call.
 
     Analogous to _configure_mcp: returns True on a verified install (or when the
     mode is not cli), False when the post-install probe fails. The caller treats
@@ -2572,19 +2573,19 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                     config.mode,
                 )
 
-        # The cli arm: pass the Sourcegraph token into the agent env too so sgx
-        # authenticates from any shell context. The /usr/local/bin/sgx wrapper
-        # already bakes the token as a fallback default; this is belt-and-
-        # suspenders for contexts that do inherit the process env. No .mcp.json
-        # and no --mcp-config are written for this arm — that is deliberate.
+        # The cli arm: pass the Sourcegraph token into the container env — this
+        # is the ONLY place sgx gets its token (the /usr/local/bin/sgx wrapper
+        # deliberately does NOT bake it, to avoid a secret in a world-readable
+        # file). No .mcp.json and no --mcp-config are written for this arm — that
+        # is deliberate.
         if config.mode == "cli":
             sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
             if sg_token:
                 env_extra["SOURCEGRAPH_ACCESS_TOKEN"] = sg_token
             else:
                 logger.warning(
-                    "SOURCEGRAPH_ACCESS_TOKEN not set in environment; sgx will "
-                    "rely on the wrapper's baked token (mode=cli)"
+                    "SOURCEGRAPH_ACCESS_TOKEN not set; sgx will not authenticate "
+                    "and will exit non-zero on every call (mode=cli)"
                 )
 
         if config.account is not None:
