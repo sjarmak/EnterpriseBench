@@ -343,8 +343,13 @@ class TestChainResultJsonContract:
 
         payload = json.loads((tmp_path / "chain_result.json").read_text())
         assert payload["total_score"] is None, "no number for a chain that never ran"
-        assert payload["session_failure"]["reason"] == SESSION_FAILURE_REASON
         assert payload["sessions_completed"] == 0
+        # reason/stage/detail mirror the verifier_infra_error shape, so a reader of
+        # chain_result.json parses either invalidity channel the same way.
+        assert payload["session_failure"]["reason"] == SESSION_FAILURE_REASON
+        assert payload["session_failure"]["stage"] == "session"
+        assert payload["session_failure"]["session_number"] == 1
+        assert payload["session_failure"]["detail"]
         assert payload["sessions_total"] == 2, (
             "sessions_total must report the CONFIGURED session count — reporting "
             "len(session_results) hid the missing sessions behind 0/1"
