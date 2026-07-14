@@ -28,6 +28,45 @@ now_ms() {
     date +%s%3N 2>/dev/null || date +%s000
 }
 
+# The score a checkpoint actually earned, or the empty string if it earned none.
+#
+# Matches the full JSON number grammar — including the exponent form json.dumps
+# emits for small floats, where a [0-9.]+ pattern would take the leading "1" of
+# 1e-05 and credit full marks — and echoes the value back only if it really is a
+# number in [0, 1]. A string, null, NaN, a missing key, an out-of-range number:
+# all yield the empty string, which run_verifier reads as "reached no verdict".
+# Anything else fabricates a verdict out of output the shell could not parse, and
+# no downstream check can catch that: a 0.0 invented here is indistinguishable
+# from a genuine wrong answer by the time the Python guard sees it.
+#
+# The tolerance mirrors eb_verify.scorer_guard._SCORE_EPSILON so the shell and the
+# guard admit exactly the same values; the guard clamps the slop away.
+#
+# LC_ALL=C is load-bearing: mawk (Debian's default awk, and the one in the task
+# images) converts strings to numbers with strtod, which takes its decimal
+# separator from LC_NUMERIC. Under a comma locale "1.5" + 0 is 1, so the range
+# check would wave a 1.5 through. JSON's separator is always a period.
+parse_score() {
+    # Exactly one "score" key, or the shell cannot say which is the verdict: a
+    # regex cannot see nesting, so {"detail": {"score": 1.0}, "score": 0.0} would
+    # award full marks on a failed checkpoint. Reading the last match instead only
+    # moves the hole to the mirror payload, so refuse both — the rule this script
+    # already applies to every score it cannot read.
+    # Counted by piping grep -o through awk: grep -c counts matching LINES, so a
+    # one-line payload carrying both keys would count as 1, and wc is not among
+    # this script's declared dependencies while awk is.
+    [ "$(printf '%s' "$1" | grep -oP '"score"\s*:' | awk 'END { print NR }')" -eq 1 ] || return 0
+
+    # The lookahead makes the number span the WHOLE value token: without it the
+    # invalid 00.5 matches its leading 0 and scores a fabricated 0.0, the same
+    # partial-match-as-verdict shape as the 1e-05 bug. `$` is in the alternation
+    # because grep is line-oriented, and a pretty-printed payload puts the closing
+    # brace of a trailing "score" on the next line.
+    printf '%s' "$1" \
+      | grep -oP '"score"\s*:\s*\K-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?(?=\s*(?:[,}]|$))' \
+      | LC_ALL=C awk '$0 + 0 >= -1e-6 && $0 + 0 <= 1 + 1e-6'
+}
+
 # Discover repos in /workspace/ (directories with .git)
 discover_repos() {
     local repos=()
@@ -60,11 +99,14 @@ command_not_found_handle() {
 PREAMBLE
 
 # Run a single verifier, capture JSON output and exit code.
-# Returns: sets VERIFIER_EXIT, VERIFIER_JSON, VERIFIER_DURATION_MS, VERIFIER_RAN
+# Returns: sets VERIFIER_EXIT, VERIFIER_JSON, VERIFIER_DURATION_MS, VERIFIER_RAN,
+# VERIFIER_SCORE
 #
-# Never fabricates a score from an exit code: absence of a verdict is not a
-# verdict of 0.0, nor of 1.0. VERIFIER_RAN attests whether the verifier actually
-# reached one; the scorer refuses to score any checkpoint that did not.
+# Never fabricates a score — not from an exit code, and not from output it could
+# not parse. Absence of a verdict is not a verdict of 0.0, nor of 1.0. A verdict
+# requires a score the schema would accept, so printing a JSON object is not on
+# its own enough to have reached one. VERIFIER_RAN attests whether the verifier
+# did; the scorer refuses to score any checkpoint that did not.
 run_verifier() {
     local verifier_path="$1"
     local timeout_sec="${2:-120}"
@@ -102,6 +144,16 @@ run_verifier() {
     VERIFIER_DURATION_MS=$(( end - start ))
     VERIFIER_RAN="true"
 
+    # The score carried by every VERIFIER_JSON the branches below fabricate: each
+    # is a literal 0.0, either attested verifier_ran=false (so the scorer refuses
+    # to score it) or a deliberate, attributed 0.0 — a timeout, or an agent
+    # artifact too malformed to check. The good path overwrites it with the
+    # verifier's own score.
+    VERIFIER_SCORE="0.0"
+
+    local verdict_score
+    verdict_score=$(parse_score "$raw_stdout")
+
     local infra_detail=""
     if [ -n "$missing_cmds" ]; then
         # Ahead of the timeout check: a command that does not exist is an infra
@@ -138,6 +190,11 @@ run_verifier() {
         # No JSON, and nothing about the agent's answer explains it: the verifier
         # died before reaching its verdict.
         infra_detail="$INFRA_SENTINEL: verifier produced no JSON verdict (exit $VERIFIER_EXIT): ${stderr_content:-no output}"
+    elif [ -z "$verdict_score" ]; then
+        # JSON, but no score the schema would accept. This belongs in the chain
+        # that decides whether a verdict was REACHED: an object whose score is a
+        # string has judged nothing, however well-formed the braces around it.
+        infra_detail="$INFRA_SENTINEL: verifier emitted no score in [0, 1] (exit $VERIFIER_EXIT): ${raw_stdout:0:200}"
     fi
 
     if [ -n "$infra_detail" ]; then
@@ -145,6 +202,7 @@ run_verifier() {
         VERIFIER_JSON="{\"score\": 0.0, \"passed\": false, \"verifier_ran\": false, \"detail\": \"$(json_escape "$infra_detail")\"}"
     else
         VERIFIER_JSON="$raw_stdout"
+        VERIFIER_SCORE="$verdict_score"
     fi
 
     rm -f "$raw_stderr"
@@ -286,8 +344,9 @@ for verifier in "$VERIFIER_DIR"/*.sh; do
     echo "--- Checkpoint: $name (weight=$weight, timeout=${checkpoint_timeout}s) ---" >&2
     run_verifier "$verifier" "$checkpoint_timeout"
 
-    # Extract score from verifier JSON
-    checkpoint_score=$(printf '%s' "$VERIFIER_JSON" | grep -oP '"score"\s*:\s*\K[0-9.]+' || echo "0.0")
+    # run_verifier parsed and range-checked this, and refused to attest any
+    # checkpoint whose score it could not: a number in [0, 1] on every path.
+    checkpoint_score="$VERIFIER_SCORE"
 
     # Extract passed from verifier JSON
     checkpoint_passed=$(printf '%s' "$VERIFIER_JSON" | grep -oP '"passed"\s*:\s*\K(true|false)' || echo "false")
@@ -307,8 +366,10 @@ for verifier in "$VERIFIER_DIR"/*.sh; do
         echo "  FAIL (score=$checkpoint_score)" >&2
     fi
 
-    # Accumulate weighted score using awk for float math
-    WEIGHTED_SCORE=$(awk "BEGIN { printf \"%.4f\", $WEIGHTED_SCORE + ($checkpoint_score * $weight) }")
+    # Accumulate weighted score using awk for float math. LC_ALL=C because under a
+    # comma locale mawk's %.4f prints "0,5000", and task_score stops being a JSON
+    # number at all.
+    WEIGHTED_SCORE=$(LC_ALL=C awk "BEGIN { printf \"%.4f\", $WEIGHTED_SCORE + ($checkpoint_score * $weight) }")
 
     # Build checkpoint result JSON entry (detail is already a quoted JSON
     # string). name comes from an agent-writable filename in .verifiers/ —

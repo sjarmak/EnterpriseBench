@@ -372,6 +372,143 @@ fi
     assert isinstance(guard_verifier_output(json.dumps(result), returncode=0), dict)
 
 
+# --- a verdict needs a SCORE, not just a pair of braces ------------------------
+#
+# Every never-ran vector above is a verifier that printed no JSON at all. One that
+# prints a well-formed JSON object carrying a score the schema would reject has
+# reached no verdict either — and the runner used to launder each such value into
+# a plausible one BEFORE the guard could see it, which is why the guard's range
+# check never caught them (bead bfrfm). The guard can only judge the number it is
+# handed, and the shell had already swapped the bad one out.
+
+
+def verifier_printing(payload: str) -> str:
+    """A check script whose entire job is to print ``payload`` and exit 0."""
+    return f"#!/usr/bin/env bash\ncat <<'JSON'\n{payload}\nJSON\n"
+
+
+NO_PARSEABLE_SCORE = {
+    # json.loads accepts bare NaN, so a verifier dividing by zero really can
+    # print one; the rest are ordinary verifier bugs.
+    "string": '{"score": "abc", "passed": false, "detail": "d"}',
+    "nan": '{"score": NaN, "passed": false, "detail": "d"}',
+    "null": '{"score": null, "passed": false, "detail": "d"}',
+    "missing": '{"passed": false, "detail": "d"}',
+    "above_one": '{"score": 999, "passed": true, "detail": "d"}',
+    "negative": '{"score": -0.5, "passed": false, "detail": "d"}',
+    # Not valid JSON: a leading zero may not be followed by another digit. The
+    # regex matched the first "0" and stopped, so the malformed token yielded a
+    # well-formed, in-range 0.0 — a partial match masquerading as the value, the
+    # original bug's exact shape. Only accepting a number that spans the WHOLE
+    # value token rejects it.
+    "leading_zero": '{"score": 00.5, "passed": false, "detail": "d"}',
+}
+
+
+# The shell reads JSON with a regex, and a regex cannot see nesting. Whichever
+# "score" key comes first in BYTE order wins — so a verifier reporting a
+# per-assertion breakdown would be graded on its own sub-score:
+#
+#   {"detail": {"score": 1.0}, "score": 0.0}  ->  1.0, not 0.0. Free full marks.
+#
+# The shell cannot tell which key is top-level, so an ambiguous payload is one it
+# has reached no verdict on — the same rule the rest of this file applies to every
+# other score it cannot read. No verifier in the corpus emits two score keys, so
+# nothing legitimate is refused; a future composite verifier gets a loud infra
+# error rather than a silent wrong grade.
+AMBIGUOUS_SCORE = {
+    "nested_before_real": '{"detail": {"score": 1.0}, "score": 0.0, "passed": false}',
+    "nested_after_real": '{"score": 0.0, "detail": {"score": 1.0}, "passed": false}',
+}
+
+
+@pytest.mark.parametrize("shape", sorted(NO_PARSEABLE_SCORE))
+def test_a_score_that_is_not_a_score_is_infra_not_a_verdict(
+    shape: str, tmp_path: Path, real_path: str
+) -> None:
+    """The under-credit direction: none of these is a verdict.
+
+    ``grep -oP '[0-9.]+'`` matched nothing in them and the ``|| echo 0.0``
+    fallback supplied a well-formed, in-range 0.0, so each arrived at the scorer
+    as a legitimate agent failure. A broken verifier, recorded as a wrong answer.
+    """
+    payload = NO_PARSEABLE_SCORE[shape]
+    result = run_test_runner(tmp_path, {"cp": verifier_printing(payload)}, real_path)
+
+    cp = checkpoint(result, "cp")
+    assert cp["verifier_ran"] is False, f"{payload} carries no score, so it is no verdict"
+
+    guarded = guard_verifier_output(json.dumps(result), returncode=0)
+    assert isinstance(guarded, InfraError), (
+        f"{payload} was scored as a real result; a verifier that cannot state a "
+        f"score has not judged the agent"
+    )
+    assert guarded.reason == "verifier_did_not_run"
+
+
+def test_a_tiny_score_is_not_fabricated_into_full_marks(
+    tmp_path: Path, real_path: str
+) -> None:
+    """The over-credit direction, and the sharper of the two bugs.
+
+    The same pattern matched the leading ``1`` of ``1e-05`` and dropped the
+    exponent, so the weakest possible passing score was credited FULL MARKS.
+    ``json.dumps`` emits this form for any small float, so no exotic verifier is
+    needed to reach it.
+    """
+    payload = '{"score": 1e-05, "passed": false, "detail": "1 of 100000"}'
+    result = run_test_runner(tmp_path, {"tiny": verifier_printing(payload)}, real_path)
+
+    cp = checkpoint(result, "tiny")
+    assert cp["verifier_ran"] is True, "a JSON number IS a verdict, however small"
+    assert cp["score"] == pytest.approx(1e-05), "the score must be the one the verifier gave"
+
+    guarded = guard_verifier_output(json.dumps(result), returncode=0)
+    assert isinstance(guarded, dict), "an exponent is valid JSON; this is a real score"
+    # Exactly 0.0, not merely "less than full marks": the shell aggregates with
+    # awk's %.4f, so 1e-05 rounds to 0.0000. A looser bound would let a wrong
+    # implementation that landed on, say, 0.3 pass.
+    assert guarded["task_score"] == 0.0, "1e-05 was credited as full marks"
+
+
+@pytest.mark.parametrize("shape", sorted(AMBIGUOUS_SCORE))
+def test_two_score_keys_are_no_verdict_not_the_first_one(
+    shape: str, tmp_path: Path, real_path: str
+) -> None:
+    """A score the shell cannot locate unambiguously is a score it has not read.
+
+    ``nested_before_real`` is the one that pays: the nested 1.0 precedes the real
+    0.0, so a first-match extraction credits full marks on a failed checkpoint.
+    ``nested_after_real`` is its mirror, and pins the rule rather than the reading
+    order — it is the vector a last-match "fix" would still get wrong.
+    """
+    payload = AMBIGUOUS_SCORE[shape]
+    result = run_test_runner(tmp_path, {"cp": verifier_printing(payload)}, real_path)
+
+    cp = checkpoint(result, "cp")
+    assert cp["verifier_ran"] is False, f"{payload} states no unambiguous score"
+    assert cp["score"] == 0.0, "the unscorable checkpoint must not carry the nested 1.0"
+
+    guarded = guard_verifier_output(json.dumps(result), returncode=0)
+    assert isinstance(guarded, InfraError), f"{payload} was scored, not flagged"
+    assert guarded.reason == "verifier_did_not_run"
+
+
+def test_partial_credit_survives_the_parse(tmp_path: Path, real_path: str) -> None:
+    """The control the new range check could plausibly break: an ordinary
+    fractional score must still be scored, and scored as itself."""
+    payload = '{"score": 0.75, "passed": false, "detail": "3 of 4 assertions held"}'
+    result = run_test_runner(tmp_path, {"partial": verifier_printing(payload)}, real_path)
+
+    cp = checkpoint(result, "partial")
+    assert cp["verifier_ran"] is True
+    assert cp["score"] == 0.75
+
+    guarded = guard_verifier_output(json.dumps(result), returncode=0)
+    assert isinstance(guarded, dict)
+    assert guarded["task_score"] == 0.75
+
+
 # --- the mirror image: a bad ANSWER must not be laundered into an infra error --
 #
 # "No verdict" has two causes, and only one of them is the harness's fault. The
