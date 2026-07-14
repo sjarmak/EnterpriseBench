@@ -335,6 +335,11 @@ class TestChainResultJsonContract:
 
     def test_chain_result_json_total_score_is_null_and_exit_is_nonzero(self, tmp_path):
         task_toml = tmp_path / "task.toml"
+        # The [[repos]] entry is load-bearing: the session has to SUCCEED for the
+        # final checkpoint to run at all (a chain whose session failed is gated off
+        # from its checkpoints — bead 6c9wp). Without it the simulated agent dies on
+        # repos[0] and this would assert the broken verifier through a chain that
+        # never ran, which is a different bug with a different channel.
         task_toml.write_text(
             '[task]\n'
             'id = "chain-infra-test"\n'
@@ -342,6 +347,9 @@ class TestChainResultJsonContract:
             'difficulty = "medium"\n'
             'session_type = "chain"\n'
             'session_count = 1\n'
+            '\n'
+            '[[repos]]\n'
+            'path = "repo-a"\n'
             '\n'
             '[[sessions]]\n'
             'prompt = "do the thing"\n'
