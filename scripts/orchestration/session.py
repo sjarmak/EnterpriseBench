@@ -147,6 +147,7 @@ def run_session(
     previous_branch_state: BranchState | None = None,
     simulation_actions: list[dict] | None = None,
     agent_callable=None,
+    simulate: bool = False,
 ) -> SessionResult:
     """Execute a single session lifecycle.
 
@@ -156,9 +157,29 @@ def run_session(
     4. Return result with branch state
 
     Args:
-        agent_callable: Optional callable(workspace_path, prompt) -> str.
-                       If None, uses simulation mode.
+        agent_callable: callable(workspace_path, prompt) -> str. Required unless
+                       ``simulate`` is set.
+        simulate: run ``simulate_agent_work`` instead of an agent. Must be asked
+                 for out loud: a missing agent used to mean "simulate", so a
+                 caller that forgot to wire one got simulated work scored as the
+                 agent's.
+
+    Raises:
+        ValueError: neither an agent nor ``simulate`` (nothing would produce agent
+            work), or both (the agent would be silently discarded).
     """
+    if agent_callable is not None and simulate:
+        raise ValueError(
+            "run_session: called with both an agent and simulate — the agent would "
+            "be discarded and the simulation scored in its place. Pick one."
+        )
+    if agent_callable is None and not simulate:
+        raise ValueError(
+            "run_session: no agent_callable and simulate is not set — a session "
+            "with no agent produces no agent work. Pass an agent, or pass "
+            "simulate=True to run the simulation scaffold on purpose."
+        )
+
     session_num = session_config.session_number
     logger.info("=== Starting session %d for task %s ===", session_num, task_id)
 
@@ -175,9 +196,7 @@ def run_session(
         )
 
         # 2. Run agent or simulate
-        if agent_callable is not None:
-            agent_output = agent_callable(workspace_path, session_config.prompt)
-        else:
+        if simulate:
             agent_output = simulate_agent_work(
                 workspace_path=workspace_path,
                 session_config=session_config,
@@ -185,6 +204,8 @@ def run_session(
                 task_id=task_id,
                 simulation_actions=simulation_actions,
             )
+        else:
+            agent_output = agent_callable(workspace_path, session_config.prompt)
         result.agent_output = agent_output
 
         # 3. Commit to session branch in ALL repos

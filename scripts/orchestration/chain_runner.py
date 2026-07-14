@@ -38,6 +38,7 @@ from eb_verify.scorer_guard import InfraError
 logger = logging.getLogger(__name__)
 
 SESSION_FAILURE_REASON = "session_failed"
+NO_AGENT_REASON = "no_agent_configured"
 
 
 def _session_failure(session_number: int, detail: str) -> dict:
@@ -52,6 +53,25 @@ def _session_failure(session_number: int, detail: str) -> dict:
         stage="session",
         detail=detail,
         context={"session_number": session_number},
+    ).as_verifier_error()
+
+
+def _no_agent_configured() -> dict:
+    """No agent was wired into the chain, so it has no agent work to score.
+
+    Its own cause, not ``session_failure``: that channel tells an operator the
+    agent died and to re-run, and a re-run of a chain with no harness behind it
+    just reproduces this. The remedy is to wire one up.
+    """
+    return InfraError(
+        reason=NO_AGENT_REASON,
+        stage="chain",
+        detail=(
+            "chain invoked with no agent_callable and without simulate. The chain "
+            "runner has no agent harness yet, so --agent is accepted but cannot be "
+            "honoured: no chain run can be scored until one exists. Pass --simulate "
+            "to run the simulation scaffold on purpose."
+        ),
     ).as_verifier_error()
 
 
@@ -74,16 +94,23 @@ class ChainTaskDefinition:
 class ChainResult:
     """Complete result of running a chain task.
 
-    ``total_score``/``final_score`` are ``None`` whenever either invalidity
-    channel is set, and the run belongs in the re-run channel rather than the
-    results table:
+    ``total_score``/``final_score`` are ``None`` whenever any invalidity channel
+    is set, and the run belongs in the re-run channel rather than the results
+    table:
 
     * ``verifier_infra_error`` — a milestone verifier never reached a verdict, so
       there is no score to record.
     * ``session_failure`` — a configured session never completed, so the agent
       never did the work the checkpoints would be scoring.
+    * ``agent_not_configured`` — no agent was wired into the chain at all, so no
+      session ran and the remedy is a harness, not a re-run.
 
-    They are independent, and both are reported when both occur.
+    They are independent, and each is reported when it occurs.
+
+    ``simulated`` travels with the result rather than being re-derived by whoever
+    serializes it: a simulated chain scores marker files the scaffold wrote into
+    repos ``setup_workspace`` git-inits empty, and a reader handed the number
+    without that flag cannot tell it from a score an agent earned.
     """
 
     task_id: str
@@ -92,13 +119,19 @@ class ChainResult:
     milestone_scores: list[SessionScore] = field(default_factory=list)
     final_score: Optional[float] = None
     total_score: Optional[float] = None
+    simulated: bool = False
     verifier_infra_error: Optional[dict] = None
     session_failure: Optional[dict] = None
+    agent_not_configured: Optional[dict] = None
 
     @property
     def is_invalid(self) -> bool:
-        """True if this chain has no score, for either reason."""
-        return self.session_failure is not None or self.verifier_infra_error is not None
+        """True if this chain has no score, for any reason."""
+        return (
+            self.session_failure is not None
+            or self.verifier_infra_error is not None
+            or self.agent_not_configured is not None
+        )
 
     @property
     def sessions_completed(self) -> int:
@@ -131,6 +164,13 @@ class ChainResult:
                     f"    {m.milestone_name}: {status} ({m.score:.2f}) {m.message}"
                 )
 
+        if self.agent_not_configured is not None:
+            lines.append(
+                f"\nINVALID RUN — no agent was wired into this chain, so none of "
+                f"its {self.total_sessions} session(s) ran; there is no agent work "
+                f"for the checkpoints to score."
+            )
+            lines.append(f"  {self.agent_not_configured['detail']}")
         if self.session_failure is not None:
             lines.append(
                 f"\nINVALID RUN — session "
@@ -233,7 +273,12 @@ def _validate_chain_task(task_def: ChainTaskDefinition) -> None:
 
 def _log_chain_outcome(chain_result: ChainResult) -> None:
     """Log every invalidity channel that fired, not just the first: an operator who
-    fixes only the one they heard about would re-run straight into the other."""
+    fixes only the one they heard about would re-run straight into the others."""
+    if chain_result.agent_not_configured is not None:
+        logger.error(
+            "Chain INVALID — no agent was wired in, so no session ran: %s",
+            chain_result.agent_not_configured["detail"],
+        )
     if chain_result.session_failure is not None:
         logger.error(
             "Chain INVALID — session %d never completed, so it has no score: %s",
@@ -270,12 +315,40 @@ def run_chain(
        d. Run milestone verifiers (if not the last session)
     2. Only once EVERY configured session has succeeded: run the final checkpoints
        and compute the total score.
+
+    Simulation is opt-in, never a fallback: an absent ``agent_callable`` is an
+    invalid run, not an invitation to simulate one and score it.
+
+    Returns a ChainResult carrying ``agent_not_configured`` when no agent was
+    wired in — deliberately NOT the ValueError ``run_session`` raises for the same
+    condition. It is the state every ``run_benchmark`` invocation of a chain task
+    is in today, and it has to reach disk as a result an operator can read, not as
+    a stack trace.
+
+    Raises ValueError when given both an agent and ``simulate`` (the agent would
+    be discarded and its stand-in scored in its place).
     """
     _validate_chain_task(task_def)
 
+    if agent_callable is not None and simulate:
+        raise ValueError(
+            f"chain {task_def.task_id}: called with both an agent and simulate — "
+            f"the agent would be discarded and the simulation scored in its place."
+        )
+
     chain_result = ChainResult(
-        task_id=task_def.task_id, total_sessions=task_def.session_count
+        task_id=task_def.task_id,
+        total_sessions=task_def.session_count,
+        simulated=simulate,
     )
+
+    # Fail closed before any session runs: simulated sessions genuinely succeed, so
+    # a silently simulating chain clears every downstream gate — the completed-session
+    # gate below included — and publishes a score no agent earned.
+    if agent_callable is None and not simulate:
+        chain_result.agent_not_configured = _no_agent_configured()
+        _log_chain_outcome(chain_result)
+        return chain_result
 
     if workspace_root is None:
         workspace_root = tempfile.mkdtemp(prefix=f"eb-chain-{task_def.task_id}-")
@@ -310,7 +383,8 @@ def run_chain(
             workspace_root=workspace_root,
             previous_branch_state=previous_branch_state,
             simulation_actions=sim_actions,
-            agent_callable=None if simulate else agent_callable,
+            agent_callable=agent_callable,
+            simulate=simulate,
         )
         chain_result.session_results.append(session_result)
 
@@ -416,7 +490,9 @@ def main():
         "--workspace", default=None, help="Workspace root directory (default: temp dir)"
     )
     parser.add_argument("--verbose", "-v", action="store_true")
-    # Passthrough args forwarded by run_benchmark.py (accepted but not used here)
+    # Accepted from run_benchmark.py's passthrough, unused here. --agent must keep
+    # parsing even though no agent harness exists to honour it: rejecting it would
+    # exit at argparse, before the no-agent guard can write an honest invalid result.
     parser.add_argument("--source", choices=["mirror", "upstream"])
     parser.add_argument("--agent", type=str)
     parser.add_argument("--timeout", type=int)
@@ -429,8 +505,20 @@ def main():
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    task_def = parse_chain_task(args.task_toml)
     task_dir = str(Path(args.task_toml).parent.resolve())
+
+    if args.dry_run:
+        print(f"[dry-run] would run chain task: {args.task_toml} (mode={args.mode})")
+        return 0
+
+    # Clear the previous run's result before this one runs, not after it finishes:
+    # writing only on the way out leaves an earlier run's score on disk as the
+    # current answer whenever this run raises on the way in (an unparseable
+    # task.toml, a rejected session_count).
+    result_path = Path(task_dir) / "chain_result.json"
+    result_path.unlink(missing_ok=True)
+
+    task_def = parse_chain_task(args.task_toml)
 
     result = run_chain(
         task_def=task_def,
@@ -447,17 +535,22 @@ def main():
     # Write result JSON. `total_score` is null for an invalid run — a reader must
     # never be handed a number that came from a verifier which did not score, or
     # from a chain whose sessions never ran.
-    result_path = Path(task_dir) / "chain_result.json"
     payload = {
         "task_id": result.task_id,
         "total_score": result.total_score,
         "sessions_completed": result.sessions_completed,
         "sessions_total": result.total_sessions,
+        # A simulated run's score comes from marker files the scaffold wrote, so it
+        # measures the orchestrator, not an agent. This artifact lands in the tracked
+        # task directory next to the real ones and has to say which it is.
+        "simulated": result.simulated,
     }
     if result.verifier_infra_error is not None:
         payload["verifier_infra_error"] = result.verifier_infra_error
     if result.session_failure is not None:
         payload["session_failure"] = result.session_failure
+    if result.agent_not_configured is not None:
+        payload["agent_not_configured"] = result.agent_not_configured
 
     with open(result_path, "w") as f:
         json.dump(payload, f, indent=2)
