@@ -45,6 +45,12 @@ PROJECT_ROOT = _SCRIPTS_DIR.parent
 
 ALL_MODES = ("baseline", "mcp_only", "hybrid", "cli")
 
+# Modes an UNSCOPED sweep runs by default. `cli` is a real, valid mode (it is in
+# ALL_MODES and accepted by --modes), but it is deliberately excluded from the
+# default so an existing sweep does not silently gain a 4th arm — inflating cost
+# ~33% — the day the cli port lands. Request it explicitly: --modes ... cli.
+DEFAULT_SWEEP_MODES = ("baseline", "mcp_only", "hybrid")
+
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
@@ -88,7 +94,7 @@ def build_sweep_matrix(
 ) -> list[SweepItem]:
     """Create all task x mode combinations as pending SweepItems."""
     if modes is None:
-        modes = list(ALL_MODES)
+        modes = list(DEFAULT_SWEEP_MODES)
     items: list[SweepItem] = []
     for task in tasks:
         for mode in modes:

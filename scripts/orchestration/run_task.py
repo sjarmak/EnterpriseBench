@@ -2087,12 +2087,15 @@ def _install_sgx(container_id: str, mode: str) -> bool:
     )
 
     # Step 3: build the /bin/sh wrapper baking SG_URL + token defaults
-    # (env-overridable). base64-encoded to sidestep shell quoting of the token.
+    # base64-encoded to sidestep shell quoting. SG_URL is not a secret, so it is
+    # safe to bake as a default here. The token is deliberately NOT baked in: it
+    # rides the container env (env_extra sets SOURCEGRAPH_ACCESS_TOKEN — see the
+    # cli-arm setup), so writing it into this chmod-755, world-readable wrapper
+    # would only widen its exposure surface (the MCP arm keeps its token in a
+    # 0600 .mcp.json). sg_cli.py reads the token from the env on every call.
     wrapper = (
         "#!/bin/sh\n"
         f'export SG_URL="${{SG_URL:-{SGX_ENDPOINT}}}"\n'
-        "export SOURCEGRAPH_ACCESS_TOKEN="
-        f'"${{SOURCEGRAPH_ACCESS_TOKEN:-{sg_token}}}"\n'
         'exec "$(command -v python3 || command -v python)" '
         '/usr/local/lib/sg_cli.py "$@"\n'
     )
@@ -2837,7 +2840,8 @@ Examples:
         default="baseline",
         help=(
             "Tool-access mode: 'baseline' (no MCP), 'mcp_only' "
-            "(Sourcegraph MCP only), or 'hybrid' (local + MCP). "
+            "(Sourcegraph MCP only), 'hybrid' (local + MCP), or 'cli' "
+            "(Sourcegraph via the sgx bash CLI, no MCP registered). "
             "Default: baseline"
         ),
     )
