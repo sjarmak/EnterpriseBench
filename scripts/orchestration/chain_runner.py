@@ -33,7 +33,6 @@ except ImportError:
 
 from orchestration.session import SessionConfig, SessionResult, run_session
 from orchestration.milestone import SessionScore, run_session_milestones
-from orchestration.branch_manager import list_session_branches
 
 logger = logging.getLogger(__name__)
 
