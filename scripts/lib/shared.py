@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-VALID_MODES = ("baseline", "mcp_only", "hybrid")
+VALID_MODES = ("baseline", "mcp_only", "hybrid", "cli")
 MODE_SUFFIXES = ("_hybrid", "_mcp_only", "_baseline")
 
 

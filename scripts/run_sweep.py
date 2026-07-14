@@ -43,7 +43,7 @@ logger = logging.getLogger("run_sweep")
 
 PROJECT_ROOT = _SCRIPTS_DIR.parent
 
-ALL_MODES = ("baseline", "mcp_only", "hybrid")
+ALL_MODES = ("baseline", "mcp_only", "hybrid", "cli")
 
 # ---------------------------------------------------------------------------
 # Data

@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import base64
 import json
 import logging
 import os
@@ -55,6 +56,11 @@ from agents.harnesses.claude.mcp.sourcegraph import (
     build_system_prompt as _build_mcp_preamble,
 )
 
+# CLI-arm (sgx) preamble builder — the cli arm's analog of the MCP preamble
+from agents.harnesses.claude.cli.sgx import (
+    build_system_prompt as _build_cli_preamble,
+)
+
 # Scorer trust boundary — single definition of "infra failure vs real score",
 # shared by every scoring entry point in this file and by code_patch.validate.
 sys.path.insert(0, str(REPO_ROOT / "lib"))
@@ -69,7 +75,7 @@ HEALTH_CHECK_SH = REPO_ROOT / "scripts" / "sandbox" / "health_check.sh"
 EB_VERIFY_LIB = REPO_ROOT / "lib" / "eb_verify"
 
 
-VALID_MODES = ("baseline", "mcp_only", "hybrid")
+VALID_MODES = ("baseline", "mcp_only", "hybrid", "cli")
 
 _DEFAULT_MCP_URL = "https://demo.sourcegraph.com/.api/mcp/all"
 _raw_mcp_url = os.environ.get("SOURCEGRAPH_MCP_URL", _DEFAULT_MCP_URL)
@@ -79,6 +85,14 @@ SOURCEGRAPH_MCP_ENDPOINT = (
 )
 # Note: MCP is configured via .mcp.json files, not `claude mcp add`
 # (the CLI command had race conditions causing intermittent needs-auth)
+
+# sgx (cli arm) endpoint. sg_cli.py hardcodes the v1 tool names
+# (sg_keyword_search, sg_read_file, ...) which the `/.api/mcp/v1` endpoint
+# serves; the MCP arms use the un-prefixed tools on `/.api/mcp/all`. Derive the
+# v1 URL from the same base host so both arms point at one Sourcegraph instance.
+SGX_ENDPOINT = f"{SOURCEGRAPH_MCP_ENDPOINT.split('/.api/mcp/')[0]}/.api/mcp/v1"
+# The stdlib-only CLI uploaded into the container for the cli arm.
+SGX_CLI_SRC = REPO_ROOT / "agents" / "harnesses" / "claude" / "mcp" / "sg_cli.py"
 
 
 @dataclass(frozen=True)
@@ -479,15 +493,21 @@ def _build_instruction_text(
 
     instruction_text = instruction.read_text()
 
-    # Build MCP preamble for non-baseline modes
+    # Build the retrieval preamble for non-baseline modes. mcp_only/hybrid get
+    # the Sourcegraph MCP preamble; the cli arm gets the sgx CLI preamble (same
+    # remote reach, exposed as a shell command, no MCP tools). baseline gets
+    # none.
     preamble_parts: list[str] = []
-    if mode in ("mcp_only", "hybrid"):
-        # Mode-specific preamble from the sourcegraph module
-        mcp_preamble = _build_mcp_preamble(mode=mode, repos=repos)
-        if mcp_preamble:
-            preamble_parts.append(mcp_preamble)
+    if mode in ("mcp_only", "hybrid", "cli"):
+        if mode == "cli":
+            retrieval_preamble = _build_cli_preamble(mode=mode, repos=repos)
+        else:
+            retrieval_preamble = _build_mcp_preamble(mode=mode, repos=repos)
+        if retrieval_preamble:
+            preamble_parts.append(retrieval_preamble)
 
-        # Append instruction_mcp.md content if it exists
+        # Append instruction_mcp.md content if it exists (remote-retrieval task
+        # guidance applies to both the MCP and cli arms).
         instruction_mcp = task_dir / "instruction_mcp.md"
         if instruction_mcp.exists():
             preamble_parts.append(instruction_mcp.read_text())
@@ -2017,6 +2037,105 @@ def _configure_mcp(container_id: str, mode: str) -> bool:
     return handshake_ok
 
 
+def _install_sgx(container_id: str, mode: str) -> bool:
+    """Install the `sgx` Bash-composable Sourcegraph retrieval CLI (cli arm).
+
+    The cli arm has the same remote reach as the MCP arms but exposes it as a
+    plain executable (/usr/local/bin/sgx) instead of registered MCP tools — NO
+    .mcp.json is written, which keeps the agent's tool prefix lean and is the
+    whole experimental point. sgx is stateless: each invocation is a JSON-RPC
+    tools/call POST to the baked SG_URL. The /bin/sh wrapper bakes the endpoint
+    and token defaults (env-overridable) so sgx works even inside Task subagents
+    whose process env is not inherited.
+
+    Analogous to _configure_mcp: returns True on a verified install (or when the
+    mode is not cli), False when the post-install probe fails. The caller treats
+    False as a HARD gate and routes the run to the infra-error re-run channel — a
+    silently-shadowed or missing sgx would run a baseline (local-only) trial
+    under a "cli" label and corrupt the arm comparison.
+    """
+    if mode != "cli":
+        return True
+
+    sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
+    if not sg_token:
+        logger.warning(
+            "SOURCEGRAPH_ACCESS_TOKEN not set; sgx will not authenticate"
+        )
+
+    if not SGX_CLI_SRC.exists():
+        logger.error("sgx source not found at %s", SGX_CLI_SRC)
+        return False
+
+    logger.info("Installing sgx CLI (mode=%s, endpoint=%s)", mode, SGX_ENDPOINT)
+
+    # Step 1: upload the stdlib-only CLI to /usr/local/lib (root-owned path).
+    _docker_cp(str(SGX_CLI_SRC), f"{container_id}:/usr/local/lib/sg_cli.py")
+
+    # Step 2: ensure a python interpreter exists (apt/apk/yum fallback ladder).
+    _docker_exec(
+        container_id,
+        [
+            "sh",
+            "-c",
+            "command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || { "
+            "(apt-get update && apt-get install -y --no-install-recommends python3) 2>/dev/null || "
+            "(apk add --no-cache python3) 2>/dev/null || "
+            "(yum install -y python3) 2>/dev/null || true; }",
+        ],
+        timeout=300,
+    )
+
+    # Step 3: build the /bin/sh wrapper baking SG_URL + token defaults
+    # (env-overridable). base64-encoded to sidestep shell quoting of the token.
+    wrapper = (
+        "#!/bin/sh\n"
+        f'export SG_URL="${{SG_URL:-{SGX_ENDPOINT}}}"\n'
+        "export SOURCEGRAPH_ACCESS_TOKEN="
+        f'"${{SOURCEGRAPH_ACCESS_TOKEN:-{sg_token}}}"\n'
+        'exec "$(command -v python3 || command -v python)" '
+        '/usr/local/lib/sg_cli.py "$@"\n'
+    )
+    wrapper_b64 = base64.b64encode(wrapper.encode()).decode()
+    _docker_exec(
+        container_id,
+        [
+            "sh",
+            "-c",
+            f"echo '{wrapper_b64}' | base64 -d > /usr/local/bin/sgx && "
+            "chmod 755 /usr/local/bin/sgx /usr/local/lib/sg_cli.py",
+        ],
+    )
+
+    # Step 4: verify PATH resolves to OUR wrapper. The grep on the literal usage
+    # header proves sgx is not some image-provided binary of the same name; a
+    # broken or shadowed install must fail the arm loudly (--help exits 0 and
+    # prints USAGE before the token check, so this probe needs no token).
+    probe = _docker_exec(
+        container_id,
+        [
+            "sh",
+            "-c",
+            'sgx --help 2>/dev/null | grep -q "usage: sgx" '
+            "&& echo SG_CLI_OK || echo SG_CLI_FAIL",
+        ],
+    )
+    if "SG_CLI_OK" not in (probe.stdout or ""):
+        logger.error(
+            "sgx CLI failed to install (missing, broken, or shadowed in PATH): "
+            "stdout=%r stderr=%r",
+            probe.stdout,
+            probe.stderr,
+        )
+        return False
+
+    logger.info(
+        "sgx CLI installed at /usr/local/bin/sgx (%s); no MCP registered",
+        SGX_ENDPOINT,
+    )
+    return True
+
+
 def _sum_model_usage(model_usage: dict) -> tuple[int, int, float]:
     """Sum token counts and cost across all models in a modelUsage dict.
 
@@ -2394,6 +2513,31 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 _save_results(result, task_data, output_dir, config)
                 return result
 
+        # --- Install sgx CLI if this is the cli arm ---
+        # The cli arm installs the sgx retrieval CLI instead of registering MCP.
+        # No .mcp.json is written (the lean, no-MCP tool prefix is the point).
+        # Like the MCP pre-flight above, a failed install is a HARD gate: a
+        # silently-shadowed or missing sgx would run a baseline (local-only)
+        # trial under a "cli" label and corrupt the arm comparison.
+        if config.mode == "cli":
+            if not _install_sgx(container_id, config.mode):
+                logger.error(
+                    "sgx install FAILED for mode=cli — routing to infra-error "
+                    "re-run channel (not a scored degraded run)"
+                )
+                result.phase = "cli_infra_error"
+                result.status = RUN_STATUS_INVALID
+                result.success = False
+                result.failure_class = "infra_sgx_install"
+                result.error = (
+                    "sgx CLI install failed: binary missing, broken, or shadowed "
+                    "in PATH. The cli arm cannot run validly; recorded as infra "
+                    "error for re-run."
+                )
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
+
         # --- Dry run stops here ---
         if config.dry_run:
             result.phase = "dry_run_complete"
@@ -2423,6 +2567,21 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                     "SOURCEGRAPH_ACCESS_TOKEN not set in environment; "
                     "MCP endpoint may not authenticate (mode=%s)",
                     config.mode,
+                )
+
+        # The cli arm: pass the Sourcegraph token into the agent env too so sgx
+        # authenticates from any shell context. The /usr/local/bin/sgx wrapper
+        # already bakes the token as a fallback default; this is belt-and-
+        # suspenders for contexts that do inherit the process env. No .mcp.json
+        # and no --mcp-config are written for this arm — that is deliberate.
+        if config.mode == "cli":
+            sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
+            if sg_token:
+                env_extra["SOURCEGRAPH_ACCESS_TOKEN"] = sg_token
+            else:
+                logger.warning(
+                    "SOURCEGRAPH_ACCESS_TOKEN not set in environment; sgx will "
+                    "rely on the wrapper's baked token (mode=cli)"
                 )
 
         if config.account is not None:

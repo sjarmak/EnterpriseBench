@@ -75,7 +75,7 @@ class TaskInfo:
     toml_path: Path
 
 
-VALID_MODES = ("baseline", "mcp_only", "hybrid")
+VALID_MODES = ("baseline", "mcp_only", "hybrid", "cli")
 
 
 @dataclass

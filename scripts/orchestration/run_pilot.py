@@ -29,7 +29,7 @@ RUN_TASK_SCRIPT = REPO_ROOT / "scripts" / "orchestration" / "run_task.py"
 ABLATION_SCRIPT = REPO_ROOT / "scripts" / "validation" / "run_crnt_ablation.sh"
 RESULTS_DIR = REPO_ROOT / "results" / "phase1_pilot"
 
-VALID_MODES = frozenset({"baseline", "mcp_only", "hybrid"})
+VALID_MODES = frozenset({"baseline", "mcp_only", "hybrid", "cli"})
 REQUIRED_FIELDS = frozenset(
     {"task_id", "task_dir", "mode", "rep_index", "account_id", "output_dir"}
 )
