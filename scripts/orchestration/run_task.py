@@ -21,7 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import Optional
+from typing import Iterator, Optional
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -287,6 +287,14 @@ def _load_oauth_token(account: int) -> str:
 
 
 DEFAULT_OAUTH_AGENT_COMMAND = "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json -p"
+
+# The sandbox registers one MCP server, `sourcegraph` (see _write_mcp_config), so
+# every genuine tool is named `mcp__sourcegraph__<tool>`. Matched by prefix rather
+# than an allow-list: a gate that invalidates on zero must not fire because the
+# agent reached for a sourcegraph tool added after this code shipped. The trailing
+# `__` is load-bearing — without it the prefix also spans a foreign server whose
+# name merely starts with `sourcegraph`.
+_MCP_TOOL_PREFIX = "mcp__sourcegraph__"
 
 
 def _parse_task(toml_path: Path) -> dict:
@@ -2040,6 +2048,64 @@ def _sum_model_usage(model_usage: dict) -> tuple[int, int, float]:
     return total_input, total_output, total_cost
 
 
+def _iter_agent_records(content: str) -> Iterator[dict]:
+    """Yield the JSON records of an agent stdout log, whatever its format.
+
+    ``--output-format json`` writes one object for the whole run; ``stream-json``
+    writes one object per line, interleaved with plain-text container noise.
+    """
+    try:
+        whole_file = json.loads(content)
+    except json.JSONDecodeError:
+        pass
+    else:
+        if isinstance(whole_file, dict):
+            yield whole_file
+        return
+
+    for line in content.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            yield record
+
+
+def _is_mcp_tool_use(block: dict) -> bool:
+    """True for a tool_use block (or flat record) naming a Sourcegraph MCP tool."""
+    if block.get("type") != "tool_use":
+        return False
+    name = block.get("name") or block.get("tool_name")
+    return isinstance(name, str) and name.startswith(_MCP_TOOL_PREFIX)
+
+
+def _count_mcp_tool_calls(record: dict) -> int:
+    """Count Sourcegraph MCP tool-use blocks in one agent stdout record.
+
+    Only a genuine tool_use counts: a substring scan of the raw log also matches
+    the agent *narrating* a tool name or a tool_result echoing one back, and this
+    count gates mcp_only invalidation (:func:`_route_zero_mcp_run`), so a false
+    positive scores a run that made no MCP calls into the mcp_only mean.
+
+    Records come flat (top-level ``type=tool_use``) or nested (``type=assistant``
+    carrying ``message.content[]`` blocks).
+    """
+    if _is_mcp_tool_use(record):
+        return 1
+
+    message = record.get("message", record)
+    blocks = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(blocks, list):
+        return 0
+    return sum(
+        1 for block in blocks if isinstance(block, dict) and _is_mcp_tool_use(block)
+    )
+
+
 def _extract_tool_usage(output_dir: Path) -> dict:
     """Parse the agent's stdout log for tool-usage metadata.
 
@@ -2063,41 +2129,20 @@ def _extract_tool_usage(output_dir: Path) -> dict:
     if not content.strip():
         return usage
 
-    # Counted on the raw log, before the format branch below: the count must
-    # not depend on --output-format, since the zero-MCP gate reads it.
-    usage["mcp_tool_calls"] = content.count("mcp__sourcegraph__")
+    for record in _iter_agent_records(content):
+        usage["mcp_tool_calls"] += _count_mcp_tool_calls(record)
 
-    # Claude Code --output-format json produces a JSON object on stdout.
-    # Try to parse the entire output as JSON first.
-    try:
-        data = json.loads(content)
-        inp, out, cost = _sum_model_usage(data.get("modelUsage", {}))
-        usage["total_input_tokens"] = inp
-        usage["total_output_tokens"] = out
-        usage["cost_usd"] = cost or data.get("total_cost_usd", 0.0)
-        usage["num_turns"] = data.get("numTurns", 0)
-        return usage
-    except (json.JSONDecodeError, ValueError):
-        pass
+        model_usage = record.get("modelUsage")
+        if isinstance(model_usage, dict):
+            inp, out, cost = _sum_model_usage(model_usage)
+            usage["total_input_tokens"] = inp
+            usage["total_output_tokens"] = out
+            usage["cost_usd"] = cost or record.get("total_cost_usd", 0.0)
 
-    # Fallback: scan stream-json lines for the result message and modelUsage
-    for line in content.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            obj = json.loads(line)
-            if "modelUsage" in obj:
-                inp, out, cost = _sum_model_usage(obj["modelUsage"])
-                usage["total_input_tokens"] = inp
-                usage["total_output_tokens"] = out
-                usage["cost_usd"] = cost or obj.get("total_cost_usd", 0.0)
-            if "numTurns" in obj:
-                usage["num_turns"] = max(usage["num_turns"], obj["numTurns"])
-            if "num_turns" in obj:
-                usage["num_turns"] = max(usage["num_turns"], obj["num_turns"])
-        except (json.JSONDecodeError, ValueError):
-            continue
+        for key in ("numTurns", "num_turns"):
+            turns = record.get(key)
+            if isinstance(turns, int):
+                usage["num_turns"] = max(usage["num_turns"], turns)
 
     return usage
 
