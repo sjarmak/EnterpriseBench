@@ -55,6 +55,10 @@ verify-crnt: ## Validate Cross-Repo Necessity Test for multi-repo tasks
 verify-expected-solutions: ## Validate expected_solution.json files
 	$(PYTHON) scripts/validation/validate_expected_solutions.py
 
+.PHONY: check-unmerged
+check-unmerged: ## Fail if a closed bead's work branch never landed on main
+	$(PYTHON) scripts/infra/check_unmerged_closed_beads.py
+
 .PHONY: analyze
 analyze: ## Run the score analysis engine (always re-scans raw runs)
 	@mkdir -p $(dir $(ANALYSIS_JSON))
