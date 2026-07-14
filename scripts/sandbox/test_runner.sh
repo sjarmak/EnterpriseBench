@@ -54,15 +54,22 @@ now_ms() {
 # held to the JSON number grammar (anchored, so "1.0abc" cannot coerce to 1.0)
 # and to the [0, 1] range (which also catches 1e400, whose strtod is +inf).
 #
-# What this is NOT is a JSON validator, and it does not claim to be one: it is a
-# structural scanner looking for one key. A payload whose detail string carries
-# stray unescaped quotes ("gap is 3" x 5" wide") can still walk to a closed root
-# and be credited, where json.loads would refuse it outright. That is a real
-# deviation, tracked separately; it is not a way to forge a score, because the
-# quotes cancel to the same token a reader would call the verdict, and any
-# desync that hides the real key also leaves the root unclosed. Nothing here
-# should be read as attesting the payload is well-formed JSON — only that the
-# score it credits is the one the verifier wrote at the root of it.
+# What this is NOT is a full JSON validator, and it does not claim to be one: it
+# is a structural scanner looking for one key. It can still credit a payload
+# json.loads would reject — {"detail": "gap is 3" x 5" wide", "score": 0.3} has
+# an unescaped quote in detail, yet the score key after the comma is real and is
+# credited as 0.3. That is fine: the malformation is confined to a value the
+# score does not depend on, and the credited number is the one the verifier
+# actually wrote.
+#
+# What it must NOT do is read a "score" key in a position JSON would not allow,
+# because that is where a score gets forged. {"detail": "x""score": 1.0} is a
+# scoreless verdict with the agent text run straight into a fake key; the two
+# strings abut with no comma, which valid JSON never does. The key-position
+# check in the walker (a key follows only "{" or ",") rejects it, so an agent
+# cannot inject a score the verifier never attested. The line to hold is not
+# "well-formed JSON" but "the score key sits where a key may sit" — enough that
+# the credited score is one the verifier wrote, never one smuggled beside it.
 #
 # LC_ALL=C is load-bearing twice. mawk (Debian's default, and the task images')
 # is byte-based, but gawk under a UTF-8 locale makes substr()/length()
@@ -83,6 +90,7 @@ parse_score() {
         n = length(buf)
         depth = 0; rootClosed = 0; ok = 1
         scoreCount = 0; keyDepth = -1; keyVal = ""
+        prevSig = ""
         i = 1
         while (i <= n) {
             c = substr(buf, i, 1)
@@ -125,8 +133,22 @@ parse_score() {
                 # only lengthen, so the span check alone rejects every forgery.
                 k = j + 1
                 while (k <= n && substr(buf, k, 1) ~ /[ \t\r\n]/) k++
-                if (k <= n && substr(buf, k, 1) == ":" &&
-                    j - i == 6 && substr(buf, i + 1, 5) == "score") {
+                isKey = (k <= n && substr(buf, k, 1) == ":")
+
+                # A key may sit only where JSON puts one: first thing after "{"
+                # or after a ",". Any other predecessor means two values abut
+                # with no separator, which no JSON emitter produces. Without this
+                # the walker credits {"detail": "x""score": 1.0} — a scoreless
+                # verdict a verifier that failed to escape agent text into detail
+                # would print, letting the agent inject a "score" the verifier
+                # never wrote. json.loads refuses those bytes; so does this now.
+                # (A comma-separated ,"score":1.0 the agent smuggles in IS valid
+                # JSON that every parser reads as a score — a verifier escaping
+                # bug, not one this layer can or should second-guess. No literal
+                # apostrophe in this block: it sits inside the awk single quote.)
+                if (isKey && prevSig != "{" && prevSig != ",") { ok = 0; break }
+
+                if (isKey && j - i == 6 && substr(buf, i + 1, 5) == "score") {
                     scoreCount++
                     if (scoreCount == 1) {
                         keyDepth = depth
@@ -157,11 +179,16 @@ parse_score() {
                         keyVal = substr(buf, start, v - start)
                     }
                 }
+                prevSig = "\""
                 i = j + 1; continue
             }
 
-            if (c == "{" || c == "[") { depth++; i++; continue }
-            if (c == "}" || c == "]") { depth--; if (depth == 0) rootClosed = 1; i++; continue }
+            if (c == "{" || c == "[") { depth++; prevSig = c; i++; continue }
+            if (c == "}" || c == "]") { depth--; if (depth == 0) rootClosed = 1; prevSig = c; i++; continue }
+            # Track the last significant byte for the key-position check above;
+            # whitespace is not significant, so "," then a newline then a key
+            # still reads the key as legally placed.
+            if (c !~ /[ \t\r\n]/) prevSig = c
             i++
         }
         if (ok && rootClosed && scoreCount == 1 && keyDepth == 1 &&
