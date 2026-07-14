@@ -28,40 +28,32 @@ now_ms() {
     date +%s%3N 2>/dev/null || date +%s000
 }
 
-# The score a checkpoint actually earned, or the empty string if it earned none.
+# The score a checkpoint actually earned, or the empty string if it earned none:
+# a string, null, NaN, a missing key or an out-of-range number all mean "no
+# verdict", which run_verifier routes to the infra chain rather than scoring.
 #
-# Matches the full JSON number grammar — including the exponent form json.dumps
-# emits for small floats, where a [0-9.]+ pattern would take the leading "1" of
-# 1e-05 and credit full marks — and echoes the value back only if it really is a
-# number in [0, 1]. A string, null, NaN, a missing key, an out-of-range number:
-# all yield the empty string, which run_verifier reads as "reached no verdict".
-# Anything else fabricates a verdict out of output the shell could not parse, and
-# no downstream check can catch that: a 0.0 invented here is indistinguishable
-# from a genuine wrong answer by the time the Python guard sees it.
+# The exponent branch is not decoration: json.dumps emits 1e-05 for any small
+# float, and a [0-9.]+ pattern takes the leading "1" of it and credits full marks.
 #
-# The tolerance mirrors eb_verify.scorer_guard._SCORE_EPSILON so the shell and the
-# guard admit exactly the same values; the guard clamps the slop away.
+# The 1e-6 tolerance mirrors eb_verify.scorer_guard._SCORE_EPSILON, so the shell
+# and the guard admit exactly the same values.
 #
 # LC_ALL=C is load-bearing: mawk (Debian's default awk, and the one in the task
 # images) converts strings to numbers with strtod, which takes its decimal
 # separator from LC_NUMERIC. Under a comma locale "1.5" + 0 is 1, so the range
 # check would wave a 1.5 through. JSON's separator is always a period.
 parse_score() {
-    # Exactly one "score" key, or the shell cannot say which is the verdict: a
-    # regex cannot see nesting, so {"detail": {"score": 1.0}, "score": 0.0} would
-    # award full marks on a failed checkpoint. Reading the last match instead only
-    # moves the hole to the mirror payload, so refuse both — the rule this script
-    # already applies to every score it cannot read.
-    # Counted by piping grep -o through awk: grep -c counts matching LINES, so a
-    # one-line payload carrying both keys would count as 1, and wc is not among
-    # this script's declared dependencies while awk is.
-    [ "$(printf '%s' "$1" | grep -oP '"score"\s*:' | awk 'END { print NR }')" -eq 1 ] || return 0
+    # Exactly one "score" key: a regex cannot see nesting, so
+    # {"detail": {"score": 1.0}, "score": 0.0} would award full marks on a failed
+    # checkpoint. Counted with grep -o piped to awk, not grep -c (which counts
+    # matching LINES, so a one-line payload carrying both keys would count 1) and
+    # not wc (not among this script's declared dependencies, while awk is).
+    printf '%s' "$1" | grep -oP '"score"\s*:' | awk 'END { exit NR != 1 }' || return 0
 
     # The lookahead makes the number span the WHOLE value token: without it the
-    # invalid 00.5 matches its leading 0 and scores a fabricated 0.0, the same
-    # partial-match-as-verdict shape as the 1e-05 bug. `$` is in the alternation
-    # because grep is line-oriented, and a pretty-printed payload puts the closing
-    # brace of a trailing "score" on the next line.
+    # invalid 00.5 matches its leading 0 and scores a fabricated 0.0. `$` is in the
+    # alternation because grep is line-oriented, and a pretty-printed payload puts
+    # the closing brace of a trailing "score" on the next line.
     printf '%s' "$1" \
       | grep -oP '"score"\s*:\s*\K-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?(?=\s*(?:[,}]|$))' \
       | LC_ALL=C awk '$0 + 0 >= -1e-6 && $0 + 0 <= 1 + 1e-6'
@@ -144,11 +136,8 @@ run_verifier() {
     VERIFIER_DURATION_MS=$(( end - start ))
     VERIFIER_RAN="true"
 
-    # The score carried by every VERIFIER_JSON the branches below fabricate: each
-    # is a literal 0.0, either attested verifier_ran=false (so the scorer refuses
-    # to score it) or a deliberate, attributed 0.0 — a timeout, or an agent
-    # artifact too malformed to check. The good path overwrites it with the
-    # verifier's own score.
+    # Default for the branches below that return early; every JSON they fabricate
+    # carries a literal 0.0. The good path overwrites it with the verifier's score.
     VERIFIER_SCORE="0.0"
 
     local verdict_score
@@ -344,8 +333,8 @@ for verifier in "$VERIFIER_DIR"/*.sh; do
     echo "--- Checkpoint: $name (weight=$weight, timeout=${checkpoint_timeout}s) ---" >&2
     run_verifier "$verifier" "$checkpoint_timeout"
 
-    # run_verifier parsed and range-checked this, and refused to attest any
-    # checkpoint whose score it could not: a number in [0, 1] on every path.
+    # Already parsed and range-checked by run_verifier — never re-parse
+    # VERIFIER_JSON, which is raw verifier stdout on the good path.
     checkpoint_score="$VERIFIER_SCORE"
 
     # Extract passed from verifier JSON
@@ -366,9 +355,8 @@ for verifier in "$VERIFIER_DIR"/*.sh; do
         echo "  FAIL (score=$checkpoint_score)" >&2
     fi
 
-    # Accumulate weighted score using awk for float math. LC_ALL=C because under a
-    # comma locale mawk's %.4f prints "0,5000", and task_score stops being a JSON
-    # number at all.
+    # awk for float math; LC_ALL=C for the same mawk locale reason as parse_score
+    # (a comma locale prints "0,5000" and task_score stops being a JSON number).
     WEIGHTED_SCORE=$(LC_ALL=C awk "BEGIN { printf \"%.4f\", $WEIGHTED_SCORE + ($checkpoint_score * $weight) }")
 
     # Build checkpoint result JSON entry (detail is already a quoted JSON
