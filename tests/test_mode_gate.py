@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 sys.path.insert(
     0, str(Path(__file__).resolve().parent.parent / "scripts" / "orchestration")
 )
@@ -27,6 +29,7 @@ sys.path.insert(
 import run_task
 from mode_gate import (
     AGENT_USER,
+    GATED_MODES,
     IneligibleTask,
     check_eligibility,
     lockdown_commands,
@@ -49,11 +52,44 @@ def _task(repos=(("ansible", "ansible"),), required=("answer",), optional=()):
 # --- which arms get gated -------------------------------------------------
 
 
-def test_only_mcp_only_is_gated():
-    assert should_gate("mcp_only") is True
-    # hybrid is MCP *plus* local by design; baseline is local-only.
-    assert should_gate("hybrid") is False
-    assert should_gate("baseline") is False
+# Every mode run_task accepts needs a deliberate answer here. Iterating
+# VALID_MODES rather than listing arms by hand is load-bearing: a mode added to
+# run_task without a decision recorded in this table would otherwise default to
+# ungated and pass silently, which is exactly how mode became prompt-only in the
+# first place (EnterpriseBench-7rc1). A new mode fails this test until someone
+# says which side of the gate it belongs on.
+EXPECTED_GATING = {
+    "baseline": False,  # local-only; the control arm.
+    "mcp_only": True,  # the ablation: local source denied at the filesystem.
+    "hybrid": False,  # MCP *plus* local by design.
+    "cli": False,  # baseline + sgx; the manipulation is the tool interface,
+    # not readability, so local source stays present.
+}
+
+
+def test_every_valid_mode_has_a_recorded_gate_decision():
+    assert set(run_task.VALID_MODES) == set(EXPECTED_GATING), (
+        "run_task.VALID_MODES and EXPECTED_GATING disagree. A new mode must "
+        "declare whether it is gated; it must not inherit ungated by default."
+    )
+
+
+def test_no_mode_is_gated_without_being_runnable():
+    """A gated mode run_task does not accept would gate nothing, silently.
+
+    The set-equality above only catches modes VALID_MODES knows about, so a
+    name added to GATED_MODES alone (typo, rename, or a mode retired from
+    VALID_MODES) would slip through it.
+    """
+    assert set(GATED_MODES) <= set(run_task.VALID_MODES), (
+        "GATED_MODES names a mode run_task cannot run: "
+        f"{sorted(set(GATED_MODES) - set(run_task.VALID_MODES))}"
+    )
+
+
+@pytest.mark.parametrize("mode", sorted(EXPECTED_GATING))
+def test_mode_is_gated_as_recorded(mode):
+    assert should_gate(mode) is EXPECTED_GATING[mode]
 
 
 # --- repo directory derivation --------------------------------------------

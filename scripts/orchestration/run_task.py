@@ -1489,20 +1489,23 @@ def _route_integrity_violation(result: "TaskRunResult", scores: dict) -> None:
 def _route_zero_mcp_run(result: "TaskRunResult", mode: str) -> None:
     """Record MCP usage for an MCP-mode run, and gate ``mcp_only`` on zero calls.
 
-    ``mcp_only`` is enforced only by a prompt preamble — local Read/Grep/Bash
-    stay available in the container. An ``mcp_only`` run that made 0 MCP calls
-    therefore delivered *baseline* tool access under an MCP label; scoring it
-    into the mcp_only mean contaminates every MCP-vs-baseline comparison. Route
-    it to the infra-error re-run channel instead.
+    ``mcp_only`` denies local source at the filesystem (``mode_gate``), so MCP
+    is the arm's only path to code. A run that made 0 MCP calls therefore never
+    retrieved source at all: whatever it scored, it did not score the retrieval
+    the arm exists to measure. That is a broken run, not a cheap one, so mark it
+    INVALID and route it to the infra-error re-run channel.
+
+    Marking it is currently all this achieves: the analysis compares ``status``
+    against ``"INVALID"`` while this writes ``"invalid"``, so the run is still
+    counted in the headline until EnterpriseBench-te9ah lands.
 
     ``hybrid`` grants both toolsets by design, so 0 MCP calls there is a
     legitimate agent choice, not an infra failure: it is flagged and still
     scored. Gating it would drop exactly the runs where the agent preferred
     local tools and bias the hybrid arm upward.
 
-    The gate is zero-vs-nonzero only. It catches a run that used no MCP at all;
-    it does not make the arm clean, since an ``mcp_only`` run that made one MCP
-    call and 300 local ones still passes.
+    The gate is zero-vs-nonzero only, and under the filesystem gate that is all
+    it needs to be: a single MCP call proves the arm's retrieval path was live.
     """
     if mode not in ("mcp_only", "hybrid"):
         return

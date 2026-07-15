@@ -1,8 +1,14 @@
 """Tests for the zero-MCP-call gate and trace/status integrity in run_task.py.
 
-An ``mcp_only`` run that made 0 MCP tool calls had baseline tool access under
-an MCP label, so it is routed to the infra-error re-run channel rather than
-scored into the mcp_only mean.
+``mcp_only`` denies local source at the filesystem, so a run there that made 0
+MCP tool calls never retrieved source at all. It is marked INVALID and routed to
+the infra-error re-run channel.
+
+Note what these tests do NOT establish: that such a run is kept out of the S6.2
+headline. run_task writes ``status="invalid"`` while the analysis compares
+against ``"INVALID"``, so the classification falls through to VALID downstream
+and the run is still counted (EnterpriseBench-te9ah). These tests assert the
+routing this module owns, not an exclusion it does not currently achieve.
 
 ``hybrid`` is deliberately NOT gated: that mode grants both toolsets, so 0 MCP
 calls is a legitimate agent choice. Invalidating those runs would delete
@@ -55,12 +61,18 @@ class TestZeroMcpGateMcpOnly:
         assert result.success is False
         assert result.tool_usage["mcp_used"] is False
 
-    def test_phase_excludes_run_from_the_headline(self) -> None:
-        """phase must land outside 'complete' — that is what actually excludes.
+    def test_phase_lands_outside_complete(self) -> None:
+        """phase must land in NON_COMPLETE_PHASES, which is what run_task keys on.
 
-        recompute_headline_uu17.py keeps only phase == 'complete' and
-        success is True, and run_task's phase-complete guard skips any phase
-        already in the infra-error set.
+        The phase is what stops run_task's own save-time override from
+        rewriting this result to phase="complete", success=True. That is the
+        whole of what this test claims.
+
+        Headline exclusion is a separate question and is not asserted here or
+        by the status test above: the locked clean-set path
+        (recompute_headline_uu17.locked_clean, via aggregate_mcp_clean.load_mode)
+        classifies on ``status``, and the case mismatch in
+        EnterpriseBench-te9ah means it never matches.
         """
         result = _result(0)
 

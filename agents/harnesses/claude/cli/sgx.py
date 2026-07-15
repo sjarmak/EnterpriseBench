@@ -35,10 +35,10 @@ logger = logging.getLogger(__name__)
 # the agent from burning ToolSearch calls hunting for nonexistent MCP tools.
 _HEADER = (
     "# IMPORTANT: Source Code Access — `sgx` command\n\n"
-    "**Local source files may not be present.** There are **NO MCP tools in "
-    "this environment** — all remote code retrieval is via the `sgx` shell "
-    "command (run it in Bash; do not search for MCP tools). Use `sgx` to search "
-    "and read code remotely via Sourcegraph before making any changes."
+    "There are **NO MCP tools in this environment** — all remote code "
+    "retrieval is via the `sgx` shell command (run it in Bash; do not search "
+    "for MCP tools). Use `sgx` to search and read code across repositories via "
+    "Sourcegraph."
 )
 
 _USAGE = """\
