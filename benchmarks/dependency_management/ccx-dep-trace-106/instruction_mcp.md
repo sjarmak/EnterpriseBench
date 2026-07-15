@@ -75,7 +75,15 @@ If MCP search returns no results:
 
 ## Your Task
 
-Trace how GCC's optimization passes are registered and executed during compilation. Find all C/C++ source files in `gcc-mirror/gcc` that: 1. Define the pass execution order (`gcc/passes.def` — the master list of all passes). 2. Implement the pass manager that orchestrates pass execution (`gcc/passes.cc`). 3. Define the `opt_pass` base class and pass manager interface (`gcc/pass_manager.h`). 4. Implement a concrete GIMPLE optimization pass — specifically dead code elimination (`gcc/tree-ssa-dce.cc`). 5. Define the tree-SSA pass header (`gcc/tree-pass.h`) that declares pass registration macros. Report the repo, file path, and key struct/function name for each file.
+Trace how GCC's optimization passes are registered and executed during compilation. Find all C/C++ source files in `gcc-mirror/gcc` that:
+
+1. Define the master list that sets the ordering and registration of all optimization passes.
+2. Implement the pass manager that orchestrates pass execution.
+3. Define the base class that every optimization pass inherits from, together with the pass-manager interface.
+4. Implement a concrete GIMPLE optimization pass — specifically one that performs dead code elimination on the tree-SSA representation.
+5. Define the tree-SSA pass header that declares the pass registration macros.
+
+Report the repo, file path, and key struct/function name for each file.
 
 ## Context
 
@@ -91,7 +99,7 @@ No local repositories are pre-checked out.
 
 ## Output Format
 
-Create a file at `/workspace/answer.json` with your findings in the following structure:
+Create a file at `/workspace/agent_output/answer.json` with your findings in the following structure:
 
 ```json
 {

@@ -24,9 +24,9 @@ Use the published task contract:
 
 - `TASK_WORKDIR=/workspace`
 - `TASK_REPO_ROOT=/workspace`
-- `TASK_OUTPUT=/workspace/answer.json`
+- `TASK_OUTPUT=/workspace/agent_output/answer.json`
 
-Create a file at `TASK_OUTPUT` (`/workspace/answer.json`) with your findings in the following structure:
+Create a file at `TASK_OUTPUT` (`/workspace/agent_output/answer.json`) with your findings in the following structure:
 
 ```json
 {
