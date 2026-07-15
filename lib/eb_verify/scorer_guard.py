@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Union
 
+from eb_verify.redact import safe_detail
+
 # Sentinel a verifier emits in its ``detail`` to declare, on purpose, that the
 # verifier harness itself failed (not that the agent failed the task). Kept
 # explicit so the guard never has to guess from an arbitrary Python traceback —
@@ -54,10 +56,6 @@ _INFRA_DETAIL_SIGNATURES = (INFRA_SENTINEL, _HARNESS_IMPORT_FAILURE)
 # filters both paths on one key. Change it here and there together.
 NO_VERDICT_REASON = "verifier_did_not_run"
 
-# Cap on evidence copied into an InfraError, so a runaway verifier cannot flood
-# reward.txt and the results payload.
-_EVIDENCE_CHARS = 2000
-
 # Positive attestation, emitted per checkpoint by test_runner.sh: "this verifier
 # reached a verdict". Its ABSENCE — not the presence of any known-bad string —
 # routes a checkpoint to an infra error, so an unrecognised never-ran mode fails
@@ -65,14 +63,41 @@ _EVIDENCE_CHARS = 2000
 _ATTESTATION = "verifier_ran"
 
 
+def _safe_context(value: object) -> object:
+    """Scrub every string an :class:`InfraError` context carries, at any depth.
+
+    Non-strings pass through by identity: ``returncode`` and ``timeout_seconds``
+    must stay an int and a float for the results payload, and neither shape can
+    carry a secret.
+    """
+    if isinstance(value, str):
+        return safe_detail(value)
+    if isinstance(value, dict):
+        return {key: _safe_context(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_safe_context(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True)
 class InfraError:
-    """A scoring-infrastructure failure. Never a legitimate score."""
+    """A scoring-infrastructure failure. Never a legitimate score.
+
+    ``detail`` and ``context`` are bounded and redacted on construction, so no
+    caller has to remember to do it and none can forget. This is the choke point
+    for the whole ``verifier_infra_error`` channel — every path that reports one
+    builds it here — and ``chain_runner`` reuses it for ``session_failure``, so
+    both invalidity channels are scrubbed by the same rule (bead otgzo).
+    """
 
     reason: str  # machine key, e.g. "empty_verifier_output"
     stage: str  # scoring stage, e.g. "deterministic_scoring" | "llm_judge"
     detail: str  # human-readable explanation
     context: dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "detail", safe_detail(self.detail))
+        object.__setattr__(self, "context", _safe_context(self.context))
 
     @property
     def cause(self) -> str:
@@ -190,7 +215,7 @@ def guard_verifier_output(
             reason="malformed_verifier_output",
             stage=stage,
             detail=f"test.sh output was not valid JSON: {exc}",
-            context={"returncode": returncode, "raw_output": text[:_EVIDENCE_CHARS]},
+            context={"returncode": returncode, "raw_output": text},
         )
 
     if not isinstance(scores, dict):
@@ -198,7 +223,7 @@ def guard_verifier_output(
             reason="malformed_verifier_output",
             stage=stage,
             detail=f"test.sh output was not a JSON object (got {type(scores).__name__})",
-            context={"returncode": returncode, "raw_output": text[:_EVIDENCE_CHARS]},
+            context={"returncode": returncode, "raw_output": text},
         )
 
     reported_error = scores.get("error")
@@ -265,7 +290,7 @@ def guard_verifier_output(
         # with no clamp, so a NaN/Infinity here writes a nan/inf task_score
         # straight into published results, and a 999 writes a 999.
         if "score" in cp and not is_valid_score(cp["score"]):
-            bad_score = repr(cp["score"])[:_EVIDENCE_CHARS]
+            bad_score = repr(cp["score"])
             return InfraError(
                 reason="malformed_verifier_output",
                 stage=stage,
@@ -354,7 +379,7 @@ def guard_checkpoint_verdict(
         )
 
     text = stdout.strip()
-    err = stderr.strip()[:_EVIDENCE_CHARS]
+    err = stderr.strip()
 
     # Checked before emptiness: this is the docker-cp / PYTHONPATH regression
     # (beads hktt/pt0n, ssikq), and it surfaces as empty stdout + exit 1. The
@@ -373,37 +398,34 @@ def guard_checkpoint_verdict(
             stderr=err,
         )
 
-    raw = text[:_EVIDENCE_CHARS]
-
     try:
         verdict = json.loads(text)
     except json.JSONDecodeError as exc:
         return did_not_run(
             "malformed_output",
             f"verifier output was not valid JSON: {exc}",
-            raw_output=raw,
+            raw_output=text,
         )
 
     if not isinstance(verdict, dict):
         return did_not_run(
             "malformed_output",
             f"verifier output was not a JSON object (got {type(verdict).__name__})",
-            raw_output=raw,
+            raw_output=text,
         )
 
     if "score" not in verdict:
         return did_not_run(
             "no_score_field",
             "verifier output carried no 'score' field",
-            raw_output=raw,
+            raw_output=text,
         )
 
     if not is_valid_score(verdict["score"]):
         return did_not_run(
             "non_numeric_score",
-            "verifier 'score' was not a real number in [0.0, 1.0]: "
-            f"{repr(verdict['score'])[:_EVIDENCE_CHARS]}",
-            raw_output=raw,
+            f"verifier 'score' was not a real number in [0.0, 1.0]: {verdict['score']!r}",
+            raw_output=text,
         )
 
     sig = _detail_infra_signature(str(verdict.get("detail", "")))

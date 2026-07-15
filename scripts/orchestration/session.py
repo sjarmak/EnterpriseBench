@@ -10,9 +10,14 @@ the previous session's committed branch.
 
 import logging
 import shutil
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT / "lib"))
+from eb_verify.redact import safe_detail
 
 from .branch_manager import (
     BranchState,
@@ -228,7 +233,13 @@ def run_session(
         )
 
     except Exception as e:
-        result.error = str(e)
-        logger.error("Session %d failed: %s", session_num, e)
+        # Scrubbed at birth, not at the sinks. `error` is read back by
+        # `ChainResult.summary` verbatim as well as wrapped into the
+        # `session_failure` channel, so redacting it downstream would leave the
+        # summary path — which prints to stdout — carrying the raw exception.
+        # The agent runs with ANTHROPIC_API_KEY in its environment and this
+        # `except` catches whatever it raises, response bodies included.
+        result.error = safe_detail(e)
+        logger.error("Session %d failed: %s", session_num, result.error)
 
     return result
