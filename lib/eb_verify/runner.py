@@ -49,6 +49,18 @@ def checkpoint_env(workspace: Path, task_dir: Path, task_id: str) -> dict[str, s
     TASK_ID is host-only — the sandbox harness (scripts/orchestration/run_task.py)
     exports WORKSPACE, TASK_DIR and PYTHONPATH but not TASK_ID, so a check script that
     reads it would work here and not where scoring really happens.
+
+    PYTHONSAFEPATH=1 (py>=3.11) drops the cwd/script-dir entry from sys.path[0].
+    Checkpoints run with cwd=workspace — the directory the agent writes — and exec
+    scorers as `python -m eb_verify.…`, whose `-m` puts cwd AHEAD of PYTHONPATH. Without
+    this flag an agent that plants /workspace/eb_verify/plugins/… shadows the real scorer
+    and mints its own verdict (bead 5cfxa). The sandbox harness sets the same flag; this
+    is the host-runner half of that guard.
+
+    The flag is a no-op below py3.11, where the shadow stays open on this host path. The
+    sandbox harness (run_task.py) is version-independent — it also scores from a cwd the
+    agent cannot write — but this runner still passes cwd=workspace, so a version-
+    independent cwd control here is tracked as follow-up (see bead 5cfxa notes).
     """
     env = os.environ.copy()
     env["WORKSPACE"] = str(workspace)
@@ -57,6 +69,7 @@ def checkpoint_env(workspace: Path, task_dir: Path, task_id: str) -> dict[str, s
     env["PYTHONPATH"] = os.pathsep.join(
         p for p in (str(_LIB_DIR), env.get("PYTHONPATH", "")) if p
     )
+    env["PYTHONSAFEPATH"] = "1"
     return env
 
 
