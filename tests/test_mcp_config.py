@@ -552,48 +552,129 @@ class TestPreAgentReadabilityGate:
 
 
 class TestVerifyMcpEndpoint:
-    """Verify the direct HTTP endpoint check for reliable MCP auth."""
+    """Verify the direct HTTP endpoint check for reliable MCP auth.
+
+    The token is staged in a 0600 in-container file and read by curl via
+    ``-H @file`` — it must never appear in argv (EnterpriseBench-rryas.5). Each
+    test patches ``_docker_cp`` (the header stager) and routes ``_docker_exec``
+    by command so chmod / curl / rm are handled independently of curl retries.
+    """
+
+    @staticmethod
+    def _exec_router(curl_results):
+        """A _docker_exec stand-in: curl calls pull from ``curl_results`` (an
+        iterator of CompletedProcess-likes); chmod / rm return benign success."""
+        it = iter(curl_results)
+
+        def _exec(container_id, cmd, timeout=120, workdir="/workspace"):
+            if cmd and cmd[0] == "curl":
+                return next(it)
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        return _exec
 
     def test_returns_true_on_success(self) -> None:
         """Successful curl (rc=0) should return True."""
-        mock_result = MagicMock(returncode=0, stdout="200", stderr="")
+        ok = MagicMock(returncode=0, stdout="200", stderr="")
 
-        with patch("run_task._docker_exec", return_value=mock_result):
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch("run_task._docker_exec", side_effect=self._exec_router([ok])),
+        ):
             assert _verify_mcp_endpoint("test-container", "sgp_token") is True
 
     def test_retries_on_failure(self) -> None:
-        """Should retry up to 5 times on failure."""
+        """Should retry on failure, then succeed."""
         fail = MagicMock(returncode=1, stdout="000", stderr="Connection refused")
         success = MagicMock(returncode=0, stdout="200", stderr="")
 
-        with patch("run_task._docker_exec", side_effect=[fail, fail, success]):
-            with patch("run_task.time.sleep"):  # skip actual sleep
-                assert _verify_mcp_endpoint("test-container", "sgp_token") is True
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch(
+                "run_task._docker_exec",
+                side_effect=self._exec_router([fail, fail, success]),
+            ),
+            patch("run_task.time.sleep"),
+        ):
+            assert _verify_mcp_endpoint("test-container", "sgp_token") is True
 
     def test_returns_false_after_max_retries(self) -> None:
         """Should return False after exhausting retries."""
         fail = MagicMock(returncode=1, stdout="401", stderr="Unauthorized")
 
-        with patch("run_task._docker_exec", return_value=fail):
-            with patch("run_task.time.sleep"):
-                assert _verify_mcp_endpoint("test-container", "sgp_token") is False
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch(
+                "run_task._docker_exec",
+                side_effect=self._exec_router([fail] * 5),
+            ),
+            patch("run_task.time.sleep"),
+        ):
+            assert _verify_mcp_endpoint("test-container", "sgp_token") is False
 
-    def test_uses_curl_with_auth_header(self) -> None:
-        """Curl command should include Authorization header."""
+    def test_token_never_appears_in_argv(self) -> None:
+        """rryas.5: the raw token must not appear in ANY docker exec argv; the
+        auth header is read from a file via ``-H @<path>``."""
         captured_cmds: list[list[str]] = []
+        header_writes: list[tuple[str, str]] = []
 
         def capture_exec(container_id, cmd, timeout=120, workdir="/workspace"):
             captured_cmds.append(cmd)
-            return MagicMock(returncode=0, stdout="200", stderr="")
+            if cmd and cmd[0] == "curl":
+                return MagicMock(returncode=0, stdout="200", stderr="")
+            return MagicMock(returncode=0, stdout="", stderr="")
 
-        with patch("run_task._docker_exec", side_effect=capture_exec):
+        def capture_cp(src, dest):
+            with open(src) as f:
+                header_writes.append((dest, f.read()))
+
+        with (
+            patch("run_task._docker_cp", side_effect=capture_cp),
+            patch("run_task._docker_exec", side_effect=capture_exec),
+        ):
             _verify_mcp_endpoint("test-container", "sgp_my_token")
 
-        assert len(captured_cmds) >= 1
-        curl_cmd = captured_cmds[0]
-        assert "curl" in curl_cmd
-        assert "Authorization: token sgp_my_token" in " ".join(curl_cmd)
+        # The token appears ONLY in the docker-cp'd header file, never in argv.
+        assert any("sgp_my_token" in content for _, content in header_writes)
+        for cmd in captured_cmds:
+            assert "sgp_my_token" not in " ".join(cmd), f"token leaked into argv: {cmd}"
+
+        curl_cmds = [c for c in captured_cmds if c and c[0] == "curl"]
+        assert curl_cmds, "expected a curl invocation"
+        curl_cmd = curl_cmds[0]
+        # Header is read from a file: -H @<path>, and the file holds the auth line.
+        file_headers = [
+            curl_cmd[i + 1]
+            for i, a in enumerate(curl_cmd[:-1])
+            if a == "-H" and curl_cmd[i + 1].startswith("@")
+        ]
+        assert file_headers, f"expected -H @file, got {curl_cmd}"
+        hdr_path = file_headers[0][1:]  # strip leading '@'
+        assert any(dest.endswith(hdr_path) for dest, _ in header_writes)
         assert "-k" in curl_cmd  # TLS skip flag
+
+    def test_header_file_is_chmod_600_and_removed(self) -> None:
+        """The staged header must be locked down (0600) and scrubbed afterward."""
+        cmds: list[list[str]] = []
+
+        def capture_exec(container_id, cmd, timeout=120, workdir="/workspace"):
+            cmds.append(cmd)
+            if cmd and cmd[0] == "curl":
+                return MagicMock(returncode=0, stdout="200", stderr="")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch("run_task._docker_exec", side_effect=capture_exec),
+        ):
+            _verify_mcp_endpoint("test-container", "sgp_token")
+
+        chmods = [c for c in cmds if c[:2] == ["chmod", "600"]]
+        rms = [c for c in cmds if c[:2] == ["rm", "-f"]]
+        assert chmods, f"expected chmod 600 of the header file, got {cmds}"
+        assert rms, f"expected the header file to be removed, got {cmds}"
+        # chmod target and rm target are the same staged header path.
+        assert chmods[0][2] == rms[0][2]
 
 
 # ---------------------------------------------------------------------------

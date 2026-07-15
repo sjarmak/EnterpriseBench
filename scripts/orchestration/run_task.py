@@ -2066,53 +2066,84 @@ def _verify_mcp_endpoint(container_id: str, sg_token: str) -> bool:
     - TLS settings are correct
 
     Returns True if the endpoint responds with HTTP 200.
+
+    The live SG token is passed to curl via ``-H @<file>`` reading a 0600 file
+    staged in the container, NOT as an inline ``-H "Authorization: token <tok>"``
+    argv element: process argv is world-visible to any host/container user via
+    ``docker top`` / ``ps aux`` / ``/proc/<pid>/cmdline``, so an inline token
+    would leak the live secret (EnterpriseBench-rryas.5). The header file is
+    chmod 600 and removed after the check.
     """
-    max_retries = 5
-    for attempt in range(1, max_retries + 1):
-        result = _docker_exec(
-            container_id,
-            [
-                "curl",
-                "-sf",
-                "-o",
-                "/dev/null",
-                "-w",
-                "%{http_code}",
-                "-H",
-                f"Authorization: token {sg_token}",
-                "-H",
-                "Content-Type: application/json",
-                "--max-time",
-                "10",
-                "-k",  # skip TLS verification (matches NODE_TLS_REJECT_UNAUTHORIZED=0)
-                SOURCEGRAPH_MCP_ENDPOINT,
-            ],
-            timeout=15,
-        )
-        http_code = result.stdout.strip()
-        # 200 = OK, 405 = Method Not Allowed (GET on POST-only MCP endpoint —
-        # means reachable and auth accepted, just wrong HTTP method)
-        if http_code in ("200", "405") or result.returncode == 0:
-            logger.info(
-                "MCP endpoint HTTP check OK (attempt %d, code=%s)",
-                attempt,
-                http_code,
+    # Stage the auth header in a 0600 file so the token never appears in argv.
+    header_path = "/tmp/.mcp_auth_header"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".hdr", delete=False) as fh:
+        fh.write(f"Authorization: token {sg_token}\n")
+        tmp_hdr = fh.name
+    try:
+        try:
+            _docker_cp(tmp_hdr, f"{container_id}:{header_path}")
+        except RuntimeError as exc:
+            logger.error(
+                "Could not stage MCP auth header file (%s) — failing the "
+                "endpoint check; caller routes to the infra-error channel",
+                exc,
             )
-            return True
-        backoff = min(2**attempt, 10)
-        logger.warning(
-            "MCP endpoint HTTP check attempt %d/%d failed "
-            "(code=%s, rc=%d, err=%s) — retrying in %ds",
-            attempt,
-            max_retries,
-            http_code,
-            result.returncode,
-            result.stderr.strip()[:120],
-            backoff,
-        )
-        time.sleep(backoff)
-    logger.error("MCP endpoint HTTP check FAILED after %d attempts", max_retries)
-    return False
+            return False
+        _docker_exec(container_id, ["chmod", "600", header_path])
+
+        max_retries = 5
+        for attempt in range(1, max_retries + 1):
+            result = _docker_exec(
+                container_id,
+                [
+                    "curl",
+                    "-sf",
+                    "-o",
+                    "/dev/null",
+                    "-w",
+                    "%{http_code}",
+                    # Read the Authorization header from the 0600 file — keeps the
+                    # token out of argv (rryas.5). Content-Type is not secret, so
+                    # an inline -H is fine for it.
+                    "-H",
+                    f"@{header_path}",
+                    "-H",
+                    "Content-Type: application/json",
+                    "--max-time",
+                    "10",
+                    "-k",  # skip TLS verification (matches NODE_TLS_REJECT_UNAUTHORIZED=0)
+                    SOURCEGRAPH_MCP_ENDPOINT,
+                ],
+                timeout=15,
+            )
+            http_code = result.stdout.strip()
+            # 200 = OK, 405 = Method Not Allowed (GET on POST-only MCP endpoint —
+            # means reachable and auth accepted, just wrong HTTP method)
+            if http_code in ("200", "405") or result.returncode == 0:
+                logger.info(
+                    "MCP endpoint HTTP check OK (attempt %d, code=%s)",
+                    attempt,
+                    http_code,
+                )
+                return True
+            backoff = min(2**attempt, 10)
+            logger.warning(
+                "MCP endpoint HTTP check attempt %d/%d failed "
+                "(code=%s, rc=%d, err=%s) — retrying in %ds",
+                attempt,
+                max_retries,
+                http_code,
+                result.returncode,
+                result.stderr.strip()[:120],
+                backoff,
+            )
+            time.sleep(backoff)
+        logger.error("MCP endpoint HTTP check FAILED after %d attempts", max_retries)
+        return False
+    finally:
+        os.unlink(tmp_hdr)
+        # Best-effort scrub of the in-container header file.
+        _docker_exec(container_id, ["rm", "-f", header_path])
 
 
 def _merge_mcp_trust(existing: dict[str, Any], server_name: str) -> dict[str, Any]:
