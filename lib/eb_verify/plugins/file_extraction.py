@@ -1,8 +1,10 @@
 """file_extraction scorer — did the agent name the right source files?
 
-A ``python -m`` CLI rather than a registry validator: checkpoint scripts exec it
-directly, and the package reaches PYTHONPATH via ``eb_verify.runner`` (host) or
-``run_task.py`` staging (sandbox).
+A scorer, not an artifact validator: the registry protocol in
+:mod:`eb_verify.plugins` returns a pass/fail ``ValidationResult`` and has nowhere
+to put a number, so this is a ``python -m`` CLI that checkpoint scripts exec
+directly. The package reaches PYTHONPATH via :func:`eb_verify.runner.checkpoint_env`
+(host) or ``run_task.py`` staging (sandbox).
 
     ANSWER_FILE=... GT_FILE=... python3 -m eb_verify.plugins.file_extraction \
         --keys source_files,files,error_source.files,code_paths,citations
@@ -12,18 +14,11 @@ Scoring is recall over ``required_files[].path``, partial credit, ``passed`` at
 file-discovery checkpoint in this benchmark already does, and diverging here
 alone would stop the tasks being comparable (bead vdeyx changes it everywhere).
 
-Agent failures score a real 0.0 and exit 0: an answer the agent never wrote (the
-file is absent), an answer it wrote badly (unparseable), or one that matched
-nothing. Harness failures score 0.0 with
-:data:`~eb_verify.scorer_guard.INFRA_SENTINEL` in ``detail`` and exit nonzero:
-ground truth missing/corrupt/empty, ``ANSWER_FILE`` unset, or an answer file that
-*exists but cannot be read* — a permission/UID mismatch on a docker-cp'd file
-(beads hktt/pt0n) is our problem, not the agent's, and folding it in with the
-absent-file case is the fail-open zero bead ssikq reopened. Only ``not isfile`` is
-an agent zero; an ``OSError`` on a present file is infra. Keeping the two apart is
-the point of the module: a broken harness must never be recorded as an agent zero
-(beads ssikq/kyo34). Every exit path prints JSON to stdout, failures included,
-because ``runner.py`` otherwise falls back to fabricating a score from the exit code.
+The module's reason to exist: a broken harness must never be recorded as an agent
+zero. Agent failures score a real 0.0 and exit 0; harness failures score 0.0 with
+:data:`~eb_verify.scorer_guard.INFRA_SENTINEL` in ``detail`` and exit nonzero.
+:func:`load_json` draws the line. Every exit path prints JSON to stdout, failures
+included, because a verdict that reaches no channel is scored as a re-run, not a 0.0.
 """
 
 from __future__ import annotations
@@ -49,15 +44,10 @@ class HarnessError(Exception):
 
 
 class AgentFault(HarnessError):
-    """The answer file was absent or its bytes were not JSON — the agent's fault.
+    """The agent produced no usable answer — a real 0.0, not a harness failure.
 
-    A subclass so :func:`main` can tell "the agent produced no usable answer" (a real
-    0.0) apart from "the runner misconfigured us / the file exists but we could not
-    read it" (infra, the base class). Absent and unparseable are the same verdict here
-    — both an agent zero, both caught together — so they share one type; the specific
-    failure lives in the message, not the class. For ground truth the distinction is
-    moot — a missing or malformed GT is infra either way — so :func:`ground_truth_files`
-    lets everything propagate to the base class and treats every failure as infra.
+    A subclass, so ground-truth faults (which are infra however they fail) can
+    propagate to the base class without :func:`ground_truth_files` classifying them.
     """
 
 
@@ -87,15 +77,17 @@ def emit(score: float, detail: str, *, infra: bool = False) -> int:
         print(json.dumps(verdict))
         sys.stdout.flush()  # print() buffers: flush inside the guard, not at exit
     except OSError:
-        # The verdict cannot reach the scoring channel — a dead stdout pipe. There is
-        # no host-side rescue today: CheckpointRunner.run_checkpoint reads stderr into
-        # `detail` only for display and never runs scorer_guard, so an empty stdout with
-        # a nonzero exit is booked as a plain 0.0, sentinel or not (that host-path gap is
-        # bead wto43 — not fixed here). We still redirect the dead fd and re-emit the
-        # sentinel to stderr so the failure is legible in the logs, and so the same
-        # BrokenPipeError does not fire again at shutdown and mask this message.
+        # A dead stdout pipe. Scoring is already safe without us: the verdict channel is
+        # empty, and scorer_guard books empty stdout as verifier_did_not_run whatever the
+        # exit code. What this rescues is the *diagnosis* — redirect the dead fd so the
+        # interpreter's own shutdown flush cannot raise a second BrokenPipeError over this
+        # message, and leave the sentinel on stderr so the logs say why.
         try:
-            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            try:
+                os.dup2(devnull, sys.stdout.fileno())
+            finally:
+                os.close(devnull)
         except OSError:
             pass
         print(f"{INFRA_SENTINEL}: verdict could not be written to stdout", file=sys.stderr)
@@ -104,29 +96,21 @@ def emit(score: float, detail: str, *, infra: bool = False) -> int:
 
 
 # Both citation dialects the arms produce: grep/editor style ('_config.py:120',
-# ':120-140' as in the captured 'reflector.go:417-418', ':120:5' from `rg --vimgrep`)
-# and blob anchors ('#L120', '#L120-L140' from GitHub, '?L120-140' from Sourcegraph).
-# Sourcegraph is a first-class arm, so stripping the baseline arm's dialect but not
-# the MCP arm's would be a mode-correlated scoring bias — an MCP regression no agent
-# caused. Over-stripping is not a risk: the match is $-anchored behind a literal ':'
-# or '#L'/'?L', so 'report-2024-2025.md' and 'v1.2-140/file.py' are untouched.
+# ':120-140', ':120:5' from `rg --vimgrep`) and blob anchors ('#L120', '#L120-L140'
+# from GitHub, '?L120-140' from Sourcegraph). Sourcegraph is a first-class arm, so
+# stripping the baseline arm's dialect but not the MCP arm's would be a mode-correlated
+# scoring bias — an MCP regression no agent caused. Over-stripping is not a risk: the
+# match is $-anchored behind a literal ':' or '#L'/'?L', so 'report-2024-2025.md' and
+# 'v1.2-140/file.py' are untouched.
 #
-# The repetition is BOUNDED, and that is a correctness requirement, not tidiness. The
-# pattern has no start anchor, so `re.sub` retries it at every ':' in the string; with
-# an unbounded `(?:[:-]L?\d+)*` each of those O(n) attempts greedily runs to the end and
-# then unwinds the whole loop when `$` fails, which is O(n) work apiece — quadratic
-# overall, and reachable straight from a graded answer.json. Measured on the unbounded
-# form, against 'file.py' + ':1'*n + 'x' (the trailing 'x' is what breaks `$` and forces
-# the unwind): 32KB took 5.7s and ~200KB blows the 120s checkpoint timeout, which
-# runner.py books as a silent agent 0.0 — the exact false zero this module exists to
-# kill. A well-formed citation of the same size matches immediately and hides it, which
-# is how it survived an earlier ReDoS review that only measured matching inputs.
-# Bounding makes each attempt O(1) and the whole scan linear.
-#
-# The bounds cost nothing real: no citation carries a 10-digit line number or 7 range
-# parts. An input past them is not a citation, and it degrades in the module's
-# documented fail-safe direction — it strips a shorter tail (under-strip -> a false
-# miss), never a longer one (over-strip -> a false match).
+# The repetition MUST stay bounded. The pattern has no start anchor, so `re.sub` retries
+# it at every ':'; with an unbounded `(?:[:-]L?\d+)*` each of those O(n) attempts runs to
+# the end and unwinds when `$` fails — quadratic overall, reachable straight from a
+# graded answer.json, and a 200KB non-matching tail blows the 120s checkpoint timeout
+# into a false 0.0. Bounding makes each attempt O(1) and the scan linear. The bounds cost
+# nothing real: no citation carries a 10-digit line number or 7 range parts, and an input
+# past them degrades in the fail-safe direction — it strips a shorter tail (a false miss),
+# never a longer one (a false match).
 _CITATION_SUFFIX_RE = re.compile(
     r"""(?: : | [#?] L )        # grep-style ':120', or a GitHub/Sourcegraph anchor
         \d{1,9} (?: [:-] L? \d{1,9} ){0,6}  # the line, plus column and range parts
@@ -158,13 +142,6 @@ def _matches_parts(gt: List[str], agent: List[str]) -> bool:
     Neither is wrong, so either component list may be the suffix of the other. Comparing
     components rather than raw strings is what keeps 'httpx/my_config.py' from
     satisfying a ground truth of '.../_config.py'.
-
-    Takes components already split because splitting is not free — it runs the citation
-    regex over the whole string. :func:`score_answer` holds both component lists
-    already, and routing back through a str-level entry point would re-derive them once
-    per (ground truth, answer) pair: a factor of ``1 + 2*len(gt_paths)`` more regex
-    scans than the answer has paths, a constant factor re-applied to precisely the input
-    the bound on ``_CITATION_SUFFIX_RE`` exists to keep cheap.
     """
     if not gt or not agent:
         return False
@@ -198,20 +175,9 @@ def score_answer(gt_paths: List[str], found: List[str]) -> tuple[set[str], List[
       ("setup.py" against a lone ground truth of "httpx/setup.py"), and is credited to
       none when it is a tail shared by several.
 
-    Every other rule considered fails a case that ships:
-
-    * Exact match alone credits nothing for the absolute ``/workspace/<repo>/...`` paths
-      run_task.py *mandates* every agent emit — the mount component alone makes such an
-      answer strictly longer than the entry it names, so nothing would ever be exact.
-      (Longer than the entry it *names*. It is not longer than every entry, and a ground
-      truth that ends in ``workspace/<repo>/<file>`` abbreviates back into it — a latent
-      false zero, pinned by a test and tracked as EnterpriseBench-d900w.)
-    * Crediting the longest hit, with no refinement test, hands "_client.py" the deeper
-      of ``httpx/_client.py`` and ``httpcore/httpcore/_async/_client.py`` — a passing
-      0.5 for a one-word non-answer.
-    * Preferring the refined hit over the abbreviated one credits ``y/a.py`` to "a.py",
-      which another answer already named exactly, and books the "x/y/a.py" it actually
-      points at as missed.
+    A ground truth ending in ``workspace/<repo>/<file>`` abbreviates back into the
+    absolute ``/workspace/<repo>/...`` shape run_task.py mandates — a latent false zero,
+    pinned by a test and tracked as EnterpriseBench-d900w.
 
     Order-independent, and over-credit is impossible: a matched entry is never "used
     up", and ``matched`` is a set of ground-truth entries, so recall stays capped at
@@ -419,10 +385,8 @@ def main(argv: List[str] | None = None) -> int:
     except HarnessError as exc:
         return emit(0.0, str(exc), infra=True)
 
-    # An absent or malformed answer is the agent's (a real 0.0); an unset ANSWER_FILE
-    # or a present-but-unreadable file is ours (infra, routed to re-run). The AgentFault
-    # clause must precede the base clause — it is a HarnessError subclass, and Python
-    # takes the first match.
+    # AgentFault must precede HarnessError — it is a subclass, and Python takes the
+    # first matching clause.
     try:
         answer = load_json(os.environ.get("ANSWER_FILE", ""), "answer.json")
     except AgentFault as exc:

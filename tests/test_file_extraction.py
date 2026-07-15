@@ -22,11 +22,10 @@ import pytest
 # drift that silently re-books infra failures as agent zeros.
 from eb_verify.plugins.file_extraction import components
 from eb_verify.scorer_guard import INFRA_SENTINEL
-from eb_verify.runner import CheckpointRunner
+from eb_verify.runner import CheckpointRunner, _LIB_DIR
 from eb_verify.task_parser import parse_task
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LIB_DIR = REPO_ROOT / "lib"
 
 # The two live tasks whose 0.40-weight checkpoint execs this module.
 AFFECTED_TASKS = [
@@ -43,9 +42,15 @@ ALL_KEYS = "source_files,files,error_source.files,code_paths,citations"
 
 
 def cli_env(answer_file, gt_file) -> dict:
-    """The environment the scorer reads its two inputs from."""
+    """The environment the scorer reads its two inputs from.
+
+    _LIB_DIR is the runner's own notion of where eb_verify lives, not a copy: a
+    hand-rolled PYTHONPATH here would keep passing after the runner stopped exporting
+    one. This helper sets only the scorer's two inputs, so it does not go through
+    checkpoint_env (which builds WORKSPACE/TASK_DIR for a full checkpoint).
+    """
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(LIB_DIR)
+    env["PYTHONPATH"] = str(_LIB_DIR)
     env["ANSWER_FILE"] = str(answer_file)
     env["GT_FILE"] = str(gt_file)
     return env
@@ -323,7 +328,7 @@ def test_a_missing_answer_file_path_is_infra_not_a_zero(tmp_path, answer_file_va
     absent-but-named file is the real agent 0.0, tested separately."""
     gt = gt_with(tmp_path, ["httpx/httpx/_config.py"])
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(LIB_DIR)
+    env["PYTHONPATH"] = str(_LIB_DIR)
     env["GT_FILE"] = str(gt)
     if answer_file_value is None:
         env.pop("ANSWER_FILE", None)
@@ -434,10 +439,10 @@ def test_cli_misuse_emits_infra_json_and_never_a_fabricated_score(tmp_path, argv
 
 def test_broken_stdout_is_an_infra_error_not_a_false_zero(tmp_path):
     """If the verdict cannot reach stdout, the module must still print the sentinel to
-    stderr and exit nonzero rather than dying with a bare traceback. The host runner
-    books this as a 0.0 today (it does not scan stderr for the sentinel — bead wto43),
-    but a legible sentinel on stderr is what a stderr-aware caller keys off, and it
-    keeps a second BrokenPipeError from masking the message at shutdown."""
+    stderr and exit nonzero rather than dying with a bare traceback. Scoring is safe
+    either way — scorer_guard books the empty stdout as verifier_did_not_run — so what
+    is pinned here is the diagnosis: a legible sentinel, and no second BrokenPipeError
+    from the shutdown flush masking it."""
     gt = gt_with(tmp_path, ["httpx/httpx/_config.py"])
     answer = write_json(tmp_path / "answer.json", {"source_files": ["httpx/_config.py"]})
 
