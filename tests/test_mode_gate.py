@@ -15,6 +15,7 @@ agent -- it simply fails less visibly.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -404,3 +405,73 @@ def test_gate_is_a_noop_for_ungated_arms(monkeypatch):
         assert ok is True and err == ""
 
     assert fake.calls == [], "an ungated arm must not be touched by the gate"
+
+
+# --- regression: the gate must not be bypassable, and the import must be clean ---
+
+
+def test_run_task_imports_standalone_on_a_clean_path():
+    """run_task must import via its package path without another test's help.
+
+    ``mode_gate`` is a sibling module; run_task's own ``sys.path.insert`` is what
+    makes ``from mode_gate import ...`` resolve. A full-suite run masks a missing
+    insert (tests/integrity/* inject scripts/orchestration onto sys.path first),
+    so this reproduces a single-file / CI-shard import in a fresh interpreter
+    where only the repo root (cwd) and lib are on the path.
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    proc = subprocess.run(
+        [sys.executable, "-c", "import scripts.orchestration.run_task"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONPATH": str(repo_root / "lib")},
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "No module named 'mode_gate'" not in proc.stderr
+
+
+def test_gated_mode_without_agent_command_is_invalid_not_complete(
+    tmp_path, monkeypatch
+):
+    """A gated arm reaching the no-agent path never applied the gate.
+
+    ``mcp_only`` + empty ``agent_command`` must refuse (INVALID), not fall through
+    to scoring and save ``phase="complete"``, ``success=True`` on a container
+    whose repos were never chowned — the exact confound this bead removes,
+    reintroduced through a nesting hole (the gate lived inside ``if
+    agent_command:``).
+    """
+    toml = tmp_path / "task.toml"
+    toml.write_text(
+        '[task]\nid = "t-1"\n\n[artifacts]\nrequired = ["answer"]\n',
+        encoding="utf-8",
+    )
+    # Drive the pipeline to the no-agent branch: every infra step succeeds so the
+    # only thing missing is an agent command.
+    for name, ret in (
+        ("_check_disk_space", True),
+        ("_docker_create_container", "cid"),
+        ("_docker_start", None),
+        ("_setup_container", None),
+        ("_run_health_check", True),
+        ("_configure_mcp", True),
+    ):
+        monkeypatch.setattr(
+            run_task, name, (lambda r: (lambda *a, **k: r))(ret)
+        )
+
+    result = run_task.run_task(
+        run_task.TaskRunConfig(
+            task_toml=toml,
+            mode="mcp_only",
+            output_dir=tmp_path / "out",
+            no_build=True,
+            agent_command="",
+        )
+    )
+
+    assert result.phase == "mode_gate_skipped"
+    assert result.phase != "complete"
+    assert result.status == run_task.RUN_STATUS_INVALID
+    assert result.success is False

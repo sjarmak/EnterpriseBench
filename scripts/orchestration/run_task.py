@@ -51,7 +51,11 @@ sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 from validation import validate_repo_entry
 
 # Tool-access arm enforcement — see mode_gate for why the ablation is a
-# filesystem permission rather than a prompt or a tool denylist.
+# filesystem permission rather than a prompt or a tool denylist. mode_gate is a
+# sibling module in scripts/orchestration, so that dir must be importable before
+# this import runs — full-suite runs get it for free (tests/integrity/* inject
+# it earlier), but a single-file/CI-shard run does not.
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "orchestration"))
 from mode_gate import (
     IneligibleTask,
     check_eligibility,
@@ -2856,6 +2860,30 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
 
             _route_zero_mcp_run(result, config.mode)
             _record_agent_trace(result, container_id, output_dir)
+        elif should_gate(config.mode):
+            # The mode gate lives inside the agent block above (it must run after
+            # build/clone/health-check, right before the agent). A gated arm that
+            # reaches here has no agent_command, so the gate never applied and the
+            # repos are still world-readable. Letting this fall through to scoring
+            # would save a `complete`/`success` result for a gated arm on an
+            # un-ablated container — the exact confound this bead removes. Refuse.
+            logger.error(
+                "mode=%s is a source-access ablation but no agent command was "
+                "provided; the gate never applied. Refusing rather than scoring "
+                "an un-ablated container.",
+                config.mode,
+            )
+            result.phase = "mode_gate_skipped"
+            result.status = RUN_STATUS_INVALID
+            result.success = False
+            result.failure_class = "infra_perms"
+            result.error = (
+                f"gated mode={config.mode} reached the no-agent path; the "
+                "source-access ablation was never applied"
+            )
+            result.timing = timings
+            _save_results(result, task_data, output_dir, config)
+            return result
         else:
             logger.info("No agent command specified, skipping agent phase")
 
