@@ -22,58 +22,11 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
-import sys
-import textwrap
 from pathlib import Path
 
 import pytest
 
-LIB = Path(__file__).resolve().parents[2] / "lib"
-
-# Refuse to import the heavy stack, the way a minimal task sandbox does: lib's
-# pyproject declares only jsonschema, so numpy-less is the canonical install.
-BLOCK_HEAVY_DEPS = """
-    import sys
-
-    BLOCKED = ("numpy", "sklearn", "scipy")
-
-    class _Blocker:
-        def find_spec(self, name, path=None, target=None):
-            if name.split(".")[0] in BLOCKED:
-                raise ImportError(f"No module named {name!r} (numpy-less sandbox)")
-            return None
-
-    sys.meta_path.insert(0, _Blocker())
-    for _m in [m for m in sys.modules if m.split(".")[0] in BLOCKED]:
-        del sys.modules[_m]
-"""
-
-
-def run_in_fresh_interpreter(
-    body: str, *, block_deps: bool, extra_path: Path | None = None
-) -> str:
-    """Run ``body`` in a new interpreter, optionally with numpy/sklearn unimportable.
-
-    ``extra_path`` is prepended to sys.path, which is how the broken-install tests
-    shadow numpy with a module that raises on import.
-    """
-    prelude = textwrap.dedent(BLOCK_HEAVY_DEPS) if block_deps else ""
-    if extra_path is not None:
-        prelude += f"sys.path.insert(0, {str(extra_path)!r})\n"
-    script = (
-        f"import sys\nsys.path.insert(0, {str(LIB)!r})\n"
-        + prelude
-        + textwrap.dedent(body)
-    )
-    proc = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True, timeout=120
-    )
-    assert proc.returncode == 0, (
-        f"probe interpreter died (rc={proc.returncode})\n"
-        f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
-    )
-    return proc.stdout
+from tests.integrity.conftest import LIB, run_in_fresh_interpreter
 
 
 def _fact_triples_workspace(tmp_path: Path) -> Path:
@@ -391,42 +344,68 @@ class TestProbeStaysCheap:
 class TestScorerGuardStaysIsolated:
     """The harness-failure guard must not depend on the stack it reports on."""
 
-    def test_importing_scorer_guard_does_not_reach_the_plugin_stack(self) -> None:
+    def test_importing_scorer_guard_pulls_nothing_but_stdlib(self) -> None:
         """``scorer_guard`` imports stdlib only -- its import must stay that cheap.
 
         It exists to report harness failures, so it must not be importable-only-if
         the harness is healthy: a broken import in any one of the 9 unguarded
         validators would otherwise take down the very module that reports that
         class of failure.
+
+        Asserted as "nothing outside the stdlib" rather than as a denylist of the
+        modules it must not reach: a denylist is blind to whatever the guard acquires
+        next, which is the regression worth catching.
+        """
+        out = run_in_fresh_interpreter(
+            """
+            import sys
+            before = set(sys.modules)
+            import eb_verify.scorer_guard  # noqa: F401
+            roots = {m.split(".")[0] for m in set(sys.modules) - before}
+            third_party = sorted(
+                r for r in roots
+                if r not in sys.stdlib_module_names and not r.startswith("_")
+            )
+            print("NONSTDLIB:" + (",".join(third_party) if third_party else "none"))
+            """,
+            block_deps=False,
+        )
+        assert "NONSTDLIB:eb_verify" in out and "," not in out.split("NONSTDLIB:")[1], (
+            f"importing eb_verify.scorer_guard reached beyond the stdlib ({out.strip()}); "
+            "the guard must stay importable when a validator is broken or a dependency "
+            "is missing, so nothing may re-couple it to the plugin stack"
+        )
+
+    def test_importing_scorer_guard_pulls_no_sibling_eb_verify_module(self) -> None:
+        """The guard's own package is the one non-stdlib root it may touch -- alone.
+
+        ``eb_verify`` passes the stdlib check above by construction, so pin separately
+        that it brings no siblings with it: ``runner``, the registry and the 9
+        validators are exactly what must not ride along.
         """
         out = run_in_fresh_interpreter(
             """
             import sys
             import eb_verify.scorer_guard  # noqa: F401
-            coupled = sorted(
+            siblings = sorted(
                 m for m in sys.modules
-                if m in ("eb_verify.runner", "eb_verify.plugins")
-                or m.startswith(("eb_verify.runner.", "eb_verify.plugins."))
-                or m.split(".")[0] == "jsonschema"
+                if m.split(".")[0] == "eb_verify"
+                and m not in ("eb_verify", "eb_verify.scorer_guard")
             )
-            print("COUPLED:" + (",".join(coupled) if coupled else "none"))
+            print("SIBLINGS:" + (",".join(siblings) if siblings else "none"))
             """,
             block_deps=False,
         )
-        assert "COUPLED:none" in out, (
-            f"importing eb_verify.scorer_guard reached the plugin stack ({out.strip()}); "
-            "the guard must stay importable when a validator is broken, so "
-            "eb_verify/__init__ must not re-export runner/plugins-backed names"
+        assert "SIBLINGS:none" in out, (
+            f"importing eb_verify.scorer_guard dragged in sibling modules ({out.strip()}); "
+            "the guard must stay importable when any of them is broken"
         )
 
     def _tree_with_a_broken_validator(self, tmp_path: Path) -> Path:
         """A copy of the real lib tree with one validator broken at import time.
 
         Breaking a validator is what actually kills the registry: the 9 non-fact_triples
-        validators are imported unguarded by ``plugins/__init__``. Shadowing jsonschema
-        would not -- ``schema_validator`` degrades it to None and fact_triples' hard
-        import is already wrapped in try/except ImportError, so the registry survives
-        without it.
+        validators are imported unguarded by ``plugins/__init__``.
 
         The whole tree is copied because the break must live inside the package:
         sys.path cannot shadow a submodule of ``eb_verify`` without shadowing

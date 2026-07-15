@@ -3,8 +3,7 @@
 The primitive every artifact consumer shares: read a file only after proving the
 path stays inside the workspace. It lives below both the plugin registry and the
 verifier primitives (groundedness) because both need it and neither may depend on
-the other -- ``groundedness`` reaching up into ``eb_verify.plugins`` for ``safe_read``
-is what closed the groundedness -> plugins -> incident_report -> groundedness cycle.
+the other.
 
 Stdlib only, by design. Anything imported here is paid by every validator.
 """
