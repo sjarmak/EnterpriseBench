@@ -28,7 +28,6 @@ sys.path.insert(
 
 import run_task
 from mode_gate import (
-    AGENT_USER,
     GATED_MODES,
     IneligibleTask,
     check_eligibility,
@@ -37,6 +36,7 @@ from mode_gate import (
     should_gate,
 )
 
+AGENT_USER = run_task.AGENT_USER
 SCORER = run_task.SCORING_USER
 
 

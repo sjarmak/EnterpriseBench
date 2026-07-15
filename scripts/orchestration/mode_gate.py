@@ -45,9 +45,6 @@ from validation import validate_repo_entry
 
 WORKSPACE = "/workspace"
 
-#: The agent process runs as this unprivileged user (``docker exec -u agent``).
-AGENT_USER = "agent"
-
 #: Arms whose agent is denied local source. ``hybrid`` is MCP *plus* local by
 #: definition, and ``baseline`` is local-only, so neither is gated.
 GATED_MODES = frozenset({"mcp_only"})

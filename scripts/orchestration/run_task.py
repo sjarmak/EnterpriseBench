@@ -53,7 +53,6 @@ from validation import validate_repo_entry
 # Tool-access arm enforcement — see mode_gate for why the ablation is a
 # filesystem permission rather than a prompt or a tool denylist.
 from mode_gate import (
-    AGENT_USER,
     IneligibleTask,
     check_eligibility,
     lockdown_commands,
@@ -187,6 +186,12 @@ NON_COMPLETE_PHASES = UNTRUSTED_SCORE_PHASES | {"agent_infra_error"}
 SCORING_USER = "ebscorer"
 SCORING_GROUP = "ebscorer"
 SCORING_UID = 2000
+
+# The agent process runs as this unprivileged user (`docker exec -u agent`); the
+# image ends with `USER agent` (dockerfile_generator). It is the identity every
+# gate here is drawn against: it must read instruction.md, must NOT read the
+# answer key, and under the mode gate must not read repo source either.
+AGENT_USER = "agent"
 
 # The mode gate recurses chown/chmod over every cloned repo. Kubernetes- and
 # Terraform-sized trees are the reason this is minutes, not seconds: a gate that
@@ -764,7 +769,7 @@ def _assert_grading_assets_sealed(container_id: str) -> tuple[bool, str]:
             + ", ".join(breached.splitlines())
         )
 
-    if _can_read(container_id, GROUND_TRUTH, user="agent"):
+    if _can_read(container_id, GROUND_TRUTH, user=AGENT_USER):
         return False, f"{GROUND_TRUTH} is readable by the agent user"
 
     identity_ok, identity_err = _assert_scoring_identity(container_id)
@@ -982,7 +987,7 @@ def _assert_agent_readable(container_id: str, paths: list[str]) -> tuple[bool, s
     (bead EnterpriseBench-s58f).
     """
     for path in paths:
-        if not _can_read(container_id, path, user="agent"):
+        if not _can_read(container_id, path, user=AGENT_USER):
             return False, (
                 f"agent user cannot read {path} "
                 "(EACCES or missing) — run is INVALID, not a real 0.0 score"
@@ -1008,6 +1013,17 @@ def _gate_probe_file(container_id: str, repo_dir: str) -> str | None:
     return found[0] if res.returncode == 0 and found else None
 
 
+def _gate_failed(reason: str) -> tuple[bool, str]:
+    """An (ok, error) pair for a gate that could not be applied or proven.
+
+    Every mode-gate failure ends with the same sentence, and that ending is the
+    load-bearing half: an unenforced gate means the run must be re-run, never
+    averaged in as a low score. Saying it in one place is what keeps the promise
+    identical across every exit, including ones added later.
+    """
+    return False, f"{reason} — run is INVALID, not a real score"
+
+
 def _apply_mode_gate(
     container_id: str, task_data: dict, mode: str
 ) -> tuple[bool, str]:
@@ -1027,7 +1043,7 @@ def _apply_mode_gate(
     try:
         dirs = repo_dirs(task_data)
     except ValueError as exc:
-        return False, f"mode gate cannot run: {exc} — run is INVALID, not a real score"
+        return _gate_failed(f"mode gate cannot run: {exc}")
     if not dirs:
         return True, ""
 
@@ -1040,33 +1056,24 @@ def _apply_mode_gate(
         except subprocess.TimeoutExpired:
             # A recursive chown over a Kubernetes-sized tree can outlast a
             # default timeout. Half-applied is not a gate.
-            return False, (
-                f"mode gate timed out running `{printable}` — run is INVALID, "
-                "not a real score"
-            )
+            return _gate_failed(f"mode gate timed out running `{printable}`")
         if res.returncode != 0:
-            return False, (
-                f"mode gate failed running `{printable}`: {res.stderr.strip()} "
-                "— run is INVALID, not a real score"
+            return _gate_failed(
+                f"mode gate failed running `{printable}`: {res.stderr.strip()}"
             )
 
     for repo_dir in dirs:
         probe = _gate_probe_file(container_id, repo_dir)
         if probe is None:
-            return False, (
-                f"mode gate found no file under {repo_dir} to prove itself "
-                "against — run is INVALID, not a real score"
+            return _gate_failed(
+                f"mode gate found no file under {repo_dir} to prove itself against"
             )
         if _can_read(container_id, probe, user=AGENT_USER):
-            return False, (
-                f"mode gate did not hold: agent can still read {probe} — run is "
-                "INVALID, not a real score"
-            )
+            return _gate_failed(f"mode gate did not hold: agent can still read {probe}")
         if not _can_read(container_id, probe, user=SCORING_USER):
-            return False, (
+            return _gate_failed(
                 f"mode gate blinded the scorer: {SCORING_USER} cannot read "
-                f"{probe}, so its checkpoints would score a tree they cannot see "
-                "— run is INVALID, not a real score"
+                f"{probe}, so its checkpoints would score a tree they cannot see"
             )
 
     logger.info(
