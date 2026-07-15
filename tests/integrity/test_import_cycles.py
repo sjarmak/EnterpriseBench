@@ -14,7 +14,12 @@ from __future__ import annotations
 
 import pytest
 
-from tests.integrity.conftest import LIB, run_in_fresh_interpreter
+from tests.integrity._probe import (
+    LIB,
+    in_package,
+    modules_pulled_by,
+    run_in_fresh_interpreter,
+)
 
 # Discovered, not hand-maintained: a new module that only imports cleanly when
 # something else warms the package first is precisely the bug this guards.
@@ -24,13 +29,23 @@ SUBMODULES = sorted(
     if path.stem != "__main__"
 )
 
+REGISTRY = "eb_verify.plugins"
+
+# The composition root: looking a validator up by artifact type is what ``runner`` is
+# FOR, so it is the one module allowed to depend on the registry. Everything else is a
+# primitive the registry is built on top of, and must not import upward.
+REGISTRY_IMPORTERS = {"eb_verify.runner"}
+
+BELOW_THE_REGISTRY = [
+    m for m in SUBMODULES if not in_package(m, REGISTRY) and m not in REGISTRY_IMPORTERS
+]
+
 
 @pytest.mark.parametrize("module", SUBMODULES)
 def test_submodule_imports_as_the_first_touch_of_the_package(module: str) -> None:
     """Importing any submodule first must not raise -- no import cycles."""
     run_in_fresh_interpreter(
         f"import {module}  # noqa: F401",
-        block_deps=False,
         context=(
             f"{module} cannot be imported as the first touch of eb_verify. This is an "
             "import cycle. It must be broken at the layering level (move the shared "
@@ -40,24 +55,22 @@ def test_submodule_imports_as_the_first_touch_of_the_package(module: str) -> Non
     )
 
 
-def test_groundedness_does_not_depend_on_the_plugin_registry() -> None:
-    """plugins -> groundedness, never the reverse.
+@pytest.mark.parametrize("module", BELOW_THE_REGISTRY)
+def test_no_module_below_the_registry_imports_the_registry(module: str) -> None:
+    """plugins -> everything else, never the reverse.
 
-    ``groundedness`` is a deterministic verifier primitive the plugins are built ON
-    TOP OF -- four validators import it. Importing the registry from it is a layering
-    inversion whether or not it happens to close a cycle, so pin the direction rather
-    than only the symptom the test above catches.
+    Stated over every module rather than for ``groundedness`` alone, where the inversion
+    was actually found: the direction is a property of the layering, not of that one
+    edge. An inversion that does not happen to close a cycle is silent in the test
+    above, and that silence is how this one survived -- it was invisible until the
+    eager import that warmed it in a working order was deleted.
+
+    A module that legitimately needs the registry belongs in ``REGISTRY_IMPORTERS``,
+    which is a claim about the layering someone has to make on purpose.
     """
-    out = run_in_fresh_interpreter(
-        """
-        import sys
-        import eb_verify.groundedness  # noqa: F401
-        print("REGISTRY:" + str("eb_verify.plugins" in sys.modules))
-        """,
-        block_deps=False,
-    )
-    assert "REGISTRY:False" in out, (
-        "importing eb_verify.groundedness pulled in the plugin registry; the "
-        "dependency must point one way (plugins -> groundedness), or the cycle "
-        "returns the next time an eager import is removed"
+    reached = sorted(m for m in modules_pulled_by(module) if in_package(m, REGISTRY))
+    assert not reached, (
+        f"importing {module} pulled in the plugin registry ({reached}); the dependency "
+        f"must point one way (plugins -> {module}), "
+        "or the cycle returns the next time an eager import is removed"
     )

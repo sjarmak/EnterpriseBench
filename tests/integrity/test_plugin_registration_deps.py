@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -29,9 +30,41 @@ from pathlib import Path
 import pytest
 
 from eb_verify.scorer_guard import _detail_infra_signature
-from tests.integrity.conftest import LIB, run_in_fresh_interpreter
+from tests.integrity._probe import (
+    HEAVY_ROOTS,
+    LIB,
+    modules_pulled_by,
+    nonstdlib_modules,
+    run_in_fresh_interpreter,
+)
 
 SCORER_MODULE = "eb_verify.scorers.file_extraction"
+
+
+@pytest.fixture
+def broken_validator_tree(tmp_path: Path) -> Path:
+    """sys.path entry whose ``eb_verify.plugins`` registry raises on import.
+
+    Breaking a validator is what actually kills the registry: the 9 non-fact_triples
+    validators are imported unguarded by ``plugins/__init__``.
+
+    The whole tree is copied because the break must live inside the package:
+    sys.path cannot shadow a submodule of ``eb_verify`` without shadowing
+    ``eb_verify`` itself.
+    """
+    shadow = tmp_path / "broken_tree"
+    shutil.copytree(
+        LIB / "eb_verify",
+        shadow / "eb_verify",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    # The missing dep must not be spelled with an ``eb_verify`` prefix: scorer_guard
+    # greps stderr for "No module named 'eb_verify", so an eb_verify_* dep matches that
+    # signature by accident and any probe asking "is this booked as infra?" answers yes
+    # without the code under test doing anything.
+    with (shadow / "eb_verify" / "plugins" / "call_graph.py").open("a") as fh:
+        fh.write("\nimport simulated_absent_thirdparty_dep  # noqa: F401\n")
+    return shadow
 
 
 def _fact_triples_workspace(tmp_path: Path) -> Path:
@@ -130,7 +163,6 @@ class TestRegistrationRequiresUsableDeps:
             from eb_verify.plugins import get_validator
             print("REGISTERED" if get_validator("fact_triples") else "ABSENT")
             """,
-            block_deps=False,
         )
         assert "REGISTERED" in out, "deps are installed; the validator must register"
 
@@ -210,7 +242,6 @@ class TestBrokenInstallCannotKillTheRun:
             except ImportError:
                 print("IMPORT_RAISES")
             """,
-            block_deps=False,
             extra_path=self._shadow_broken_numpy(tmp_path),
         )
         assert "FOUND" in out and "IMPORT_RAISES" in out, (
@@ -240,7 +271,6 @@ class TestBrokenInstallCannotKillTheRun:
                 except ImportError as exc:
                     print(f"IMPORTERROR_ESCAPED {{exc}}")
             """,
-            block_deps=False,
             extra_path=self._shadow_broken_numpy(tmp_path),
         )
         assert "IMPORTERROR_ESCAPED" not in out, (
@@ -275,7 +305,6 @@ class TestBrokenInstallCannotKillTheRun:
                 except BaseException as exc:  # noqa: BLE001 — anything escaping is the bug
                     print(f"ESCAPED {{type(exc).__name__}}: {{exc}}")
             """,
-            block_deps=False,
             extra_path=self._shadow_broken_numpy(tmp_path, exc),
         )
         assert "ESCAPED" not in out, (
@@ -284,7 +313,6 @@ class TestBrokenInstallCannotKillTheRun:
             f"the dependency load must be guarded on failure, not on type. Got: {out.strip()}"
         )
         assert "RECORDED" in out, out
-
 
     def test_process_control_still_propagates(self, tmp_path: Path) -> None:
         """The guard stops at Exception on purpose.
@@ -305,7 +333,6 @@ class TestBrokenInstallCannotKillTheRun:
             except SystemExit:
                 print("PROPAGATED")
             """,
-            block_deps=False,
             extra_path=self._shadow_broken_numpy(tmp_path, "SystemExit"),
         )
         assert "PROPAGATED" in out, (
@@ -328,20 +355,12 @@ class TestProbeStaysCheap:
         the guard no longer reaches the registry (see ``TestScorerGuardStaysIsolated``),
         so probing via the guard would pass vacuously.
         """
-        out = run_in_fresh_interpreter(
-            """
-            import sys
-            import eb_verify.plugins  # noqa: F401
-            heavy = sorted({
-                m.split(".")[0] for m in sys.modules
-                if m.split(".")[0] in ("numpy", "sklearn", "scipy")
-            })
-            print("HEAVY:" + (",".join(heavy) if heavy else "none"))
-            """,
-            block_deps=False,
+        heavy = sorted(
+            {m.split(".")[0] for m in modules_pulled_by("eb_verify.plugins")}
+            & set(HEAVY_ROOTS)
         )
-        assert "HEAVY:none" in out, (
-            f"the registry import pulled the heavy scoring stack ({out.strip()}); "
+        assert not heavy, (
+            f"the registry import pulled the heavy scoring stack ({heavy}); "
             "the numpy/sklearn imports must stay deferred and the probe must not execute them"
         )
 
@@ -349,71 +368,31 @@ class TestProbeStaysCheap:
 class TestScorerGuardStaysIsolated:
     """The harness-failure guard must not depend on the stack it reports on."""
 
-    def test_importing_scorer_guard_pulls_nothing_but_stdlib(self) -> None:
-        """``scorer_guard`` imports stdlib only -- its import must stay that cheap.
+    # The guard needs ``redact`` to bound the detail strings it reports; a stdlib-only
+    # sibling cannot break in a way the guard exists to survive. Anything else -- the
+    # registry, the 9 validators, ``runner``, a third-party dep -- is a module that can
+    # blind the very thing that reports it being broken.
+    GUARD_MAY_REACH = {"eb_verify", "eb_verify.scorer_guard", "eb_verify.redact"}
 
-        It exists to report harness failures, so it must not be importable-only-if
-        the harness is healthy: a broken import in any one of the 9 unguarded
-        validators would otherwise take down the very module that reports that
-        class of failure.
+    def test_importing_scorer_guard_reaches_nothing_that_can_blind_it(self) -> None:
+        """``scorer_guard`` imports stdlib and ``redact`` -- its import must stay that cheap.
 
-        Asserted as "nothing outside the stdlib" rather than as a denylist of the
-        modules it must not reach: a denylist is blind to whatever the guard acquires
-        next, which is the regression worth catching.
+        It exists to report harness failures, so it must not be importable-only-if the
+        harness is healthy: a broken import in any one of the 9 unguarded validators
+        would otherwise take down the very module that reports that class of failure.
+
+        One allowlist rather than a stdlib check plus a sibling check: "reaches nothing
+        outside this set" already fails on numpy AND on eb_verify.plugins, and unlike a
+        denylist it also fails on whatever the guard acquires next -- which is the
+        regression worth catching. A new entry here is only acceptable if it is
+        stdlib-only and the guard genuinely needs it.
         """
-        out = run_in_fresh_interpreter(
-            """
-            import sys
-            before = set(sys.modules)
-            import eb_verify.scorer_guard  # noqa: F401
-            roots = {m.split(".")[0] for m in set(sys.modules) - before}
-            third_party = sorted(
-                r for r in roots
-                if r not in sys.stdlib_module_names and not r.startswith("_")
-            )
-            print("NONSTDLIB:" + (",".join(third_party) if third_party else "none"))
-            """,
-            block_deps=False,
-        )
-        assert "NONSTDLIB:eb_verify" in out and "," not in out.split("NONSTDLIB:")[1], (
-            f"importing eb_verify.scorer_guard reached beyond the stdlib ({out.strip()}); "
-            "the guard must stay importable when a validator is broken or a dependency "
-            "is missing, so nothing may re-couple it to the plugin stack"
-        )
-
-    def test_importing_scorer_guard_pulls_no_unvetted_sibling_module(self) -> None:
-        """Every sibling the guard pulls in is one more module that can blind it.
-
-        ``eb_verify`` passes the stdlib check above by construction, so pin separately
-        which siblings ride along: ``runner``, the registry and the 9 validators are
-        exactly what must not.
-
-        Pinned as an allowlist rather than "no siblings at all" -- the guard needs
-        ``redact`` to bound the detail strings it reports, and a stdlib-only sibling
-        cannot break in a way the guard exists to survive. An allowlist, not a denylist
-        of the plugin stack: whatever the guard acquires NEXT is the regression worth
-        catching, and a denylist is blind to it by construction.
-        """
-        allowed = {"eb_verify.redact"}
-        out = run_in_fresh_interpreter(
-            """
-            import sys
-            import eb_verify.scorer_guard  # noqa: F401
-            siblings = sorted(
-                m for m in sys.modules
-                if m.split(".")[0] == "eb_verify"
-                and m not in ("eb_verify", "eb_verify.scorer_guard")
-            )
-            print("SIBLINGS:" + (",".join(siblings) if siblings else "none"))
-            """,
-            block_deps=False,
-        )
-        reached = {m for m in out.split("SIBLINGS:")[1].strip().split(",") if m != "none"}
-        assert reached <= allowed, (
-            f"importing eb_verify.scorer_guard dragged in unvetted sibling modules "
-            f"({sorted(reached - allowed)}); the guard must stay importable when any "
-            "of them is broken. A new sibling here is only acceptable if it is "
-            "stdlib-only and the guard genuinely needs it -- then add it to `allowed`."
+        reached = nonstdlib_modules(modules_pulled_by("eb_verify.scorer_guard"))
+        assert reached <= self.GUARD_MAY_REACH, (
+            f"importing eb_verify.scorer_guard dragged in unvetted modules "
+            f"({sorted(reached - self.GUARD_MAY_REACH)}); the guard must stay importable "
+            "when a validator is broken or a dependency is missing, so nothing may "
+            "re-couple it to the plugin stack"
         )
 
     def test_the_broken_validator_shadow_actually_breaks_the_registry(
@@ -428,7 +407,6 @@ class TestScorerGuardStaysIsolated:
             except ImportError as exc:
                 print("REGISTRY_RAISES:" + str(exc))
             """,
-            block_deps=False,
             extra_path=broken_validator_tree,
         )
         assert "REGISTRY_RAISES" in out, (
@@ -445,7 +423,6 @@ class TestScorerGuardStaysIsolated:
             import eb_verify.scorer_guard as guard
             print("GUARD_OK:" + guard.__file__)
             """,
-            block_deps=False,
             extra_path=broken_validator_tree,
         )
         assert "GUARD_OK:" in out, (
@@ -470,50 +447,40 @@ class TestScorersPackageStaysImportLight:
     reintroduce an edge to the plugin registry or the scoring stack.
     """
 
-    def test_importing_the_scorer_reaches_neither_the_registry_nor_the_heavy_stack(
-        self,
-    ) -> None:
-        out = run_in_fresh_interpreter(
-            f"""
-            import sys
-            import {SCORER_MODULE}  # noqa: F401
-            plugins = sorted(m for m in sys.modules if m.startswith("eb_verify.plugins"))
-            heavy = sorted(
-                m for m in sys.modules
-                if m.split(".")[0] in ("numpy", "sklearn", "scipy", "pandas")
-            )
-            print("PLUGINS:" + (",".join(plugins) if plugins else "none"))
-            print("HEAVY:" + (",".join(heavy) if heavy else "none"))
-            """,
-            block_deps=False,
-        )
-        assert "PLUGINS:none" in out, (
-            f"the shipped scorer imports the validator registry ({out.strip()}); a "
-            "broken validator would then empty its stdout and the runner would book "
-            "the harness failure as an agent zero"
-        )
-        assert "HEAVY:none" in out, (
-            f"the shipped scorer imports the scoring stack ({out.strip()}); it does not "
-            "score facts, and task sandboxes do not ship numpy"
+    # What the scorer legitimately needs to print a guarded verdict, and nothing more.
+    # The registry (a broken validator would empty its stdout, and the runner would book
+    # the harness failure as an agent zero) and the scoring stack (it does not score
+    # facts, and task sandboxes do not ship numpy) are both excluded by not appearing.
+    SCORER_MAY_REACH = {
+        "eb_verify",
+        "eb_verify.scorers",
+        "eb_verify.scorers.file_extraction",
+        "eb_verify.scorer_guard",
+        "eb_verify.redact",
+    }
+
+    def test_importing_the_scorer_reaches_nothing_it_does_not_need(self) -> None:
+        """Stated as an allowlist, for the same reason the guard's isolation is.
+
+        The tempting form is a denylist of the registry plus the heavy roots, but that
+        only ever catches the two edges someone already thought of: a scorer that
+        acquired ``jsonschema``, ``yaml``, or ``eb_verify.fact_coverage`` would read as
+        clean -- and ``fact_coverage`` is exactly the module that would drag numpy back
+        in transitively while a root-name check reported nothing heavy.
+        """
+        reached = nonstdlib_modules(modules_pulled_by(SCORER_MODULE))
+        assert reached <= self.SCORER_MAY_REACH, (
+            f"the shipped scorer reached modules it does not need "
+            f"({sorted(reached - self.SCORER_MAY_REACH)}); every one of them is a module "
+            "that can fail to import on a task sandbox and empty the scorer's stdout, "
+            "which the runner books as a real agent zero"
         )
 
     def test_the_scorers_package_itself_has_no_import_side_effects(self) -> None:
         """The package is the contract: it must add nothing to what its modules cost."""
-        out = run_in_fresh_interpreter(
-            """
-            import sys
-            before = set(sys.modules)
-            import eb_verify.scorers  # noqa: F401
-            pulled = sorted(
-                m for m in set(sys.modules) - before
-                if m not in ("eb_verify", "eb_verify.scorers")
-            )
-            print("PULLED:" + (",".join(pulled) if pulled else "none"))
-            """,
-            block_deps=False,
-        )
-        assert "PULLED:none" in out, (
-            f"eb_verify.scorers imports modules at package import ({out.strip()}); it "
+        pulled = modules_pulled_by("eb_verify.scorers") - {"eb_verify", "eb_verify.scorers"}
+        assert not pulled, (
+            f"eb_verify.scorers imports modules at package import ({sorted(pulled)}); it "
             "exists to be the location that does not, so its submodules pay only for "
             "what they use"
         )
