@@ -4,11 +4,10 @@
 MCP tool calls never retrieved source at all. It is marked INVALID and routed to
 the infra-error re-run channel.
 
-Note what these tests do NOT establish: that such a run is kept out of the S6.2
-headline. run_task writes ``status="invalid"`` while the analysis compares
-against ``"INVALID"``, so the classification falls through to VALID downstream
-and the run is still counted (EnterpriseBench-te9ah). These tests assert the
-routing this module owns, not an exclusion it does not currently achieve.
+The run is marked ``status="invalid"``; the analysis normalizes the case before
+comparison (``aggregate_mcp_clean.load_mode``, EnterpriseBench-te9ah), so a
+routed run classes INVALID and is excluded from the S6.2 headline. These tests
+assert the routing this module owns; the exclusion itself is te9ah's to prove.
 
 ``hybrid`` is deliberately NOT gated: that mode grants both toolsets, so 0 MCP
 calls is a legitimate agent choice. Invalidating those runs would delete
@@ -68,11 +67,11 @@ class TestZeroMcpGateMcpOnly:
         rewriting this result to phase="complete", success=True. That is the
         whole of what this test claims.
 
-        Headline exclusion is a separate question and is not asserted here or
-        by the status test above: the locked clean-set path
-        (recompute_headline_uu17.locked_clean, via aggregate_mcp_clean.load_mode)
-        classifies on ``status``, and the case mismatch in
-        EnterpriseBench-te9ah means it never matches.
+        Headline exclusion is a separate question, owned elsewhere: the locked
+        clean-set path (recompute_headline_uu17.locked_clean, via
+        aggregate_mcp_clean.load_mode) classifies on ``status`` and, since
+        EnterpriseBench-te9ah normalized the case, an ``"invalid"`` run classes
+        INVALID and is excluded. This test asserts only the phase override guard.
         """
         result = _result(0)
 

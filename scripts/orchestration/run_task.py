@@ -1511,9 +1511,10 @@ def _route_zero_mcp_run(result: "TaskRunResult", mode: str) -> None:
     the arm exists to measure. That is a broken run, not a cheap one, so mark it
     INVALID and route it to the infra-error re-run channel.
 
-    Marking it is currently all this achieves: the analysis compares ``status``
-    against ``"INVALID"`` while this writes ``"invalid"``, so the run is still
-    counted in the headline until EnterpriseBench-te9ah lands.
+    The status this writes (``"invalid"``, lowercase) is normalized by the
+    analysis before comparison (``aggregate_mcp_clean.load_mode`` upper-cases it,
+    EnterpriseBench-te9ah), so a marked run classes ``INVALID`` and is excluded
+    from the MCP-vs-baseline headline.
 
     ``hybrid`` grants both toolsets by design, so 0 MCP calls there is a
     legitimate agent choice, not an infra failure: it is flagged and still
@@ -2569,11 +2570,11 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         # with a number that measures the gate rather than the agent, so the run
         # is refused here rather than scored (bead EnterpriseBench-7rc1).
         #
-        # Refusing is all this does. Whether the published headline is computed
-        # over a subset every arm can run is a separate, open question: the
-        # reported run set predates this check (EnterpriseBench-yxu3k), and a
-        # refused run is still miscounted downstream until EnterpriseBench-te9ah
-        # lands.
+        # Refusing is all this does. A refused run is marked INVALID and the
+        # analysis now excludes it (EnterpriseBench-te9ah normalized the status
+        # case). Whether the *published* headline is computed over a subset every
+        # arm can run is a separate, still-open question: the reported run set
+        # predates this check (EnterpriseBench-yxu3k).
         try:
             check_eligibility(task_data, config.mode)
         except IneligibleTask as exc:
