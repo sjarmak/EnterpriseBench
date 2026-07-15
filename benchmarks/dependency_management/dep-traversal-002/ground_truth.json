@@ -21,10 +21,21 @@
       "affected_versions": "< 0.21.2"
     }
   ],
-  "direct_dependents": ["grafana", "druid-web-console"],
+  "direct_dependents": [
+    "grafana",
+    "druid-web-console"
+  ],
   "transitive_paths": [
-    ["axios", "grafana-plugin-sdk", "grafana-plugins"],
-    ["axios", "druid-web-console", "druid"]
+    [
+      "axios",
+      "grafana-plugin-sdk",
+      "grafana-plugins"
+    ],
+    [
+      "axios",
+      "druid-web-console",
+      "druid"
+    ]
   ],
   "fix_reference": "axios/axios@5b457116e31db0e88fede6c428e969e87f290929",
   "affected_version_range": "< 0.21.2",
@@ -34,5 +45,19 @@
     "verified": true
   },
   "difficulty": "medium",
-  "confidence": 0.93
+  "confidence": 0.93,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-cph5-m8f7-6c5x"
+    ],
+    "find_direct_deps": [
+      "0.21.2"
+    ],
+    "trace_transitive_paths": [
+      "0.21.2"
+    ],
+    "version_analysis": [
+      "0.21.2"
+    ]
+  }
 }

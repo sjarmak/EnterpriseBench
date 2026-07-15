@@ -1,9 +1,10 @@
-"""Prompt-echo resistance for the 7 dep-traversal CVE-blast-radius tasks.
+"""Prompt-echo resistance for the 12 dep-traversal CVE-blast-radius tasks.
 
-EnterpriseBench-vjrbw: dep-traversal-004/007/008/009/010/011/012 each shipped
-four checkpoints that grepped BLAST_RADIUS.md for the CVE id, the consumer repo
-names, and the fixed version — every one of which instruction.md hands the agent.
-A verbatim `cp instruction.md BLAST_RADIUS.md` scored 1.00 across all four
+EnterpriseBench-vjrbw (004/007-012, full echo credit) and its follow-up
+EnterpriseBench-jn73.2.7.3 (001/002/003/005/006, partial echo credit) each
+shipped four checkpoints that grepped BLAST_RADIUS.md for the CVE id, the
+consumer repo names, and the fixed version — every one of which instruction.md
+hands the agent. A verbatim `cp instruction.md BLAST_RADIUS.md` scored those
 checkpoints with zero investigation.
 
 The fix grades each checkpoint against
@@ -30,7 +31,12 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 SUITE = REPO_ROOT / "benchmarks" / "dependency_management"
 
 TASK_IDS = [
+    "dep-traversal-001",
+    "dep-traversal-002",
+    "dep-traversal-003",
     "dep-traversal-004",
+    "dep-traversal-005",
+    "dep-traversal-006",
     "dep-traversal-007",
     "dep-traversal-008",
     "dep-traversal-009",

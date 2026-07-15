@@ -21,10 +21,21 @@
       "affected_versions": "< 0.3.8"
     }
   ],
-  "direct_dependents": ["go-chi/chi", "gorilla/mux", "gohugoio/hugo"],
+  "direct_dependents": [
+    "go-chi/chi",
+    "gorilla/mux",
+    "gohugoio/hugo"
+  ],
   "transitive_paths": [
-    ["golang.org/x/text", "go-chi/chi", "chi-based-apps"],
-    ["golang.org/x/text", "gohugoio/hugo"]
+    [
+      "golang.org/x/text",
+      "go-chi/chi",
+      "chi-based-apps"
+    ],
+    [
+      "golang.org/x/text",
+      "gohugoio/hugo"
+    ]
   ],
   "fix_reference": "go.dev/cl/442235",
   "affected_version_range": "< 0.3.8",
@@ -35,5 +46,19 @@
     "verified": true
   },
   "difficulty": "medium",
-  "confidence": 0.92
+  "confidence": 0.92,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-69ch-w2m2-3vjp"
+    ],
+    "find_direct_deps": [
+      "0.3.8"
+    ],
+    "trace_transitive_paths": [
+      "0.3.8"
+    ],
+    "version_analysis": [
+      "0.3.8"
+    ]
+  }
 }

@@ -21,11 +21,28 @@
       "affected_versions": "< 4.17.21"
     }
   ],
-  "direct_dependents": ["webpack", "jest", "@babel/traverse"],
+  "direct_dependents": [
+    "webpack",
+    "jest",
+    "@babel/traverse"
+  ],
   "transitive_paths": [
-    ["lodash", "webpack", "create-react-app"],
-    ["lodash", "jest", "create-react-app"],
-    ["lodash", "@babel/traverse", "babel-loader", "webpack"]
+    [
+      "lodash",
+      "webpack",
+      "create-react-app"
+    ],
+    [
+      "lodash",
+      "jest",
+      "create-react-app"
+    ],
+    [
+      "lodash",
+      "@babel/traverse",
+      "babel-loader",
+      "webpack"
+    ]
   ],
   "fix_reference": "lodash/lodash@3469357cff396a26c363f8c1b5a91dde28ba4b1c",
   "affected_version_range": "< 4.17.21",
@@ -35,5 +52,19 @@
     "verified": true
   },
   "difficulty": "medium",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-35jh-r3h4-6jhm"
+    ],
+    "find_direct_deps": [
+      "GHSA-35jh-r3h4-6jhm"
+    ],
+    "trace_transitive_paths": [
+      "GHSA-35jh-r3h4-6jhm"
+    ],
+    "version_analysis": [
+      "GHSA-35jh-r3h4-6jhm"
+    ]
+  }
 }

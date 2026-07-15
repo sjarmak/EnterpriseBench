@@ -28,11 +28,24 @@
       "affected_versions": "< 0.7.0"
     }
   ],
-  "direct_dependents": ["prometheus", "consul", "vault"],
+  "direct_dependents": [
+    "prometheus",
+    "consul",
+    "vault"
+  ],
   "transitive_paths": [
-    ["golang.org/x/net", "prometheus"],
-    ["golang.org/x/net", "consul"],
-    ["golang.org/x/net", "vault"]
+    [
+      "golang.org/x/net",
+      "prometheus"
+    ],
+    [
+      "golang.org/x/net",
+      "consul"
+    ],
+    [
+      "golang.org/x/net",
+      "vault"
+    ]
   ],
   "fix_reference": "go.dev/cl/468135",
   "affected_version_range": "< 0.7.0",
@@ -43,5 +56,19 @@
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-vvpx-j8f3-3w6h"
+    ],
+    "find_direct_deps": [
+      "0.7.0"
+    ],
+    "trace_transitive_paths": [
+      "0.7.0"
+    ],
+    "version_analysis": [
+      "0.7.0"
+    ]
+  }
 }

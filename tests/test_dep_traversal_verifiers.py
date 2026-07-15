@@ -1,21 +1,21 @@
 """Verification tests for dep-traversal task checkpoint scripts.
 
-For each task, tests 3 tiers:
-  (a) Ground truth answer -> score >=0.85
-  (b) Empty answer -> score <=0.10
-  (c) Partial answer -> 0.15 <= score <= 0.75
+All 12 dep-traversal tasks were re-anchored to non-prompt evidence
+(EnterpriseBench-vjrbw for 004/007-012; jn73.2.7.3 for 001/002/003/005/006):
+each checkpoint now scores 0-or-1 over a small evidence-token set drawn from
+ground_truth.json:scoring_evidence, not a continuous count of prompt vocabulary.
 
-Runs the actual bash verifier scripts via subprocess, matching the
-eb_verify runner convention (WORKSPACE env var, JSON stdout).
+This file asserts the two ends of the WEIGHTED aggregate:
+  (a) a ground-truth answer carrying the non-prompt evidence -> score >=0.85
+  (b) an empty answer -> score <=0.10
 
-Tasks 004/007-012 were re-anchored to non-prompt evidence (EnterpriseBench-vjrbw)
-and now score each checkpoint 0-or-1 on a small evidence-token set rather than on
-a continuous count of prompt vocabulary. The partial-answer "mid" band (c) no
-longer models their discrete scoring, so it runs over the LEGACY tasks only; the
-echo->0 / real->full behaviour of the re-anchored tasks is owned end-to-end by
-tests/integrity/test_dep_traversal_prompt_echo.py. Their ground-truth answers
-here carry the non-prompt evidence a genuine full report cites (advisory id,
-transitive version bound), so tier (a) stays a real assertion.
+The prompt-echo->0 / real->full / guard behaviour, per checkpoint, is owned
+end-to-end by tests/integrity/test_dep_traversal_prompt_echo.py. The old
+partial-answer "mid" band modelled the continuous prompt-vocab scoring and no
+longer applies to any task, so it was retired.
+
+Runs the actual bash verifier scripts via subprocess, matching the eb_verify
+runner convention (WORKSPACE env var, JSON stdout).
 """
 
 from __future__ import annotations
@@ -41,8 +41,6 @@ class TaskVerifierSpec:
     task_num: str
     # Ground truth answer content -- what a perfect agent would write
     gt_answer: str
-    # Partial answer -- some but not all info found
-    partial_answer: str
 
 
 TASKS: list[TaskVerifierSpec] = [
@@ -54,6 +52,7 @@ TASKS: list[TaskVerifierSpec] = [
 ## CVE Identification
 CVE-2021-23337 affects `lodash` versions < 4.17.21. Command injection via
 `_.template` function.
+Advisory: GHSA-35jh-r3h4-6jhm.
 
 ## Direct Dependents
 - **webpack** — `package.json` lists lodash as devDependency
@@ -68,15 +67,6 @@ CVE-2021-23337 affects `lodash` versions < 4.17.21. Command injection via
 ## Version Analysis
 - webpack v5.64.0: lodash pinned at 4.17.20 — **affected**, needs upgrade
 - jest v29.0.0: lodash resolved to 4.17.21 — **not affected**, already patched
-""",
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2021-23337
-Affects lodash < 4.17.21.
-
-## Direct Dependents
-- webpack uses lodash
 """,
     ),
     TaskVerifierSpec(
@@ -98,15 +88,6 @@ CVE-2021-3749 affects `axios` versions < 0.21.2. ReDoS via trim function.
 ## Version Analysis
 - grafana v9.5.0: axios pinned at 0.21.1 — **affected**, needs upgrade to 0.21.2+
 - druid web-console: axios 0.21.1 — **still vulnerable**, needs upgrade
-""",
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2021-3749
-Affects axios < 0.21.2.
-
-## Dependents
-- grafana uses axios
 """,
     ),
     TaskVerifierSpec(
@@ -131,15 +112,6 @@ ParseAcceptLanguage function.
 - chi v5.0.8: x/text resolved to 0.3.7 in go.mod — **affected** version but
   not calling vulnerable function
 - hugo v0.111.0: x/text at 0.5.0 — **not affected**, already patched
-""",
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2022-32149
-Affects golang.org/x/text < 0.3.8.
-
-## Dependents
-- chi depends on x/text (go.mod)
 """,
     ),
     TaskVerifierSpec(
@@ -168,16 +140,6 @@ versions < 1.58.3.
 - etcd v3.5.9: x/net at 0.10.0 — **affected**, needs upgrade
 - grpc-go v1.58.0: x/net at 0.14.0 — **affected**, needs upgrade to 0.17.0+
 """,
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2023-39325
-Affects golang.org/x/net < 0.17.0.
-
-## Dependents
-- kubernetes depends on x/net (go.mod)
-- etcd depends on x/net
-""",
     ),
     TaskVerifierSpec(
         task_num="005",
@@ -202,15 +164,6 @@ compression DoS in HTTP/2 server.
 - prometheus v2.45.0: x/net resolved in go.sum to 0.9.0 — **not affected**, already patched
 - consul v1.16.0: x/net at 0.8.0 — **not affected**, already patched
 - vault v1.14.0: x/net at 0.7.0 — **patched** at exact fix version
-""",
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2022-41723
-Affects golang.org/x/net < 0.7.0.
-
-## Dependents
-- prometheus has x/net in go.mod
 """,
     ),
     TaskVerifierSpec(
@@ -237,15 +190,6 @@ loop when unmarshaling JSON containing Any protobuf types.
 - istio 1.20.0: protobuf at 1.31.0 — **affected**
 - go-control-plane v0.12.0: protobuf at 1.31.0 — **affected**
 """,
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2024-24786
-Affects google.golang.org/protobuf < 1.33.0.
-
-## Dependents
-- grpc-go uses protobuf
-""",
     ),
     TaskVerifierSpec(
         task_num="007",
@@ -268,15 +212,6 @@ Advisory: GHSA-g954-5hwp-pp24.
 ## Version Analysis
 - grpc-node grpc-js: protobufjs at 6.11.2 in lock file — **affected**
 - kubernetes-client: depends on grpc-js which pulls in affected protobufjs — **affected** transitively
-""",
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2022-25878
-Affects protobufjs 6.10.0-6.10.2.
-
-## Dependents
-- grpc-node uses protobufjs
 """,
     ),
     TaskVerifierSpec(
@@ -302,15 +237,6 @@ Advisory: GHSA-j8r2-6x86-q33q.
 - boto3 1.26.0: botocore pins requests>=2.25.0,<2.29 in setup.py — **affected**
 - awscli 2.11.0: inherits requests version from botocore — **affected**, needs upgrade to requests 2.31.0+
 """,
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2023-32681
-Affects requests < 2.31.0. Proxy-Authorization header leak.
-
-## Dependents
-- boto3 depends on requests via botocore
-""",
     ),
     TaskVerifierSpec(
         task_num="009",
@@ -335,15 +261,6 @@ Cookie header leak on cross-origin redirect.
 - requests v2.28.0: pins urllib3>=1.21.1,<1.27 — uses 1.x branch, version
   1.26.16 — **affected**, needs 1.26.17+
 - boto3 1.26.0: inherits urllib3 version through botocore -> requests chain — **affected** transitively
-""",
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2023-43804
-Affects urllib3 < 1.26.17.
-
-## Dependents
-- requests uses urllib3 as transport layer
 """,
     ),
     TaskVerifierSpec(
@@ -371,15 +288,6 @@ and 2.13.2.
 - spring-boot v2.7.0: manages jackson-databind 2.13.3 via build.gradle — **not affected** (post-fix)
 - dropwizard v2.1.0: jackson-databind 2.13.2 in dropwizard-bom/pom.xml — **affected**, needs 2.13.2.1+
 """,
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2020-36518
-Affects jackson-databind <= 2.12.6.0 and 2.13.0-2.13.2.
-
-## Dependents
-- spring-boot uses jackson-databind via BOM
-""",
     ),
     TaskVerifierSpec(
         task_num="011",
@@ -406,15 +314,6 @@ Backports: 2.3.1 (Java 6), 2.12.2 (Java 7).
 ## Version Analysis
 - spring-boot v2.6.1: starter-log4j2 manages log4j 2.14.1 — **affected**, 2.15.0 is partial fix only, needs 2.16.0+
 - kafka 3.1.0: log4j 2.17.1 in build.gradle — **patched** (post 2.16.0)
-""",
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2021-44228
-Log4Shell. Affects log4j-core 2.0-beta9 through 2.14.1. JNDI RCE.
-
-## Dependents
-- kafka uses log4j-core
 """,
     ),
     TaskVerifierSpec(
@@ -446,15 +345,6 @@ BN_mod_sqrt infinite loop triggered by crafted certificates.
 - kubernetes: pure Go crypto/tls (CGO_ENABLED=0 default) — **not affected/immune**
   unless built with CGO_ENABLED=1
 """,
-        partial_answer="""\
-# Blast Radius Report
-
-## CVE-2022-0778
-Affects OpenSSL 1.1.1 through 1.1.1m. Infinite loop.
-
-## Dependents
-- curl uses OpenSSL (dynamic linking)
-""",
     ),
 ]
 
@@ -474,13 +364,6 @@ CHECKPOINT_NAMES = [
 ]
 
 CHECKPOINT_WEIGHTS = (0.10, 0.30, 0.35, 0.25)
-
-# Tasks re-anchored to non-prompt evidence (EnterpriseBench-vjrbw). Their
-# per-checkpoint score is discrete (0 or 1 over a tiny token set), so the
-# continuous partial-answer "mid" band does not apply — those tasks are covered
-# by tests/integrity/test_dep_traversal_prompt_echo.py instead.
-REWORKED_TASK_NUMS = {"004", "007", "008", "009", "010", "011", "012"}
-LEGACY_TASKS = [t for t in TASKS if t.task_num not in REWORKED_TASK_NUMS]
 
 
 def _run_verifier(
@@ -569,27 +452,6 @@ class TestEmptyAnswerScoresLow:
         total = _weighted_score(results)
         assert total <= 0.10, (
             f"Task {spec.task_num} empty scored {total:.2f} (>0.10). "
-            f"Results: {results}"
-        )
-
-
-class TestPartialAnswerScoresMid:
-    """(c) Partial answer should score between 0.15 and 0.75 (legacy tasks only)."""
-
-    @pytest.mark.parametrize(
-        "spec", LEGACY_TASKS, ids=[t.task_num for t in LEGACY_TASKS]
-    )
-    def test_partial_answer_scores_mid(self, tmp_path: Path, spec: TaskVerifierSpec) -> None:
-        workspace = tmp_path / "workspace"
-        _write_report(workspace, spec.partial_answer)
-
-        results = [
-            _run_verifier(spec.task_num, cp, workspace)
-            for cp in CHECKPOINT_NAMES
-        ]
-        total = _weighted_score(results)
-        assert 0.15 <= total <= 0.75, (
-            f"Task {spec.task_num} partial scored {total:.2f} (expected 0.15-0.75). "
             f"Results: {results}"
         )
 

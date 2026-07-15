@@ -21,11 +21,26 @@
       "affected_versions": "all using protobuf < 1.33.0"
     }
   ],
-  "direct_dependents": ["grpc-go", "istio", "go-control-plane"],
+  "direct_dependents": [
+    "grpc-go",
+    "istio",
+    "go-control-plane"
+  ],
   "transitive_paths": [
-    ["google.golang.org/protobuf", "grpc-go", "istio"],
-    ["google.golang.org/protobuf", "go-control-plane", "istio"],
-    ["google.golang.org/protobuf", "grpc-go"]
+    [
+      "google.golang.org/protobuf",
+      "grpc-go",
+      "istio"
+    ],
+    [
+      "google.golang.org/protobuf",
+      "go-control-plane",
+      "istio"
+    ],
+    [
+      "google.golang.org/protobuf",
+      "grpc-go"
+    ]
   ],
   "fix_reference": "go.dev/cl/569356",
   "affected_version_range": "< 1.33.0",
@@ -36,5 +51,19 @@
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.94
+  "confidence": 0.94,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-8r3f-844c-mc37"
+    ],
+    "find_direct_deps": [
+      "1.33.0"
+    ],
+    "trace_transitive_paths": [
+      "1.33.0"
+    ],
+    "version_analysis": [
+      "1.33.0"
+    ]
+  }
 }
