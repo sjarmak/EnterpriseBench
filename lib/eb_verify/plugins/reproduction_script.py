@@ -7,7 +7,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from eb_verify.plugins import ValidationResult, safe_read
+from eb_verify.artifact_io import safe_read
+from eb_verify.plugins import ValidationResult
 
 
 class ReproductionScriptValidator:

@@ -20,7 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import FrozenSet, Sequence
 
-from eb_verify.plugins import ValidationResult, safe_read
+from eb_verify.artifact_io import safe_read
+from eb_verify.plugins import ValidationResult
 
 
 @dataclass(frozen=True)

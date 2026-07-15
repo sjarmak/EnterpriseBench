@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from eb_verify.groundedness import CitationParseError, ground_citations
-from eb_verify.plugins import ValidationResult, safe_read
+from eb_verify.artifact_io import safe_read
+from eb_verify.plugins import ValidationResult
 
 
 REQUIRED_FIELDS = ["timeline", "root_cause", "remediation", "affected_services"]

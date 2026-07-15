@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from eb_verify.groundedness import check_groundedness, parse_citations
-from eb_verify.plugins import ValidationResult, safe_read
+from eb_verify.artifact_io import safe_read
+from eb_verify.plugins import ValidationResult
 
 REQUIRED_FIELDS = ["vulnerabilities", "severity_summary", "recommendations"]
 

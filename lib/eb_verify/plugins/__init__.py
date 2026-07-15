@@ -11,16 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Protocol
 
-# Re-exported: the validators in this package all read artifacts through
-# safe_read, and importing it from here costs them nothing (this registry
-# imports every validator eagerly anyway). It is DEFINED in artifact_io so that
-# groundedness can use it without importing the registry, which would cycle.
-from eb_verify.artifact_io import (  # noqa: F401
-    MAX_ARTIFACT_BYTES,
-    FileTooLargeError,
-    safe_read,
-)
-
 
 @dataclass
 class ValidationResult:

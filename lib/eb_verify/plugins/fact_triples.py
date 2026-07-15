@@ -50,7 +50,8 @@ from eb_verify.fact_coverage import (
     load_scoring_deps,
 )
 from eb_verify.groundedness import Citation, check_groundedness
-from eb_verify.plugins import ValidationResult, safe_read
+from eb_verify.artifact_io import safe_read
+from eb_verify.plugins import ValidationResult
 
 DEFAULT_ALPHA = 0.3
 # Chosen operating point for one-to-one greedy triple matching — NOT calibrated

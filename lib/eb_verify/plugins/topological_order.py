@@ -15,6 +15,7 @@ from collections import deque
 from pathlib import Path
 from typing import Dict, Iterable, List
 
+from eb_verify.artifact_io import safe_read
 from eb_verify.plugins import ValidationResult
 
 # Agents write the required "numbered list of repos in order" as either:
@@ -324,8 +325,6 @@ class TopologicalOrderValidator:
 
     def validate(self, workspace: Path) -> ValidationResult:
         import json
-
-        from eb_verify.plugins import safe_read
 
         candidates = list(workspace.glob("**/ordering.json"))
         if not candidates:

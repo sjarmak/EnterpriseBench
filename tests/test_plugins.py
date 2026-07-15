@@ -9,14 +9,12 @@ from pathlib import Path
 
 import pytest
 
+from eb_verify.artifact_io import FileTooLargeError, MAX_ARTIFACT_BYTES, safe_read
 from eb_verify.plugins import (
-    FileTooLargeError,
-    MAX_ARTIFACT_BYTES,
     ValidationResult,
     get_validator,
     list_validators,
     register,
-    safe_read,
 )
 from eb_verify.plugins.answer import (
     AnswerValidator,
