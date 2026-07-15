@@ -376,6 +376,21 @@ def run_task(
 # ---------------------------------------------------------------------------
 
 
+def _mode_output_dir(task_id: str, mode: str, *, multi_mode: bool) -> Path | None:
+    """Per-mode results directory, or None for single-mode runs.
+
+    Multi-mode sweeps route each mode to its own subdirectory so results from
+    different modes do not overwrite each other; a single-mode run uses the
+    runner's default output path. Only run_task (single-session tasks) honors the
+    forwarded --output-dir; chain_runner and event_replay accept it but write to
+    their own fixed paths, so their multi-mode outputs still collide — tracked
+    separately, out of scope for the argparse contract this file establishes.
+    """
+    if not multi_mode:
+        return None
+    return PROJECT_ROOT / "results" / "runs" / task_id / mode
+
+
 def _run_task_with_account(
     task: TaskInfo,
     account_id: int | None,
@@ -388,10 +403,8 @@ def _run_task_with_account(
         cli_args,
         account_override=account_id,
         mode_override=mode,
+        output_dir=_mode_output_dir(task.task_id, mode, multi_mode=multi_mode),
     )
-    if multi_mode:
-        mode_output = PROJECT_ROOT / "results" / "runs" / task.task_id / mode
-        pt.extend(["--output-dir", str(mode_output)])
     return run_task(task, passthrough_args=pt, mode=mode)
 
 
@@ -571,12 +584,19 @@ def collect_passthrough_args(
     *,
     account_override: int | None = None,
     mode_override: str | None = None,
+    output_dir: Path | None = None,
 ) -> list[str]:
     """Build list of flags to pass through to underlying runner scripts.
 
     If *account_override* is given it replaces whatever --account was on the CLI
     (used by the parallel dispatcher to rotate accounts per task).
     If *mode_override* is given it replaces the --mode flag.
+    If *output_dir* is given a ``--output-dir`` flag is appended (used for
+    multi-mode runs that route each mode to its own subdirectory). This function
+    is the sole *emitter* of the forwarded flags — callers must not append flags
+    afterward, or the runner-contract test (which pins the emitted set against
+    runner_cli.PASSTHROUGH_FLAGS) cannot guarantee every runner accepts them
+    (EnterpriseBench-nw70h).
     """
     result: list[str] = []
     if args.source:
@@ -597,6 +617,8 @@ def collect_passthrough_args(
     result.extend(["--mode", mode])
     if args.dry_run:
         result.append("--dry-run")
+    if output_dir is not None:
+        result.extend(["--output-dir", str(output_dir)])
     return result
 
 
@@ -723,13 +745,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if len(modes) > 1:
             logger.info("--- Running mode: %s ---", current_mode)
 
-        # When using multi-mode, set output-dir to include mode subdirectory
-        mode_passthrough_extra: list[str] = []
-        if len(modes) > 1:
-            # Tell runners to use mode-specific output directories
-            for task in tasks:
-                pass  # output-dir override handled per-task below
-
         if workers <= 1 or args.dry_run:
             # Sequential execution
             for task in tasks:
@@ -749,13 +764,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args,
                     account_override=account_id,
                     mode_override=current_mode,
+                    output_dir=_mode_output_dir(
+                        task.task_id, current_mode, multi_mode=len(modes) > 1
+                    ),
                 )
-                # For multi-mode runs, use mode-specific output directory
-                if len(modes) > 1:
-                    mode_output = (
-                        PROJECT_ROOT / "results" / "runs" / task.task_id / current_mode
-                    )
-                    passthrough.extend(["--output-dir", str(mode_output)])
                 result = run_task(
                     task,
                     passthrough_args=passthrough,

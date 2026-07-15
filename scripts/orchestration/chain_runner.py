@@ -33,6 +33,7 @@ except ImportError:
 
 from orchestration.session import SessionConfig, SessionResult, run_session
 from orchestration.milestone import SessionScore, run_session_milestones
+from orchestration.runner_cli import add_passthrough_args
 from eb_verify.scorer_guard import InfraError
 
 logger = logging.getLogger(__name__)
@@ -464,7 +465,7 @@ def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinitio
     chain_result.final_score = chain_result.total_score
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a session-chain task")
     parser.add_argument("task_toml", help="Path to the chain task.toml file")
     parser.add_argument(
@@ -480,14 +481,16 @@ def main():
         "--workspace", default=None, help="Workspace root directory (default: temp dir)"
     )
     parser.add_argument("--verbose", "-v", action="store_true")
-    # Passthrough from run_benchmark.py, unused here. --agent must keep PARSING:
-    # rejecting it would exit at argparse, before the guard can write a real result.
-    parser.add_argument("--source", choices=["mirror", "upstream"])
-    parser.add_argument("--agent", type=str)
-    parser.add_argument("--timeout", type=int)
-    parser.add_argument("--account", type=int)
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+    # run_benchmark forwards a fixed flag set to whichever runner handles a task.
+    # --mode is consumed above; the rest are accepted-and-ignored here. Declaring
+    # the contract once (runner_cli) stops a forwarded flag from being rejected at
+    # argparse before a result can be written (EnterpriseBench-nw70h).
+    add_passthrough_args(parser, consumed=("--mode",))
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

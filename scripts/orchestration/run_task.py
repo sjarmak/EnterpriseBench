@@ -66,6 +66,12 @@ from agents.harnesses.claude.cli.sgx import (
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 from eb_verify.scorer_guard import InfraError, guard_verifier_output
 
+try:
+    from orchestration.runner_cli import assert_accepts_passthrough
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from runner_cli import assert_accepts_passthrough
+
 logger = logging.getLogger(__name__)
 
 # Paths to sandbox scripts (relative to repo root)
@@ -2746,7 +2752,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             logger.info("Keeping container for debugging: %s", result.container_id)
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run a single-session EnterpriseBench task in a Docker sandbox",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -2889,7 +2895,17 @@ Examples:
         help="Enable debug logging",
     )
 
-    args = parser.parse_args()
+    # run_task consumes every run_benchmark passthrough flag itself (richer
+    # semantics than the generic helper: choices, dest, typed defaults), so it
+    # declares them above rather than calling add_passthrough_args. Bind to the
+    # contract locally — a dropped/renamed flag fails here, not as a silent
+    # argparse exit-2 at dispatch (EnterpriseBench-nw70h).
+    assert_accepts_passthrough(parser)
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

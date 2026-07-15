@@ -45,6 +45,11 @@ except ImportError:
     )
     from action_scorer import score, ScoringConfig, ScoreResult
 
+try:
+    from .runner_cli import add_passthrough_args
+except ImportError:
+    from runner_cli import add_passthrough_args
+
 
 def load_task_config(task_dir: Path) -> dict:
     """Load and validate the task.toml file."""
@@ -143,7 +148,7 @@ def print_report(result: ScoreResult) -> None:
     print()
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Event-replay runner and scorer")
     parser.add_argument("task_dir", type=Path, help="Path to task directory")
     parser.add_argument(
@@ -152,13 +157,16 @@ def main():
     )
     parser.add_argument("--json", action="store_true", help="Output raw JSON instead of report")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
-    # Passthrough args forwarded by run_benchmark.py (accepted but not used here)
-    parser.add_argument("--source", choices=["mirror", "upstream"])
-    parser.add_argument("--agent", type=str)
-    parser.add_argument("--timeout", type=int)
-    parser.add_argument("--account", type=int)
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+    # run_benchmark forwards a fixed flag set to whichever runner handles a task.
+    # None are used here, but all must parse or the run dies at argparse before a
+    # result is written — event_replay silently rejected --mode and --output-dir
+    # this way (EnterpriseBench-nw70h). Contract lives in runner_cli.
+    add_passthrough_args(parser)
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
 
     task_dir = args.task_dir.resolve()
 
