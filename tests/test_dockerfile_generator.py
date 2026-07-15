@@ -9,6 +9,7 @@ Ensures:
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -103,6 +104,96 @@ PYTHON_BEARING_BASES = [
     "node:20-bookworm",
     "gcc:13-bookworm",
 ]
+
+
+def _eb_verify_modules() -> list[str]:
+    """Every importable module under lib/eb_verify, as dotted names.
+
+    Discovered from the filesystem rather than listed here, so a module added
+    later is covered without anyone remembering to add it. That is the whole
+    point: the gap this test exists to catch was one module out of 32
+    (parsers.manifests, whose bare ``import tomllib`` fails on 3.10) that no
+    test ever imported.
+
+    ``eb_verify.__main__`` is excluded — importing it runs the CLI's argparse
+    and exits, so it is not an import target.
+    """
+    lib_dir = REPO_ROOT / "lib"
+    modules = []
+    for path in sorted((lib_dir / "eb_verify").rglob("*.py")):
+        parts = list(path.relative_to(lib_dir).with_suffix("").parts)
+        if parts[-1] == "__main__":
+            continue
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        modules.append(".".join(parts))
+    return modules
+
+
+EB_VERIFY_MODULES = _eb_verify_modules()
+
+# These import numpy at module scope, which none of the generated images
+# install -- not even the python-bearing 3.11 bases. That is a gap in the
+# library's packaging, orthogonal to whether an image has an interpreter, so it
+# is marked here rather than chased from this bead.
+NUMPY_DEPENDENT_MODULES = {
+    "eb_verify.fact_coverage",
+    "eb_verify.fact_coverage_calibration",
+    "eb_verify.plugins.fact_triples",
+}
+
+
+def _module_param(module: str):
+    """Mark the numpy-dependent modules xfail, strictly.
+
+    Strict is the point: whoever puts numpy on the images should be told this
+    exemption has expired, by a failing XPASS. A silently-tolerated xfail is the
+    same class of bug as the silently-zeroing checkpoint this file exists to
+    prevent -- it just fails green instead of red.
+    """
+    if module in NUMPY_DEPENDENT_MODULES:
+        return pytest.param(
+            module,
+            marks=pytest.mark.xfail(
+                reason=f"{module} imports numpy, which no generated image installs",
+                strict=True,
+            ),
+        )
+    return module
+
+
+EB_VERIFY_MODULE_PARAMS = [_module_param(m) for m in EB_VERIFY_MODULES]
+
+# Imports each named module in the container, reporting per-module outcomes as
+# JSON instead of dying on the first failure -- one bad module should name
+# itself, not mask the other 31.
+_IMPORT_PROBE = """
+import importlib, json, sys
+
+results = {}
+for name in json.loads(sys.argv[1]):
+    try:
+        importlib.import_module(name)
+        results[name] = None
+    except BaseException as exc:  # SystemExit is not an Exception
+        results[name] = f"{type(exc).__name__}: {exc}"
+print(json.dumps(results))
+"""
+
+
+def _run_python(tag: str, code: str, *args: str) -> subprocess.CompletedProcess:
+    """Run *code* on *tag*'s python3, with lib/ mounted as eb_verify's import path."""
+    return subprocess.run(
+        [
+            "docker", "run", "--rm",
+            "-v", f"{REPO_ROOT / 'lib'}:/eb_lib:ro",
+            "-e", "PYTHONPATH=/eb_lib",
+            tag, "python3", "-c", code, *args,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +338,27 @@ class TestImageProvidesPython:
             ["RUN apt-get update && apt-get install -y git curl jq"]
         )
 
+    def test_gutted_install_is_not_covered_by_the_guard_expression(self) -> None:
+        """The interpreter must be read from the install's own arguments.
+
+        A guard that merely *mentions* python3 installs nothing. Scanning from
+        the first apt-get install to any later python3 counted this as
+        provisioned, which let a python-less image through preflight -- the
+        exact silent 0.0 the interpreter gate exists to prevent.
+        """
+        gutted = [
+            "RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates \\",
+            "    && if ! python3 -c 'import tomllib' 2>/dev/null; then :; fi \\",
+            "    && rm -rf /var/lib/apt/lists/*",
+        ]
+        assert not dockerfile_generator._provisions_python(gutted)
+
+    def test_the_toml_backport_alone_is_not_an_interpreter(self) -> None:
+        """python3-tomli is a library for the interpreter, not the interpreter."""
+        assert not dockerfile_generator._provisions_python(
+            ["RUN apt-get update && apt-get install -y python3-tomli"]
+        )
+
 
 # ---------------------------------------------------------------------------
 # Full Dockerfile generation tests
@@ -312,6 +424,32 @@ def build_setup_image(tmp_path_factory):
         subprocess.run(["docker", "rmi", "-f", tag], capture_output=True, timeout=120)
 
 
+@pytest.fixture(scope="session")
+def eb_verify_import_results(build_setup_image):
+    """base -> {module: error-or-None} for every eb_verify module.
+
+    One container per base rather than one per (base, module): the import
+    attempt is cheap but the container start is not, and the parametrization is
+    every base times every module.
+    """
+    cache: dict[str, dict[str, str | None]] = {}
+
+    def _results(base: str) -> dict[str, str | None]:
+        if base in cache:
+            return cache[base]
+        tag = build_setup_image(base)
+        run = _run_python(tag, _IMPORT_PROBE, json.dumps(EB_VERIFY_MODULES))
+        # A non-zero exit means python3 itself is missing or broken, not that
+        # some module failed to import -- the probe reports those in its JSON.
+        assert run.returncode == 0, (
+            f"import probe could not run on {base}:\n{run.stdout}\n{run.stderr}"
+        )
+        cache[base] = json.loads(run.stdout)
+        return cache[base]
+
+    return _results
+
+
 @pytest.mark.docker
 @pytest.mark.skipif(not docker_available(), reason="docker daemon not available")
 class TestPythonInterpreterE2E:
@@ -319,36 +457,27 @@ class TestPythonInterpreterE2E:
     a package missing from a base image's apt repo, a guard whose shell syntax
     is wrong, or an interpreter that imports eb_verify only on paper."""
 
-    def _run(self, tag: str, code: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            [
-                "docker", "run", "--rm",
-                "-v", f"{REPO_ROOT / 'lib'}:/eb_lib:ro",
-                "-e", "PYTHONPATH=/eb_lib",
-                tag, "python3", "-c", code,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-
+    @pytest.mark.parametrize("module", EB_VERIFY_MODULE_PARAMS)
     @pytest.mark.parametrize("base", PYTHONLESS_BASES + PYTHON_BEARING_BASES)
-    def test_eb_verify_imports_on_generated_image(self, base: str, build_setup_image) -> None:
-        tag = build_setup_image(base)
-        run = self._run(
-            tag, "import eb_verify.plugins.topological_order as m; print(m.__name__)"
-        )
-        assert run.returncode == 0, (
-            f"python3/eb_verify unusable on {base}:\n{run.stdout}\n{run.stderr}"
-        )
-        assert "eb_verify.plugins.topological_order" in run.stdout
+    def test_eb_verify_module_imports_on_generated_image(
+        self, base: str, module: str, eb_verify_import_results
+    ) -> None:
+        """Every eb_verify module, not just a representative one.
+
+        Asserting a single module is what let the interpreter guarantee read as
+        green while it was false: topological_order imports on 3.10, and
+        parsers.manifests -- the one module with a bare ``import tomllib`` --
+        does not.
+        """
+        error = eb_verify_import_results(base)[module]
+        assert error is None, f"{module} does not import on {base}: {error}"
 
     @pytest.mark.parametrize("base", PYTHON_BEARING_BASES)
     def test_base_interpreter_is_not_shadowed(self, base: str, build_setup_image) -> None:
         """These images ship their own python. The guard must leave it alone
         rather than lay a distro interpreter over the top of it."""
         tag = build_setup_image(base)
-        run = self._run(tag, "import sys; print(sys.version_info[:2])")
+        run = _run_python(tag, "import sys; print(sys.version_info[:2])")
         assert run.returncode == 0, run.stderr
         assert "(3, 11)" in run.stdout or "(3, 12)" in run.stdout, (
             f"{base} should still be on its own 3.11+ interpreter, got {run.stdout!r}"

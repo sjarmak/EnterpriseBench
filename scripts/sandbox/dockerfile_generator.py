@@ -148,16 +148,31 @@ _PYTHON_PROVISION = (
     "then apt-get install -y python3 python3-tomli; fi"
 )
 
-# True when a RUN line apt-installs python3. Continuations are collapsed before
-# matching, so the answer tracks what the shell would run rather than how the
-# line happens to be wrapped.
-_PYTHON_INSTALL_RE = re.compile(r"\bapt-get install\b.*\bpython3\b")
+# One apt-get install invocation, capturing only its own arguments: the match
+# stops at the shell separator that ends the command. The bound is the whole
+# point -- an unbounded `.*` runs past the install and finds the python3 inside
+# the guard expression, so gutting the install would leave the match (and this
+# module's promise to preflight) intact.
+_APT_INSTALL_RE = re.compile(r"\bapt-get\s+install\b([^&|;\n]*)")
+
+# A package argument that provides the interpreter itself. python3-tomli ships
+# a TOML parser for it and does not count, which is why this anchors rather
+# than matching a python3 prefix.
+_PYTHON_PKG_RE = re.compile(r"^python3(\.\d+)?(-minimal)?$")
 
 
 def _provisions_python(setup_lines: list[str]) -> bool:
-    """True if *setup_lines* apt-install a python3."""
+    """True if *setup_lines* apt-install a python3 interpreter.
+
+    Continuations are collapsed first, so the answer tracks what the shell would
+    run rather than how the line happens to be wrapped.
+    """
     logical = "\n".join(setup_lines).replace("\\\n", " ")
-    return bool(_PYTHON_INSTALL_RE.search(logical))
+    return any(
+        _PYTHON_PKG_RE.match(token)
+        for args in _APT_INSTALL_RE.findall(logical)
+        for token in args.split()
+    )
 
 
 def image_provides_python(languages: list[str]) -> bool:

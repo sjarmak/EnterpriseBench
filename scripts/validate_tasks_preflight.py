@@ -70,10 +70,18 @@ _PYTHON_USE_RE = re.compile(r"\bpython3?\b|\beb_verify\b")
 def _script_invokes_python(text: str) -> bool:
     """True if any executable line of *text* runs python or reaches eb_verify.
 
-    Only whole-line comments are skipped, so a trailing ``# python`` still trips
-    the detector. See check 14 for why the detector errs this way.
+    The shebang is read before comments are skipped. ``#!/usr/bin/env python3``
+    is how a script declares the interpreter it cannot start without, so
+    discarding it as a comment hides the very scripts this check exists to find.
+    Below the shebang, whole-line comments are skipped but a trailing
+    ``# python`` still trips the detector -- see check 14 for why the detector
+    errs this way.
     """
-    for raw_line in text.splitlines():
+    lines = text.splitlines()
+    # A shebang is only a shebang on the first line, at column 0.
+    if lines and lines[0].startswith("#!") and _PYTHON_USE_RE.search(lines[0]):
+        return True
+    for raw_line in lines:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
@@ -89,17 +97,37 @@ def _python_dependent_scripts(task_dir: Path, checkpoints: list[dict]) -> list[s
     task. Neither alone is enough: the schema lets a verifier be a ``.py`` file,
     which needs an interpreter just to start, and a verifier may call a shell
     helper the checkpoint list never names.
+
+    Verifiers are reported under their declared name, as check 5 reports them.
+    A verifier declared absolute resolves outside the task (``task_dir / "/x"``
+    is just ``/x``), so it has no task-relative name to compute -- and deriving
+    one anyway raised, taking down the whole run over one malformed task.
     """
-    candidates = {task_dir / cp["verifier"] for cp in checkpoints if cp.get("verifier")}
-    candidates.update(task_dir.rglob("*.sh"))
+    candidates: dict[Path, str] = {}
+    for cp in checkpoints:
+        verifier = cp.get("verifier")
+        if verifier:
+            candidates[task_dir / verifier] = str(verifier)
+    for path in task_dir.rglob("*.sh"):
+        # Discovered under task_dir, so a relative name always exists. A verifier
+        # already naming this file keeps its declared spelling.
+        candidates.setdefault(path, path.relative_to(task_dir).as_posix())
 
     needs_python: list[str] = []
-    for path in candidates:
+    for path, name in candidates.items():
         if not path.is_file():
             continue  # missing verifiers are already reported by the scripts check
         if path.suffix == ".py" or _script_invokes_python(path.read_text(errors="replace")):
-            needs_python.append(path.relative_to(task_dir).as_posix())
+            needs_python.append(name)
     return sorted(needs_python)
+
+
+def _suite_name(task_dir: Path, benchmarks_dir: Path | None) -> str:
+    """The suite *task_dir* belongs to, falling back to its parent's name."""
+    base = benchmarks_dir or BENCHMARKS_DIR
+    if task_dir.is_relative_to(base):
+        return task_dir.relative_to(base).parts[0]
+    return task_dir.parent.name
 
 
 @dataclass(frozen=True)
@@ -230,18 +258,11 @@ def validate_task(
     benchmarks_dir: Path | None = None,
 ) -> TaskValidation:
     """Run all validation checks on a single task directory."""
-    base = benchmarks_dir or BENCHMARKS_DIR
-    if task_dir.is_relative_to(base):
-        rel = task_dir.relative_to(base)
-        suite_name = rel.parts[0]
-    else:
-        # Fallback: parent directory name as suite
-        suite_name = task_dir.parent.name
     dir_name = task_dir.name
 
     result = TaskValidation(
         task_id=dir_name,
-        suite=suite_name,
+        suite=_suite_name(task_dir, benchmarks_dir),
         task_dir=str(task_dir),
     )
 
@@ -511,6 +532,46 @@ def validate_task(
     return result
 
 
+def validate_task_guarded(
+    task_dir: Path,
+    schema: dict[str, Any] | None,
+    validator: Any | None,
+    sg_index: dict[str, bool],
+    mirror_task_ids: set[str],
+    *,
+    benchmarks_dir: Path | None = None,
+) -> TaskValidation:
+    """``validate_task``, with an unhandled error degraded to that task's issue.
+
+    Preflight's product is a per-task verdict for every task. A malformed task
+    that raises must therefore be reported as unready on its own row rather than
+    aborting the run, which would report nothing about any of the others.
+    """
+    try:
+        return validate_task(
+            task_dir,
+            schema,
+            validator,
+            sg_index,
+            mirror_task_ids,
+            benchmarks_dir=benchmarks_dir,
+        )
+    except Exception as exc:
+        result = TaskValidation(
+            task_id=task_dir.name,
+            suite=_suite_name(task_dir, benchmarks_dir),
+            task_dir=str(task_dir),
+        )
+        result.issues.append(
+            TaskIssue(
+                "error",
+                "validator_error",
+                f"Validation raised {type(exc).__name__}: {exc}",
+            )
+        )
+        return result
+
+
 def generate_registry(results: list[TaskValidation]) -> dict[str, Any]:
     """Generate the validation registry JSON structure."""
     tasks_by_suite: dict[str, list[dict[str, Any]]] = {}
@@ -710,7 +771,7 @@ def main() -> int:
         return 1
 
     results = [
-        validate_task(td, schema, validator, sg_index, mirror_task_ids)
+        validate_task_guarded(td, schema, validator, sg_index, mirror_task_ids)
         for td in task_dirs
     ]
 

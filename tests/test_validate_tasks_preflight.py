@@ -685,6 +685,87 @@ class TestScriptInvokesPython:
     def test_ignores_comments_and_plain_shell(self, script: str) -> None:
         assert not vtp._script_invokes_python(script)
 
+    @pytest.mark.parametrize(
+        "shebang",
+        [
+            "#!/usr/bin/env python3",
+            "#!/usr/bin/python3",
+            "#!/usr/bin/env python",
+        ],
+    )
+    def test_reads_the_shebang(self, shebang: str) -> None:
+        """A shebang is the interpreter declaration, not a comment.
+
+        Skipping it as one hides a script whose body never spells 'python' --
+        the strongest possible signal that it needs an interpreter.
+        """
+        assert vtp._script_invokes_python(f"{shebang}\nimport json\nprint(1)\n")
+
+    def test_a_python_mention_below_a_bash_shebang_is_still_a_comment(self) -> None:
+        """Reading the shebang must not switch comment handling off."""
+        assert not vtp._script_invokes_python(
+            "#!/usr/bin/env bash\n# python3 would be nicer here\nexit 0\n"
+        )
+
+
+class TestMalformedTaskIsIsolated:
+    """One malformed task must cost its own row, not the whole report.
+
+    Preflight exists to say which of the 112 tasks are unready. A task whose
+    data trips an error and aborts the process answers that question for none
+    of them.
+    """
+
+    def test_absolute_verifier_path_does_not_raise(
+        self, tmp_benchmarks: Path, minimal_task_toml: str
+    ) -> None:
+        """`task_dir / "/abs/path"` is just `/abs/path`, which has no name
+        relative to the task -- deriving one anyway raised ValueError."""
+        toml = minimal_task_toml.replace(
+            'verifier = "checks/check_one.sh"', 'verifier = "/tmp/absolute_check.sh"'
+        )
+        task_dir = _create_task_dir(
+            tmp_benchmarks, "customer_escalation", "abs-verifier", toml
+        )
+        result = _validate(task_dir)
+        assert result.task_id == "abs-verifier"
+
+    def test_absolute_verifier_that_needs_python_is_named_as_declared(
+        self, tmp_benchmarks: Path, tmp_path: Path
+    ) -> None:
+        """The body spells python3 outright, so the naming path is reached
+        regardless of shebang handling -- this pins the ValueError, not the
+        shebang fix that happens to sit next to it."""
+        outside = tmp_path / "outside_check.sh"
+        outside.write_text('#!/usr/bin/env bash\npython3 -c "import json"\n')
+        task_dir = tmp_benchmarks / "customer_escalation" / "abs-python-verifier"
+        task_dir.mkdir(parents=True)
+
+        assert vtp._python_dependent_scripts(task_dir, [{"verifier": str(outside)}]) == [
+            str(outside)
+        ]
+
+    def test_guard_turns_a_raising_task_into_that_tasks_issue(
+        self, tmp_benchmarks: Path, minimal_task_toml: str, monkeypatch
+    ) -> None:
+        task_dir = _create_task_dir(
+            tmp_benchmarks, "customer_escalation", "exploding", minimal_task_toml
+        )
+
+        def _explode(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(vtp, "validate_task", _explode)
+        result = vtp.validate_task_guarded(
+            task_dir, None, None, {}, set(), benchmarks_dir=tmp_benchmarks
+        )
+        assert result.task_id == "exploding"
+        assert result.suite == "customer_escalation"
+        assert not result.ready
+        errors = [i for i in result.issues if i.check == "validator_error"]
+        assert len(errors) == 1
+        assert "RuntimeError: boom" in errors[0].message
+
 
 class TestPythonInterpreterCheck:
     """A check script that shells out to python on an image with no python

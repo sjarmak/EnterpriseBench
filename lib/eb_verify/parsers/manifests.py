@@ -1,8 +1,9 @@
 """
 Manifest parsers for npm, Go, and Python dependency files.
 
-All parsers use only Python stdlib (json, configparser, tomllib).
-No external dependencies required.
+All parsers use only Python stdlib (json, configparser, tomllib), except on
+Python < 3.11, where tomllib does not exist and the tomli backport is required.
+The sandbox images provision it alongside their interpreter.
 """
 
 from __future__ import annotations
@@ -11,10 +12,18 @@ import configparser
 import io
 import json
 import re
-import tomllib
+import sys
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
 
 # ---------------------------------------------------------------------------
 # Common types
