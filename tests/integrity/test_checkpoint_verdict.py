@@ -92,6 +92,7 @@ class TestGuardCheckpointVerdict:
         verdict = guard_checkpoint_verdict(json.dumps({"score": 1.0}), 0)
         assert not isinstance(verdict, InfraError)
 
+
     @pytest.mark.parametrize("returncode", [0, 1])
     def test_empty_output_is_never_a_score(self, returncode):
         """The core fabrication: exit 0 -> 1.0, exit 1 -> 0.0. Both are lies."""
@@ -167,6 +168,48 @@ class TestGuardCheckpointVerdict:
             json.dumps({"score": 1.0, "detail": "No module named 'requests'"}), 0
         )
         assert not isinstance(verdict, InfraError)
+
+
+class TestGuardReturnsAWholeVerdict:
+    """`passed` is always present, so no caller has to invent it.
+
+    The guard used to return `score` and leave `passed` to the caller — and the
+    two Python callers derived it differently (runner.py: score > 0.0;
+    milestone.py: returncode == 0), so identical verifier output was a PASS on
+    one runner and a FAIL on the other (bead bbn22).
+    """
+
+    @pytest.mark.parametrize(
+        "score,expected", [(1.0, True), (0.5, True), (0.0, False)]
+    )
+    def test_passed_is_derived_from_the_score_when_absent(self, score, expected):
+        verdict = guard_checkpoint_verdict(json.dumps({"score": score}), 0)
+        assert verdict["passed"] is expected
+
+    @pytest.mark.parametrize("returncode", [0, 1, 127])
+    def test_derived_passed_ignores_the_exit_code(self, returncode):
+        """The exit code is not a verdict on any runner — the score is."""
+        verdict = guard_checkpoint_verdict(json.dumps({"score": 0.0}), returncode)
+        assert verdict["passed"] is False
+
+    @pytest.mark.parametrize("declared", [True, False])
+    def test_explicit_passed_bool_is_honored(self, declared):
+        """A verifier that disagrees with the derivation wins: it knows whether
+        a partial score clears its own bar."""
+        verdict = guard_checkpoint_verdict(
+            json.dumps({"score": 0.5, "passed": declared}), 0
+        )
+        assert verdict["passed"] is declared
+
+    @pytest.mark.parametrize("junk", ["yes", 1, 0, None, "false", []])
+    def test_non_bool_passed_falls_back_to_the_derivation(self, junk):
+        """`passed: "false"` and `passed: 0` are truthy/falsy traps — a raw
+        `if verdict["passed"]` would read the string "false" as a PASS. Only a
+        real JSON bool is a declaration; anything else is derived."""
+        verdict = guard_checkpoint_verdict(
+            json.dumps({"score": 0.5, "passed": junk}), 0
+        )
+        assert verdict["passed"] is True, "derived from score=0.5, not from junk"
 
 
 # ---------------------------------------------------------------------------

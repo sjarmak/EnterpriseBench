@@ -16,7 +16,6 @@ import inspect
 import json
 import logging
 import os
-import subprocess
 from pathlib import Path
 from typing import Any, Optional, Protocol, cast
 
@@ -28,7 +27,7 @@ from eb_verify.scoring import (
     compute_score,
     write_reward,
 )
-from eb_verify.scorer_guard import InfraError, guard_checkpoint_verdict, no_verdict
+from eb_verify.scorer_guard import InfraError, run_verifier_subprocess
 from eb_verify.plugins import ValidationResult, get_validator
 
 logger = logging.getLogger(__name__)
@@ -148,18 +147,6 @@ class CheckpointRunner:
             print(f"[health] OK: {repo_path}")
         return True
 
-    def _safe_verifier_path(self, verifier: str) -> Path:
-        """Resolve verifier path and assert it stays within task_dir."""
-        resolved = (self.task_dir / verifier).resolve()
-        if (
-            not str(resolved).startswith(str(self.task_dir) + "/")
-            and resolved != self.task_dir
-        ):
-            raise ValueError(
-                f"Verifier path escapes task_dir: {verifier!r} -> {resolved}"
-            )
-        return resolved
-
     def _infra_result(
         self, checkpoint: Checkpoint, error: InfraError
     ) -> CheckpointResult:
@@ -189,71 +176,31 @@ class CheckpointRunner:
         A verifier that does not reach a verdict (missing, escaping task_dir,
         timing out, crashing, or emitting no parseable score) yields an
         InfraError — never a fabricated score. See
-        :func:`eb_verify.scorer_guard.guard_checkpoint_verdict`.
+        :func:`eb_verify.scorer_guard.run_verifier_subprocess`, which owns both
+        halves of that rule for every runner.
         """
-
-        def did_not_run(
-            cause: str, detail: str, **evidence: object
-        ) -> CheckpointResult:
-            return self._infra_result(
-                checkpoint,
-                no_verdict(
-                    cause, detail, checkpoint=checkpoint.name, evidence=evidence
-                ),
-            )
-
-        try:
-            verifier_path = self._safe_verifier_path(checkpoint.verifier)
-        except ValueError as e:
-            return did_not_run("path_escape", str(e))
-
-        if not verifier_path.exists():
-            return did_not_run(
-                "missing_verifier", f"Verifier script not found: {verifier_path}"
-            )
-
         env = os.environ.copy()
         env["WORKSPACE"] = str(self.workspace)
         env["TASK_DIR"] = str(self.task_dir)
         env["TASK_ID"] = self.task.id
 
-        try:
-            result = subprocess.run(
-                ["bash", str(verifier_path)],
-                capture_output=True,
-                text=True,
-                timeout=checkpoint.timeout_seconds,
-                cwd=str(self.workspace),
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            # No verdict, and not attributable to the agent: the one verifier
-            # that runs agent-authored code bounds it with its own inner
-            # pytest --timeout, so the checkpoint budget only expires when the
-            # harness itself wedges.
-            return did_not_run(
-                "verifier_timeout",
-                f"Verifier timed out ({checkpoint.timeout_seconds}s)",
-                timeout_seconds=checkpoint.timeout_seconds,
-            )
-        except Exception as e:
-            return did_not_run("exec_error", f"Error running verifier: {e}")
-
-        verdict = guard_checkpoint_verdict(
-            result.stdout,
-            result.returncode,
-            stderr=result.stderr,
+        verdict = run_verifier_subprocess(
+            checkpoint.verifier,
+            base_dir=self.task_dir,
+            argv_prefix=("bash",),
+            cwd=self.workspace,
+            env=env,
+            timeout=checkpoint.timeout_seconds,
             checkpoint=checkpoint.name,
         )
         if isinstance(verdict, InfraError):
             return self._infra_result(checkpoint, verdict)
 
-        score = float(verdict["score"])  # guard_checkpoint_verdict clamped it
         return CheckpointResult(
             name=checkpoint.name,
             weight=checkpoint.weight,
-            passed=score > 0.0,
-            score=score,
+            passed=verdict["passed"],
+            score=verdict["score"],
             detail=verdict.get("detail", ""),
         )
 

@@ -10,7 +10,6 @@ one definition of "the verifier reached a verdict". A verifier that did not
 reach one yields an :class:`InfraError`, never a number.
 """
 
-import subprocess
 import logging
 import sys
 from dataclasses import dataclass, field
@@ -19,7 +18,7 @@ from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "lib"))
-from eb_verify.scorer_guard import InfraError, guard_checkpoint_verdict, no_verdict
+from eb_verify.scorer_guard import InfraError, run_verifier_subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -81,100 +80,57 @@ class SessionScore:
 
 
 def run_milestone_verifier(
-    verifier_path: str,
+    verifier: str,
+    task_dir: str,
     workspace_path: str,
     session_number: int,
     milestone_name: str,
     timeout_seconds: int = 120,
 ) -> MilestoneResult:
-    """Run a single milestone verifier script.
+    """Run a single milestone verifier script, resolved relative to ``task_dir``.
 
     The verifier receives the workspace path as its first argument and MUST print
     a JSON object carrying a numeric ``score`` in [0.0, 1.0]; ``message`` is
-    optional. Its exit code is read as pass/fail only, never as a score — see
-    ``guard_checkpoint_verdict``, which owns that rule for every runner.
+    optional. Its exit code is never read — neither as a score nor as pass/fail.
+    ``run_verifier_subprocess`` owns both, for every runner.
     """
     logger.info(
         "Running milestone '%s' for session %d: %s",
         milestone_name,
         session_number,
-        verifier_path,
+        verifier,
     )
 
-    def failed(error: InfraError) -> MilestoneResult:
+    verdict = run_verifier_subprocess(
+        verifier,
+        base_dir=Path(task_dir),
+        argv_suffix=(workspace_path,),
+        cwd=Path(workspace_path),
+        timeout=timeout_seconds,
+        checkpoint=milestone_name,
+        stage=_STAGE,
+    )
+
+    if isinstance(verdict, InfraError):
         logger.error(
             "Milestone '%s' did not reach a verdict (%s): %s",
             milestone_name,
-            error.cause,
-            error.detail,
+            verdict.cause,
+            verdict.detail,
         )
         return MilestoneResult(
             session_number=session_number,
             milestone_name=milestone_name,
             passed=False,
             score=None,
-            message=error.detail,
-            infra_error=error,
+            message=verdict.detail,
+            infra_error=verdict,
         )
-
-    def did_not_run(cause: str, detail: str, **evidence: object) -> MilestoneResult:
-        return failed(
-            no_verdict(
-                cause,
-                detail,
-                checkpoint=milestone_name,
-                stage=_STAGE,
-                evidence=evidence,
-            )
-        )
-
-    verifier = Path(verifier_path)
-    if not verifier.exists():
-        return did_not_run(
-            "missing_verifier",
-            f"verifier script not found: {verifier_path}",
-            verifier=str(verifier_path),
-        )
-
-    try:
-        result = subprocess.run(
-            [str(verifier.resolve()), workspace_path],
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            cwd=workspace_path,
-        )
-    except subprocess.TimeoutExpired:
-        return did_not_run(
-            "verifier_timeout",
-            f"verifier timed out after {timeout_seconds}s",
-            timeout_seconds=timeout_seconds,
-        )
-    except OSError as exc:
-        # A non-executable or non-ELF verifier raises here. Uncaught, it took the
-        # whole chain down mid-run — a harness bug reported as a crash, not a score.
-        return did_not_run(
-            "exec_error",
-            f"verifier could not be executed: {exc}",
-            verifier=str(verifier_path),
-        )
-
-    verdict = guard_checkpoint_verdict(
-        result.stdout,
-        result.returncode,
-        stderr=result.stderr,
-        checkpoint=milestone_name,
-        stage=_STAGE,
-    )
-    if isinstance(verdict, InfraError):
-        return failed(verdict)
 
     return MilestoneResult(
         session_number=session_number,
         milestone_name=milestone_name,
-        # The verifier reached a verdict, so its exit code is a real pass/fail
-        # signal: the real verifiers emit partial credit (e.g. 0.6) with exit 1.
-        passed=result.returncode == 0,
+        passed=verdict["passed"],
         score=verdict["score"],
         message=str(verdict.get("message", "")),
     )
@@ -197,13 +153,9 @@ def run_session_milestones(
     session_score = SessionScore(session_number=session_number)
 
     for milestone in milestones:
-        resolved = Path(task_dir, milestone["verifier"]).resolve()
-        task_dir_resolved = Path(task_dir).resolve()
-        if not str(resolved).startswith(str(task_dir_resolved) + "/"):
-            raise ValueError(f"Verifier path escapes task directory: {resolved}")
-        verifier_path = str(resolved)
         result = run_milestone_verifier(
-            verifier_path=verifier_path,
+            verifier=milestone["verifier"],
+            task_dir=task_dir,
             workspace_path=workspace_path,
             session_number=session_number,
             milestone_name=milestone["name"],

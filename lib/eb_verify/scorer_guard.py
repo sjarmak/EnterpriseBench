@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional, Union
 
 # Sentinel a verifier emits in its ``detail`` to declare, on purpose, that the
@@ -335,6 +337,14 @@ def guard_checkpoint_verdict(
     ``passed`` is NOT required. The schema nominally demands it, but 22 active
     verifiers and the ``topological_order`` plugin emit ``score`` alone;
     requiring it here would false-positive them all into infra errors.
+
+    ``passed`` IS always present in the returned verdict: an explicit JSON bool
+    is honored, anything else (absent, or a non-bool like ``"yes"``/``1``) is
+    derived as ``score > 0.0``. Before this fold each caller invented its own
+    other half of the verdict — runner.py said ``score > 0.0`` while
+    milestone.py said ``returncode == 0``, so a verifier emitting
+    ``{"score": 0.0}`` with exit 0 was FAIL under one runner and PASS under the
+    other (bead bbn22).
     """
 
     def did_not_run(cause: str, detail: str, **evidence: object) -> InfraError:
@@ -410,4 +420,133 @@ def guard_checkpoint_verdict(
     # Absorb the ±_SCORE_EPSILON slop admitted above, so the caller reads a score
     # already inside [0, 1] and no second clamp has to know this epsilon exists.
     verdict["score"] = max(0.0, min(1.0, float(verdict["score"])))
+    declared = verdict.get("passed")
+    verdict["passed"] = (
+        declared if isinstance(declared, bool) else verdict["score"] > 0.0
+    )
     return verdict
+
+
+def run_verifier_subprocess(
+    verifier: str,
+    *,
+    base_dir: Path,
+    # tuple[str, ...], not Sequence[str]: a bare `str` satisfies Sequence[str],
+    # so `argv_prefix="bash"` type-checks and then splats into
+    # ['b', 'a', 's', 'h'] — a silently corrupted argv that surfaces as a
+    # baffling exec_error naming 'b'. A tuple annotation rejects it up front.
+    argv_prefix: tuple[str, ...] = (),
+    argv_suffix: tuple[str, ...] = (),
+    cwd: Path,
+    env: Optional[dict[str, str]] = None,
+    timeout: float,
+    checkpoint: str = "",
+    stage: str = "deterministic_scoring",
+) -> GuardResult:
+    """Run ONE verifier under ``base_dir`` and return its verdict, or an InfraError.
+
+    The single definition of "produce a verdict" — the producing half of the
+    boundary whose parsing half is :func:`guard_checkpoint_verdict`. Owns the
+    whole ladder a verifier can fall off before it ever reaches a verdict:
+    unresolvable path -> path escape -> missing -> timeout -> exec failure ->
+    the guard.
+
+    Both Python runners hand-rolled this ladder and had already diverged on
+    every rung (bead bbn22): milestone.py *raised* on a path escape, taking a
+    whole chain down mid-run, and caught only ``OSError`` where runner.py caught
+    every exception. Every rung is an InfraError here, so a runner cannot report
+    a harness bug as a crash or as the agent's zero.
+
+    The invocation convention stays the caller's: ``argv`` is
+    ``[*argv_prefix, resolved_verifier, *argv_suffix]``, so runner.py keeps
+    ``bash <script>`` plus its env contract and milestone.py keeps direct exec
+    with the workspace as ``argv[1]``.
+    """
+
+    def did_not_run(cause: str, detail: str, **evidence: object) -> InfraError:
+        return no_verdict(
+            cause, detail, checkpoint=checkpoint, stage=stage, evidence=evidence
+        )
+
+    # Touching the path at all can raise, and both rungs that do so run BEFORE
+    # the exec rung's own guard — so neither is covered by it. resolve() raises
+    # on a symlink loop (RuntimeError), an embedded null byte (ValueError) and a
+    # too-long name (OSError ENAMETOOLONG); exists() then raises ENAMETOOLONG in
+    # its own right, because pathlib only swallows ENOENT/ENOTDIR/ELOOP and lets
+    # every other errno through. None of these is a path escape, and none is the
+    # agent's fault: they are harness or task-definition bugs. Uncaught, they
+    # propagate out of the one function that promises never to raise and take the
+    # whole checkpoint/milestone loop down mid-run, losing every other
+    # checkpoint's result. Caught broadly for the same reason the exec rung is:
+    # every way a path probe can fail is a harness bug, and a harness bug is an
+    # InfraError — never a crash, never the agent's zero.
+    try:
+        base = Path(base_dir).resolve()
+        resolved = (base / verifier).resolve()
+    except Exception as exc:
+        return did_not_run(
+            "unresolvable_path",
+            f"verifier path could not be resolved: {exc}",
+            verifier=str(verifier),
+        )
+
+    # Strict containment: base_dir itself is a directory, never a verifier.
+    if resolved == base or not resolved.is_relative_to(base):
+        return did_not_run(
+            "path_escape",
+            f"verifier path escapes {base}: {verifier!r} -> {resolved}",
+            verifier=str(verifier),
+        )
+
+    try:
+        found = resolved.exists()
+    except Exception as exc:
+        return did_not_run(
+            "unresolvable_path",
+            f"verifier path could not be probed: {exc}",
+            verifier=str(resolved),
+        )
+
+    if not found:
+        return did_not_run(
+            "missing_verifier",
+            f"verifier script not found: {resolved}",
+            verifier=str(resolved),
+        )
+
+    try:
+        proc = subprocess.run(
+            [*argv_prefix, str(resolved), *argv_suffix],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(cwd),
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        # No verdict, and not attributable to the agent: the one verifier that
+        # runs agent-authored code bounds it with its own inner pytest
+        # --timeout, so this budget only expires when the harness itself wedges.
+        return did_not_run(
+            "verifier_timeout",
+            f"verifier timed out after {timeout}s",
+            timeout_seconds=timeout,
+        )
+    except Exception as exc:
+        # A non-executable or non-ELF verifier raises OSError; catching only
+        # that let anything else (a bad env dict, a cwd that vanished) escape as
+        # a crash. Every exec failure is a harness bug, so all of them route
+        # here rather than up.
+        return did_not_run(
+            "exec_error",
+            f"verifier could not be executed: {exc}",
+            verifier=str(resolved),
+        )
+
+    return guard_checkpoint_verdict(
+        proc.stdout,
+        proc.returncode,
+        stderr=proc.stderr,
+        checkpoint=checkpoint,
+        stage=stage,
+    )

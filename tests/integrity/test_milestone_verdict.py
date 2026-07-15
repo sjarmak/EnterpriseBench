@@ -35,6 +35,7 @@ from orchestration.milestone import (
     MilestoneResult,
     SessionScore,
     run_milestone_verifier,
+    run_session_milestones,
 )
 
 
@@ -52,8 +53,10 @@ def write_stub_verifier(tmp_path: Path, body: str, name: str = "check.sh") -> Pa
 
 
 def run(verifier: Path, tmp_path: Path, **kw) -> MilestoneResult:
+    """Run ``verifier`` as a milestone whose task dir — and workspace — is tmp_path."""
     return run_milestone_verifier(
-        verifier_path=str(verifier),
+        verifier=verifier.name,
+        task_dir=str(tmp_path),
         workspace_path=str(tmp_path),
         session_number=1,
         milestone_name="m1",
@@ -102,6 +105,26 @@ class TestNoVerdictIsNeverAScore:
         assert result.infra_error is not None
         assert result.infra_error.context["cause"] == "verifier_timeout"
         assert result.score is None
+
+    def test_path_escape_is_infra_not_a_crash_mid_chain(self, tmp_path):
+        """A verifier path escaping the task dir *raised* ValueError out of
+        run_session_milestones (bead bbn22), taking the whole chain down mid-run
+        — the exact "harness bug reported as a crash, not a score" the other
+        rungs of this ladder exist to prevent. It is an InfraError like the
+        rest: the chain is INVALID, not dead."""
+        score = run_session_milestones(
+            milestones=[{"name": "escaper", "verifier": "../../../etc/passwd"}],
+            workspace_path=str(tmp_path),
+            session_number=1,
+            task_dir=str(tmp_path),
+        )
+
+        assert len(score.milestones) == 1
+        result = score.milestones[0]
+        assert result.infra_error is not None
+        assert result.infra_error.context["cause"] == "path_escape"
+        assert result.score is None
+        assert score.total_score is None, "an escaped verifier scores nothing"
 
     def test_unexecutable_verifier_is_infra_not_a_crash(self, tmp_path):
         """subprocess.run raises OSError on a non-executable file — it must not
@@ -175,12 +198,45 @@ class TestRealVerdictsPassThroughUnchanged:
         assert result.passed
         assert result.message == "partial"
 
-    def test_valid_score_with_nonzero_exit_is_a_real_fail_not_infra(self, tmp_path):
+    def test_valid_score_with_nonzero_exit_is_a_real_verdict_not_infra(self, tmp_path):
         """check_investigation.sh emits {"score": 0.6} and exits 1. That is a
-        genuine partial-credit FAIL verdict, not a broken harness: the score is
-        honored and `passed` stays exit-code-derived."""
+        genuine partial-credit verdict, not a broken harness: the score is
+        honored and the exit code is not read at all.
+
+        `passed` was `returncode == 0` here until bead bbn22 — so this verifier
+        was a FAIL under milestone.py and a PASS under runner.py on identical
+        output. The score, which is what every aggregator actually sums, is
+        unchanged either way."""
         v = write_stub_verifier(
             tmp_path, "#!/bin/sh\necho '{\"score\": 0.6, \"message\": \"partial\"}'\nexit 1\n"
+        )
+
+        result = run(v, tmp_path)
+
+        assert result.infra_error is None
+        assert result.score == 0.6
+        assert result.passed, "0.6 is a passing score whatever the exit code says"
+
+    def test_zero_score_with_exit_0_is_a_fail_not_a_pass(self, tmp_path):
+        """THE DIVERGENCE (bead bbn22). {"score": 0.0} + exit 0 was FAIL under
+        runner.py (score > 0.0) and PASS under milestone.py (returncode == 0) —
+        the guard returned half a verdict and each caller invented the other
+        half. One rule now: a 0.0 is a fail, on both runners."""
+        v = write_stub_verifier(
+            tmp_path, "#!/bin/sh\necho '{\"score\": 0.0, \"message\": \"nothing done\"}'\nexit 0\n"
+        )
+
+        result = run(v, tmp_path)
+
+        assert result.infra_error is None
+        assert result.score == 0.0
+        assert not result.passed, "a 0.0 score is not a pass, whatever the exit code"
+
+    def test_explicit_passed_field_is_honored_over_the_derivation(self, tmp_path):
+        """A verifier that states `passed` outright is believed: the derivation
+        is the fallback for the 22 verifiers that emit `score` alone."""
+        v = write_stub_verifier(
+            tmp_path, "#!/bin/sh\necho '{\"score\": 0.6, \"passed\": false}'\nexit 0\n"
         )
 
         result = run(v, tmp_path)
