@@ -52,22 +52,29 @@ class TestConfigureMcpReturn:
 
     def test_handshake_connected_returns_true(self):
         connected = MagicMock(stdout="sourcegraph: https://... - ✓ Connected")
+        # _trust_project_mcp_servers (EnterpriseBench-rryas.4) runs before the
+        # handshake; it has its own tests, so mock it True here to keep this test
+        # focused on the connected-handshake contract rather than trust-file I/O.
         with (
             patch.dict("os.environ", {"SOURCEGRAPH_ACCESS_TOKEN": "tok"}),
             patch.object(run_task, "_verify_mcp_endpoint", return_value=True),
             patch.object(run_task, "_docker_cp", MagicMock()),
             patch.object(run_task, "_docker_exec", MagicMock()),
+            patch.object(run_task, "_trust_project_mcp_servers", return_value=True),
             patch.object(run_task, "_mcp_exec", return_value=connected),
         ):
             assert run_task._configure_mcp("cid", "mcp_only") is True
 
     def test_handshake_never_connects_returns_false(self):
         needs_auth = MagicMock(stdout="sourcegraph: https://... - needs-auth")
+        # Trust succeeds so the False return is unambiguously the never-connecting
+        # handshake, not the trust step failing under the bare _docker_exec mock.
         with (
             patch.dict("os.environ", {"SOURCEGRAPH_ACCESS_TOKEN": "tok"}),
             patch.object(run_task, "_verify_mcp_endpoint", return_value=True),
             patch.object(run_task, "_docker_cp", MagicMock()),
             patch.object(run_task, "_docker_exec", MagicMock()),
+            patch.object(run_task, "_trust_project_mcp_servers", return_value=True),
             patch.object(run_task, "_mcp_exec", return_value=needs_auth),
             patch.object(run_task.time, "sleep", MagicMock()),
         ):

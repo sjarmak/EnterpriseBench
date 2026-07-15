@@ -54,20 +54,41 @@ class TestMcpEndpointUrl:
         assert SOURCEGRAPH_MCP_ENDPOINT.endswith("/.api/mcp/all")
 
     def test_endpoint_overridable_via_env(self) -> None:
-        """SOURCEGRAPH_MCP_URL env var overrides the default endpoint."""
+        """SOURCEGRAPH_MCP_URL env var overrides the default endpoint.
+
+        rryas.2 made the repo's ``.env.local`` authoritative for SOURCEGRAPH_*
+        keys, and that file defines SOURCEGRAPH_MCP_URL — so on a plain reload it
+        would clobber the ambient override we set here. Suppress ONLY the
+        ``.env.local`` read (a targeted ``Path.is_file`` shim that defers every
+        other import-time check) to isolate the ambient-env → endpoint
+        derivation; the loader's own precedence is covered by
+        TestLoadEnvLocalPrecedence in test_run_task_env_and_mcp_trust.
+        """
         import importlib
+        from pathlib import Path
+
         import run_task
 
-        with patch.dict(
-            os.environ,
-            {"SOURCEGRAPH_MCP_URL": "https://custom.example.com/.api/mcp/all"},
+        real_is_file = Path.is_file
+
+        def is_file_without_env_local(self: Path) -> bool:
+            if self.name == ".env.local":
+                return False
+            return real_is_file(self)
+
+        with (
+            patch.object(Path, "is_file", is_file_without_env_local),
+            patch.dict(
+                os.environ,
+                {"SOURCEGRAPH_MCP_URL": "https://custom.example.com/.api/mcp/all"},
+            ),
         ):
             importlib.reload(run_task)
             assert (
                 run_task.SOURCEGRAPH_MCP_ENDPOINT
                 == "https://custom.example.com/.api/mcp/all"
             )
-        # Restore
+        # Restore the module to its real, .env.local-derived state.
         importlib.reload(run_task)
 
 
@@ -614,7 +635,16 @@ class TestMcpDualConfig:
         assert (
             len(workspace_writes) == 1
         ), f"Expected 1 workspace write, got {workspace_writes}"
-        assert len(user_writes) == 1, f"Expected 1 user-level write, got {user_writes}"
+        # The project .mcp.json goes to /workspace/.mcp.json; the user-level dir
+        # gets the same .mcp.json PLUS the enabledMcpjsonServers trust
+        # settings.json written by _trust_project_mcp_servers
+        # (EnterpriseBench-rryas.4) — both are real writes.
+        assert any(
+            d.endswith("/home/agent/.claude/.mcp.json") for d in user_writes
+        ), f"Expected user-level .mcp.json, got {user_writes}"
+        assert any(
+            d.endswith("/home/agent/.claude/settings.json") for d in user_writes
+        ), f"Expected user-level trust settings.json, got {user_writes}"
 
 
 # ---------------------------------------------------------------------------
