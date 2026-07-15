@@ -105,6 +105,14 @@ def _block_entry(
     )
 
 
+def _synthetic_error_entry() -> dict:
+    """A zero-usage ``<synthetic>`` isApiErrorMessage line — Claude Code's
+    401/429 placeholder that must not latch the run's representative model."""
+    return _assistant_entry(input_tokens=0, output_tokens=0, model="<synthetic>") | {
+        "isApiErrorMessage": True
+    }
+
+
 # ---------------------------------------------------------------------------
 # parse_trace
 # ---------------------------------------------------------------------------
@@ -152,19 +160,10 @@ class TestParseTrace:
         must not become the run's representative model — otherwise the real
         tokens get priced at DEFAULT_MODEL and the mispricing is hidden from
         unpriced_models (EnterpriseBench-qjfi)."""
-        synthetic = {
-            "type": "assistant",
-            "isApiErrorMessage": True,
-            "message": {
-                "model": "<synthetic>",
-                "role": "assistant",
-                "usage": {"input_tokens": 0, "output_tokens": 0},
-            },
-        }
         trace = _write_trace(
             tmp_path / "agent_trace.jsonl",
             [
-                synthetic,
+                _synthetic_error_entry(),
                 _assistant_entry(
                     input_tokens=1000, output_tokens=500, model="claude-opus-4-8"
                 ),
@@ -183,17 +182,7 @@ class TestParseTrace:
         rather than surfacing the sentinel as an unpriced model."""
         trace = _write_trace(
             tmp_path / "agent_trace.jsonl",
-            [
-                {
-                    "type": "assistant",
-                    "isApiErrorMessage": True,
-                    "message": {
-                        "model": "<synthetic>",
-                        "role": "assistant",
-                        "usage": {"input_tokens": 0, "output_tokens": 0},
-                    },
-                }
-            ],
+            [_synthetic_error_entry()],
         )
         usage = parse_trace(trace)
         assert usage.model == DEFAULT_MODEL
@@ -433,29 +422,26 @@ class TestComputeCost:
         ) / 1_000_000
         assert cost == round(expected, 6)
 
-    def test_fable_5_known_values(self) -> None:
+    @pytest.mark.parametrize(
+        "model, expected",
+        [
+            # 1M input + 1M output at each model's own (input, output) rate.
+            ("claude-fable-5", 60.0),  # $10/M + $50/M
+            ("claude-opus-4-8", 30.0),  # $5/M + $25/M — not opus-4-6's $90
+        ],
+    )
+    def test_newly_priced_model_known_values(
+        self, model: str, expected: float
+    ) -> None:
         usage = Usage(
             input_tokens=1_000_000,
             output_tokens=1_000_000,
             cache_write_tokens=0,
             cache_read_tokens=0,
-            model="claude-fable-5",
+            model=model,
             num_requests=4,
         )
-        # 1M * $10/M + 1M * $50/M = $60
-        assert compute_cost(usage) == 60.0
-
-    def test_opus_4_8_known_values(self) -> None:
-        usage = Usage(
-            input_tokens=1_000_000,
-            output_tokens=1_000_000,
-            cache_write_tokens=0,
-            cache_read_tokens=0,
-            model="claude-opus-4-8",
-            num_requests=4,
-        )
-        # 1M * $5/M + 1M * $25/M = $30 — the vendor's own rate, not opus-4-6's $90
-        assert compute_cost(usage) == 30.0
+        assert compute_cost(usage) == expected
 
     def test_opus_4_8_matches_vendor_costusd(self) -> None:
         """The real dep-traversal-010/condB opus-4-8 block prices to its own

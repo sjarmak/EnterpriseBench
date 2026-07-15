@@ -57,16 +57,12 @@ PRICING: dict[str, dict[str, float]] = {
         "cache_write": 1.0,
         "cache_read": 0.08,
     },
-    # Rates below are not typed in by hand from a price page — they are the
-    # vendor's own, recovered from the per-model costUSD in tier-1 modelUsage
-    # blocks. Across every fable-5 tier-1 record in results/ the implied
-    # input rate is exactly 10.0 (zero variance), and the one opus-4-8 record
-    # exactly 5.0, under Anthropic's standard multipliers (output = 5x input,
-    # cache_write = 1.25x, cache_read = 0.1x). A tier-2 run of either model is
-    # rare-to-absent today — both cluster in condB, which is vendor-priced —
-    # so these mainly keep the reconciliation baseline honest and stop a
-    # future fallback from billing an opus-class run at sonnet rates
-    # (EnterpriseBench-qjfi).
+    # fable-5 / opus-4-8 rates recovered from the vendor's own per-model costUSD
+    # in tier-1 modelUsage blocks (implied input rate is exact, zero variance),
+    # under Anthropic's standard multipliers (output 5x, cache_write 1.25x,
+    # cache_read 0.1x input). Tier-2 runs of either are rare today — both cluster
+    # in vendor-priced condB — so these mainly keep the reconciliation baseline
+    # honest (EnterpriseBench-qjfi).
     "claude-fable-5": {
         "input": 10.0,
         "output": 50.0,
@@ -266,12 +262,9 @@ def parse_trace(trace_path: Path) -> Usage:
                 continue
 
             # Capture the model from the first assistant message that names a
-            # real one. An isApiErrorMessage line (Claude Code stamps it
-            # ``<synthetic>`` for a 401/429) can precede the real, billed turns
-            # of a retried request; letting it latch the run's representative
-            # model would then price those real tokens at DEFAULT_MODEL and hide
-            # the mismatch from unpriced_models — the signal that gap exists to
-            # raise (EnterpriseBench-qjfi).
+            # real one, skipping isApiErrorMessage / ``<synthetic>`` placeholder
+            # lines so they can't latch the run's representative model. See
+            # SYNTHETIC_MODEL for why (EnterpriseBench-qjfi).
             msg_model = msg.get("model", "")
             if (
                 msg_model
