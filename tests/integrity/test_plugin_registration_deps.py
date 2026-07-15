@@ -1,9 +1,7 @@
 """fact_triples must be registered only when its heavy deps are actually usable.
 
 The scoring stack (numpy/scikit-learn) is imported lazily so that importers which
-never score facts -- above all the chain runner, which reaches this package via
-``eb_verify/__init__`` -> ``runner`` -> ``plugins/__init__`` -- do not pay ~0.8s
-and ~100MB of TF-IDF machinery at startup.
+never score facts do not pay ~0.8s and ~100MB of TF-IDF machinery at startup.
 
 That deferral silently defeated the old capability probe. The probe registered
 FactTriplesValidator unless ``import fact_triples`` raised ImportError; once the
@@ -23,6 +21,7 @@ suite reaches this module.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -359,19 +358,22 @@ class TestBrokenInstallCannotKillTheRun:
 class TestProbeStaysCheap:
     """The probe must not undo the deferral it exists to protect."""
 
-    def test_chain_runner_import_path_does_not_pull_numpy(self) -> None:
-        """Importing the scorer guard must not drag in the TF-IDF stack.
+    def test_registry_import_does_not_pull_numpy(self) -> None:
+        """Importing the plugin registry must not drag in the TF-IDF stack.
 
-        ``milestone.py`` imports ``eb_verify.scorer_guard`` on every chain run, and
-        that import reaches ``plugins/__init__``. Restoring the capability probe by
-        actually importing numpy would re-impose the ~0.8s/~100MB cost on every
-        chain run -- so this pins the cheap-probe property, and equally forbids
-        "fixing" the registration bug by reverting the lazy import.
+        ``plugins/__init__`` imports every validator eagerly, so a probe that really
+        imports numpy re-imposes the ~0.8s/~100MB cost on every consumer of the
+        registry. This equally forbids "fixing" the registration bug by reverting
+        the lazy import.
+
+        It probes ``eb_verify.plugins`` directly rather than through ``scorer_guard``:
+        the guard no longer reaches the registry (see ``TestScorerGuardStaysIsolated``),
+        so probing via the guard would pass vacuously.
         """
         out = run_in_fresh_interpreter(
             """
             import sys
-            import eb_verify.scorer_guard  # noqa: F401
+            import eb_verify.plugins  # noqa: F401
             heavy = sorted({
                 m.split(".")[0] for m in sys.modules
                 if m.split(".")[0] in ("numpy", "sklearn", "scipy")
@@ -381,6 +383,104 @@ class TestProbeStaysCheap:
             block_deps=False,
         )
         assert "HEAVY:none" in out, (
-            f"the chain-runner import path pulled the heavy scoring stack ({out.strip()}); "
+            f"the registry import pulled the heavy scoring stack ({out.strip()}); "
             "the numpy/sklearn imports must stay deferred and the probe must not execute them"
+        )
+
+
+class TestScorerGuardStaysIsolated:
+    """The harness-failure guard must not depend on the stack it reports on."""
+
+    def test_importing_scorer_guard_does_not_reach_the_plugin_stack(self) -> None:
+        """``scorer_guard`` imports stdlib only -- its import must stay that cheap.
+
+        It exists to report harness failures, so it must not be importable-only-if
+        the harness is healthy: a broken import in any one of the 9 unguarded
+        validators would otherwise take down the very module that reports that
+        class of failure.
+        """
+        out = run_in_fresh_interpreter(
+            """
+            import sys
+            import eb_verify.scorer_guard  # noqa: F401
+            coupled = sorted(
+                m for m in sys.modules
+                if m.startswith(("eb_verify.runner", "eb_verify.plugins"))
+                or m.split(".")[0] == "jsonschema"
+            )
+            print("COUPLED:" + (",".join(coupled) if coupled else "none"))
+            """,
+            block_deps=False,
+        )
+        assert "COUPLED:none" in out, (
+            f"importing eb_verify.scorer_guard reached the plugin stack ({out.strip()}); "
+            "the guard must stay importable when a validator is broken, so "
+            "eb_verify/__init__ must not re-export runner/plugins-backed names"
+        )
+
+    def _tree_with_a_broken_validator(self, tmp_path: Path) -> Path:
+        """A copy of the real lib tree with one validator broken at import time.
+
+        Breaking a validator is what actually kills the registry: the 9 non-fact_triples
+        validators are imported unguarded by ``plugins/__init__``. Shadowing jsonschema
+        would not -- ``schema_validator`` degrades it to None and fact_triples' hard
+        import is already wrapped in try/except ImportError, so the registry survives
+        without it.
+
+        The whole tree is copied because the break must live inside the package:
+        sys.path cannot shadow a submodule of ``eb_verify`` without shadowing
+        ``eb_verify`` itself.
+        """
+        shadow = tmp_path / "broken_tree"
+        shutil.copytree(
+            LIB / "eb_verify",
+            shadow / "eb_verify",
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+        with (shadow / "eb_verify" / "plugins" / "call_graph.py").open("a") as fh:
+            fh.write("\nimport eb_verify_simulated_broken_dep  # noqa: F401\n")
+        return shadow
+
+    def test_the_broken_validator_shadow_actually_breaks_the_registry(
+        self, tmp_path: Path
+    ) -> None:
+        """Guard the premise: a vacuous shadow would make the next test meaningless."""
+        out = run_in_fresh_interpreter(
+            """
+            try:
+                import eb_verify.plugins  # noqa: F401
+                print("REGISTRY_IMPORTED")
+            except ImportError as exc:
+                print("REGISTRY_RAISES:" + str(exc))
+            """,
+            block_deps=False,
+            extra_path=self._tree_with_a_broken_validator(tmp_path),
+        )
+        assert "REGISTRY_RAISES" in out, (
+            "the broken-validator shadow does not break the plugin stack, so the "
+            f"isolation test below would pass vacuously: {out.strip()}"
+        )
+
+    def test_scorer_guard_imports_while_the_plugin_stack_is_broken(
+        self, tmp_path: Path
+    ) -> None:
+        """The end the isolation exists for: a broken stack must not blind the guard."""
+        out = run_in_fresh_interpreter(
+            """
+            import eb_verify.scorer_guard as guard
+            print("GUARD_OK:" + guard.__file__)
+            """,
+            block_deps=False,
+            extra_path=self._tree_with_a_broken_validator(tmp_path),
+        )
+        assert "GUARD_OK:" in out, (
+            f"the scorer guard could not be imported while the plugin stack was broken "
+            f"({out.strip()}); the module that reports harness failure must not require "
+            "a healthy harness"
+        )
+        # Assert the BROKEN tree is the one that answered, not the real lib/ still on
+        # sys.path behind it -- otherwise this passes without ever exercising the break.
+        assert str(tmp_path) in out, (
+            f"the guard resolved to a tree outside the broken shadow ({out.strip()}); "
+            "the shadow is not on sys.path first, so this test proves nothing"
         )
