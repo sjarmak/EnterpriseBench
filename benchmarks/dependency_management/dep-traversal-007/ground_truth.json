@@ -21,10 +21,21 @@
       "affected_versions": "transitive"
     }
   ],
-  "direct_dependents": ["@grpc/grpc-js", "@google-cloud/pubsub"],
+  "direct_dependents": [
+    "@grpc/grpc-js",
+    "@google-cloud/pubsub"
+  ],
   "transitive_paths": [
-    ["protobufjs", "@grpc/grpc-js", "kubernetes-client-node"],
-    ["protobufjs", "@grpc/grpc-js", "@google-cloud/pubsub"]
+    [
+      "protobufjs",
+      "@grpc/grpc-js",
+      "kubernetes-client-node"
+    ],
+    [
+      "protobufjs",
+      "@grpc/grpc-js",
+      "@google-cloud/pubsub"
+    ]
   ],
   "fix_reference": "protobufjs/protobuf.js#1731",
   "affected_version_range": "6.10.0-6.10.2, 6.11.0-6.11.2",
@@ -34,5 +45,19 @@
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.93
+  "confidence": 0.93,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-g954-5hwp-pp24"
+    ],
+    "find_direct_deps": [
+      "GHSA-g954-5hwp-pp24"
+    ],
+    "trace_transitive_paths": [
+      "GHSA-g954-5hwp-pp24"
+    ],
+    "version_analysis": [
+      "GHSA-g954-5hwp-pp24"
+    ]
+  }
 }

@@ -21,10 +21,22 @@
       "affected_versions": "transitive"
     }
   ],
-  "direct_dependents": ["botocore", "docker-py"],
+  "direct_dependents": [
+    "botocore",
+    "docker-py"
+  ],
   "transitive_paths": [
-    ["requests", "botocore", "boto3", "awscli"],
-    ["requests", "docker-py", "docker-compose"]
+    [
+      "requests",
+      "botocore",
+      "boto3",
+      "awscli"
+    ],
+    [
+      "requests",
+      "docker-py",
+      "docker-compose"
+    ]
   ],
   "fix_reference": "psf/requests@74ea7cf7a6a27a4eeb2ae24e162bcc942a6706d5",
   "affected_version_range": ">= 2.3.0, < 2.31.0",
@@ -34,5 +46,19 @@
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.96
+  "confidence": 0.96,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-j8r2-6x86-q33q"
+    ],
+    "find_direct_deps": [
+      "GHSA-j8r2-6x86-q33q"
+    ],
+    "trace_transitive_paths": [
+      "GHSA-j8r2-6x86-q33q"
+    ],
+    "version_analysis": [
+      "GHSA-j8r2-6x86-q33q"
+    ]
+  }
 }

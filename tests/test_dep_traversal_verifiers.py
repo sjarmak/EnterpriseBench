@@ -3,10 +3,19 @@
 For each task, tests 3 tiers:
   (a) Ground truth answer -> score >=0.85
   (b) Empty answer -> score <=0.10
-  (c) Partial answer -> 0.3 <= score <= 0.7
+  (c) Partial answer -> 0.15 <= score <= 0.75
 
 Runs the actual bash verifier scripts via subprocess, matching the
 eb_verify runner convention (WORKSPACE env var, JSON stdout).
+
+Tasks 004/007-012 were re-anchored to non-prompt evidence (EnterpriseBench-vjrbw)
+and now score each checkpoint 0-or-1 on a small evidence-token set rather than on
+a continuous count of prompt vocabulary. The partial-answer "mid" band (c) no
+longer models their discrete scoring, so it runs over the LEGACY tasks only; the
+echo->0 / real->full behaviour of the re-anchored tasks is owned end-to-end by
+tests/integrity/test_dep_traversal_prompt_echo.py. Their ground-truth answers
+here carry the non-prompt evidence a genuine full report cites (advisory id,
+transitive version bound), so tier (a) stays a real assertion.
 """
 
 from __future__ import annotations
@@ -141,6 +150,8 @@ Affects golang.org/x/text < 0.3.8.
 ## CVE Identification
 CVE-2023-39325 affects `golang.org/x/net` versions < 0.17.0. HTTP/2 Rapid Reset
 denial of service.
+Advisory: GHSA-4374-p667-p6c8. etcd is exposed transitively through grpc-go at
+versions < 1.58.3.
 
 ## Direct Dependents
 - **kubernetes** — go.mod lists golang.org/x/net (API server, kubelet)
@@ -244,6 +255,7 @@ Affects google.golang.org/protobuf < 1.33.0.
 ## CVE Identification
 CVE-2022-25878 affects `protobufjs` (npm) — prototype pollution. Affected
 versions: 6.10.0-6.10.2 and 6.11.0-6.11.2. Fixed in 6.10.3 / 6.11.3.
+Advisory: GHSA-g954-5hwp-pp24.
 
 ## Direct Dependents
 - **grpc-node** — packages/grpc-js/package.json depends on protobufjs
@@ -275,6 +287,7 @@ Affects protobufjs 6.10.0-6.10.2.
 ## CVE Identification
 CVE-2023-32681 affects `requests` (PyPI) versions >= 2.3.0, < 2.31.0.
 Proxy-Authorization header leak on redirect.
+Advisory: GHSA-j8r2-6x86-q33q.
 
 ## Direct Dependents
 - **botocore** — setup.py lists requests as dependency
@@ -341,6 +354,8 @@ Affects urllib3 < 1.26.17.
 ## CVE Identification
 CVE-2020-36518 affects `com.fasterxml.jackson.core:jackson-databind` versions
 <= 2.12.6.0 (fix 2.12.6.1) and 2.13.0-2.13.2 (fix 2.13.2.1). Deep nesting DoS.
+Advisory: GHSA-57j2-w4cx-62h2. Pre-fix affected versions include 2.12.6, 2.13.0,
+and 2.13.2.
 
 ## Direct Dependents
 - **spring-boot** — spring-boot-dependencies manages jackson-databind version
@@ -460,6 +475,13 @@ CHECKPOINT_NAMES = [
 
 CHECKPOINT_WEIGHTS = (0.10, 0.30, 0.35, 0.25)
 
+# Tasks re-anchored to non-prompt evidence (EnterpriseBench-vjrbw). Their
+# per-checkpoint score is discrete (0 or 1 over a tiny token set), so the
+# continuous partial-answer "mid" band does not apply — those tasks are covered
+# by tests/integrity/test_dep_traversal_prompt_echo.py instead.
+REWORKED_TASK_NUMS = {"004", "007", "008", "009", "010", "011", "012"}
+LEGACY_TASKS = [t for t in TASKS if t.task_num not in REWORKED_TASK_NUMS]
+
 
 def _run_verifier(
     task_num: str,
@@ -552,9 +574,11 @@ class TestEmptyAnswerScoresLow:
 
 
 class TestPartialAnswerScoresMid:
-    """(c) Partial answer should score between 0.3 and 0.7."""
+    """(c) Partial answer should score between 0.15 and 0.75 (legacy tasks only)."""
 
-    @pytest.mark.parametrize("spec", TASKS, ids=[t.task_num for t in TASKS])
+    @pytest.mark.parametrize(
+        "spec", LEGACY_TASKS, ids=[t.task_num for t in LEGACY_TASKS]
+    )
     def test_partial_answer_scores_mid(self, tmp_path: Path, spec: TaskVerifierSpec) -> None:
         workspace = tmp_path / "workspace"
         _write_report(workspace, spec.partial_answer)

@@ -28,11 +28,26 @@
       "affected_versions": "< 0.17.0"
     }
   ],
-  "direct_dependents": ["grpc-go", "kubernetes", "etcd"],
+  "direct_dependents": [
+    "grpc-go",
+    "kubernetes",
+    "etcd"
+  ],
   "transitive_paths": [
-    ["golang.org/x/net", "grpc-go", "etcd"],
-    ["golang.org/x/net", "kubernetes"],
-    ["golang.org/x/net", "grpc-go", "kubernetes"]
+    [
+      "golang.org/x/net",
+      "grpc-go",
+      "etcd"
+    ],
+    [
+      "golang.org/x/net",
+      "kubernetes"
+    ],
+    [
+      "golang.org/x/net",
+      "grpc-go",
+      "kubernetes"
+    ]
   ],
   "fix_reference": "go.dev/cl/514907",
   "affected_version_range": "< 0.17.0",
@@ -43,5 +58,19 @@
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.97
+  "confidence": 0.97,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-4374-p667-p6c8"
+    ],
+    "find_direct_deps": [
+      "1.58.3"
+    ],
+    "trace_transitive_paths": [
+      "1.58.3"
+    ],
+    "version_analysis": [
+      "1.58.3"
+    ]
+  }
 }

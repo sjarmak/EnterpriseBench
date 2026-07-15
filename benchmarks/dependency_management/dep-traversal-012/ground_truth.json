@@ -4,7 +4,7 @@
   "ghsa": "GHSA-x3mh-jvjw-3xwx",
   "package": "openssl",
   "ecosystem": "system",
-  "description": "OpenSSL BN_mod_sqrt infinite loop affects curl, git, Python ssl, Node.js crypto — cross-ecosystem blast radius",
+  "description": "OpenSSL BN_mod_sqrt infinite loop affects curl, git, Python ssl, Node.js crypto \u2014 cross-ecosystem blast radius",
   "dependency_chain": [
     {
       "from": "openssl",
@@ -28,12 +28,36 @@
       "affected_versions": "conditional on CGO"
     }
   ],
-  "direct_dependents": ["curl", "python-ssl", "node-crypto", "nginx"],
+  "direct_dependents": [
+    "curl",
+    "python-ssl",
+    "node-crypto",
+    "nginx"
+  ],
   "transitive_paths": [
-    ["openssl", "curl", "git", "CI/CD pipelines"],
-    ["openssl", "python ssl", "pip", "requests", "boto3"],
-    ["openssl", "nodejs crypto", "npm", "JS ecosystem"],
-    ["openssl", "kubernetes (CGO)"]
+    [
+      "openssl",
+      "curl",
+      "git",
+      "CI/CD pipelines"
+    ],
+    [
+      "openssl",
+      "python ssl",
+      "pip",
+      "requests",
+      "boto3"
+    ],
+    [
+      "openssl",
+      "nodejs crypto",
+      "npm",
+      "JS ecosystem"
+    ],
+    [
+      "openssl",
+      "kubernetes (CGO)"
+    ]
   ],
   "fix_reference": "OpenSSL 1.0.2zd, 1.1.1n, 3.0.2",
   "affected_version_range": "1.0.2-1.0.2zc, 1.1.1-1.1.1m, 3.0.0-3.0.1",
@@ -43,5 +67,22 @@
     "verified": true
   },
   "difficulty": "expert",
-  "confidence": 0.92
+  "confidence": 0.92,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-x3mh-jvjw-3xwx"
+    ],
+    "find_direct_deps": [
+      "3.0.0",
+      "3.0.1"
+    ],
+    "trace_transitive_paths": [
+      "3.0.0",
+      "3.0.1"
+    ],
+    "version_analysis": [
+      "3.0.0",
+      "3.0.1"
+    ]
+  }
 }

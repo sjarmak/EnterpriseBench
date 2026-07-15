@@ -28,11 +28,27 @@
       "affected_versions": "shaded copy"
     }
   ],
-  "direct_dependents": ["spring-boot-starter-log4j2", "kafka", "elasticsearch"],
+  "direct_dependents": [
+    "spring-boot-starter-log4j2",
+    "kafka",
+    "elasticsearch"
+  ],
   "transitive_paths": [
-    ["log4j-core", "spring-boot-starter-log4j2", "spring-boot-apps"],
-    ["log4j-core", "kafka-clients", "kafka-streams", "kafka-apps"],
-    ["pax-logging-log4j2", "OSGi-applications"]
+    [
+      "log4j-core",
+      "spring-boot-starter-log4j2",
+      "spring-boot-apps"
+    ],
+    [
+      "log4j-core",
+      "kafka-clients",
+      "kafka-streams",
+      "kafka-apps"
+    ],
+    [
+      "pax-logging-log4j2",
+      "OSGi-applications"
+    ]
   ],
   "fix_reference": "apache/logging-log4j2#608",
   "affected_version_range": "2.0-beta9 - 2.14.1",
@@ -42,5 +58,22 @@
     "verified": true
   },
   "difficulty": "expert",
-  "confidence": 0.98
+  "confidence": 0.98,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-jfh8-c2jp-5v3q"
+    ],
+    "find_direct_deps": [
+      "2.0",
+      "2.14.1"
+    ],
+    "trace_transitive_paths": [
+      "2.0",
+      "2.14.1"
+    ],
+    "version_analysis": [
+      "2.0",
+      "2.14.1"
+    ]
+  }
 }

@@ -21,10 +21,21 @@
       "affected_versions": "transitive"
     }
   ],
-  "direct_dependents": ["spring-boot", "dropwizard"],
+  "direct_dependents": [
+    "spring-boot",
+    "dropwizard"
+  ],
   "transitive_paths": [
-    ["jackson-databind", "spring-boot-starter-web", "spring-boot-apps"],
-    ["jackson-databind", "dropwizard-jackson", "dropwizard-apps"]
+    [
+      "jackson-databind",
+      "spring-boot-starter-web",
+      "spring-boot-apps"
+    ],
+    [
+      "jackson-databind",
+      "dropwizard-jackson",
+      "dropwizard-apps"
+    ]
   ],
   "fix_reference": "FasterXML/jackson-databind@3cc52f8",
   "affected_version_range": "<= 2.12.6.0 (fix 2.12.6.1), 2.13.0-2.13.2 (fix 2.13.2.1)",
@@ -34,5 +45,25 @@
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "scoring_evidence": {
+    "identify_cve": [
+      "GHSA-57j2-w4cx-62h2"
+    ],
+    "find_direct_deps": [
+      "2.12.6",
+      "2.13.0",
+      "2.13.2"
+    ],
+    "trace_transitive_paths": [
+      "2.12.6",
+      "2.13.0",
+      "2.13.2"
+    ],
+    "version_analysis": [
+      "2.12.6",
+      "2.13.0",
+      "2.13.2"
+    ]
+  }
 }
