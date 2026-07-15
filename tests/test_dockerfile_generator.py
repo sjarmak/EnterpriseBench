@@ -391,7 +391,15 @@ def build_setup_image(tmp_path_factory):
     Memoized and torn down: the two tests below overlap on five bases, and each
     image runs to ~1.5 GB. Building per test case and leaving the tags behind
     costs a full run five redundant builds and ~7.5 GB of resident images.
+
+    The daemon probe lives here rather than in a `skipif`, because skipif
+    conditions are evaluated at collection: a `-m "not docker"` or
+    `--collect-only` run would otherwise still pay for `docker info`, which
+    blocks for the full timeout when DOCKER_HOST points somewhere dead.
     """
+    if not docker_available():
+        pytest.skip("docker daemon not available")
+
     tags: dict[str, str] = {}
 
     def _build(base: str) -> str:
@@ -451,7 +459,6 @@ def eb_verify_import_results(build_setup_image):
 
 
 @pytest.mark.docker
-@pytest.mark.skipif(not docker_available(), reason="docker daemon not available")
 class TestPythonInterpreterE2E:
     """Build the generated provisioning for real. String assertions cannot catch
     a package missing from a base image's apt repo, a guard whose shell syntax

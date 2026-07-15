@@ -12,18 +12,14 @@ import configparser
 import io
 import json
 import re
-import sys
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
-if sys.version_info >= (3, 11):
+try:
     import tomllib
-else:
-    try:
-        import tomllib
-    except ModuleNotFoundError:
-        import tomli as tomllib  # type: ignore[no-redef]
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redef]
 
 # ---------------------------------------------------------------------------
 # Common types

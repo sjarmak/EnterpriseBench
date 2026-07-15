@@ -772,6 +772,15 @@ class TestPythonInterpreterCheck:
     scores 0.0 no matter how good the agent's answer is. Preflight must catch
     that before the run, not leave it to the scorer."""
 
+    @pytest.fixture
+    def pythonless_image(self, monkeypatch) -> None:
+        """Reproduces the pre-fix generator: an image with no interpreter."""
+        monkeypatch.setattr(
+            dockerfile_generator,
+            "_setup_lines",
+            lambda base: ["RUN apt-get install -y git curl", "USER agent"],
+        )
+
     def _java_task(
         self, tmp_benchmarks: Path, minimal_task_toml: str, check_body: str
     ) -> Path:
@@ -795,14 +804,8 @@ class TestPythonInterpreterCheck:
         assert not [i for i in result.issues if i.check == "python_interpreter"]
 
     def test_errors_when_image_has_no_python(
-        self, tmp_benchmarks: Path, minimal_task_toml: str, monkeypatch
+        self, tmp_benchmarks: Path, minimal_task_toml: str, pythonless_image
     ) -> None:
-        """Reproduces the pre-fix generator: temurin with no interpreter."""
-        monkeypatch.setattr(
-            dockerfile_generator,
-            "_setup_lines",
-            lambda base: ["RUN apt-get install -y git curl", "USER agent"],
-        )
         task_dir = self._java_task(
             tmp_benchmarks,
             minimal_task_toml,
@@ -822,13 +825,8 @@ class TestPythonInterpreterCheck:
         assert not result.ready, "a task that cannot score its checkpoints is not ready"
 
     def test_eb_verify_import_counts_as_needing_python(
-        self, tmp_benchmarks: Path, minimal_task_toml: str, monkeypatch
+        self, tmp_benchmarks: Path, minimal_task_toml: str, pythonless_image
     ) -> None:
-        monkeypatch.setattr(
-            dockerfile_generator,
-            "_setup_lines",
-            lambda base: ["RUN apt-get install -y git curl", "USER agent"],
-        )
         task_dir = self._java_task(
             tmp_benchmarks,
             minimal_task_toml,
@@ -839,13 +837,8 @@ class TestPythonInterpreterCheck:
         assert not result.python_interpreter_ok
 
     def test_shell_only_task_is_unaffected_by_a_pythonless_image(
-        self, tmp_benchmarks: Path, minimal_task_toml: str, monkeypatch
+        self, tmp_benchmarks: Path, minimal_task_toml: str, pythonless_image
     ) -> None:
-        monkeypatch.setattr(
-            dockerfile_generator,
-            "_setup_lines",
-            lambda base: ["RUN apt-get install -y git curl", "USER agent"],
-        )
         task_dir = self._java_task(
             tmp_benchmarks,
             minimal_task_toml,
@@ -856,16 +849,11 @@ class TestPythonInterpreterCheck:
         assert not [i for i in result.issues if i.check == "python_interpreter"]
 
     def test_a_python_verifier_needs_an_interpreter_to_start(
-        self, tmp_benchmarks: Path, minimal_task_toml: str, monkeypatch
+        self, tmp_benchmarks: Path, minimal_task_toml: str, pythonless_image
     ) -> None:
         """schemas/task.schema.json puts no extension constraint on `verifier`.
         A .py verifier cannot even start without an interpreter, and globbing
         only *.sh would wave it through."""
-        monkeypatch.setattr(
-            dockerfile_generator,
-            "_setup_lines",
-            lambda base: ["RUN apt-get install -y git curl", "USER agent"],
-        )
         toml = minimal_task_toml.replace(
             'verifier = "checks/check_one.sh"', 'verifier = "checks/check_one.py"'
         ) + '\n[metadata]\nlanguages = ["java"]\n'

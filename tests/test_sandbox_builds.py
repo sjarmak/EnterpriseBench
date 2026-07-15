@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import docker_available
+
 
 REPO_ROOT = Path(__file__).parent.parent
 TEMPLATE_DIR = REPO_ROOT / "scripts" / "sandbox" / "templates"
@@ -63,19 +65,6 @@ def _parse_git_clone_urls(dockerfile_text: str) -> list[tuple[str, str]]:
         url = url.rstrip("/")
         results.append((url, tag))
     return results
-
-
-def _docker_available() -> bool:
-    """Check if Docker daemon is accessible."""
-    try:
-        result = subprocess.run(
-            ["docker", "info"],
-            capture_output=True,
-            timeout=10,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
 
 
 def _network_available() -> bool:
@@ -267,7 +256,7 @@ class TestDockerBuild:
         ids=[d.stem for d in DOCKERFILES],
     )
     def test_docker_build(self, dockerfile: Path, tmp_path: Path) -> None:
-        if not _docker_available():
+        if not docker_available():
             pytest.skip("Docker daemon not available — skipping build test")
 
         # Copy Dockerfile and helper scripts into build context
