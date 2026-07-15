@@ -4,7 +4,7 @@ Evidence-span groundedness gate — a deterministic verifier primitive.
 Checks that each citation's evidence_span appears verbatim (whitespace-
 normalized, case-insensitive) in the cited file inside the task workspace.
 Adapted from the autoresearch harness groundedness() metric, hardened with
-workspace containment (via plugins.safe_read) and a minimum-span guard so
+workspace containment (via artifact_io.safe_read) and a minimum-span guard so
 trivially matchable spans ("import os") do not count as evidence.
 
 Reasons per citation:
@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
-from eb_verify.plugins import FileTooLargeError, safe_read
+from eb_verify.artifact_io import FileTooLargeError, safe_read
 
 # Spans shorter than this after whitespace normalization are not evidence.
 MIN_SPAN_CHARS = 20
