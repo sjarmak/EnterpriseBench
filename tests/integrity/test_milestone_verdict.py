@@ -107,11 +107,9 @@ class TestNoVerdictIsNeverAScore:
         assert result.score is None
 
     def test_path_escape_is_infra_not_a_crash_mid_chain(self, tmp_path):
-        """A verifier path escaping the task dir *raised* ValueError out of
-        run_session_milestones (bead bbn22), taking the whole chain down mid-run
-        — the exact "harness bug reported as a crash, not a score" the other
-        rungs of this ladder exist to prevent. It is an InfraError like the
-        rest: the chain is INVALID, not dead."""
+        """A verifier path escaping the task dir must not raise out of
+        run_session_milestones and take the whole chain down mid-run. It is an
+        InfraError like every other rung: the chain is INVALID, not dead."""
         score = run_session_milestones(
             milestones=[{"name": "escaper", "verifier": "../../../etc/passwd"}],
             workspace_path=str(tmp_path),
@@ -201,12 +199,7 @@ class TestRealVerdictsPassThroughUnchanged:
     def test_valid_score_with_nonzero_exit_is_a_real_verdict_not_infra(self, tmp_path):
         """check_investigation.sh emits {"score": 0.6} and exits 1. That is a
         genuine partial-credit verdict, not a broken harness: the score is
-        honored and the exit code is not read at all.
-
-        `passed` was `returncode == 0` here until bead bbn22 — so this verifier
-        was a FAIL under milestone.py and a PASS under runner.py on identical
-        output. The score, which is what every aggregator actually sums, is
-        unchanged either way."""
+        honored and the exit code is not read at all."""
         v = write_stub_verifier(
             tmp_path, "#!/bin/sh\necho '{\"score\": 0.6, \"message\": \"partial\"}'\nexit 1\n"
         )
@@ -218,10 +211,9 @@ class TestRealVerdictsPassThroughUnchanged:
         assert result.passed, "0.6 is a passing score whatever the exit code says"
 
     def test_zero_score_with_exit_0_is_a_fail_not_a_pass(self, tmp_path):
-        """THE DIVERGENCE (bead bbn22). {"score": 0.0} + exit 0 was FAIL under
-        runner.py (score > 0.0) and PASS under milestone.py (returncode == 0) —
-        the guard returned half a verdict and each caller invented the other
-        half. One rule now: a 0.0 is a fail, on both runners."""
+        """{"score": 0.0} + exit 0 is the case where deriving `passed` from the
+        exit code instead of the score flips the verdict. One rule: a 0.0 is a
+        fail, on both runners."""
         v = write_stub_verifier(
             tmp_path, "#!/bin/sh\necho '{\"score\": 0.0, \"message\": \"nothing done\"}'\nexit 0\n"
         )

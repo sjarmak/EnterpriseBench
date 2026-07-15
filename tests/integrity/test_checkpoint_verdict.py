@@ -92,7 +92,6 @@ class TestGuardCheckpointVerdict:
         verdict = guard_checkpoint_verdict(json.dumps({"score": 1.0}), 0)
         assert not isinstance(verdict, InfraError)
 
-
     @pytest.mark.parametrize("returncode", [0, 1])
     def test_empty_output_is_never_a_score(self, returncode):
         """The core fabrication: exit 0 -> 1.0, exit 1 -> 0.0. Both are lies."""
@@ -173,10 +172,9 @@ class TestGuardCheckpointVerdict:
 class TestGuardReturnsAWholeVerdict:
     """`passed` is always present, so no caller has to invent it.
 
-    The guard used to return `score` and leave `passed` to the caller — and the
-    two Python callers derived it differently (runner.py: score > 0.0;
-    milestone.py: returncode == 0), so identical verifier output was a PASS on
-    one runner and a FAIL on the other (bead bbn22).
+    A guard that returns `score` alone leaves each caller to derive `passed` its
+    own way, and identical verifier output then reads as a PASS on one runner
+    and a FAIL on the next.
     """
 
     @pytest.mark.parametrize(

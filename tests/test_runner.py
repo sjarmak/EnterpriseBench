@@ -251,8 +251,7 @@ class TestRunCheckpointTimeout:
 
         runner = CheckpointRunner(task=task, task_dir=task_dir, workspace=workspace)
 
-        # Patched in scorer_guard, not runner: it owns the subprocess for every
-        # runner (bead bbn22).
+        # Patched in scorer_guard, not runner: it owns the subprocess.
         import subprocess
         with patch("eb_verify.scorer_guard.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired(cmd=["bash"], timeout=120)

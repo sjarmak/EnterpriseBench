@@ -340,11 +340,8 @@ def guard_checkpoint_verdict(
 
     ``passed`` IS always present in the returned verdict: an explicit JSON bool
     is honored, anything else (absent, or a non-bool like ``"yes"``/``1``) is
-    derived as ``score > 0.0``. Before this fold each caller invented its own
-    other half of the verdict — runner.py said ``score > 0.0`` while
-    milestone.py said ``returncode == 0``, so a verifier emitting
-    ``{"score": 0.0}`` with exit 0 was FAIL under one runner and PASS under the
-    other (bead bbn22).
+    derived as ``score > 0.0``. It is derived here, once, so that no caller
+    invents the other half of the verdict and disagrees with the next caller.
     """
 
     def did_not_run(cause: str, detail: str, **evidence: object) -> InfraError:
@@ -445,22 +442,22 @@ def run_verifier_subprocess(
 ) -> GuardResult:
     """Run ONE verifier under ``base_dir`` and return its verdict, or an InfraError.
 
-    The single definition of "produce a verdict" — the producing half of the
-    boundary whose parsing half is :func:`guard_checkpoint_verdict`. Owns the
-    whole ladder a verifier can fall off before it ever reaches a verdict:
+    The producing half of the boundary whose parsing half is
+    :func:`guard_checkpoint_verdict`, for the two Python runners. Owns the whole
+    ladder a verifier can fall off before it ever reaches a verdict:
     unresolvable path -> path escape -> missing -> timeout -> exec failure ->
-    the guard.
+    the guard. Every rung is an InfraError, never a raise and never a zero, so a
+    runner cannot report a harness bug as a crash or as the agent's score.
 
-    Both Python runners hand-rolled this ladder and had already diverged on
-    every rung (bead bbn22): milestone.py *raised* on a path escape, taking a
-    whole chain down mid-run, and caught only ``OSError`` where runner.py caught
-    every exception. Every rung is an InfraError here, so a runner cannot report
-    a harness bug as a crash or as the agent's zero.
+    ``scripts/sandbox/test_runner.sh`` is a third runner, in bash, that still
+    hand-rolls this ladder in-container and derives ``passed`` its own way — it
+    cannot import this module, so it is NOT covered here.
 
-    The invocation convention stays the caller's: ``argv`` is
-    ``[*argv_prefix, resolved_verifier, *argv_suffix]``, so runner.py keeps
-    ``bash <script>`` plus its env contract and milestone.py keeps direct exec
-    with the workspace as ``argv[1]``.
+    ``argv`` is ``[*argv_prefix, resolved_verifier, *argv_suffix]``: runner.py
+    needs ``bash <script>`` plus its env contract, milestone.py needs the
+    workspace as ``argv[1]``. The knobs exist to hold those two conventions
+    still while the ladder is shared; converging them is a behavior change this
+    function deliberately does not force.
     """
 
     def did_not_run(cause: str, detail: str, **evidence: object) -> InfraError:
@@ -468,43 +465,28 @@ def run_verifier_subprocess(
             cause, detail, checkpoint=checkpoint, stage=stage, evidence=evidence
         )
 
-    # Touching the path at all can raise, and both rungs that do so run BEFORE
-    # the exec rung's own guard — so neither is covered by it. resolve() raises
-    # on a symlink loop (RuntimeError), an embedded null byte (ValueError) and a
-    # too-long name (OSError ENAMETOOLONG); exists() then raises ENAMETOOLONG in
-    # its own right, because pathlib only swallows ENOENT/ENOTDIR/ELOOP and lets
-    # every other errno through. None of these is a path escape, and none is the
-    # agent's fault: they are harness or task-definition bugs. Uncaught, they
-    # propagate out of the one function that promises never to raise and take the
-    # whole checkpoint/milestone loop down mid-run, losing every other
-    # checkpoint's result. Caught broadly for the same reason the exec rung is:
+    # resolve() raises on a symlink loop (RuntimeError), an embedded null byte
+    # (ValueError) and a too-long name (OSError ENAMETOOLONG); exists() raises
+    # ENAMETOOLONG in its own right, because pathlib swallows only
+    # ENOENT/ENOTDIR/ELOOP and lets every other errno through. Caught broadly:
     # every way a path probe can fail is a harness bug, and a harness bug is an
     # InfraError — never a crash, never the agent's zero.
     try:
         base = Path(base_dir).resolve()
         resolved = (base / verifier).resolve()
+        # Strict containment: base_dir itself is a directory, never a verifier.
+        if resolved == base or not resolved.is_relative_to(base):
+            return did_not_run(
+                "path_escape",
+                f"verifier path escapes {base}: {verifier!r} -> {resolved}",
+                verifier=str(verifier),
+            )
+        found = resolved.exists()
     except Exception as exc:
         return did_not_run(
             "unresolvable_path",
             f"verifier path could not be resolved: {exc}",
             verifier=str(verifier),
-        )
-
-    # Strict containment: base_dir itself is a directory, never a verifier.
-    if resolved == base or not resolved.is_relative_to(base):
-        return did_not_run(
-            "path_escape",
-            f"verifier path escapes {base}: {verifier!r} -> {resolved}",
-            verifier=str(verifier),
-        )
-
-    try:
-        found = resolved.exists()
-    except Exception as exc:
-        return did_not_run(
-            "unresolvable_path",
-            f"verifier path could not be probed: {exc}",
-            verifier=str(resolved),
         )
 
     if not found:
@@ -533,10 +515,9 @@ def run_verifier_subprocess(
             timeout_seconds=timeout,
         )
     except Exception as exc:
-        # A non-executable or non-ELF verifier raises OSError; catching only
-        # that let anything else (a bad env dict, a cwd that vanished) escape as
-        # a crash. Every exec failure is a harness bug, so all of them route
-        # here rather than up.
+        # A non-executable or non-ELF verifier raises OSError, a bad env dict or
+        # a vanished cwd raise other types. Every exec failure is a harness bug,
+        # so all of them route here rather than up.
         return did_not_run(
             "exec_error",
             f"verifier could not be executed: {exc}",

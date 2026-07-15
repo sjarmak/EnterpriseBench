@@ -1,14 +1,11 @@
-"""The verdict-PRODUCING half of the scorer trust boundary (bead bbn22).
+"""The verdict-PRODUCING half of the scorer trust boundary.
 
-``guard_checkpoint_verdict`` owns PARSING a verdict and every runner routed
-through it. PRODUCING one — resolve the path, run the subprocess, classify
-escape / missing / timeout / exec-failure — was hand-rolled twice, and the two
-copies had already diverged on every rung: milestone.py *raised* on a path
-escape (crashing the chain mid-run) where runner.py returned an InfraError, and
-caught only ``OSError`` where runner.py caught everything.
+``guard_checkpoint_verdict`` owns PARSING a verdict; ``run_verifier_subprocess``
+owns PRODUCING one — resolve the path, run the subprocess, classify
+escape / missing / timeout / exec-failure.
 
-These tests exercise the lifted ``run_verifier_subprocess`` directly, so the
-ladder is pinned once instead of twice. The per-runner wiring on top of it lives
+These tests exercise ``run_verifier_subprocess`` directly, so the
+ladder is pinned once instead of per-runner. The per-runner wiring on top of it lives
 in test_checkpoint_verdict.py (runner.py) and test_milestone_verdict.py
 (milestone.py); the parse table it delegates to lives in
 test_checkpoint_verdict.py.
@@ -140,20 +137,13 @@ class TestTheLadder:
 
 
 class TestAPathThatCannotBeResolvedIsInfra:
-    """resolve() itself can fail, and it runs before every other rung.
+    """resolve() runs before every other rung, and can itself fail.
 
-    The ladder's first act is to resolve the verifier path — so a path that
-    cannot be resolved at all fails *earlier* than the escape check that was
-    supposed to be the first gate. Unguarded, resolve() raises straight out of
-    run_verifier_subprocess and takes the whole checkpoint/milestone loop down
-    mid-run, losing every other checkpoint's result. That is precisely the
-    "harness bug reported as a crash, not a score" this module exists to
-    prevent, and it contradicted the docstring's own claim that every rung is
-    an InfraError.
-
-    Old runner.py wrapped this step in `except ValueError`, so the null-byte
-    case is a REGRESSION the lift introduced; the RuntimeError/OSError cases
-    escaped both old runners and are pre-existing. All three arrive here now.
+    A path that cannot be resolved at all fails *earlier* than the escape check
+    that is otherwise the first gate. Unguarded, resolve() raises straight out
+    of run_verifier_subprocess and takes the whole checkpoint/milestone loop
+    down mid-run, losing every other checkpoint's result — a harness bug
+    reported as a crash rather than as an InfraError.
     """
 
     def test_symlink_loop_is_infra_not_a_crash(self, tmp_path):
@@ -229,9 +219,7 @@ class TestVerdictsPassThrough:
 
 
 class TestCallersKeepTheirInvocationConvention:
-    """The ladder is shared; how a verifier is *called* is not. Unifying that
-    would have changed how the 3 real milestone verifiers are invoked, which is
-    a behavior change bead bbn22 explicitly holds out of scope."""
+    """The ladder is shared; how a verifier is *called* is not."""
 
     def test_argv_suffix_passes_the_workspace_as_argv_1(self, tmp_path):
         """milestone.py's convention: direct exec, workspace as argv[1]."""

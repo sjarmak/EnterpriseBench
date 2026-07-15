@@ -92,7 +92,7 @@ def run_milestone_verifier(
     The verifier receives the workspace path as its first argument and MUST print
     a JSON object carrying a numeric ``score`` in [0.0, 1.0]; ``message`` is
     optional. Its exit code is never read — neither as a score nor as pass/fail.
-    ``run_verifier_subprocess`` owns both, for every runner.
+    ``run_verifier_subprocess`` owns both.
     """
     logger.info(
         "Running milestone '%s' for session %d: %s",

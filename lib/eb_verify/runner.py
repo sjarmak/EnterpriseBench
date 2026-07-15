@@ -177,7 +177,7 @@ class CheckpointRunner:
         timing out, crashing, or emitting no parseable score) yields an
         InfraError — never a fabricated score. See
         :func:`eb_verify.scorer_guard.run_verifier_subprocess`, which owns both
-        halves of that rule for every runner.
+        halves of that rule.
         """
         env = os.environ.copy()
         env["WORKSPACE"] = str(self.workspace)
