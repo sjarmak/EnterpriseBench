@@ -2484,6 +2484,101 @@ def _install_sgx(container_id: str, mode: str) -> bool:
     return True
 
 
+# Substrings that mark a Sourcegraph response as a definitive credential
+# rejection rather than a transient blip. A bad/expired token never heals on
+# retry, so seeing any of these fails the arm at once instead of burning the
+# backoff ladder. Matched case-insensitively against sgx's combined output.
+_SGX_AUTH_FAIL_MARKERS = (
+    "401",
+    "403",
+    "invalid access token",
+    "unauthorized",
+    "authentication required",
+)
+
+
+def _verify_sgx_endpoint(container_id: str, sg_token: str) -> bool:
+    """Confirm the cli arm's ``sgx`` can make an AUTHENTICATED call (rryas.3).
+
+    ``_install_sgx`` only probes that the wrapper resolves in PATH — it is
+    token-free by design, so a dead/expired token sails past it. This preflight
+    closes that gap: without it, a 401-on-every-call cli run still scores off the
+    agent's local grep fallback and is recorded with ``sgx_used=true`` (a
+    false-valid cli measurement), while the ``mcp_only`` arm already fails loudly
+    on the same bad token at :func:`_verify_mcp_endpoint`. It is the cli-arm
+    analog of that MCP preflight.
+
+    Makes ONE real, token-bearing ``sgx`` call inside the container as the
+    ``agent`` user — the same binary, endpoint, and env the agent gets — so it
+    exercises the whole path the install probe skips. The token is forwarded by
+    NAME via ``docker exec -e SOURCEGRAPH_ACCESS_TOKEN`` (inherited from this
+    process's env), so its value never lands in argv where a host ``ps`` could
+    read it (EnterpriseBench-rryas.5 token-hygiene posture).
+
+    Returns True only when the call authenticates (``sgx`` exit 0). Returns False
+    on a definitive credential rejection (fail-fast, no retry) or after
+    exhausting retries against transient transport failures. The caller treats
+    False as a HARD gate and routes the run to the infra-error re-run channel.
+    """
+    if not sg_token:
+        logger.error(
+            "sgx auth preflight: SOURCEGRAPH_ACCESS_TOKEN not set — the cli arm "
+            "cannot authenticate; failing loudly (mode=cli)"
+        )
+        return False
+
+    # A trivially cheap authenticated call: `count:1` caps the payload and the
+    # query is well-formed, so exit 0 means "the server accepted the token and
+    # answered", not "the query happened to match". Token forwarded by name
+    # (-e SOURCEGRAPH_ACCESS_TOKEN) so its value stays out of argv.
+    probe_cmd = [
+        "docker",
+        "exec",
+        "-u",
+        "agent",
+        "-e",
+        "SOURCEGRAPH_ACCESS_TOKEN",
+        "-w",
+        "/workspace",
+        container_id,
+        "sgx",
+        "search",
+        "count:1 test",
+    ]
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        result = subprocess.run(
+            probe_cmd, capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            logger.info("sgx auth preflight OK (attempt %d)", attempt)
+            return True
+        combined = f"{result.stdout}\n{result.stderr}".lower()
+        if any(marker in combined for marker in _SGX_AUTH_FAIL_MARKERS):
+            logger.error(
+                "sgx auth preflight: Sourcegraph REJECTED the token "
+                "(attempt %d, rc=%d) — expired/invalid credential, not a "
+                "transient blip: %s",
+                attempt,
+                result.returncode,
+                result.stderr.strip()[:200],
+            )
+            return False
+        backoff = min(2**attempt, 10)
+        logger.warning(
+            "sgx auth preflight attempt %d/%d failed (rc=%d, err=%s) — "
+            "retrying in %ds",
+            attempt,
+            max_retries,
+            result.returncode,
+            result.stderr.strip()[:120],
+            backoff,
+        )
+        time.sleep(backoff)
+    logger.error("sgx auth preflight FAILED after %d attempts", max_retries)
+    return False
+
+
 def _sum_model_usage(model_usage: dict) -> tuple[int, int, float]:
     """Sum token counts and cost across all models in a modelUsage dict.
 
@@ -2933,6 +3028,36 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                     "sgx CLI install failed: binary missing, broken, or shadowed "
                     "in PATH. The cli arm cannot run validly; recorded as infra "
                     "error for re-run."
+                )
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
+
+            # --- sgx auth preflight (EnterpriseBench-rryas.3) ---
+            # _install_sgx only proved the wrapper resolves in PATH (token-free
+            # by design); it did NOT prove the token authenticates. Without this
+            # check a dead/expired token 401s on every sgx call, yet the run
+            # scores off the agent's local grep fallback and is recorded with
+            # sgx_used=true — a false-valid cli measurement, and asymmetric with
+            # mcp_only, which already fails loudly on the same bad token. Make
+            # one authenticated sgx call and HARD-gate on rejection, fail-fast
+            # before wasting an agent run.
+            if not _verify_sgx_endpoint(
+                container_id, os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
+            ):
+                logger.error(
+                    "sgx auth preflight FAILED for mode=cli — routing to "
+                    "infra-error re-run channel (not a scored degraded run)"
+                )
+                result.phase = "cli_infra_error"
+                result.status = RUN_STATUS_INVALID
+                result.success = False
+                result.failure_class = "infra_sgx_auth"
+                result.error = (
+                    "sgx auth preflight failed: Sourcegraph rejected the access "
+                    "token (expired/invalid) or the endpoint was unreachable "
+                    "(mode=cli). The cli arm cannot run validly; recorded as "
+                    "infra error for re-run."
                 )
                 result.timing = timings
                 _save_results(result, task_data, output_dir, config)
