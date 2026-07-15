@@ -2557,9 +2557,14 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         # --- Arm eligibility: refuse the task, do not score it near zero ---
         # A code_patch task cannot be solved by an agent forbidden to read the
         # source it must patch. Scoring it anyway would drag the arm's mean down
-        # with a number that measures the gate rather than the agent, so the task
-        # is excluded from the arm and the headline compared on the subset every
-        # arm can actually run (bead EnterpriseBench-7rc1).
+        # with a number that measures the gate rather than the agent, so the run
+        # is refused here rather than scored (bead EnterpriseBench-7rc1).
+        #
+        # Refusing is all this does. Whether the published headline is computed
+        # over a subset every arm can run is a separate, open question: the
+        # reported run set predates this check (EnterpriseBench-yxu3k), and a
+        # refused run is still miscounted downstream until EnterpriseBench-te9ah
+        # lands.
         try:
             check_eligibility(task_data, config.mode)
         except IneligibleTask as exc:

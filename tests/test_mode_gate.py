@@ -178,11 +178,16 @@ def test_lockdown_commands_need_no_shell():
         assert cmd[0] in ("chown", "chmod")
 
 
-def test_lockdown_never_touches_workspace_root_or_agent_output():
+def test_lockdown_adds_no_target_beyond_the_dirs_it_is_handed():
     """Locking /workspace itself would zero the arm instead of gating it.
 
     The agent still has to traverse /workspace to reach instruction.md and to
     write agent_output/.
+
+    Scope: this proves only that lockdown_commands invents no target of its own.
+    That the workspace root can never REACH ``dirs`` in the first place is
+    repo_dirs'/validate_repo_entry's guarantee, asserted by
+    test_repo_dirs_rejects_path_escape, not here.
     """
     for cmd in lockdown_commands(["/workspace/ansible"], SCORER):
         assert "/workspace" not in cmd
