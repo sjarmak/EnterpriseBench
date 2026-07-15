@@ -368,6 +368,11 @@ def _generate_dockerfile(task_toml: Path, source: str) -> Path:
     from dockerfile_generator import generate_for_task
 
     results = generate_for_task(task_toml, source=source)
+    # Every arm builds this one image on purpose; do NOT "fix" this to
+    # results.get(mode). Mode is applied at runtime by mode_gate, because the
+    # scorer shares the container with the agent: an image built without the
+    # repos would blind the scorer too, and its checkpoints would award full
+    # credit for a missing file. See mode_gate's module docstring.
     dockerfile_path = results.get("standard")
     if dockerfile_path is None or not dockerfile_path.exists():
         raise RuntimeError(
@@ -1041,7 +1046,7 @@ def _apply_mode_gate(
         return True, ""
 
     try:
-        dirs = repo_dirs(task_data)
+        dirs = repo_dirs(task_data, WORKSPACE_DIR)
     except ValueError as exc:
         return _gate_failed(f"mode gate cannot run: {exc}")
     if not dirs:

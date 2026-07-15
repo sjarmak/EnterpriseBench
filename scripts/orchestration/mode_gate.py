@@ -43,8 +43,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from validation import validate_repo_entry
 
-WORKSPACE = "/workspace"
-
 #: Arms whose agent is denied local source. ``hybrid`` is MCP *plus* local by
 #: definition, and ``baseline`` is local-only, so neither is gated.
 GATED_MODES = frozenset({"mcp_only"})
@@ -65,11 +63,14 @@ def should_gate(mode: str) -> bool:
     return mode in GATED_MODES
 
 
-def repo_dirs(task_data: dict) -> list[str]:
-    """Absolute container paths of the cloned repo trees.
+def repo_dirs(task_data: dict, workspace: str) -> list[str]:
+    """Absolute container paths of the cloned repo trees under *workspace*.
 
     Mirrors ``dockerfile_generator._clone_commands``, which clones each repo into
-    ``/workspace/{path}``.
+    ``{workspace}/{path}``. The workspace root is passed in rather than redefined
+    here, for the same reason ``lockdown_commands`` takes ``scoring_group``:
+    ``run_task`` owns the container layout, and a second copy of it in this
+    module is a copy that can drift.
 
     ``validate_repo_entry`` is the codebase's one definition of a safe repo entry
     (no slashes, no ``..``) and ``_parse_task`` already applied it to this same
@@ -81,7 +82,7 @@ def repo_dirs(task_data: dict) -> list[str]:
     dirs: list[str] = []
     for repo in task_data.get("repos", []):
         validate_repo_entry(repo)
-        dirs.append(f"{WORKSPACE}/{repo['path']}")
+        dirs.append(f"{workspace}/{repo['path']}")
     return dirs
 
 

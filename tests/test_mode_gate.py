@@ -38,6 +38,7 @@ from mode_gate import (
 
 AGENT_USER = run_task.AGENT_USER
 SCORER = run_task.SCORING_USER
+WORKSPACE = run_task.WORKSPACE_DIR
 
 
 def _task(repos=(("ansible", "ansible"),), required=("answer",), optional=()):
@@ -97,17 +98,17 @@ def test_mode_is_gated_as_recorded(mode):
 
 def test_repo_dirs_derives_workspace_paths():
     task = _task(repos=(("ansible", "ansible"), ("galaxy", "galaxy-ng")))
-    assert repo_dirs(task) == ["/workspace/ansible", "/workspace/galaxy-ng"]
+    assert repo_dirs(task, WORKSPACE) == ["/workspace/ansible", "/workspace/galaxy-ng"]
 
 
 def test_repo_dirs_empty_when_no_repos():
-    assert repo_dirs({"repos": []}) == []
+    assert repo_dirs({"repos": []}, WORKSPACE) == []
 
 
 def test_repo_dirs_rejects_path_escape():
     escaping = {"url": "https://x/etc", "rev": "main", "path": "../../etc"}
     try:
-        repo_dirs({"repos": [escaping]})
+        repo_dirs({"repos": [escaping]}, WORKSPACE)
     except ValueError as exc:
         assert "Invalid repo path" in str(exc)
     else:
