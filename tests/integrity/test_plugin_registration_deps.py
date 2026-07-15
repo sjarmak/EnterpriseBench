@@ -405,7 +405,8 @@ class TestScorerGuardStaysIsolated:
             import eb_verify.scorer_guard  # noqa: F401
             coupled = sorted(
                 m for m in sys.modules
-                if m.startswith(("eb_verify.runner", "eb_verify.plugins"))
+                if m in ("eb_verify.runner", "eb_verify.plugins")
+                or m.startswith(("eb_verify.runner.", "eb_verify.plugins."))
                 or m.split(".")[0] == "jsonschema"
             )
             print("COUPLED:" + (",".join(coupled) if coupled else "none"))
