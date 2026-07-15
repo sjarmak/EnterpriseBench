@@ -22,26 +22,53 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
+from collections.abc import MutableMapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Auto-load .env.local for Sourcegraph credentials if not already in env
-_env_local = REPO_ROOT / ".env.local"
-if _env_local.is_file() and not os.environ.get("SOURCEGRAPH_ACCESS_TOKEN"):
-    for _line in _env_local.read_text().splitlines():
-        _line = _line.strip()
-        if _line.startswith("#") or not _line or "=" not in _line:
+# Only these keys are allowed to OVERRIDE an ambient value from .env.local. The
+# rryas.2 bug was a stale Sourcegraph token in the shell env shadowing the live one;
+# the fix is scoped to Sourcegraph credentials so importing this module never
+# clobbers unrelated ambient secrets (GITHUB_TOKEN, OPENAI_API_KEY, …) that also
+# live in .env.local — every other key keeps the safe setdefault semantics.
+_ENV_LOCAL_OVERRIDE_PREFIXES = ("SOURCEGRAPH", "SG_", "SRC_")
+
+
+def _load_env_local(path: Path, environ: MutableMapping[str, str]) -> None:
+    """Load KEY=VALUE lines from .env.local.
+
+    Sourcegraph credential keys (``_ENV_LOCAL_OVERRIDE_PREFIXES``) WIN over the
+    ambient env; every other key uses ``setdefault`` (ambient value preserved).
+    The previous loader skipped entirely when SOURCEGRAPH_ACCESS_TOKEN was already
+    set and otherwise used setdefault throughout, so a stale token exported by a
+    shell profile (~/.env) silently shadowed the live token here and every
+    Sourcegraph arm failed auth with a 401 (EnterpriseBench-rryas.2). Overriding
+    only the Sourcegraph keys fixes that without letting this import-time load
+    clobber the ~10 unrelated third-party secrets that also sit in .env.local.
+    """
+    if not path.is_file():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if line.startswith("#") or not line or "=" not in line:
             continue
-        # Handle 'export KEY=VALUE' and 'KEY=VALUE'
-        if _line.startswith("export "):
-            _line = _line[7:]
-        _key, _, _val = _line.partition("=")
-        _val = _val.strip().strip("\"'")
-        os.environ.setdefault(_key.strip(), _val)
+        if line.startswith("export "):  # tolerate 'export KEY=VALUE'
+            line = line[7:]
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip().strip("\"'")
+        if key.startswith(_ENV_LOCAL_OVERRIDE_PREFIXES):
+            environ[key] = val
+        else:
+            environ.setdefault(key, val)
+
+
+_env_local = REPO_ROOT / ".env.local"
+_load_env_local(_env_local, os.environ)
 
 # Reuse the TOML parser from create_sg_mirrors
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "infra"))
@@ -2088,6 +2115,103 @@ def _verify_mcp_endpoint(container_id: str, sg_token: str) -> bool:
     return False
 
 
+def _merge_mcp_trust(existing: dict[str, Any], server_name: str) -> dict[str, Any]:
+    """Trust one named project ``.mcp.json`` server in a Claude Code settings dict.
+
+    Claude Code >=2.1 gates project ``.mcp.json`` servers behind an approval step:
+    an un-trusted server shows as "Pending approval" in ``claude mcp list`` and
+    never reaches "Connected", so the handshake below fails and every mcp_only /
+    hybrid run routes to infra-error even with a valid token
+    (EnterpriseBench-rryas.4). ``enabledMcpjsonServers`` trusts ONLY the named
+    server the harness wrote — deliberately not the blanket
+    ``enableAllProjectMcpServers``, which would also auto-trust any ``.mcp.json``
+    an adversarial-under-test agent later drops into the workspace. Merge (append,
+    dedup, keep other settings) so nothing Claude Code relies on is clobbered.
+    """
+    merged = dict(existing)
+    enabled = list(merged.get("enabledMcpjsonServers") or [])
+    if server_name not in enabled:
+        enabled.append(server_name)
+    merged["enabledMcpjsonServers"] = enabled
+    return merged
+
+
+def _trust_project_mcp_servers(container_id: str, server_name: str) -> bool:
+    """Trust the named MCP server in the agent's ~/.claude/settings.json in-container.
+
+    Reads any existing settings first and merges, so this is safe even if the base
+    image (or a prior step) already wrote a settings file. Host-side JSON handling
+    only — no dependency on a Python interpreter inside the task image. Returns
+    False on any docker failure so the caller can route the run to the infra-error
+    channel rather than letting an unwritten trust file surface later as an opaque
+    "Pending approval" handshake timeout.
+    """
+    settings_path = "/home/agent/.claude/settings.json"
+    settings_dir = str(PurePosixPath(settings_path).parent)
+    current = _docker_exec(container_id, ["cat", settings_path])
+    existing: dict[str, Any] = {}
+    if current.returncode == 0 and current.stdout.strip():
+        try:
+            loaded = json.loads(current.stdout)
+        except json.JSONDecodeError as exc:
+            loaded = None
+            logger.warning(
+                "Existing %s is not valid JSON (%s); replacing with a minimal "
+                "trust settings file",
+                settings_path,
+                exc,
+            )
+        if isinstance(loaded, dict):
+            existing = loaded
+        elif loaded is not None:
+            logger.warning(
+                "Existing %s is JSON but not an object (%s); replacing with a "
+                "minimal trust settings file",
+                settings_path,
+                type(loaded).__name__,
+            )
+    elif current.returncode != 0 and "No such file" not in (current.stderr or ""):
+        # cat failed for a reason OTHER than the file being absent (transient docker
+        # error, permissions). Surface it: proceeding would silently overwrite a real
+        # settings file we simply failed to read.
+        logger.warning(
+            "Could not read %s (rc=%d: %s); trust file will be written fresh",
+            settings_path,
+            current.returncode,
+            (current.stderr or "").strip()[:120],
+        )
+
+    merged = _merge_mcp_trust(existing, server_name)
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".settings.json", delete=False
+    ) as fh:
+        fh.write(json.dumps(merged))
+        tmp = fh.name
+    try:
+        mk = _docker_exec(container_id, ["mkdir", "-p", settings_dir])
+        if mk.returncode != 0:
+            logger.error(
+                "Failed to create %s (rc=%d: %s); cannot trust MCP server",
+                settings_dir,
+                mk.returncode,
+                (mk.stderr or "").strip()[:120],
+            )
+            return False
+        _docker_cp(tmp, f"{container_id}:{settings_path}")
+        _docker_exec(container_id, ["chown", "agent:agent", settings_path])
+        logger.info(
+            "Trusted MCP server %r via enabledMcpjsonServers in %s",
+            server_name,
+            settings_path,
+        )
+        return True
+    except RuntimeError as exc:
+        logger.error("Failed to write MCP trust settings: %s", exc)
+        return False
+    finally:
+        os.unlink(tmp)
+
+
 def _configure_mcp(container_id: str, mode: str) -> bool:
     """Configure Sourcegraph MCP endpoint with pre-flight verification.
 
@@ -2191,6 +2315,18 @@ def _configure_mcp(container_id: str, mode: str) -> bool:
     finally:
         os.unlink(tmp_project)
         os.unlink(tmp_user)
+
+    # Step 2b: trust the project MCP server we just wrote, or Claude Code >=2.1
+    # leaves it "Pending approval" and the handshake below never reaches
+    # "Connected" (EnterpriseBench-rryas.4). The server key must match the one
+    # written into .mcp.json above.
+    if not _trust_project_mcp_servers(container_id, "sourcegraph"):
+        logger.error(
+            "Could not write MCP trust settings (mode=%s) — failing MCP pre-flight; "
+            "run will be routed to the infra-error re-run channel",
+            mode,
+        )
+        return False
 
     # Step 3: Verify Claude Code sees the MCP server with retries
     handshake_ok = False

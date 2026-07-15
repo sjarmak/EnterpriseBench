@@ -63,3 +63,7 @@ scripts/infra/accounts_config.json
 
 # Agent audit/status reports (local, not tracked)
 .gc-reports/
+
+# secrets backups (never commit)
+.env.local.bak*
+*.bak-rryas2
