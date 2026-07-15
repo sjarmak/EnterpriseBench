@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,11 @@ from tests.integrity._probe import (
     nonstdlib_modules,
     run_in_fresh_interpreter,
 )
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - exercised only on the 3.10 floor
+    import tomli as tomllib
 
 SCORER_MODULE = "eb_verify.scorers.file_extraction"
 
@@ -595,4 +601,50 @@ class TestShippedScorerSurvivesABrokenValidator:
         assert not _detail_infra_signature(verdict["detail"]), (
             f"the scorer reported a harness failure ({verdict['detail']!r}) over a broken "
             "validator it never uses; the checkpoint would be re-run rather than scored"
+        )
+
+
+class TestScoringDepsStayOptional:
+    """The packaging half of the invariant the rest of this module assumes.
+
+    Every test above proves the code survives a numpy-less install by blocking the
+    stack at ``sys.meta_path``. None of them proves the *install* can still be
+    numpy-less: promoting numpy into ``[project] dependencies`` would make every
+    eb-verify install drag in ~100MB of TF-IDF machinery, and each meta_path-based
+    test would keep passing while the property it exists to protect was gone.
+
+    CI installs ``lib/[dev]`` -> ``[scoring]``, so the deps are present when the
+    suite runs. That is exactly the condition under which the regression is
+    invisible, which is why this reads the manifest instead of the environment.
+    """
+
+    HEAVY = {"numpy", "scikit-learn", "scipy"}
+
+    @staticmethod
+    def _names(requirements: list[str]) -> set[str]:
+        """Distribution names from PEP 508 strings, minus extras/version/markers."""
+        return {
+            re.split(r"[<>=!~;\[\s]", req, maxsplit=1)[0].strip().lower()
+            for req in requirements
+        }
+
+    @pytest.fixture(scope="class")
+    def pyproject(self) -> dict:
+        return tomllib.loads((LIB / "pyproject.toml").read_text(encoding="utf-8"))
+
+    def test_heavy_stack_is_not_a_runtime_dependency(self, pyproject: dict) -> None:
+        declared = self._names(pyproject["project"]["dependencies"])
+        leaked = sorted(declared & self.HEAVY)
+        assert not leaked, (
+            f"{leaked} became a hard dependency of eb-verify; a numpy-less install is "
+            "the canonical one and the lazy-import design depends on it. Declare the "
+            "scoring stack in the [scoring] extra instead."
+        )
+
+    def test_scoring_extra_provides_the_stack(self, pyproject: dict) -> None:
+        """The escape hatch must exist, or the only fix left is a hard dependency."""
+        extras = pyproject["project"]["optional-dependencies"]
+        assert "scoring" in extras, "the [scoring] extra is how callers opt into fact scoring"
+        assert {"numpy", "scikit-learn"} <= self._names(extras["scoring"]), (
+            "the [scoring] extra must name the deps fact_coverage lazily imports"
         )

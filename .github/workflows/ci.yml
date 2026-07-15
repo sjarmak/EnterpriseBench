@@ -16,9 +16,10 @@ jobs:
           python-version: '3.12'
           cache: pip
       - name: Install dependencies
-        run: |
-          pip install pytest jsonschema tomli
-          pip install -e lib/
+        # The [dev] extra pulls the test suite's full dependency set (pytest,
+        # scoring stack, chart stack). Installing the deps by name here instead
+        # is what let numpy/matplotlib go undeclared and abort collection.
+        run: pip install -e "lib/[dev]"
       - name: Run tests
         run: python3 -m pytest tests/ -v --tb=short -m "not network and not docker"
       - name: Scoring-integrity corpus (merge blocker)
