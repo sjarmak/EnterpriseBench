@@ -340,6 +340,28 @@ DEFAULT_OAUTH_AGENT_COMMAND = "claude --dangerously-skip-permissions --max-turns
 # a gate that invalidates on zero must not fire over a tool added after this shipped.
 _MCP_TOOL_PREFIX = "mcp__sourcegraph__"
 
+# The cli arm's retrieval is the `sgx` shell command, run via the Bash tool, so it
+# is not visible to the MCP-prefix match above. Match `sgx` only in COMMAND
+# position — the start of the command, after a shell separator (`;`, `&`, `|`,
+# newline), or opening a subshell / command-substitution (`(`, backtick) — with an
+# optional leading path, and a following space or end so `sgxfoo` does not match.
+# Anchoring to command position keeps `sgx` inside a quoted string or a path from
+# counting. Calibrated on 60 real cli traces (CSB:runs/stratum_cliv1): 728/728 real
+# sgx calls matched, 0 misses, 0 false positives. The gate is zero-vs-nonzero, and
+# a false zero destroys a valid run, so the match errs toward seeing an invocation.
+#
+# The path scan is bounded ({0,256}, not `*`) so an adversarial slash-heavy command
+# string cannot drive the search quadratic — `input.command` is agent-authored trace
+# text parsed synchronously in the orchestrator. No real invocation path is close to
+# 256 chars.
+#
+# KNOWN GAP: a wrapper token with no separator before `sgx` is not seen —
+# `timeout 30 sgx …`, `env X=y sgx …`, `sh -c "sgx …"`, `./sgx …`. Zero of the 728
+# calibrated calls use these forms; broadening the anchor to catch them reintroduces
+# false positives (`echo "sgx"`). Revisit on the first real EB cli calibration
+# (EnterpriseBench follow-up) rather than loosening against an unmeasured form.
+_SGX_COMMAND_RE = re.compile(r"(?:^|[;&|\n(`])\s*(?:/\S{0,256}/)?sgx(?=\s|$)")
+
 
 def _parse_task(toml_path: Path) -> dict:
     """Parse and validate a task.toml file."""
@@ -1567,6 +1589,59 @@ def _route_zero_mcp_run(result: "TaskRunResult", mode: str) -> None:
     result.error = reason
 
 
+def _route_zero_sgx_run(result: "TaskRunResult", mode: str) -> None:
+    """Record sgx usage for a cli-mode run, and gate ``cli`` on zero calls.
+
+    The cli arm measures the `sgx` retrieval command. Unlike ``mcp_only`` it is
+    NOT gated at the filesystem — local source is present by design
+    (EnterpriseBench-83lg6) — so nothing else stops a run from ignoring sgx and
+    solving with local tools. Such a run scored something, but not the retrieval
+    the arm exists to measure, so mark it INVALID and route it to the infra-error
+    re-run channel (the analog of :func:`_route_zero_mcp_run`,
+    EnterpriseBench-ybge9).
+
+    Every non-cli arm is left untouched: baseline/mcp_only/hybrid do not measure
+    sgx, and mcp_only/hybrid have their own zero-call gate on a different counter.
+
+    The gate is zero-vs-nonzero only: a single sgx call proves the arm's
+    retrieval path was live.
+    """
+    if mode != "cli":
+        return
+
+    sgx_calls = result.tool_usage.get("sgx_tool_calls", 0)
+    result.tool_usage["sgx_used"] = sgx_calls > 0
+
+    if sgx_calls > 0:
+        logger.info("Agent made %d sgx tool calls", sgx_calls)
+        return
+
+    result.status = RUN_STATUS_INVALID
+    result.phase = "agent_infra_error"
+    result.success = False
+
+    if result.failure_class is not None:
+        # An OOM kill, a timeout, a crashed agent or a broken sandbox all produce
+        # 0 sgx calls as a *symptom*. Relabelling the run infra_sgx_unused would
+        # bury the actual cause and send triage chasing a phantom sgx problem, so
+        # keep the more specific classification.
+        logger.info(
+            "mode=cli with 0 sgx tool calls, but the run already failed as %s — "
+            "keeping that classification",
+            result.failure_class,
+        )
+        return
+
+    reason = (
+        "mode=cli but the agent made 0 sgx tool calls: the run retrieved with "
+        "local tools under a cli label, so it is not a valid CLI measurement. "
+        "Recorded as infra error for re-run."
+    )
+    logger.error(reason)
+    result.failure_class = "infra_sgx_unused"
+    result.error = reason
+
+
 def _record_agent_trace(
     result: "TaskRunResult", container_id: str, output_dir: Path
 ) -> None:
@@ -2348,6 +2423,30 @@ def _count_mcp_tool_calls(record: dict) -> int:
     )
 
 
+def _count_sgx_tool_calls(record: dict) -> int:
+    """Count `sgx` invocations in one agent stdout record.
+
+    The cli arm retrieves via the `sgx` shell command, so a genuine call is a
+    Bash tool_use whose ``input.command`` invokes `sgx` (see ``_SGX_COMMAND_RE``).
+    A single Bash command can chain several (``sgx search …; sgx read …``), so
+    each match counts, not each block. This count gates cli invalidation
+    (:func:`_route_zero_sgx_run`). Subagent calls that Claude Code inlines into
+    this stream (tagged ``parent_tool_use_id``) are counted like any other
+    record — a compliant Task-subagent run must not read as 0 sgx.
+    """
+    message = record.get("message")
+    blocks = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(blocks, list):
+        return 0
+    return sum(
+        len(_SGX_COMMAND_RE.findall(str((block.get("input") or {}).get("command", ""))))
+        for block in blocks
+        if isinstance(block, dict)
+        and block.get("type") == "tool_use"
+        and block.get("name") == "Bash"
+    )
+
+
 def _extract_tool_usage(output_dir: Path) -> dict:
     """Parse the agent's stdout log for tool-usage metadata.
 
@@ -2361,6 +2460,7 @@ def _extract_tool_usage(output_dir: Path) -> dict:
         "cost_usd": 0.0,
         "num_turns": 0,
         "mcp_tool_calls": 0,
+        "sgx_tool_calls": 0,
     }
 
     stdout_log = output_dir / "agent_stdout.log"
@@ -2373,6 +2473,7 @@ def _extract_tool_usage(output_dir: Path) -> dict:
 
     for record in _iter_agent_records(content):
         usage["mcp_tool_calls"] += _count_mcp_tool_calls(record)
+        usage["sgx_tool_calls"] += _count_sgx_tool_calls(record)
 
         model_usage = record.get("modelUsage")
         if isinstance(model_usage, dict):
@@ -2860,6 +2961,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 )
 
             _route_zero_mcp_run(result, config.mode)
+            _route_zero_sgx_run(result, config.mode)
             _record_agent_trace(result, container_id, output_dir)
         elif should_gate(config.mode):
             # The mode gate lives inside the agent block above (it must run after
