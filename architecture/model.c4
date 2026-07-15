@@ -224,8 +224,13 @@ model {
       }
       validators = component 'plugins/ — 9 artifact validators' {
         #built
-        description 'answer, code_patch, config_validator, incident_report, runbook, security_assessment, reproduction_script, topological_order, call_graph + file_extraction'
+        description 'answer, code_patch, config_validator, incident_report, runbook, security_assessment, reproduction_script, topological_order, call_graph; the runner imports all 9 at package import to look any of them up'
         link ../lib/eb_verify/plugins 'plugins/'
+      }
+      scorers = component 'scorers/ — standalone python -m scorers' {
+        #built
+        description 'file_extraction. Outside plugins/ on purpose: python -m runs every parent __init__ before main() can catch anything, so a scorer in the registry package inherits the import risk of all 9 validators and one broken validator empties its stdout. Side-effect-free; reaches neither the registry nor the scoring stack'
+        link ../lib/eb_verify/scorers 'scorers/'
       }
       parsers = component 'deterministic parsers' {
         #built
@@ -384,6 +389,7 @@ model {
   // Verification
   eb.verify.cli -> eb.verify.runner 'parse task + run checkpoints'
   eb.verify.runner -> eb.verify.validators 'per-artifact validation'
+  eb.verify.runner -> eb.verify.scorers 'checkpoint scripts exec python -m; runner puts the package on PYTHONPATH'
   eb.verify.runner -> eb.verify.judge 'semantic checkpoint judging'
   eb.verify.validators -> eb.verify.parsers 'AST / manifest structural match'
   eb.verify.validators -> eb.corpus.groundTruth 'match against expected_solution'

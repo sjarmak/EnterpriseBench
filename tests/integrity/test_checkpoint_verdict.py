@@ -280,14 +280,14 @@ class TestRunCheckpointNoFabrication:
 
     def test_httpx_import_failure_regression(self, dirs):
         """Built on the real signature of the two active customer_escalation
-        tasks that exec a nonexistent eb_verify.plugins.file_extraction module
+        tasks that exec a nonexistent eb_verify.scorers.file_extraction module
         (bead ssikq): they were silently recording a legitimate 0.0 on a
         weight-0.40 checkpoint. They must now fail closed."""
         task_dir, workspace = dirs
         v = write_verifier(
             task_dir,
             "check_error_source.sh",
-            "#!/bin/bash\npython3 -m eb_verify.plugins.file_extraction\n",
+            "#!/bin/bash\npython3 -m eb_verify.scorers.file_extraction\n",
         )
         _, _, result = run_one(task_dir, workspace, v, weight=0.40)
 

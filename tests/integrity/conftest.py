@@ -9,12 +9,42 @@ the old object keeps it alive.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 LIB = Path(__file__).resolve().parents[2] / "lib"
+
+
+@pytest.fixture
+def broken_validator_tree(tmp_path: Path) -> Path:
+    """sys.path entry whose ``eb_verify.plugins`` registry raises on import.
+
+    Breaking a validator is what actually kills the registry: the 9 non-fact_triples
+    validators are imported unguarded by ``plugins/__init__``.
+
+    The whole tree is copied because the break must live inside the package:
+    sys.path cannot shadow a submodule of ``eb_verify`` without shadowing
+    ``eb_verify`` itself.
+    """
+    shadow = tmp_path / "broken_tree"
+    shutil.copytree(
+        LIB / "eb_verify",
+        shadow / "eb_verify",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    # The missing dep must not be spelled with an ``eb_verify`` prefix: scorer_guard
+    # greps stderr for "No module named 'eb_verify", so an eb_verify_* dep matches that
+    # signature by accident and any probe asking "is this booked as infra?" answers yes
+    # without the code under test doing anything.
+    with (shadow / "eb_verify" / "plugins" / "call_graph.py").open("a") as fh:
+        fh.write("\nimport simulated_absent_thirdparty_dep  # noqa: F401\n")
+    return shadow
+
 
 # Refuse to import the heavy stack, the way a minimal task sandbox does: lib's
 # pyproject declares only jsonschema, so numpy-less is the canonical install.

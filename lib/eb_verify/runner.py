@@ -53,7 +53,7 @@ def checkpoint_env(workspace: Path, task_dir: Path, task_id: str) -> dict[str, s
     PYTHONSAFEPATH=1 (py>=3.11) drops the cwd/script-dir entry from sys.path[0].
     Checkpoints run with cwd=workspace — the directory the agent writes — and exec
     scorers as `python -m eb_verify.…`, whose `-m` puts cwd AHEAD of PYTHONPATH. Without
-    this flag an agent that plants /workspace/eb_verify/plugins/… shadows the real scorer
+    this flag an agent that plants /workspace/eb_verify/scorers/… shadows the real scorer
     and mints its own verdict (bead 5cfxa). The sandbox harness sets the same flag; this
     is the host-runner half of that guard.
 

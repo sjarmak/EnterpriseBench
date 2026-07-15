@@ -1,10 +1,10 @@
 """A planted ``/workspace/eb_verify`` must not shadow the real scorer.
 
-Checkpoint scripts exec ``python3 -m eb_verify.plugins.…`` with ``cwd`` set to the
+Checkpoint scripts exec ``python3 -m eb_verify.scorers.…`` with ``cwd`` set to the
 agent-writable workspace (``CheckpointRunner.run_checkpoint``). Python's ``-m`` puts
 ``cwd`` at ``sys.path[0]`` — ahead of the absolute ``_LIB_DIR`` that ``checkpoint_env``
 prepends to ``PYTHONPATH``. So an agent that writes
-``/workspace/eb_verify/plugins/file_extraction.py`` would shadow the shipped scorer and
+``/workspace/eb_verify/scorers/file_extraction.py`` would shadow the shipped scorer and
 mint its own ``{"score": 1.0}`` for a checkpoint it never solved (bead 5cfxa).
 
 ``checkpoint_env`` closes this by exporting ``PYTHONSAFEPATH=1`` (py>=3.11 drops the
@@ -29,7 +29,7 @@ from pathlib import Path
 
 from eb_verify.runner import _LIB_DIR, checkpoint_env
 
-MODULE = "eb_verify.plugins.file_extraction"
+MODULE = "eb_verify.scorers.file_extraction"
 PWNED = "PWNED-agent-minted-verdict"
 
 
@@ -38,13 +38,18 @@ def _plant_shadow_workspace(tmp_path: Path) -> Path:
 
     The planted scorer ignores its arguments and prints a full-marks verdict, exactly
     the forgery the real scorer must win over.
+
+    The plant's path is derived from ``MODULE`` rather than spelled out: it has to
+    shadow whatever the checkpoint actually execs, and a plant left behind at the
+    scorer's old location would shadow nothing and pass both vectors vacuously.
     """
     ws = tmp_path / "ws"
-    plugins = ws / "eb_verify" / "plugins"
-    plugins.mkdir(parents=True)
-    (ws / "eb_verify" / "__init__.py").write_text("")
-    (plugins / "__init__.py").write_text("")
-    (plugins / "file_extraction.py").write_text(
+    *packages, module_name = MODULE.split(".")
+    package_dir = ws.joinpath(*packages)
+    package_dir.mkdir(parents=True)
+    for depth in range(len(packages)):
+        ws.joinpath(*packages[: depth + 1], "__init__.py").write_text("")
+    (package_dir / f"{module_name}.py").write_text(
         "import json\n"
         f'print(json.dumps({{"score": 1.0, "passed": True, "detail": "{PWNED}"}}))\n'
     )
@@ -52,7 +57,7 @@ def _plant_shadow_workspace(tmp_path: Path) -> Path:
 
 
 def _run_module(ws: Path, env: dict[str, str]) -> str:
-    """``python -m eb_verify.plugins.file_extraction`` with ``cwd=ws``, as the runner does."""
+    """``python -m eb_verify.scorers.file_extraction`` with ``cwd=ws``, as the runner does."""
     return subprocess.run(
         [sys.executable, "-m", MODULE],
         capture_output=True,

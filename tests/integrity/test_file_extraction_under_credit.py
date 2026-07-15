@@ -34,7 +34,7 @@ from eb_verify.runner import _LIB_DIR, checkpoint_env
 # The scorer's OWN argument parser, so shipped_keys() reads --keys exactly as the
 # scorer does — no second, drift-prone parser. HarnessError is what it raises on a
 # malformed invocation.
-from eb_verify.plugins.file_extraction import HarnessError, build_parser
+from eb_verify.scorers.file_extraction import HarnessError, build_parser
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -44,7 +44,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FILE_EXTRACTION_CHECKS = sorted(
     path
     for path in REPO_ROOT.glob("benchmarks/*/*/checks/*.sh")
-    if "eb_verify.plugins.file_extraction" in path.read_text(encoding="utf-8")
+    if "eb_verify.scorers.file_extraction" in path.read_text(encoding="utf-8")
 )
 
 # (repo, path) pairs, as required_files entries really are: repo-prefixed paths, as
@@ -61,7 +61,7 @@ def test_the_corpus_actually_found_the_scorers_call_sites():
     """Non-vacuity guard. Without it a rename empties the glob, every vector below
     passes by iterating nothing, and the gate goes green guarding nothing."""
     assert len(FILE_EXTRACTION_CHECKS) >= 2, (
-        "no shipped check script execs eb_verify.plugins.file_extraction, so the "
+        "no shipped check script execs eb_verify.scorers.file_extraction, so the "
         "vectors below would all pass vacuously"
     )
 
@@ -109,7 +109,7 @@ def shipped_keys(script: Path, tmp_path) -> set[str]:
     with it. (An earlier plan to regex the script text was rejected for exactly that
     fragility.)
     """
-    module = "eb_verify.plugins.file_extraction"
+    module = "eb_verify.scorers.file_extraction"
     bindir = tmp_path / "shimbin"
     bindir.mkdir(exist_ok=True)
     dump = tmp_path / "argv.txt"

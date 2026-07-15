@@ -21,12 +21,17 @@ suite reaches this module.
 from __future__ import annotations
 
 import json
-import shutil
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from eb_verify.scorer_guard import _detail_infra_signature
 from tests.integrity.conftest import LIB, run_in_fresh_interpreter
+
+SCORER_MODULE = "eb_verify.scorers.file_extraction"
 
 
 def _fact_triples_workspace(tmp_path: Path) -> Path:
@@ -376,13 +381,20 @@ class TestScorerGuardStaysIsolated:
             "is missing, so nothing may re-couple it to the plugin stack"
         )
 
-    def test_importing_scorer_guard_pulls_no_sibling_eb_verify_module(self) -> None:
-        """The guard's own package is the one non-stdlib root it may touch -- alone.
+    def test_importing_scorer_guard_pulls_no_unvetted_sibling_module(self) -> None:
+        """Every sibling the guard pulls in is one more module that can blind it.
 
         ``eb_verify`` passes the stdlib check above by construction, so pin separately
-        that it brings no siblings with it: ``runner``, the registry and the 9
-        validators are exactly what must not ride along.
+        which siblings ride along: ``runner``, the registry and the 9 validators are
+        exactly what must not.
+
+        Pinned as an allowlist rather than "no siblings at all" -- the guard needs
+        ``redact`` to bound the detail strings it reports, and a stdlib-only sibling
+        cannot break in a way the guard exists to survive. An allowlist, not a denylist
+        of the plugin stack: whatever the guard acquires NEXT is the regression worth
+        catching, and a denylist is blind to it by construction.
         """
+        allowed = {"eb_verify.redact"}
         out = run_in_fresh_interpreter(
             """
             import sys
@@ -396,33 +408,16 @@ class TestScorerGuardStaysIsolated:
             """,
             block_deps=False,
         )
-        assert "SIBLINGS:none" in out, (
-            f"importing eb_verify.scorer_guard dragged in sibling modules ({out.strip()}); "
-            "the guard must stay importable when any of them is broken"
+        reached = {m for m in out.split("SIBLINGS:")[1].strip().split(",") if m != "none"}
+        assert reached <= allowed, (
+            f"importing eb_verify.scorer_guard dragged in unvetted sibling modules "
+            f"({sorted(reached - allowed)}); the guard must stay importable when any "
+            "of them is broken. A new sibling here is only acceptable if it is "
+            "stdlib-only and the guard genuinely needs it -- then add it to `allowed`."
         )
-
-    def _tree_with_a_broken_validator(self, tmp_path: Path) -> Path:
-        """A copy of the real lib tree with one validator broken at import time.
-
-        Breaking a validator is what actually kills the registry: the 9 non-fact_triples
-        validators are imported unguarded by ``plugins/__init__``.
-
-        The whole tree is copied because the break must live inside the package:
-        sys.path cannot shadow a submodule of ``eb_verify`` without shadowing
-        ``eb_verify`` itself.
-        """
-        shadow = tmp_path / "broken_tree"
-        shutil.copytree(
-            LIB / "eb_verify",
-            shadow / "eb_verify",
-            ignore=shutil.ignore_patterns("__pycache__"),
-        )
-        with (shadow / "eb_verify" / "plugins" / "call_graph.py").open("a") as fh:
-            fh.write("\nimport eb_verify_simulated_broken_dep  # noqa: F401\n")
-        return shadow
 
     def test_the_broken_validator_shadow_actually_breaks_the_registry(
-        self, tmp_path: Path
+        self, broken_validator_tree: Path
     ) -> None:
         """Guard the premise: a vacuous shadow would make the next test meaningless."""
         out = run_in_fresh_interpreter(
@@ -434,7 +429,7 @@ class TestScorerGuardStaysIsolated:
                 print("REGISTRY_RAISES:" + str(exc))
             """,
             block_deps=False,
-            extra_path=self._tree_with_a_broken_validator(tmp_path),
+            extra_path=broken_validator_tree,
         )
         assert "REGISTRY_RAISES" in out, (
             "the broken-validator shadow does not break the plugin stack, so the "
@@ -442,7 +437,7 @@ class TestScorerGuardStaysIsolated:
         )
 
     def test_scorer_guard_imports_while_the_plugin_stack_is_broken(
-        self, tmp_path: Path
+        self, broken_validator_tree: Path
     ) -> None:
         """The end the isolation exists for: a broken stack must not blind the guard."""
         out = run_in_fresh_interpreter(
@@ -451,7 +446,7 @@ class TestScorerGuardStaysIsolated:
             print("GUARD_OK:" + guard.__file__)
             """,
             block_deps=False,
-            extra_path=self._tree_with_a_broken_validator(tmp_path),
+            extra_path=broken_validator_tree,
         )
         assert "GUARD_OK:" in out, (
             f"the scorer guard could not be imported while the plugin stack was broken "
@@ -460,7 +455,154 @@ class TestScorerGuardStaysIsolated:
         )
         # Assert the BROKEN tree is the one that answered, not the real lib/ still on
         # sys.path behind it -- otherwise this passes without ever exercising the break.
-        assert str(tmp_path) in out, (
+        assert str(broken_validator_tree) in out, (
             f"the guard resolved to a tree outside the broken shadow ({out.strip()}); "
             "the shadow is not on sys.path first, so this test proves nothing"
+        )
+
+
+class TestScorersPackageStaysImportLight:
+    """What the scorer's location has to keep buying, stated as a test.
+
+    ``python -m`` executes every parent ``__init__`` before ``main()``, so the import
+    cost and the import risk of the scorer's package are paid on every checkpoint of
+    every task attempt, before any code can report a failure. Nothing may quietly
+    reintroduce an edge to the plugin registry or the scoring stack.
+    """
+
+    def test_importing_the_scorer_reaches_neither_the_registry_nor_the_heavy_stack(
+        self,
+    ) -> None:
+        out = run_in_fresh_interpreter(
+            f"""
+            import sys
+            import {SCORER_MODULE}  # noqa: F401
+            plugins = sorted(m for m in sys.modules if m.startswith("eb_verify.plugins"))
+            heavy = sorted(
+                m for m in sys.modules
+                if m.split(".")[0] in ("numpy", "sklearn", "scipy", "pandas")
+            )
+            print("PLUGINS:" + (",".join(plugins) if plugins else "none"))
+            print("HEAVY:" + (",".join(heavy) if heavy else "none"))
+            """,
+            block_deps=False,
+        )
+        assert "PLUGINS:none" in out, (
+            f"the shipped scorer imports the validator registry ({out.strip()}); a "
+            "broken validator would then empty its stdout and the runner would book "
+            "the harness failure as an agent zero"
+        )
+        assert "HEAVY:none" in out, (
+            f"the shipped scorer imports the scoring stack ({out.strip()}); it does not "
+            "score facts, and task sandboxes do not ship numpy"
+        )
+
+    def test_the_scorers_package_itself_has_no_import_side_effects(self) -> None:
+        """The package is the contract: it must add nothing to what its modules cost."""
+        out = run_in_fresh_interpreter(
+            """
+            import sys
+            before = set(sys.modules)
+            import eb_verify.scorers  # noqa: F401
+            pulled = sorted(
+                m for m in set(sys.modules) - before
+                if m not in ("eb_verify", "eb_verify.scorers")
+            )
+            print("PULLED:" + (",".join(pulled) if pulled else "none"))
+            """,
+            block_deps=False,
+        )
+        assert "PULLED:none" in out, (
+            f"eb_verify.scorers imports modules at package import ({out.strip()}); it "
+            "exists to be the location that does not, so its submodules pay only for "
+            "what they use"
+        )
+
+
+class TestShippedScorerSurvivesABrokenValidator:
+    """A broken validator must not silence the scorer that checkpoints exec.
+
+    The guard being importable (above) is necessary but not sufficient: what the
+    benchmark actually runs is ``python -m`` on the scorer, and runpy executes every
+    parent package ``__init__`` before ``main()``'s try/except gets to report anything.
+    While the scorer lived in ``eb_verify.plugins``, that meant one broken sibling
+    validator emptied stdout and the runner fell back to exit-code scoring -- booking
+    a harness failure as a real agent zero, which is the whole reason this module has
+    a guard at all.
+    """
+
+    def _run_scorer(self, tree: Path, workspace: Path) -> subprocess.CompletedProcess:
+        """Exec the scorer with ``tree`` as the ONLY source of ``eb_verify``.
+
+        Deliberately not ``tree:LIB``: with the real lib behind it on the path, a
+        scorer that failed to resolve out of the broken tree would quietly answer
+        from the healthy one and the vectors below would pass without ever meeting
+        the break. The tree is a whole copy of the package, so it needs no fallback.
+        """
+        env = {
+            **os.environ,
+            "PYTHONPATH": str(tree),
+            "ANSWER_FILE": str(workspace / "answer.json"),
+            "GT_FILE": str(workspace / "ground_truth.json"),
+        }
+        return subprocess.run(
+            [sys.executable, "-m", SCORER_MODULE, "--keys", "source_files"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=env,
+        )
+
+    def _workspace(self, tmp_path: Path) -> Path:
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        (workspace / "answer.json").write_text(
+            json.dumps({"source_files": ["src/a.py"]}), encoding="utf-8"
+        )
+        (workspace / "ground_truth.json").write_text(
+            json.dumps({"required_files": [{"path": "src/a.py", "repo": "r"}]}),
+            encoding="utf-8",
+        )
+        return workspace
+
+    def test_scorer_scores_a_matching_answer_on_a_healthy_tree(
+        self, tmp_path: Path
+    ) -> None:
+        """Guard the premise: pins what the broken-tree run below must reproduce."""
+        proc = self._run_scorer(LIB, self._workspace(tmp_path))
+        verdict = json.loads(proc.stdout)
+        assert (verdict["score"], verdict["passed"], proc.returncode) == (1.0, True, 0), (
+            f"the scorer does not score a matching answer on a healthy tree "
+            f"({proc.stdout!r}, rc={proc.returncode}); the vector below compares against "
+            "this result, so it would prove nothing"
+        )
+
+    def test_a_broken_validator_is_invisible_to_the_scorer(
+        self, broken_validator_tree: Path, tmp_path: Path
+    ) -> None:
+        """The headline invariant, and the shape of the bug if it regresses.
+
+        Asserted as "identical to the healthy verdict" rather than "prints some JSON":
+        the scorer does not import the registry, so a broken validator is not something
+        it survives -- it is something it never meets. Anything re-coupling the two
+        shows up here first as an empty stdout (runner.py then fabricates a score from
+        the exit code and books the harness failure as a real agent zero), and a
+        weaker assertion would let a degraded-but-parseable verdict through.
+        """
+        proc = self._run_scorer(broken_validator_tree, self._workspace(tmp_path))
+
+        assert proc.stdout.strip(), (
+            "the scorer printed NOTHING to stdout with a sibling validator broken "
+            f"(rc={proc.returncode}, stderr={proc.stderr[-400:]!r}); runner.py then "
+            "fabricates a score from the exit code, and scorer_guard cannot tell that "
+            "0.0 from a real agent zero -- a harness failure booked as agent performance"
+        )
+        verdict = json.loads(proc.stdout)
+        assert (verdict["score"], verdict["passed"], proc.returncode) == (1.0, True, 0), (
+            f"a broken validator changed the scorer's verdict ({verdict}, rc={proc.returncode}); "
+            "it must score exactly as it does on a healthy tree"
+        )
+        assert not _detail_infra_signature(verdict["detail"]), (
+            f"the scorer reported a harness failure ({verdict['detail']!r}) over a broken "
+            "validator it never uses; the checkpoint would be re-run rather than scored"
         )

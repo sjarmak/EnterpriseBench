@@ -64,11 +64,11 @@ register(CallGraphValidator())
 register(TopologicalOrderValidator())
 
 # fact_triples needs numpy/scikit-learn/jsonschema, which minimal task
-# sandboxes do not ship. Register it only when its deps are importable so
-# dependency-free scorers (e.g. plugins.file_extraction run via `python -m`
-# inside the sandbox) can import this package without the heavy stack.
-# get_validator("fact_triples") returns None in that case and the runner
-# reports the unknown artifact type explicitly.
+# sandboxes do not ship. Register it only when its deps are importable, so that
+# runner.py -- which imports this registry to look up any validator -- still
+# works on a sandbox that cannot score facts, rather than dying at import over a
+# validator the task never asked for. get_validator("fact_triples") returns None
+# in that case and the runner reports the unknown artifact type explicitly.
 #
 # The scoring deps must be probed explicitly: fact_triples defers them to its scoring
 # call sites, so importing it cleanly proves only that jsonschema is present. Relying

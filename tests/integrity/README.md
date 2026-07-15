@@ -58,7 +58,7 @@ so removing a key turns its case red. The *add* row discovers the shipped keys b
 executing each script under a `python3` shim that captures the real argv — never by
 restating the list — and fails when a shipped key has no covering shape, so a key added
 with no vector cannot slip through green. Both cover the two scripts that exec
-`eb_verify.plugins.file_extraction` today and any that adopt it later; they say nothing
+`eb_verify.scorers.file_extraction` today and any that adopt it later; they say nothing
 about the ~39 sibling checkpoints that still match files with an inline
 `af.endswith(gt)`, which carry all the same defects and are bead `rmz1x`.
 

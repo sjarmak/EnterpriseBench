@@ -13,5 +13,5 @@ set -euo pipefail
 export ANSWER_FILE="$WORKSPACE/agent_output/answer.json"
 export GT_FILE="$TASK_DIR/ground_truth.json"
 
-exec python3 -m eb_verify.plugins.file_extraction \
+exec python3 -m eb_verify.scorers.file_extraction \
     --keys files,source_files,code_paths,error_source.files,citations

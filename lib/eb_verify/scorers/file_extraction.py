@@ -3,10 +3,12 @@
 A scorer, not an artifact validator: the registry protocol in
 :mod:`eb_verify.plugins` returns a pass/fail ``ValidationResult`` and has nowhere
 to put a number, so this is a ``python -m`` CLI that checkpoint scripts exec
-directly. The package reaches PYTHONPATH via :func:`eb_verify.runner.checkpoint_env`
-(host) or ``run_task.py`` staging (sandbox).
+directly. It lives in :mod:`eb_verify.scorers`, not the registry package, so that a
+broken validator cannot empty its stdout before ``main()`` runs -- see that
+package's docstring. The package reaches PYTHONPATH via
+:func:`eb_verify.runner.checkpoint_env` (host) or ``run_task.py`` staging (sandbox).
 
-    ANSWER_FILE=... GT_FILE=... python3 -m eb_verify.plugins.file_extraction \
+    ANSWER_FILE=... GT_FILE=... python3 -m eb_verify.scorers.file_extraction \
         --keys source_files,files,error_source.files,code_paths,citations
 
 Scoring is recall over ``required_files[].path``, partial credit, ``passed`` at
@@ -361,7 +363,7 @@ def agent_files(answer: Any, keys: Iterable[str]) -> List[str]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = _JsonErrorParser(
-        prog="python -m eb_verify.plugins.file_extraction",
+        prog="python -m eb_verify.scorers.file_extraction",
         description="Score the source files an agent named against ground truth.",
         add_help=False,
     )

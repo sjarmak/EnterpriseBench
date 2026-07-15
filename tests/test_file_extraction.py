@@ -20,7 +20,7 @@ import pytest
 # Import the real sentinel rather than re-spelling it: scorer_guard is what greps
 # for it, so a test asserting against its own copy would pass straight through a
 # drift that silently re-books infra failures as agent zeros.
-from eb_verify.plugins.file_extraction import components
+from eb_verify.scorers.file_extraction import components
 from eb_verify.scorer_guard import INFRA_SENTINEL
 from eb_verify.runner import CheckpointRunner, _LIB_DIR
 from eb_verify.task_parser import parse_task
@@ -59,7 +59,7 @@ def cli_env(answer_file, gt_file) -> dict:
 def run_cli(answer_file, gt_file, argv=("--keys", ALL_KEYS)):
     """Invoke the scorer across its real ``python -m`` CLI boundary."""
     return subprocess.run(
-        [sys.executable, "-m", "eb_verify.plugins.file_extraction", *argv],
+        [sys.executable, "-m", "eb_verify.scorers.file_extraction", *argv],
         capture_output=True, text=True,
         env=cli_env(answer_file, gt_file), cwd=str(REPO_ROOT),
     )
@@ -335,7 +335,7 @@ def test_a_missing_answer_file_path_is_infra_not_a_zero(tmp_path, answer_file_va
     else:
         env["ANSWER_FILE"] = answer_file_value
     proc = subprocess.run(
-        [sys.executable, "-m", "eb_verify.plugins.file_extraction", "--keys", ALL_KEYS],
+        [sys.executable, "-m", "eb_verify.scorers.file_extraction", "--keys", ALL_KEYS],
         capture_output=True, text=True, env=env, cwd=str(REPO_ROOT),
     )
     assert proc.returncode != 0, "an unset/blank ANSWER_FILE must fail closed"
@@ -447,7 +447,7 @@ def test_broken_stdout_is_an_infra_error_not_a_false_zero(tmp_path):
     answer = write_json(tmp_path / "answer.json", {"source_files": ["httpx/_config.py"]})
 
     proc = subprocess.Popen(
-        [sys.executable, "-m", "eb_verify.plugins.file_extraction",
+        [sys.executable, "-m", "eb_verify.scorers.file_extraction",
          "--keys", "source_files"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=cli_env(answer, gt), cwd=str(REPO_ROOT),
