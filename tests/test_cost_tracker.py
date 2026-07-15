@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from cost_tracker import (
     DEFAULT_MODEL,
+    PRICING,
     ModelUsage,
     TaskCost,
     Usage,
@@ -145,6 +146,59 @@ class TestParseTrace:
         assert usage.input_tokens == 0
         assert usage.num_requests == 0
         assert usage.model == DEFAULT_MODEL
+
+    def test_api_error_line_does_not_latch_model(self, tmp_path: Path) -> None:
+        """A `<synthetic>` isApiErrorMessage line preceding a real, billed turn
+        must not become the run's representative model — otherwise the real
+        tokens get priced at DEFAULT_MODEL and the mispricing is hidden from
+        unpriced_models (EnterpriseBench-qjfi)."""
+        synthetic = {
+            "type": "assistant",
+            "isApiErrorMessage": True,
+            "message": {
+                "model": "<synthetic>",
+                "role": "assistant",
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+            },
+        }
+        trace = _write_trace(
+            tmp_path / "agent_trace.jsonl",
+            [
+                synthetic,
+                _assistant_entry(
+                    input_tokens=1000, output_tokens=500, model="claude-opus-4-8"
+                ),
+            ],
+        )
+        usage = parse_trace(trace)
+        assert usage.model == "claude-opus-4-8"
+        assert usage.input_tokens == 1000
+        assert usage.output_tokens == 500
+
+    def test_pure_synthetic_trace_falls_back_to_default_model(
+        self, tmp_path: Path
+    ) -> None:
+        """A run that only ever produced a `<synthetic>` error line names no real
+        model, so it resolves to DEFAULT_MODEL at zero usage — priced (cost 0)
+        rather than surfacing the sentinel as an unpriced model."""
+        trace = _write_trace(
+            tmp_path / "agent_trace.jsonl",
+            [
+                {
+                    "type": "assistant",
+                    "isApiErrorMessage": True,
+                    "message": {
+                        "model": "<synthetic>",
+                        "role": "assistant",
+                        "usage": {"input_tokens": 0, "output_tokens": 0},
+                    },
+                }
+            ],
+        )
+        usage = parse_trace(trace)
+        assert usage.model == DEFAULT_MODEL
+        assert usage.input_tokens == 0
+        assert usage.output_tokens == 0
 
     def test_malformed_lines_skipped(self, tmp_path: Path) -> None:
         path = tmp_path / "agent_trace.jsonl"
@@ -378,6 +432,54 @@ class TestComputeCost:
             500_000 * 0.80 + 100_000 * 4.0 + 200_000 * 1.0 + 300_000 * 0.08
         ) / 1_000_000
         assert cost == round(expected, 6)
+
+    def test_fable_5_known_values(self) -> None:
+        usage = Usage(
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+            cache_write_tokens=0,
+            cache_read_tokens=0,
+            model="claude-fable-5",
+            num_requests=4,
+        )
+        # 1M * $10/M + 1M * $50/M = $60
+        assert compute_cost(usage) == 60.0
+
+    def test_opus_4_8_known_values(self) -> None:
+        usage = Usage(
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+            cache_write_tokens=0,
+            cache_read_tokens=0,
+            model="claude-opus-4-8",
+            num_requests=4,
+        )
+        # 1M * $5/M + 1M * $25/M = $30 — the vendor's own rate, not opus-4-6's $90
+        assert compute_cost(usage) == 30.0
+
+    def test_opus_4_8_matches_vendor_costusd(self) -> None:
+        """The real dep-traversal-010/condB opus-4-8 block prices to its own
+        costUSD to the cent — the derivation these rates came from."""
+        usage = Usage(
+            input_tokens=296,
+            output_tokens=13_680,
+            cache_write_tokens=21_578,
+            cache_read_tokens=579_879,
+            model="claude-opus-4-8",
+            num_requests=1,
+        )
+        assert compute_cost(usage) == 0.768282
+
+    @pytest.mark.parametrize("model", sorted(PRICING))
+    def test_pricing_follows_standard_multipliers(self, model: str) -> None:
+        """Every PRICING row is derived from one input rate under Anthropic's
+        standard multipliers (output 5x, cache_write 1.25x, cache_read 0.1x).
+        A future price edit that touches one field without the others would
+        silently break the derivation this table documents."""
+        p = PRICING[model]
+        assert p["output"] == pytest.approx(5.0 * p["input"])
+        assert p["cache_write"] == pytest.approx(1.25 * p["input"])
+        assert p["cache_read"] == pytest.approx(0.1 * p["input"])
 
     def test_unknown_model_falls_back_to_default(self) -> None:
         usage = Usage(
@@ -643,27 +745,47 @@ class TestUnpricedModelDisclosure:
                 _make_cost(
                     task_id="t1", model="claude-sonnet-4-6", cost_source="trace"
                 ),
-                _make_cost(task_id="t2", model="claude-opus-4-8", cost_source="trace"),
+                _make_cost(
+                    task_id="t2", model="claude-unknown-99", cost_source="trace"
+                ),
             ]
         )
-        assert report["unpriced_models"] == ["claude-opus-4-8"]
+        assert report["unpriced_models"] == ["claude-unknown-99"]
 
     def test_unpriced_models_deduped_and_sorted(self) -> None:
         report = aggregate_report(
             [
-                _make_cost(task_id="t1", model="claude-opus-4-8", cost_source="trace"),
-                _make_cost(task_id="t2", model="claude-fable-5", cost_source="trace"),
-                _make_cost(task_id="t3", model="claude-opus-4-8", cost_source="trace"),
+                _make_cost(
+                    task_id="t1", model="claude-unknown-99", cost_source="trace"
+                ),
+                _make_cost(
+                    task_id="t2", model="claude-unknown-42", cost_source="trace"
+                ),
+                _make_cost(
+                    task_id="t3", model="claude-unknown-99", cost_source="trace"
+                ),
             ]
         )
-        assert report["unpriced_models"] == ["claude-fable-5", "claude-opus-4-8"]
+        assert report["unpriced_models"] == ["claude-unknown-42", "claude-unknown-99"]
 
     def test_vendor_priced_model_is_not_flagged_unpriced(self) -> None:
-        """The vendor prices opus-4-8 itself — PRICING never touches it."""
+        """A vendor-priced run is billed from costUSD — PRICING never touches it,
+        so even a model absent from PRICING must not be flagged."""
         report = aggregate_report(
             [
-                _make_cost(task_id="t1", model="claude-opus-4-8", cost_source="sdk"),
-                _make_cost(task_id="t2", model="claude-fable-5", cost_source="sdk"),
+                _make_cost(task_id="t1", model="claude-unknown-99", cost_source="sdk"),
+                _make_cost(task_id="t2", model="claude-unknown-42", cost_source="sdk"),
+            ]
+        )
+        assert report["unpriced_models"] == []
+
+    def test_now_priced_models_not_flagged_when_trace_derived(self) -> None:
+        """fable-5 and opus-4-8 are in PRICING now, so a tier-2 run of either is
+        billed at its real rate and must not be flagged as unpriced."""
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", model="claude-fable-5", cost_source="trace"),
+                _make_cost(task_id="t2", model="claude-opus-4-8", cost_source="trace"),
             ]
         )
         assert report["unpriced_models"] == []

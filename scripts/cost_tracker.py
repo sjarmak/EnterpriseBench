@@ -57,9 +57,40 @@ PRICING: dict[str, dict[str, float]] = {
         "cache_write": 1.0,
         "cache_read": 0.08,
     },
+    # Rates below are not typed in by hand from a price page — they are the
+    # vendor's own, recovered from the per-model costUSD in tier-1 modelUsage
+    # blocks. Across every fable-5 tier-1 record in results/ the implied
+    # input rate is exactly 10.0 (zero variance), and the one opus-4-8 record
+    # exactly 5.0, under Anthropic's standard multipliers (output = 5x input,
+    # cache_write = 1.25x, cache_read = 0.1x). A tier-2 run of either model is
+    # rare-to-absent today — both cluster in condB, which is vendor-priced —
+    # so these mainly keep the reconciliation baseline honest and stop a
+    # future fallback from billing an opus-class run at sonnet rates
+    # (EnterpriseBench-qjfi).
+    "claude-fable-5": {
+        "input": 10.0,
+        "output": 50.0,
+        "cache_write": 12.5,
+        "cache_read": 1.0,
+    },
+    "claude-opus-4-8": {
+        "input": 5.0,
+        "output": 25.0,
+        "cache_write": 6.25,
+        "cache_read": 0.5,
+    },
 }
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
+
+# Claude Code stamps this on an ``isApiErrorMessage`` assistant line (a 401/429
+# placeholder) in place of a real model name. It is a sentinel, not a model, so
+# ``parse_trace`` refuses to let it latch a run's representative model: a
+# pure-error run then resolves to DEFAULT_MODEL at zero usage (zero cost), and a
+# retried run keeps the real model from its successful turn. Guarding at capture
+# is what keeps such tokens from being mispriced and dropped from the
+# ``unpriced_models`` signal (EnterpriseBench-qjfi).
+SYNTHETIC_MODEL = "<synthetic>"
 
 # Checksum slack between the per-model costUSD records and the vendor's own
 # total_cost_usd: an absolute floor for float summation, a relative term for a
@@ -234,9 +265,20 @@ def parse_trace(trace_path: Path) -> Usage:
             if not msg:
                 continue
 
-            # Capture the model from the first assistant message that has one
+            # Capture the model from the first assistant message that names a
+            # real one. An isApiErrorMessage line (Claude Code stamps it
+            # ``<synthetic>`` for a 401/429) can precede the real, billed turns
+            # of a retried request; letting it latch the run's representative
+            # model would then price those real tokens at DEFAULT_MODEL and hide
+            # the mismatch from unpriced_models — the signal that gap exists to
+            # raise (EnterpriseBench-qjfi).
             msg_model = msg.get("model", "")
-            if msg_model and not model:
+            if (
+                msg_model
+                and not model
+                and not entry.get("isApiErrorMessage")
+                and msg_model != SYNTHETIC_MODEL
+            ):
                 model = msg_model
 
             usage = msg.get("usage", {})
