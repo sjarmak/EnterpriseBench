@@ -1164,6 +1164,27 @@ def _scan_mcp_config_error(output_dir: Path) -> bool:
     return False
 
 
+def _scan_agent_rate_limited(output_dir: Path) -> bool:
+    """Scan the agent stdout log for a provider rate/session-limit signal.
+
+    A 429 / session-limit ends the agent mid-run with a non-zero exit. The run is
+    INVALID either way (:func:`_route_agent_exit`, EnterpriseBench-rryas.7), but a
+    rate limit is a transient, re-runnable infra failure — distinct from a genuine
+    agent crash — so triage should see it labelled ``infra_rate_limit`` rather
+    than an opaque ``agent_error``. Markers are provider-emitted and unambiguous
+    (a bare ``429`` in agent-authored content is deliberately NOT matched).
+    """
+    stdout_log = output_dir / "agent_stdout.log"
+    if not stdout_log.exists():
+        return False
+    content = stdout_log.read_text(errors="replace")
+    return (
+        '"error":"rate_limit"' in content
+        or "You've hit your session limit" in content
+        or "session limit · resets" in content
+    )
+
+
 def _write_content_to_container(
     container_id: str, content: str, dest_path: str, suffix: str = ""
 ) -> None:
@@ -1667,6 +1688,49 @@ def _route_zero_sgx_run(result: "TaskRunResult", mode: str) -> None:
     logger.error(reason)
     result.failure_class = "infra_sgx_unused"
     result.error = reason
+
+
+def _route_agent_exit(
+    result: "TaskRunResult", agent_exit: int, output_dir: Path
+) -> None:
+    """Classify the agent process exit and flag any unclean exit INVALID.
+
+    A non-zero exit means the agent did not finish cleanly, so whatever sits in
+    the workspace is not a valid measurement: route it to the infra re-run
+    channel (``phase='agent_infra_error'`` + ``status=INVALID``, like OOM/timeout)
+    so the save-time ``phase='complete'`` overwrite cannot resurrect it.
+
+    Before EnterpriseBench-rryas.7 the generic non-zero branch set only
+    ``failure_class`` and left ``phase`` unprotected, so the run was saved
+    ``complete``/``success``. mcp_only and cli were rescued only *incidentally* by
+    the zero-tool gates (a dead agent makes 0 MCP/sgx calls); baseline has no such
+    gate, so a rate-limited baseline was recorded as a valid 0. Setting the status
+    here fixes every arm uniformly. A session-limit/429 is labelled
+    ``infra_rate_limit`` (transient, re-runnable); any other non-zero exit stays
+    ``agent_error``. Runs before the zero-tool gates, whose "don't relabel an
+    already-classified run" guard then preserves whichever cause this set.
+    """
+    if agent_exit == 0:
+        return
+    result.phase = "agent_infra_error"
+    result.status = RUN_STATUS_INVALID
+    result.success = False
+    if agent_exit == 137:
+        result.failure_class = "infra_oom"
+        logger.warning("Agent killed by OOM/SIGKILL (exit 137)")
+    elif agent_exit == 124:
+        result.failure_class = "infra_timeout"
+        logger.warning("Agent timed out (exit 124)")
+    elif _scan_agent_rate_limited(output_dir):
+        result.failure_class = "infra_rate_limit"
+        logger.warning(
+            "Agent hit a provider rate/session limit (exit %d) — INVALID, "
+            "transient/re-runnable infra error",
+            agent_exit,
+        )
+    else:
+        result.failure_class = "agent_error"
+        logger.warning("Agent exited with non-zero code: %d", agent_exit)
 
 
 def _record_agent_trace(
@@ -3225,17 +3289,11 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             )
             timings["agent"] = agent_duration
 
-            if agent_exit == 137:
-                result.failure_class = "infra_oom"
-                result.phase = "agent_infra_error"
-                logger.warning("Agent killed by OOM/SIGKILL (exit 137)")
-            elif agent_exit == 124:
-                result.failure_class = "infra_timeout"
-                result.phase = "agent_infra_error"
-                logger.warning("Agent timed out (exit 124)")
-            elif agent_exit != 0:
-                result.failure_class = "agent_error"
-                logger.warning("Agent exited with non-zero code: %d", agent_exit)
+            # A non-zero agent exit (OOM, timeout, rate-limit, or crash) is an
+            # unclean exit: flag the run INVALID so it cannot be saved as a valid
+            # score. Uniform across arms — baseline has no zero-tool gate to catch
+            # it downstream (EnterpriseBench-rryas.7).
+            _route_agent_exit(result, agent_exit, output_dir)
 
             # Extract tool-usage metadata from agent output
             result.tool_usage = _extract_tool_usage(output_dir)
