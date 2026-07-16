@@ -1,15 +1,67 @@
 {
   "candidate_id": 1,
   "repo": "bitnami/charts",
+  "repo_rev": "130ffd163382dffd5762034291203a3ac2792fba",
   "pr_refs": [
     "#33114"
   ],
   "description": "serfLAN/serfWAN port mismatch in consul-headless-service template after serfWAN port addition",
-  "drift_points": [],
+  "drift_points": [
+    {
+      "file": "bitnami/consul/templates/consul-headless-service.yaml",
+      "key": "serflan-udp",
+      "protocol": "UDP",
+      "actual": "{{ .Values.containerPorts.serfWAN }}",
+      "expected": "{{ .Values.containerPorts.serfLAN }}",
+      "override_chain": "values.yaml:containerPorts.serfLAN -> consul-headless-service.yaml:spec.ports[name=serflan-udp].port",
+      "evidence_tokens": {
+        "identifies": ["serflan-udp"],
+        "actual": ["containerports", "serfwan"],
+        "expected": ["containerports", "serflan"]
+      }
+    },
+    {
+      "file": "bitnami/consul/templates/consul-headless-service.yaml",
+      "key": "serfwan-udp",
+      "protocol": "UDP",
+      "actual": "{{ .Values.containerPorts.serfLAN }}",
+      "expected": "{{ .Values.containerPorts.serfWAN }}",
+      "override_chain": "values.yaml:containerPorts.serfWAN -> consul-headless-service.yaml:spec.ports[name=serfwan-udp].port",
+      "evidence_tokens": {
+        "identifies": ["serfwan-udp"],
+        "actual": ["containerports", "serflan"],
+        "expected": ["containerports", "serfwan"]
+      }
+    }
+  ],
+  "not_drifted": [
+    {
+      "key": "serflan-tcp",
+      "port": "{{ .Values.containerPorts.serfLAN }}",
+      "note": "correct at the pinned SHA — only the two UDP entries are swapped"
+    },
+    {
+      "key": "serfwan-tcp",
+      "port": "{{ .Values.containerPorts.serfWAN }}",
+      "note": "correct at the pinned SHA — only the two UDP entries are swapped"
+    }
+  ],
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md, so a report fabricated from the prompt cannot carry them. VERIFIED at the pinned SHA against the template and PR #33114: 'containerports' 0 hits in the prompt, 'serfwan-udp' 0, '.Values' 0, 'UDP' 0. The prompt DOES supply 'serflan-udp', 'serfLAN', 'serfWAN', 'consul-headless-service', 'values.yaml' and 'statefulset.yaml' — none of those may be graded alone.",
+    "_trap": "instruction.md is the ONLY text the agent sees: run_task.py feeds it as `agent_command < /workspace/instruction.md` (+ an output appendix, + the retrieval preamble in mcp/cli modes). task.toml's [task].prompt is stale CSB-migration metadata that is NEVER shown, and this task's copy DIVERGES from instruction.md — it spells out 'containerPorts.serfLAN and containerPorts.serfWAN', the very evidence graded here. Judge prompt-suppliedness against instruction.md, never task.toml; and if instruction.md is ever regenerated from that prompt field, this evidence set is void.",
+    "identify_drift_points": [
+      "serfwan-udp",
+      "containerports"
+    ],
+    "determine_expected_values": [
+      "containerports"
+    ]
+  },
   "verification": {
     "method": "gh_api_pr_files",
     "pr_url": "https://github.com/bitnami/charts/pull/33114",
-    "verified": true
+    "verified": true,
+    "verified_at_sha": "confirmed the swap is present in bitnami/consul/templates/consul-headless-service.yaml at 130ffd16: serflan-udp -> containerPorts.serfWAN, serfwan-udp -> containerPorts.serfLAN, both TCP entries already correct"
   },
   "difficulty": "medium",
   "confidence": 0.95

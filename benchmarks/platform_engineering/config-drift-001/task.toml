@@ -57,30 +57,33 @@ dependency_depth = 1
 frameworks = ["helm", "kubernetes"]
 multi_repo_pattern = "enforce"
 
+# validate_corrected_config (weight 0.25, checks/check_config_valid.sh) was
+# removed, not repaired. instruction.md never asks for a corrected config — the
+# only artifact it requests is DRIFT_REPORT.json — so the checkpoint graded an
+# artifact a compliant agent has no reason to produce, and its "optional
+# checkpoint — skipped" branch paid 1.0 for the absence. That is free credit on
+# the deliverable alone, which is what kept this task quarantined
+# (EnterpriseBench-jn73.2.7.3.1.1). Routing it to 0.0 instead would have made
+# the checkpoint un-passable for an instruction-following agent; the checkpoint
+# genuinely tests nothing, so it is gone and its weight is redistributed in the
+# original 0.40:0.35 ratio. Rendering a corrected chart is code generation
+# anyway — EnterpriseBench measures retrieval.
 [[checkpoints]]
 name = "identify_drift_points"
-weight = 0.40
+weight = 0.55
 verifier = "checks/check_drift_points.sh"
-description = "Agent identifies all port mapping drift points in consul templates"
+description = "Agent identifies both drifted UDP port entries and the wrong expression each currently resolves to"
 timeout_seconds = 60
 
 [[checkpoints]]
 name = "determine_expected_values"
-weight = 0.35
+weight = 0.45
 verifier = "checks/check_expected_values.sh"
-description = "Agent correctly determines that serflan-udp should use containerPorts.serfLAN not serfWAN"
+description = "Agent determines the correct containerPorts key path for each drifted entry"
 timeout_seconds = 60
-
-[[checkpoints]]
-name = "validate_corrected_config"
-weight = 0.25
-verifier = "checks/check_config_valid.sh"
-description = "If corrected config provided, validate it renders without errors"
-timeout_seconds = 120
 
 [artifacts]
 required = ["answer"]
-optional = ["config"]
 
 [tool_access]
 sourcegraph_mirror_config = "configs/sg_mirrors/config-drift-consul-serf-port-001.json"
