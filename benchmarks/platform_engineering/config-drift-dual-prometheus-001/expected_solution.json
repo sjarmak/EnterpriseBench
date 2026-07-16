@@ -1,0 +1,24 @@
+{
+  "task_id": "config-drift-dual-prometheus-001",
+  "_fidelity": "Authored from source at the pinned revs (prometheus v2.48.0, thanos-io/thanos v0.32.5); the task previously had no expected_solution and a placeholder ground_truth. Unlike config-drift-dual-argocd-001, this task's premise is real and sharply provable.",
+  "checkpoints": {
+    "drift_points": {
+      "expected_solution": "Two provable drift points. (1) storage.tsdb.max-block-duration: Prometheus registers the flag with NO default (cmd/prometheus/main.go:304-306, PlaceHolder only) while min-block-duration is Default(\"2h\") (:301-302), then computes max at startup (:553-563): start from 31d, and if retention/10 is smaller use that. With the default retention of 15d (defaultRetentionString, :93, applied at :537-540) that is 15d/10 = 36h, against a min of 2h. Thanos's sidecar requires them to be equal — sidecar.go:396-399 returns 'found that TSDB Max time is %s and Min time is %s. Compaction needs to be disabled' unless --shipper.ignore-block-size, which downgrades it to a warning at the cost of blocks going missing. The repos are joined by literal flag name via promclient.go:196-197's json tags on /api/v1/status/flags, which reports the computed value rendered as '1d12h'. (2) external_labels: DefaultGlobalConfig (config/config.go:142-146) sets no ExternalLabels, so it is empty; sidecar.go:216-218 errors 'no external labels configured on Prometheus server' and sidecar.go:341 refuses to upload — the prompt's block-upload symptom. tsdb/db.go is a red herring: DefaultOptions (:53, :76-77) sets Min == Max == 2h, which AGREES with Thanos; the drift is created by main.go's flag layer.",
+      "evaluation_criteria": [
+        "Reports storage.tsdb.max-block-duration as drifting, and attributes the default to the COMPUTATION in cmd/prometheus/main.go — not to tsdb/db.go, whose DefaultOptions say 2h/2h and would mean no drift",
+        "Shows where 36h comes from: retention/10 with the 15d default retention. The prompt lists the flag names outright, so naming them proves nothing; the arithmetic is what requires reading the source",
+        "Reports external_labels as drifting: empty by Prometheus default, required non-empty by the sidecar",
+        "Cites the Thanos side from cmd/thanos/sidecar.go for each — a drift claim needs both halves",
+        "Does NOT report min-block-duration itself as drift: its 2h default is what the sidecar wants (sidecar.go:404-405 only warns if it is NOT 2h)"
+      ]
+    },
+    "expected_values": {
+      "expected_solution": "The mechanism behind the computed default: max-block-duration has no declared value anywhere; cmd/prometheus/main.go derives it from retention at startup, so with the stock 15d retention it becomes 36h. Naming both the 15d input and cmd/prometheus/main.go as the site of the arithmetic is what distinguishes an agent that read the flag layer from one that read the prompt's flag list or only the TSDB defaults.",
+      "evaluation_criteria": [
+        "Names the retention value the computation runs on (15d) — absent from instruction.md",
+        "Names cmd/prometheus/main.go as where the default is computed — absent from instruction.md",
+        "Both must be present: the prompt supplies 'retention' and 'max-block-duration' as words, so only the value and the location evidence a real read"
+      ]
+    }
+  }
+}

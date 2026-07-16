@@ -39,13 +39,67 @@
       "confidence": 0.8
     }
   ],
+  "_fidelity": "drift_points was a placeholder ({description: 'Cross-repo config value inconsistency'}) — the task shipped with no answer, and all three of its checks were byte-identical copies of the bitnami/consul task config-drift-001's verifiers (grading serflan/serfwan at $WORKSPACE/charts/DRIFT_REPORT.json with field names this schema does not define), so every checkpoint scored 0.0 for a perfect answer. Unlike config-drift-dual-argocd-001, this task's PREMISE IS REAL and sharply provable — rebuilt from source at the pinned revs. Note the required/sufficient weighting was inverted: tsdb/db.go (required) sets MinBlockDuration == MaxBlockDuration == 2h, which AGREES with Thanos; an agent reading only the required files correctly concludes there is no drift. The divergence exists only because cmd/prometheus/main.go (merely sufficient) recomputes MaxBlockDuration, so that file is promoted to required.",
+  "scenario": {
+    "values": "Prometheus v2.48.0 started with stock flags (no --storage.tsdb.max-block-duration, no --storage.tsdb.retention.time), Thanos v0.32.5 sidecar attached",
+    "note": "The drift is a COMPUTED default, not a literal one: it does not appear in any struct or flag default, only in main.go's startup arithmetic."
+  },
   "drift_points": [
     {
-      "description": "Cross-repo config value inconsistency",
-      "repos_involved": [
-        "prometheus",
-        "thanos"
-      ]
+      "config_key": "storage.tsdb.max-block-duration",
+      "prometheus_default": "36h (computed at startup, not declared)",
+      "prometheus_source_file": "cmd/prometheus/main.go",
+      "prometheus_evidence": "The flag is registered with NO default — `serverOnlyFlag(a, \"storage.tsdb.max-block-duration\", ...).Hidden().PlaceHolder(\"<duration>\").SetValue(&cfg.tsdb.MaxBlockDuration)` (main.go:304-306) — so it starts at 0, while min-block-duration is `.Hidden().Default(\"2h\")` (main.go:301-302). main.go:553-563 then computes it: `if cfg.tsdb.MaxBlockDuration == 0 { maxBlockDuration = ParseDuration(\"31d\"); if cfg.tsdb.RetentionDuration != 0 && cfg.tsdb.RetentionDuration/10 < maxBlockDuration { maxBlockDuration = cfg.tsdb.RetentionDuration / 10 } }`. With the default retention (defaultRetentionString = \"15d\", main.go:93, applied at :537-540 when neither retention flag is set), 15d/10 = 36h < 31d, so MaxBlockDuration = 36h while MinBlockDuration = 2h. tsdb/db.go:53,76-77 is a red herring: DefaultOptions sets both to DefaultBlockDuration (2h), which would AGREE with Thanos — the drift is introduced by main.go's flag layer, not the TSDB defaults.",
+      "thanos_expectation": "min-block-duration == max-block-duration (local compaction disabled)",
+      "thanos_source_file": "cmd/thanos/sidecar.go",
+      "thanos_evidence": "sidecar.go:396-399 — `if flags.TSDBMinTime != flags.TSDBMaxTime { if !ignoreBlockSize { return errors.Errorf(\"found that TSDB Max time is %s and Min time is %s. Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)\", ...) } }`. The two repos are joined by literal flag name: pkg/promclient/promclient.go:196-197 tags the fields `json:\"storage.tsdb.min-block-duration\"` / `json:\"storage.tsdb.max-block-duration\"`, read from Prometheus's /api/v1/status/flags.",
+      "failure_mode": "The sidecar refuses to start: 'found that TSDB Max time is 1d12h and Min time is 2h. Compaction needs to be disabled'. Passing --shipper.ignore-block-size downgrades it to a warning (sidecar.go:401) at the cost of blocks going missing from object storage if a compaction races an upload. Note /api/v1/status/flags reports the COMPUTED value rendered by model.Duration.String() as '1d12h', not '36h' — main.go:698-707 builds cfg.web.Flags after the line-553 computation.",
+      "override_chain": "tsdb.DefaultOptions() 2h/2h -> cmd/prometheus/main.go flag layer leaves max unset (0) -> retention defaults to 15d -> max = retention/10 = 36h -> /api/v1/status/flags reports 1d12h -> promclient.Flags.TSDBMaxTime -> sidecar validatePrometheus",
+      "evidence_tokens": {
+        "identifies": ["max-block-duration"],
+        "computation": ["15d"],
+        "thanos_side": ["cmd/thanos/sidecar.go"]
+      }
+    },
+    {
+      "config_key": "external_labels",
+      "prometheus_default": "empty",
+      "prometheus_source_file": "config/config.go",
+      "prometheus_evidence": "config/config.go:142-146 DefaultGlobalConfig sets ScrapeInterval, ScrapeTimeout and EvaluationInterval and nothing else, so ExternalLabels (declared at :393 `ExternalLabels labels.Labels `yaml:\"external_labels,omitempty\"``) zero-values to empty.",
+      "thanos_expectation": "at least one external label, uniquely identifying the Prometheus instance",
+      "thanos_source_file": "cmd/thanos/sidecar.go",
+      "thanos_evidence": "sidecar.go:216-218 — `if len(m.Labels()) == 0 { return errors.New(\"no external labels configured on Prometheus server, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.\") }`. sidecar.go:341 blocks uploads for the same reason: 'not uploading as no external labels are configured yet'.",
+      "failure_mode": "The sidecar will not consider Prometheus ready and will not upload blocks — the 'failing to upload blocks' symptom in the prompt.",
+      "override_chain": "config/config.go:DefaultGlobalConfig (no ExternalLabels) -> empty global.external_labels -> sidecar reloadPrometheusConfig -> validation error / upload refused",
+      "evidence_tokens": {
+        "identifies": ["external_labels"],
+        "computation": ["defaultglobalconfig"],
+        "thanos_side": ["cmd/thanos/sidecar.go"]
+      }
     }
-  ]
+  ],
+  "not_drifted": [
+    {
+      "config_key": "storage.tsdb.min-block-duration",
+      "note": "AGREES. sidecar.go:404-405 warns `if flags.TSDBMinTime != model.Duration(2*time.Hour)` ('found that TSDB block time is not 2h'), and Prometheus's min-block-duration default IS 2h (main.go:301-302). Do not report the min flag itself as drift — only its inequality with max."
+    },
+    {
+      "config_key": "tsdb/db.go DefaultOptions",
+      "note": "tsdb/db.go:53 DefaultBlockDuration = 2h and :76-77 sets MinBlockDuration = MaxBlockDuration = DefaultBlockDuration. Read alone this says there is NO drift. It is the required-file red herring: the divergence is created by cmd/prometheus/main.go's flag layer, so a report blaming tsdb/db.go's defaults has traced the wrong layer."
+    }
+  ],
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md, verified with fixed-string grep -coF. The prompt DOES supply the bare flag names 'min-block-duration' (1), 'max-block-duration' (1), 'external labels' (1) and 'retention' (3) — it literally lists them as things to look at — so none of those may be graded on their own, and the fully-qualified storage.tsdb.* forms are only weak evidence (trivially reconstructed by prefixing). What cannot be reconstructed is the ARITHMETIC and where it lives: '15d', '31d', '36h', '1d12h', defaultRetentionString, TSDBMaxTime, ignoreBlockSize and every file path all score 0. An agent that never opened cmd/prometheus/main.go cannot know max-block-duration is computed from retention at all.",
+    "drift_mechanism": [
+      "15d",
+      "cmd/prometheus/main.go"
+    ]
+  },
+  "verification": {
+    "method": "raw source at pinned revs (prometheus v2.48.0, thanos-io/thanos v0.32.5)",
+    "verified": true,
+    "verified_at_rev": "All four ground_truth paths return HTTP 200 at the pinned revs; thanos is under the thanos-io org. Confirmed by reading the files: main.go:301-302 min-block-duration Default(\"2h\"); main.go:304-306 max-block-duration registered with no Default (PlaceHolder only); main.go:553-563 the 31d / retention-10 computation; main.go:93 defaultRetentionString = \"15d\"; sidecar.go:396-399 the min != max hard error with the ignoreBlockSize escape; sidecar.go:216-218 the empty-external-labels error. 15d/10 = 36h != 2h, so the drift holds under stock flags."
+  },
+  "difficulty": "hard",
+  "confidence": 0.95
 }
