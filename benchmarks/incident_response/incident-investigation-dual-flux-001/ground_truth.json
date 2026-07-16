@@ -25,6 +25,12 @@
       "repo": "helm-controller",
       "confidence": 0.9,
       "source": "deterministic"
+    },
+    {
+      "path": "cmd/flux/get_helmrelease.go",
+      "repo": "flux2",
+      "confidence": 0.7,
+      "source": "deterministic"
     }
   ],
   "sufficient_files": [
@@ -39,28 +45,29 @@
       "confidence": 0.75
     },
     {
-      "path": "cmd/flux/reconcile.go",
+      "path": "cmd/flux/reconcile_helmrelease.go",
       "repo": "flux2",
-      "confidence": 0.6
+      "confidence": 0.55
     }
   ],
   "expected_answer": {
-    "root_cause": "helm-controller v0.37 (shipped with Flux v2.2) changed the HelmRelease status-condition API. helm-controller's reconciler in internal/controller/helmrelease_controller.go writes status conditions in the new format after a successful release, using the condition types defined in api/v2beta2/helmrelease_types.go and api/v2beta2/condition_types.go. HelmRelease resources that were in-progress during the v0.36 to v0.37 upgrade retain old-format conditions, and the new reconciler cannot interpret them, so it perpetually reports the release as not ready.",
+    "root_cause": "helm-controller v0.37 (shipped with Flux v2.2) changed the HelmRelease status-condition API (the v2beta2 condition types). helm-controller's reconciler in internal/controller/helmrelease_controller.go reads and writes status conditions in the new format after a successful release, using the condition types defined in api/v2beta2/helmrelease_types.go and api/v2beta2/condition_types.go. HelmRelease resources that were in-progress during the v0.36 to v0.37 upgrade retain old-format conditions, and the new reconciler cannot interpret them, so it perpetually reports the release as not ready and re-reconciles in a loop. The symptom the operator observes comes from the Flux CLI: cmd/flux/get_helmrelease.go imports helm-controller's api/v2beta2 and, in summariseItem, reads item.Status.Conditions via statusAndMessage to render the Ready column, so the stale condition surfaces as Ready=False in `flux get helmreleases`.",
     "error_chain": [
-      "HelmRelease was in-progress during the helm-controller v0.36 to v0.37 upgrade (Flux v2.1 to v2.2)",
-      "helm-controller's internal/reconcile/release.go completes the Helm release",
-      "helm-controller's reconciler in internal/controller/helmrelease_controller.go writes new-format status conditions (types in api/v2beta2/helmrelease_types.go and api/v2beta2/condition_types.go)",
-      "Old-format stale conditions from before the upgrade remain on the HelmRelease resource",
+      "An operator runs `flux get helmreleases` and sees the affected releases as Ready=False",
+      "The Flux CLI reader cmd/flux/get_helmrelease.go (summariseItem) reads item.Status.Conditions to render that Ready column, so the stale condition is what it displays",
+      "The HelmRelease was in-progress during the helm-controller v0.36 to v0.37 upgrade (Flux v2.1 to v2.2), leaving an old-format status condition on the object",
+      "helm-controller's internal/reconcile/release.go completes the Helm release and helm-controller's reconciler in internal/controller/helmrelease_controller.go writes new-format status conditions (types in api/v2beta2/helmrelease_types.go and api/v2beta2/condition_types.go)",
       "internal/controller/helmrelease_controller.go reads the status conditions and cannot parse the old format, treating the release as not-ready",
-      "The reconciler triggers re-reconciliation, creating an infinite loop",
-      "kustomize-controller and Flux CLI consumers that gate on HelmRelease readiness are blocked"
+      "The reconciler triggers re-reconciliation, creating an infinite loop while the stale old-format condition persists",
+      "kustomize-controller and other consumers that gate on HelmRelease readiness stay blocked"
     ],
     "affected_components": [
+      "The Flux CLI readout cmd/flux/get_helmrelease.go, which renders the Ready column operators observe from item.Status.Conditions",
       "helm-controller reconciler that reads and writes status conditions (internal/controller/helmrelease_controller.go)",
       "helm-controller release reconcile logic (internal/reconcile/release.go)",
       "HelmRelease v2beta2 API surface and condition types (api/v2beta2/helmrelease_types.go, api/v2beta2/condition_types.go)",
       "All HelmRelease resources that were in-progress during the v0.36 to v0.37 helm-controller upgrade",
-      "kustomize-controller and Flux CLI consumers that depend on HelmRelease readiness"
+      "kustomize-controller and other consumers that depend on HelmRelease readiness"
     ],
     "remediation": "Add backward-compatible status-condition parsing in helm-controller's reconciler (internal/controller/helmrelease_controller.go) so it accepts both old and new condition formats. For immediate relief, manually delete and recreate the affected HelmRelease resources, or annotate them to force a full status-condition reset."
   },
@@ -76,17 +83,21 @@
       "internal/reconcile/release.go",
       "api/v2beta2/helmrelease_types.go",
       "internal/controller/helmrelease_controller.go",
+      "cmd/flux/get_helmrelease.go",
       "helmrelease_types",
-      "helmrelease_controller"
+      "helmrelease_controller",
+      "get_helmrelease"
     ],
     "affected_resources": [
       "internal/controller/helmrelease_controller.go",
       "internal/reconcile/release.go",
       "api/v2beta2/helmrelease_types.go",
       "api/v2beta2/condition_types.go",
+      "cmd/flux/get_helmrelease.go",
       "helmrelease_controller",
       "helmrelease_types",
-      "condition_types"
+      "condition_types",
+      "get_helmrelease"
     ],
     "remediation_proposal": [
       "internal/controller/helmrelease_controller.go",

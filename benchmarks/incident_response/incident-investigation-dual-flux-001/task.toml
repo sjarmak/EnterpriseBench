@@ -13,47 +13,60 @@ task_type = "incident_investigation"
 difficulty = "hard"
 estimated_duration_minutes = 40
 session_type = "single"
-description = "Trace a stuck Helm release from Flux reconciliation loop to helm-controller status condition handling"
+description = "Trace a stuck HelmRelease from the flux CLI's not-ready readout into helm-controller's status-condition handling"
 prompt = """
 After upgrading Flux from v2.1 to v2.2, several HelmRelease resources are stuck
-in a "not ready" state. The Helm releases themselves were successfully deployed
-by helm-controller, but Flux's reconciliation loop cannot detect the success.
-The HelmRelease objects show `Ready=False` with message "waiting for completion"
-indefinitely.
+in a "not ready" state. The Helm releases themselves were successfully deployed,
+but `flux get helmreleases` keeps showing the affected releases with
+`Ready=False`. The HelmRelease objects report not-ready indefinitely even though
+the underlying Helm operation succeeded.
 
 Symptoms:
-- HelmRelease resources show status `Ready: False` with reason "ArtifactFailed"
-  or "ReconciliationFailed"
-- `helm list` shows the releases as deployed successfully
-- helm-controller logs show successful reconciliation but Flux source-controller
-  reports the HelmRelease as not ready
+- `flux get helmreleases` shows the affected releases as `Ready: False` while
+  `helm list` shows them deployed successfully
+- helm-controller logs show successful reconciliation, yet the HelmRelease
+  status still reports not ready
 - The issue affects only HelmReleases that were in-progress during the upgrade
 - New HelmReleases created after the upgrade work correctly
-- Flux kustomize-controller also cannot see the HelmRelease as ready
+- kustomize-controller and other consumers that gate on HelmRelease readiness
+  are blocked because they read the same stale status
 
 Investigation notes:
-- Flux v2.2 updated the status condition API for HelmRelease resources
-- helm-controller writes status conditions using the new API format
-- Flux's reconciler reads status conditions to determine readiness
-- HelmReleases that were in-progress during upgrade have old-format conditions
-- The reconciler does not handle the transition from old to new condition format
-- The stale condition causes an infinite reconciliation loop
+- Flux v2.2 ships helm-controller v0.37, which changed the HelmRelease status
+  condition API (the v2beta2 condition types)
+- helm-controller's reconciler writes and re-reads status conditions in the new
+  format after a release completes
+- The flux CLI reads those same status conditions to render the Ready column
+  operators see
+- HelmReleases that were in-progress during the upgrade retain old-format
+  conditions, and the new reconciler cannot interpret them, so it keeps
+  treating the release as not ready and re-reconciles in a loop
+
+The two repos in the workspace:
+- /workspace/flux2/           — the Flux CLI (how operators observe and trigger
+                                HelmRelease reconciliation)
+- /workspace/helm-controller/ — the controller that reconciles HelmRelease
+                                resources and owns their status
 
 Your task:
-1. Find where Flux's reconciler evaluates HelmRelease readiness conditions —
-   identify how it reads and interprets status conditions.
-2. Find where helm-controller writes HelmRelease status conditions after
-   successful reconciliation — identify the status update code.
-3. Trace the failure: old-format status condition → Flux reconciler cannot
-   parse → reports not-ready → triggers re-reconciliation → helm-controller
-   succeeds but old condition persists.
+1. In the Flux CLI (flux2), find where the CLI reads HelmRelease status
+   conditions to report readiness to the operator.
+2. In helm-controller, find where the reconciler reads and writes HelmRelease
+   status conditions, and the v2beta2 type/API surface that defines them.
+3. Trace the failure: an operator observes not-ready via the flux CLI →
+   helm-controller's reconciler cannot parse the old-format condition left on
+   an in-progress HelmRelease → treats the release as not ready → triggers
+   re-reconciliation → the stale condition persists → infinite loop.
 4. Identify the specific status condition fields that changed between versions
    and why the transition is not handled.
 
 Write your incident report to /workspace/flux2/INCIDENT_REPORT.md with:
-- Root cause identification (file and function in each repo)
+- Root cause: the file and function in helm-controller where old-format
+  conditions are misparsed, plus the flux CLI surface where the symptom is
+  observed
 - Full reconciliation failure chain
-- Affected Flux components and resources
+- Affected components and resources (both the flux CLI readout and the
+  helm-controller reconciler)
 - Remediation steps
 """
 
@@ -74,27 +87,27 @@ languages = ["go"]
 total_loc = 300_000
 dependency_depth = 2
 frameworks = ["flux", "helm"]
-multi_repo_pattern = "enforce"
+multi_repo_pattern = "investigate"
 
 [[checkpoints]]
 name = "root_cause_identification"
 weight = 0.35
 verifier = "checks/check_root_cause.sh"
-description = "Agent identifies Flux reconciler condition parsing and helm-controller status writer"
+description = "Agent identifies helm-controller's reconciler that misparses old-format conditions and the v2beta2 status type surface"
 timeout_seconds = 120
 
 [[checkpoints]]
 name = "error_chain_trace"
 weight = 0.30
 verifier = "checks/check_error_chain.sh"
-description = "Agent traces: stale status condition → reconciler mismatch → not-ready → re-reconciliation loop"
+description = "Agent traces: flux CLI reports not-ready → stale old-format condition → helm-controller reconciler mismatch → re-reconciliation loop"
 timeout_seconds = 120
 
 [[checkpoints]]
 name = "affected_resources"
 weight = 0.15
 verifier = "checks/check_affected_components.sh"
-description = "Agent identifies HelmRelease resources and kustomize-controller as affected"
+description = "Agent identifies the flux CLI readout, helm-controller reconciler, HelmRelease resources, and kustomize-controller as affected"
 timeout_seconds = 60
 
 [[checkpoints]]
@@ -110,7 +123,7 @@ optional = ["code_patch"]
 
 [tool_access]
 expected_mcp_benefit = "high"
-mcp_benefit_rationale = "Understanding how Flux reconciler interprets helm-controller status conditions requires cross-repo navigation of the GitOps control loop"
+mcp_benefit_rationale = "Connecting the flux CLI's not-ready readout to helm-controller's status-condition reconciler requires cross-repo navigation of the GitOps control loop"
 
 [ground_truth]
 tiers = ["deterministic"]
@@ -127,6 +140,17 @@ repo = "helm-controller"
 confidence = 0.90
 source = "deterministic"
 
+# flux2 is genuinely required: the flux CLI reads HelmRelease status conditions
+# (via helm-controller's v2beta2 API, which it imports) to render the Ready
+# column an operator sees as "not ready". This is the observation surface the
+# investigation starts from — flux2 v2.2.0 carries NO HelmRelease reconciler
+# (internal/ = build,flags,tree,utils); the reconciler lives in helm-controller.
+[[ground_truth.required_files]]
+path = "cmd/flux/get_helmrelease.go"
+repo = "flux2"
+confidence = 0.70
+source = "deterministic"
+
 [[ground_truth.sufficient_files]]
 path = "api/v2beta2/helmrelease_types.go"
 repo = "helm-controller"
@@ -138,6 +162,6 @@ repo = "helm-controller"
 confidence = 0.75
 
 [[ground_truth.sufficient_files]]
-path = "cmd/flux/reconcile.go"
+path = "cmd/flux/reconcile_helmrelease.go"
 repo = "flux2"
-confidence = 0.60
+confidence = 0.55
