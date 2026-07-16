@@ -116,23 +116,28 @@ mcp_benefit_rationale = "Understanding how Flux reconciler interprets helm-contr
 tiers = ["deterministic"]
 
 [[ground_truth.required_files]]
-path = "internal/reconcile/helmrelease_reconciler.go"
-repo = "flux2"
-confidence = 0.90
-source = "deterministic"
-
-[[ground_truth.required_files]]
-path = "internal/reconcile/helmrelease.go"
+path = "internal/controller/helmrelease_controller.go"
 repo = "helm-controller"
 confidence = 0.95
 source = "deterministic"
 
+[[ground_truth.required_files]]
+path = "internal/reconcile/release.go"
+repo = "helm-controller"
+confidence = 0.90
+source = "deterministic"
+
 [[ground_truth.sufficient_files]]
-path = "internal/controller/helmrelease_controller.go"
+path = "api/v2beta2/helmrelease_types.go"
 repo = "helm-controller"
 confidence = 0.80
 
 [[ground_truth.sufficient_files]]
+path = "api/v2beta2/condition_types.go"
+repo = "helm-controller"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
 path = "cmd/flux/reconcile.go"
 repo = "flux2"
-confidence = 0.70
+confidence = 0.60
