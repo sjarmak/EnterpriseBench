@@ -5,7 +5,7 @@
 We're deploying Spring Cloud Dataflow via the bitnami Helm chart and want to use our own managed RabbitMQ instance instead of the bundled subchart. However, the external RabbitMQ configuration is broken in several ways:
 
 - We can't use an existing Kubernetes secret for the RabbitMQ password — the chart doesn't support specifying which key in the secret holds the password.
-- The chart requires `rabbitmq.auth.erlangCookie` and `rabbitmq.auth.password` even when we're connecting to an external RabbitMQ and have provided our own secret.
+- When we point the chart at an external RabbitMQ and set the password inline rather than via an existing secret, it still refuses to render until we also supply `rabbitmq.auth.password` and `rabbitmq.auth.erlangCookie` — bundled-subchart values that mean nothing for an external broker.
 - The configuration path for external RabbitMQ doesn't follow the same pattern as external databases, which is confusing and inconsistent.
 
 ## What I Need

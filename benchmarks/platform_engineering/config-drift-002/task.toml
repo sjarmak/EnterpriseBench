@@ -61,30 +61,30 @@ dependency_depth = 2
 frameworks = ["helm", "kubernetes", "spring-cloud"]
 multi_repo_pattern = "enforce"
 
+# validate_corrected_config (0.25, checks/check_config_valid.sh) removed, not
+# repaired: instruction.md asks only for DRIFT_REPORT.json, so it graded an
+# artifact a compliant agent has no reason to produce and paid 1.0 for its
+# absence. Weight redistributed in the original 0.40:0.35 ratio (schema requires
+# the sum to be 1.0). determine_expected_values becomes config_hierarchy: the
+# instruction's first ask is the hierarchy trace, and the "expected value" for
+# every drift point here is a design shape rather than a literal, so grading a
+# free-text expected string measured nothing.
 [[checkpoints]]
 name = "identify_drift_points"
-weight = 0.40
+weight = 0.55
 verifier = "checks/check_drift_points.sh"
-description = "Agent identifies drift points in external RabbitMQ config: missing secret key parameter, unnecessary required fields, inconsistent config paths"
+description = "Agent finds the real drift points, including the NOTES.txt validation the prompt misdirects away from"
 timeout_seconds = 60
 
 [[checkpoints]]
-name = "determine_expected_values"
-weight = 0.35
-verifier = "checks/check_expected_values.sh"
-description = "Agent correctly determines expected values for each drift point including secret key name and optional password fields"
+name = "config_hierarchy"
+weight = 0.45
+verifier = "checks/check_config_hierarchy.sh"
+description = "Agent's trace reaches the layers that actually carry the drift: NOTES.txt, the hardcoded rabbitmq-password key, and the scdf.rabbitmq.fullname secret-name resolution"
 timeout_seconds = 60
-
-[[checkpoints]]
-name = "validate_corrected_config"
-weight = 0.25
-verifier = "checks/check_config_valid.sh"
-description = "If corrected config provided, validate it renders without errors"
-timeout_seconds = 120
 
 [artifacts]
 required = ["answer"]
-optional = ["config"]
 
 [tool_access]
 sourcegraph_mirror_config = "configs/sg_mirrors/config-drift-scdf-rabbitmq-002.json"
@@ -118,12 +118,20 @@ repo = "charts"
 confidence = 0.90
 source = "deterministic"
 
+# Promoted from sufficient_files (0.60). NOTES.txt:77 and :85-88 hold the
+# scdf.rabbitmq.fullname secret-name resolution and the rabbitmq.auth.password /
+# rabbitmq.auth.erlangCookie validation — two of the four drift points and the
+# only place either string exists. The weighting was inverted: _helpers.tpl sat
+# at required/0.98 while containing 0 hits for both, because the old answer key
+# attributed the validation there. PR #24493 changes NOTES.txt (+13/-9), its
+# largest template hunk.
+[[ground_truth.required_files]]
+path = "bitnami/spring-cloud-dataflow/templates/NOTES.txt"
+repo = "charts"
+confidence = 0.95
+source = "deterministic"
+
 [[ground_truth.sufficient_files]]
 path = "bitnami/spring-cloud-dataflow/Chart.yaml"
 repo = "charts"
 confidence = 0.70
-
-[[ground_truth.sufficient_files]]
-path = "bitnami/spring-cloud-dataflow/templates/NOTES.txt"
-repo = "charts"
-confidence = 0.60

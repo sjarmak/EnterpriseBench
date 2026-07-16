@@ -1,50 +1,85 @@
 {
   "candidate_id": 2,
   "repo": "bitnami/charts",
+  "repo_rev": "53aca51120f86086e6780dc0453b93fbf49766b4",
   "pr_refs": ["#24493"],
   "issues_refs": ["#24474", "#24475"],
-  "description": "External RabbitMQ configuration inconsistencies in spring-cloud-dataflow chart across values, helpers, secrets, and configmaps",
+  "description": "External RabbitMQ configuration inconsistencies in the spring-cloud-dataflow chart: no secret-key parameter, a hardcoded secret key in the consumers, and bundled-subchart password validation applied to the external path",
+  "_fidelity": "Rebuilt from source at the pinned SHA. The previous key attributed drift points 2 and 3 (rabbitmq.auth.password / rabbitmq.auth.erlangCookie validation) to templates/_helpers.tpl. That file contains NEITHER string — both live in templates/NOTES.txt:86-87, which the old key never mentioned and which task.toml still demotes to sufficient_files. Its override_chains also cited 'values.yaml: rabbitmq.auth.erlangCookie' and 'values.yaml: rabbitmq.auth.password'; erlangCookie occurs 0 times in values.yaml. Drift point 1's core claim was real but its mechanism was wrong: scdf.rabbitmq.secretName (_helpers.tpl:338-346) resolves only a NAME and never reads a key, so the fixed-key assumption is not there — it is hardcoded in the consumers (externalrabbitmq-secrets.yaml:18, skipper/configmap.yaml:52). The key also undercounted: PR #24493 changes 5 template/values files, not 3. expected_solution.json separately demanded a field named existingPasswordSecretPasswordKey, which occurs 0 times in the real chart (the PR adds externalRabbitmq.existingSecret + existingSecretPasswordKey).",
+  "scenario": {
+    "values": "rabbitmq.enabled=false, externalRabbitmq.enabled=true, externalRabbitmq.password set inline (externalRabbitmq.existingPasswordSecret unset)",
+    "note": "The NOTES.txt validation is gated by `or (rabbitmq.enabled) (and (externalRabbitmq.enabled) (not externalRabbitmq.existingPasswordSecret))` at NOTES.txt:85. With an existing secret supplied the block is SKIPPED, so the drift only manifests on the inline-password path. instruction.md was corrected to match; it previously claimed the demand persists 'even when we have provided our own secret', which the guard contradicts."
+  },
   "drift_points": [
     {
       "file": "bitnami/spring-cloud-dataflow/values.yaml",
+      "line": 1975,
       "key": "externalRabbitmq.existingPasswordSecret",
-      "expected": "Support specifying secret key name for password (like external database config does)",
-      "actual": "Only supports secret name, not the key within the secret that holds the password",
-      "override_chain": [
-        "values.yaml: externalRabbitmq.existingPasswordSecret (name only)",
-        "templates/_helpers.tpl: helper reads secret but assumes fixed key name",
-        "templates/externalrabbitmq-secrets.yaml: generates secret without configurable key"
-      ],
-      "severity": "functional_break"
+      "expected": "a secret NAME plus a configurable KEY, mirroring the external-database pattern (externalDatabase.existingPasswordSecret at :1881 paired with externalDatabase.existingPasswordKey at :1884)",
+      "actual": "name only — there is no externalRabbitmq key parameter at all, so the key the secret stores the password under cannot be expressed",
+      "override_chain": "values.yaml:externalRabbitmq.existingPasswordSecret -> _helpers.tpl:scdf.rabbitmq.secretName (resolves the NAME only) -> consumers hardcode the key",
+      "evidence_tokens": {
+        "identifies": ["values.yaml"],
+        "chain": ["existingpasswordkey"]
+      }
     },
     {
-      "file": "bitnami/spring-cloud-dataflow/templates/_helpers.tpl",
-      "key": "rabbitmq.auth.password requirement",
-      "expected": "Password should be optional when using external RabbitMQ with existing secret",
-      "actual": "Password is required even when existingSecret is provided",
-      "override_chain": [
-        "values.yaml: rabbitmq.auth.password (always required)",
-        "templates/_helpers.tpl: helper checks password without considering existingSecret case"
-      ],
-      "severity": "functional_break"
+      "file": "bitnami/spring-cloud-dataflow/templates/skipper/configmap.yaml",
+      "line": 52,
+      "key": "SPRING_RABBITMQ_PASSWORD",
+      "expected": "read the password from the key named by a configurable parameter",
+      "actual": "- SPRING_RABBITMQ_PASSWORD=${rabbitmq-password} — the key 'rabbitmq-password' is hardcoded, so an existing secret must happen to use exactly that key. externalrabbitmq-secrets.yaml:18 hardcodes the same key when generating the secret",
+      "override_chain": "values.yaml:externalRabbitmq.existingPasswordSecret -> scdf.rabbitmq.secretName -> skipper/configmap.yaml:${rabbitmq-password} (fixed key)",
+      "evidence_tokens": {
+        "identifies": ["configmap.yaml"],
+        "chain": ["rabbitmq-password"]
+      }
     },
     {
-      "file": "bitnami/spring-cloud-dataflow/templates/_helpers.tpl",
-      "key": "rabbitmq.auth.erlangCookie requirement",
-      "expected": "erlangCookie should be optional when using external RabbitMQ",
-      "actual": "erlangCookie is required even for external RabbitMQ where it is irrelevant",
-      "override_chain": [
-        "values.yaml: rabbitmq.auth.erlangCookie (always required)",
-        "templates/_helpers.tpl: helper validates erlangCookie regardless of rabbitmq mode"
-      ],
-      "severity": "configuration_inconsistency"
+      "file": "bitnami/spring-cloud-dataflow/templates/NOTES.txt",
+      "line": 87,
+      "key": "rabbitmq.auth.erlangCookie",
+      "expected": "not required on the external path — an Erlang cookie is a bundled-subchart clustering concern and is meaningless for an external broker. PR #24493 gates the block on .Values.rabbitmq.enabled",
+      "actual": "$requiredErlangPassword := dict \"valueKey\" \"rabbitmq.auth.erlangCookie\" ... — validated whenever externalRabbitmq.enabled and no existingPasswordSecret, so rendering fails until an irrelevant value is supplied",
+      "override_chain": "NOTES.txt:85 guard -> NOTES.txt:87 $requiredErlangPassword -> common.validations.values.multiple.empty -> common.errors.upgrade.passwords.empty",
+      "evidence_tokens": {
+        "identifies": ["notes.txt"],
+        "chain": ["rabbitmq-erlang-cookie"]
+      }
+    },
+    {
+      "file": "bitnami/spring-cloud-dataflow/templates/NOTES.txt",
+      "line": 77,
+      "key": "$secretNameRabbitmq",
+      "expected": "include \"scdf.rabbitmq.secretName\" . — the helper that honours externalRabbitmq.existingPasswordSecret",
+      "actual": "include \"scdf.rabbitmq.fullname\" . — always names the BUNDLED subchart's secret, so validation errors point external users at a secret that does not exist in their deployment",
+      "override_chain": "NOTES.txt:77 $secretNameRabbitmq -> scdf.rabbitmq.fullname -> error message names the wrong secret",
+      "evidence_tokens": {
+        "identifies": ["notes.txt"],
+        "chain": ["scdf.rabbitmq.fullname"]
+      }
     }
   ],
+  "not_drifted": [
+    {
+      "file": "bitnami/spring-cloud-dataflow/templates/_helpers.tpl",
+      "note": "Named by the OLD key for the rabbitmq.auth.password and erlangCookie validation. It contains NEITHER string (0 fixed-string hits each). scdf.rabbitmq.secretName at :338-346 is a name resolver and is essentially correct; PR #24493 touches it only to extend it. instruction.md names this file, so citing it is prompt-following, not evidence."
+    }
+  ],
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md, verified with fixed-string grep -coF. The prompt SUPPLIES 'rabbitmq.auth.erlangCookie' (1), 'rabbitmq.auth.password' (1), '_helpers.tpl' (1), 'externalrabbitmq-secrets.yaml' (1) and 'skipper/configmap.yaml' (1) — none may be graded. It never names NOTES.txt, where the validation actually lives, nor the secret KEY names, nor the external-database precedent field. Note the fixed-string discipline matters here: 'rabbitmq.auth.erlangCookie' leaks but the secret field 'rabbitmq-erlang-cookie' does not, and a regex '.' would conflate the two.",
+    "config_hierarchy": [
+      "notes.txt",
+      "rabbitmq-password",
+      "scdf.rabbitmq.fullname"
+    ]
+  },
   "verification": {
-    "method": "gh_api_pr_files",
+    "method": "gh_api_pr_files + raw source at pinned SHA",
     "pr_url": "https://github.com/bitnami/charts/pull/24493",
-    "verified": true
+    "verified": true,
+    "verified_at_sha": "PR #24493 changes 7 files; 5 are template/values (NOTES.txt, _helpers.tpl, externalrabbitmq-secrets.yaml, skipper/configmap.yaml, values.yaml) plus Chart.yaml and README.md. Confirmed at 53aca511: _helpers.tpl contains 0 hits for 'auth.password' and 'erlangCookie'; NOTES.txt:86-87 contains both; values.yaml contains 0 hits for 'erlangCookie'; externalDatabase pairs existingPasswordSecret (:1881) with existingPasswordKey (:1884) while externalRabbitmq has only existingPasswordSecret (:1975); externalrabbitmq-secrets.yaml:18 and skipper/configmap.yaml:52 both hardcode the key 'rabbitmq-password'; NOTES.txt:77 uses scdf.rabbitmq.fullname. Chart.yaml at the SHA is version 26.11.0 and the PR bumps to 26.12.0, so the pinned tree is pre-fix."
   },
   "difficulty": "hard",
-  "confidence": 0.90
+  "confidence": 0.92
 }

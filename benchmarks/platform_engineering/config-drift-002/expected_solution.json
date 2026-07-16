@@ -1,0 +1,25 @@
+{
+  "task_id": "config-drift-scdf-rabbitmq-002",
+  "_fidelity": "Rebuilt from the chart at the pinned SHA 53aca511. The previous key required the agent to propose a field named `existingPasswordSecretPasswordKey` (8 occurrences) and claimed it mirrors `externalDatabase.existingPasswordSecret + existingPasswordSecretPasswordKey`. That field name occurs 0 times in the real chart: the external-database precedent is existingPasswordSecret + existingPasswordKey (values.yaml:1881/:1884), and PR #24493's actual fix adds externalRabbitmq.existingSecret + existingSecretPasswordKey. The old key also placed the rabbitmq.auth.password / erlangCookie validation in _helpers.tpl, which contains neither string — both are in NOTES.txt:86-87. A correct agent following the old key scored 0.0 on the rebuilt checks.",
+  "checkpoints": {
+    "identify_drift_points": {
+      "expected_solution": "Four drift points at the pinned SHA, under the scenario rabbitmq.enabled=false / externalRabbitmq.enabled=true with the password set inline. (1) values.yaml:1975 — externalRabbitmq.existingPasswordSecret takes a secret NAME only; there is no key parameter, unlike externalDatabase which pairs existingPasswordSecret (:1881) with existingPasswordKey (:1884). (2) skipper/configmap.yaml:52 — `- SPRING_RABBITMQ_PASSWORD=${rabbitmq-password}` hardcodes the key `rabbitmq-password`, and externalrabbitmq-secrets.yaml:18 hardcodes the same key when generating the secret; this, not the helper, is where the fixed-key assumption lives. (3) NOTES.txt:87 — $requiredErlangPassword validates rabbitmq.auth.erlangCookie whenever externalRabbitmq is enabled without an existing secret, forcing a bundled-subchart clustering value that is meaningless for an external broker (NOTES.txt:86 does the same for rabbitmq.auth.password). (4) NOTES.txt:77 — $secretNameRabbitmq resolves through scdf.rabbitmq.fullname rather than scdf.rabbitmq.secretName, so validation errors name the bundled subchart's secret even on the external path. PR #24493 changes all four areas plus _helpers.tpl.",
+      "evaluation_criteria": [
+        "Locates the password/erlangCookie validation in templates/NOTES.txt. The prompt describes this validation but points at _helpers.tpl, externalrabbitmq-secrets.yaml and skipper/configmap.yaml; _helpers.tpl contains 0 hits for auth.password and erlangCookie. Naming NOTES.txt is the checkpoint's main discriminator and requires reading the chart",
+        "Names the hardcoded secret key `rabbitmq-password` at skipper/configmap.yaml:52 and/or externalrabbitmq-secrets.yaml:18 — the prompt says a key cannot be specified but never says what the key is",
+        "Cites the external-database precedent by its real field name, externalDatabase.existingPasswordKey — not an invented one",
+        "Identifies scdf.rabbitmq.fullname at NOTES.txt:77 as the wrong secret-name resolution (scdf.rabbitmq.secretName is the one that honours existingPasswordSecret)",
+        "Does NOT attribute the validation to _helpers.tpl: scdf.rabbitmq.secretName resolves a name and never reads a key"
+      ]
+    },
+    "config_hierarchy": {
+      "expected_solution": "The trace runs: values.yaml (externalRabbitmq.existingPasswordSecret — name only) -> _helpers.tpl:338-346 scdf.rabbitmq.secretName (returns the existing secret's NAME if set, else the bundled subchart's fullname, else <release>-externalrabbitmq) -> consumers that hardcode the KEY (externalrabbitmq-secrets.yaml:18 writes `rabbitmq-password:`, skipper/configmap.yaml:52 reads `${rabbitmq-password}`). Separately, NOTES.txt:77 resolves $secretNameRabbitmq via scdf.rabbitmq.fullname and NOTES.txt:85-88 feeds rabbitmq.auth.password / rabbitmq.auth.erlangCookie into common.validations.values.multiple.empty and then common.errors.upgrade.passwords.empty. The chain breaks at the consumers (the key is not configurable) and in NOTES.txt (the external path is validated as if it were the bundled subchart).",
+      "evaluation_criteria": [
+        "Trace reaches NOTES.txt — the layer the prompt never names and where the validation actually is",
+        "Trace names the hardcoded key rabbitmq-password rather than only asserting that 'the key is fixed'",
+        "Trace identifies scdf.rabbitmq.fullname as what NOTES.txt resolves the secret name through",
+        "Restating the prompt's file list (values.yaml, _helpers.tpl, externalrabbitmq-secrets.yaml, skipper/configmap.yaml) earns nothing on its own: the prompt supplies all four"
+      ]
+    }
+  }
+}
