@@ -219,7 +219,6 @@ class AnswerValidator:
 
         answer_text: Optional[str] = None
         data: Optional[dict[str, Any]] = None
-        used_json = json_path is not None
 
         if json_path is not None:
             try:
@@ -265,7 +264,7 @@ class AnswerValidator:
 
         # Structure-only validation (no oracle)
         if ground_truth is None:
-            source = "answer.json" if used_json else "answer.txt"
+            source = "answer.json" if json_path is not None else "answer.txt"
             return ValidationResult(valid=True, detail=f"{source} found and valid")
 
         # Oracle matching. The file_path dimension scores against the agent's
