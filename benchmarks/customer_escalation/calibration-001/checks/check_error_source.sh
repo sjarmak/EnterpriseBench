@@ -64,7 +64,7 @@ if lib_dir:
     sys.path.insert(0, lib_dir)
 
 try:
-    from eb_verify.plugins.path_match import path_match_score
+    from eb_verify.plugins.path_match import extract_claimed_paths, path_match_score
 except Exception as exc:  # import miss => our infra, not the agent's fault
     verdict(0.0, False, f"VERIFIER_INFRA_ERROR: cannot import path_match: {exc}")
 
@@ -102,18 +102,10 @@ sufficient = _paths(gt.get("sufficient_files", []))
 if not required:
     verdict(0.0, False, "VERIFIER_INFRA_ERROR: no required_files in ground_truth.json")
 
-# Claimed paths: STRUCTURED list, unioned across the fields agents actually emit
-# (source_files/files/code_paths/error_source.files) — matches run_task.py's
-# advertised output schema. No free-text tokenisation.
-raw = []
-for key in ("source_files", "files", "code_paths"):
-    value = answer.get(key)
-    if isinstance(value, list):
-        raw.extend(value)
-nested = answer.get("error_source")
-if isinstance(nested, dict) and isinstance(nested.get("files"), list):
-    raw.extend(nested["files"])
-claimed = _paths(raw)
+# Claimed paths: STRUCTURED list unioned across the fields agents actually emit
+# (source_files/files/code_paths/error_source.files) via the shared extractor,
+# so this script and the answer plugin cannot drift. No free-text tokenisation.
+claimed = extract_claimed_paths(answer)
 
 if not claimed:
     verdict(0.0, False, "Agent provided no files")

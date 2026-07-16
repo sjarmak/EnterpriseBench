@@ -65,7 +65,7 @@ if lib_dir:
     sys.path.insert(0, lib_dir)
 
 try:
-    from eb_verify.plugins.path_match import path_match_score
+    from eb_verify.plugins.path_match import extract_claimed_paths, path_match_score
 except Exception as exc:  # import miss => our infra, not the agent's fault
     verdict(0.0, f"VERIFIER_INFRA_ERROR: cannot import path_match: {exc}")
 
@@ -87,30 +87,11 @@ except (json.JSONDecodeError, UnicodeDecodeError) as exc:
 if not isinstance(answer, dict):
     verdict(0.0, "answer.json is not a JSON object")
 
-# The output appendix run_task.py appends offers source_files and code_paths;
-# accept the field names agents actually emit, and paths as either bare strings
-# or {"path": ...} objects.
-raw = []
-for key in ("source_files", "files", "code_paths"):
-    value = answer.get(key)
-    if isinstance(value, list):
-        raw.extend(value)
-nested = answer.get("error_source")
-if isinstance(nested, dict) and isinstance(nested.get("files"), list):
-    raw.extend(nested["files"])
-
-claimed = []
-for entry in raw:
-    if isinstance(entry, dict):
-        path = entry.get("path") or entry.get("file") or ""
-    elif isinstance(entry, str):
-        path = entry
-    else:
-        path = ""
-    # A non-str path value (e.g. {"path": 123}) must not crash the grader into
-    # a verifier_infra_error free re-run — treat it as no path.
-    if isinstance(path, str) and path.strip():
-        claimed.append(path.strip())
+# Claimed paths come from the shared extractor: it unions the fields agents
+# actually emit (source_files/files/code_paths/error_source.files), accepts bare
+# strings or {"path"|"file": ...} objects, and treats a non-str path value as no
+# path — so this script and the answer plugin cannot drift.
+claimed = extract_claimed_paths(answer)
 
 if not claimed:
     verdict(0.0, "answer.json names no source files")

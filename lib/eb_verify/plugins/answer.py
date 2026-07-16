@@ -22,7 +22,7 @@ from typing import Any, Optional
 from eb_verify.groundedness import CitationParseError, ground_citations
 from eb_verify.artifact_io import safe_read
 from eb_verify.plugins import ValidationResult
-from eb_verify.plugins.path_match import path_match_score
+from eb_verify.plugins.path_match import extract_claimed_paths, path_match_score
 
 
 def _normalize(text: str) -> str:
@@ -64,49 +64,6 @@ def symbol_match_score(answer_text: str, symbols: list[str]) -> float:
         if pattern.search(answer_text):
             hits += 1
     return hits / len(symbols)
-
-
-# Answer fields that carry claimed source-file paths, unioned. Matches the
-# converted check scripts and run_task.py's advertised output schema
-# (source_files + code_paths are both offered to the agent). Deliberately
-# excludes ``citations`` (a distinct evidence-span artifact, see
-# EnterpriseBench-fsb4d).
-_CLAIMED_PATH_FIELDS = ("source_files", "files", "code_paths")
-
-
-def extract_claimed_paths(data: object) -> list[str]:
-    """Pull the agent's claimed source-file paths from answer data as a
-    STRUCTURED list — never by flattening free text.
-
-    Unions the ``source_files``/``files``/``code_paths`` fields plus
-    ``error_source.files``; each entry may be a str or a dict with a
-    ``path``/``file`` key. Free-text flattening is deliberately not used: it is
-    the over-permissive path that let any mention anywhere count
-    (EnterpriseBench-6py4v).
-    """
-    if not isinstance(data, dict):
-        return []
-    raw: list[Any] = []
-    for field in _CLAIMED_PATH_FIELDS:
-        value = data.get(field)
-        if isinstance(value, list):
-            raw.extend(value)
-    error_source = data.get("error_source")
-    if isinstance(error_source, dict) and isinstance(error_source.get("files"), list):
-        raw.extend(error_source["files"])
-
-    paths: list[str] = []
-    for entry in raw:
-        resolved: object
-        if isinstance(entry, str):
-            resolved = entry
-        elif isinstance(entry, dict):
-            resolved = entry.get("path", entry.get("file", ""))
-        else:
-            resolved = ""
-        if isinstance(resolved, str) and resolved.strip():
-            paths.append(resolved.strip())
-    return paths
 
 
 def file_path_match_score(claimed_paths: list[str], expected_files: list[str]) -> float:

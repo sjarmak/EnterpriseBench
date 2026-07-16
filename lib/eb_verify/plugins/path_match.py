@@ -39,6 +39,49 @@ from __future__ import annotations
 
 from eb_verify.scorers.file_extraction import components, score_answer, _matches_parts
 
+# Answer fields that carry claimed source-file paths, unioned. Matches
+# run_task.py's advertised output schema (source_files + code_paths are both
+# offered to the agent). ``error_source.files`` is unioned separately below.
+# Deliberately excludes ``citations`` (a distinct evidence-span artifact, see
+# EnterpriseBench-fsb4d). Single-sourced here so the answer plugin and the shell
+# check scripts share one extractor instead of respelling the field list.
+_CLAIMED_PATH_FIELDS = ("source_files", "files", "code_paths")
+
+
+def extract_claimed_paths(data: object) -> list[str]:
+    """Pull the agent's claimed source-file paths from answer data as a
+    STRUCTURED list — never by flattening free text.
+
+    Unions the ``source_files``/``files``/``code_paths`` fields plus
+    ``error_source.files``; each entry may be a str or a dict with a
+    ``path``/``file`` key. Free-text flattening is deliberately not used: it is
+    the over-permissive path that let any mention anywhere count
+    (EnterpriseBench-6py4v).
+    """
+    if not isinstance(data, dict):
+        return []
+    raw: list = []
+    for field in _CLAIMED_PATH_FIELDS:
+        value = data.get(field)
+        if isinstance(value, list):
+            raw.extend(value)
+    error_source = data.get("error_source")
+    if isinstance(error_source, dict) and isinstance(error_source.get("files"), list):
+        raw.extend(error_source["files"])
+
+    paths: list[str] = []
+    for entry in raw:
+        if isinstance(entry, str):
+            resolved: object = entry
+        elif isinstance(entry, dict):
+            resolved = entry.get("path", entry.get("file", ""))
+        else:
+            resolved = ""
+        if isinstance(resolved, str) and resolved.strip():
+            paths.append(resolved.strip())
+    return paths
+
+
 MAX_PATH_LEN = 512
 # A real source path is not 40 directories deep; anything past this is a blob
 # masquerading as a path (or a hostile input trying to look path-shaped).
@@ -124,19 +167,21 @@ def path_match_score(
     matched, _ambiguous = score_answer(req, valid)
     found = len(matched)
 
-    req_parts = [components(r) for r in req]
-    suf_parts = [components(s) for s in _clean_targets(sufficient)]
-
     # Precision denominator: every valid claimed path counts, EXCEPT one that
-    # matches only a sufficient (GT-blessed) file and no required file.
-    effective = 0
-    for claim in valid:
-        claim_parts = components(claim)
-        neutral = not any(
-            _matches_parts(rp, claim_parts) for rp in req_parts
-        ) and any(_matches_parts(sp, claim_parts) for sp in suf_parts)
-        if not neutral:
-            effective += 1
+    # matches only a sufficient (GT-blessed) file and no required file. With no
+    # sufficient files there is nothing to exclude, so every claim counts and the
+    # per-claim matching (and the req_parts precompute it needs) is skipped.
+    suf_parts = [components(s) for s in _clean_targets(sufficient)]
+    if not suf_parts:
+        effective = len(valid)
+    else:
+        req_parts = [components(r) for r in req]
+        effective = 0
+        for claim in valid:
+            claim_parts = components(claim)
+            matches_sufficient = any(_matches_parts(sp, claim_parts) for sp in suf_parts)
+            if not matches_sufficient or any(_matches_parts(rp, claim_parts) for rp in req_parts):
+                effective += 1
 
     denom = max(len(req), effective)
     return found / denom
