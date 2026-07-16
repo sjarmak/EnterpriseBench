@@ -23,12 +23,16 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 SUITE = REPO_ROOT / "benchmarks" / "dependency_management"
+
+sys.path.insert(0, str(REPO_ROOT / "lib"))
+from eb_verify.scorer_guard import InfraError, guard_checkpoint_verdict  # noqa: E402
 
 TASK_IDS = [
     "dep-traversal-001",
@@ -186,7 +190,16 @@ def test_scoring_evidence_tokens_are_in_the_answer_key(task_id: str) -> None:
 
 @pytest.mark.parametrize("check", CHECKS)
 def test_missing_ground_truth_is_infra_error(check: str, tmp_path: Path) -> None:
-    """A missing answer key is a broken verifier (re-run), not a legitimate 0.0."""
+    """A missing answer key is a broken verifier (re-run), not a legitimate 0.0.
+
+    Asserted through ``scorer_guard`` rather than by grepping the verdict text:
+    the guard is what actually routes the run, and it reads the sentinel out of
+    ``detail`` alone. An earlier revision of these drivers emitted the sentinel
+    under ``reason``, so the guard saw nothing and a missing answer key was
+    recorded as a real agent 0.0 — the exact false-zero the sentinel exists to
+    prevent. A string assertion on the verdict passed the whole time; only
+    driving the guard catches it.
+    """
     workspace = tmp_path / "ws"
     workspace.mkdir()
     _write_report(workspace, "GHSA-4374-p667-p6c8 1.58.3")
@@ -207,7 +220,19 @@ def test_missing_ground_truth_is_infra_error(check: str, tmp_path: Path) -> None
     )
     verdict = json.loads(result.stdout.strip())
     assert verdict["score"] == 0.0
-    assert "VERIFIER_INFRA_ERROR" in verdict["reason"]
+    assert "VERIFIER_INFRA_ERROR" in verdict.get("detail", ""), (
+        f"{check}: the sentinel must ride in 'detail' — the only field "
+        f"scorer_guard scans. Got: {verdict}"
+    )
+
+    guarded = guard_checkpoint_verdict(
+        result.stdout, result.returncode, checkpoint=check
+    )
+    assert isinstance(guarded, InfraError), (
+        f"{check}: a missing answer key was scored as a real 0.0 instead of "
+        f"routing to the re-run channel: {guarded}"
+    )
+    assert guarded.context["signature"] == "VERIFIER_INFRA_ERROR"
 
 
 @pytest.mark.parametrize("check", CHECKS)

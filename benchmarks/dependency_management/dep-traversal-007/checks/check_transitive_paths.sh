@@ -18,7 +18,7 @@ REPORT="$WORKSPACE/BLAST_RADIUS.md"
 GT="${TASK_DIR:-}/ground_truth.json"
 MAX_REPORT_BYTES=1048576
 
-verdict() { printf '{"score": %s, "passed": %s, "reason": "%s"}\n' "$1" "$2" "$3"; exit 0; }
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
 
 # The answer key is ours: a missing ground_truth means the verifier did not
 # really run — route to re-run rather than bury it under an agent 0.0.
@@ -41,7 +41,7 @@ python3 -c '
 import json, os, re
 
 def verdict(score, detail):
-    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "reason": detail}))
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
     raise SystemExit(0)
 
 with open(os.environ["GT"]) as fh:
