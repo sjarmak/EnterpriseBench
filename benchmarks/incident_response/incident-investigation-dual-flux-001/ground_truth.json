@@ -84,9 +84,8 @@
       "api/v2beta2/helmrelease_types.go",
       "internal/controller/helmrelease_controller.go",
       "cmd/flux/get_helmrelease.go",
-      "helmrelease_types",
-      "helmrelease_controller",
-      "get_helmrelease"
+      "summariseItem",
+      "statusAndMessage"
     ],
     "affected_resources": [
       "internal/controller/helmrelease_controller.go",
@@ -94,10 +93,8 @@
       "api/v2beta2/helmrelease_types.go",
       "api/v2beta2/condition_types.go",
       "cmd/flux/get_helmrelease.go",
-      "helmrelease_controller",
-      "helmrelease_types",
-      "condition_types",
-      "get_helmrelease"
+      "summariseItem",
+      "statusAndMessage"
     ],
     "remediation_proposal": [
       "internal/controller/helmrelease_controller.go",

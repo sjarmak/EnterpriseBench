@@ -12,9 +12,9 @@
       ]
     },
     "error_chain_trace": {
-      "expected_solution": "Error chain: (1) An operator runs `flux get helmreleases` and sees the affected releases as Ready=False. (2) The Flux CLI reader cmd/flux/get_helmrelease.go reads item.Status.Conditions to render that Ready column, so the stale condition is what it displays. (3) The HelmRelease was in-progress when helm-controller was upgraded from v0.36 to v0.37 (Flux v2.1 -> v2.2), leaving an old-format condition. (4) helm-controller's internal/reconcile/release.go successfully deploys the release and writes new-format status conditions defined in api/v2beta2/helmrelease_types.go. (5) The reconciler internal/controller/helmrelease_controller.go reads the status conditions and cannot parse the old format, so it treats the release as not ready. (6) The reconciler triggers another reconciliation, producing an infinite loop. (7) kustomize-controller and other consumers that depend on HelmRelease readiness are also blocked.",
+      "expected_solution": "Error chain: (1) An operator runs `flux get helmreleases` and sees the affected releases as Ready=False. (2) The Flux CLI reader cmd/flux/get_helmrelease.go, in summariseItem, calls statusAndMessage over item.Status.Conditions to render that Ready column, so the stale condition is what it displays. (3) The HelmRelease was in-progress when helm-controller was upgraded from v0.36 to v0.37 (Flux v2.1 -> v2.2), leaving an old-format condition. (4) helm-controller's internal/reconcile/release.go successfully deploys the release and writes new-format status conditions defined in api/v2beta2/helmrelease_types.go. (5) The reconciler internal/controller/helmrelease_controller.go reads the status conditions and cannot parse the old format, so it treats the release as not ready. (6) The reconciler triggers another reconciliation, producing an infinite loop. (7) kustomize-controller and other consumers that depend on HelmRelease readiness are also blocked.",
       "evaluation_criteria": [
-        "Starts the chain at the flux CLI readout: cmd/flux/get_helmrelease.go (flux2) reads Status.Conditions to display Ready=False",
+        "Starts the chain at the flux CLI readout: cmd/flux/get_helmrelease.go (flux2), whose summariseItem calls statusAndMessage over Status.Conditions to display Ready=False",
         "Mentions the helm-controller v0.36 -> v0.37 (Flux v2.1 -> v2.2) upgrade as the trigger for in-progress HelmReleases retaining old-format conditions",
         "Identifies helm-controller writing new-format conditions and the same controller's reconciler reading them as the seam",
         "Names internal/controller/helmrelease_controller.go (helm-controller) and internal/reconcile/release.go (helm-controller)",
@@ -22,9 +22,9 @@
       ]
     },
     "affected_resources": {
-      "expected_solution": "Affected components: the Flux CLI readout cmd/flux/get_helmrelease.go, which renders the Ready column operators observe from item.Status.Conditions; the helm-controller reconciler that parses status conditions (internal/controller/helmrelease_controller.go); the helm-controller release writer that emits new-format conditions (internal/reconcile/release.go); the HelmRelease v2beta2 API surface (api/v2beta2/helmrelease_types.go and api/v2beta2/condition_types.go); all HelmRelease resources that were in-progress during the v0.36 to v0.37 helm-controller upgrade; kustomize-controller and other consumers that gate on HelmRelease readiness.",
+      "expected_solution": "Affected components: the Flux CLI readout cmd/flux/get_helmrelease.go, whose summariseItem calls statusAndMessage over item.Status.Conditions to render the Ready column operators observe; the helm-controller reconciler that parses status conditions (internal/controller/helmrelease_controller.go); the helm-controller release writer that emits new-format conditions (internal/reconcile/release.go); the HelmRelease v2beta2 API surface (api/v2beta2/helmrelease_types.go and api/v2beta2/condition_types.go); all HelmRelease resources that were in-progress during the v0.36 to v0.37 helm-controller upgrade; kustomize-controller and other consumers that gate on HelmRelease readiness.",
       "evaluation_criteria": [
-        "Names cmd/flux/get_helmrelease.go (flux2) as the CLI readout surfacing the not-ready status",
+        "Names cmd/flux/get_helmrelease.go (flux2) as the CLI readout surfacing the not-ready status, citing its summariseItem / statusAndMessage read of Status.Conditions",
         "Names internal/controller/helmrelease_controller.go (helm-controller)",
         "Names internal/reconcile/release.go (helm-controller)",
         "References api/v2beta2/helmrelease_types.go or api/v2beta2/condition_types.go (helm-controller)",
