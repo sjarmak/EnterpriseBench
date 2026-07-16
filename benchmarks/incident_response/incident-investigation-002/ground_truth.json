@@ -1,7 +1,12 @@
 {
   "candidate_id": "incident-inv-002",
-  "repos": ["kubernetes/kubernetes"],
-  "issue_refs": ["#58545", "kubernetes/client-go#338"],
+  "repos": [
+    "kubernetes/kubernetes"
+  ],
+  "issue_refs": [
+    "#58545",
+    "kubernetes/client-go#338"
+  ],
   "fix_pr": "#58547",
   "fix_merged": "2018-01-23",
   "buggy_rev": "v1.9.1",
@@ -41,5 +46,37 @@
     "staging/src/k8s.io/apiserver/pkg/storage/cacher_whitebox_test.go"
   ],
   "difficulty": "hard",
-  "confidence": 0.97
+  "confidence": 0.97,
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "etcd3/watcher.go",
+      "etcd/etcd_watcher.go",
+      "staging/src/k8s.io/apiserver/pkg/storage/cacher.go",
+      "curObjPasses",
+      "oldObjPasses",
+      "DeepCopyObject",
+      "etcd_watcher",
+      "watchEvent",
+      "processEvent"
+    ],
+    "error_chain_trace": [
+      "cacher.go",
+      "watcher.go",
+      "processEvent"
+    ],
+    "affected_services": [
+      "cacher.go",
+      "staging/src/k8s.io/apiserver/pkg/storage/cacher.go",
+      "staging/src/k8s.io/apiserver/pkg/storage/etcd3/watcher.go"
+    ],
+    "remediation_proposal": [
+      "etcd3/watcher.go",
+      "etcd/etcd_watcher.go",
+      "staging/src/k8s.io/apiserver/pkg/storage/cacher.go",
+      "staging/src/k8s.io/apiserver/pkg/storage/cacher_whitebox_test.go",
+      "DeepCopyObject",
+      "etcd_watcher",
+      "cacher_whitebox_test"
+    ]
+  }
 }

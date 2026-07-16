@@ -45,5 +45,39 @@
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.96
+  "confidence": 0.96,
+  "scoring_evidence": {
+    "identify_schema_change": [
+      "zerver/models/realms.py",
+      "zerver/models/__init__.py"
+    ],
+    "find_direct_refs": [
+      "zerver/models/realms.py",
+      "zerver/actions/realm_export.py",
+      "zerver/views/realm_export.py",
+      "zerver/worker/deferred_work.py",
+      "export_type",
+      "date_started",
+      "realm_export",
+      "DELETE"
+    ],
+    "find_indirect_refs": [
+      "zerver/lib/export.py",
+      "zerver/management/commands/export.py",
+      "manage.py",
+      "zerver/models/__init__.py"
+    ],
+    "identify_test_impact": [
+      "zerver/tests/test_realm_export.py",
+      "zerver/tests/test_import_export.py",
+      "zerver/tests/test_events.py",
+      "zerver/tests/test_management_commands.py",
+      "manage.py",
+      "test_management_commands.py",
+      "test_realm_export",
+      "test_import_export",
+      "test_events",
+      "test_management_commands"
+    ]
+  }
 }

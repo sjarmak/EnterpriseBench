@@ -29,5 +29,34 @@
     "balancer.ClientConn"
   ],
   "difficulty": "hard",
-  "confidence": 0.92
+  "confidence": 0.92,
+  "scoring_evidence": {
+    "identify_breaking_api": [
+      "balancer/balancer.go",
+      "balancer/subconn.go",
+      "balancer_wrapper.go",
+      "internal/balancer/gracefulswitch/gracefulswitch.go",
+      "internal/internal.go",
+      "internal/testutils/balancer.go",
+      "xds/internal/balancer/outlierdetection/balancer.go",
+      "balancer.go",
+      "subconn.go",
+      "gracefulswitch.go"
+    ],
+    "find_direct_consumers": [
+      "server/etcdserver/api/rafthttp/http.go",
+      "http.go",
+      "ground_truth"
+    ],
+    "trace_transitive_impact": [
+      "etcd-io/etcd#19780",
+      "balancer/balancer.go"
+    ],
+    "classify_breakage": [
+      "compile_error",
+      "compile_and_runtime",
+      "compile_only",
+      "runtime_only"
+    ]
+  }
 }

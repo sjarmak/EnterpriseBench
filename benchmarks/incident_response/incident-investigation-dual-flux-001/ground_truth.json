@@ -58,5 +58,34 @@
       "kustomize-controller dependency on HelmRelease readiness"
     ],
     "remediation": "Add backward-compatible status condition parsing in the Flux reconciler to handle both old and new condition formats. For immediate relief, manually delete and recreate affected HelmRelease resources, or annotate them to force a full status condition reset."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "internal/controller/helmrelease_controller.go",
+      "internal/reconcile/release.go",
+      "api/v2beta2/helmrelease_types.go",
+      "helmrelease_controller",
+      "helmrelease_types"
+    ],
+    "error_chain_trace": [
+      "internal/reconcile/release.go",
+      "api/v2beta2/helmrelease_types.go",
+      "internal/controller/helmrelease_controller.go",
+      "helmrelease_types",
+      "helmrelease_controller"
+    ],
+    "affected_resources": [
+      "internal/controller/helmrelease_controller.go",
+      "internal/reconcile/release.go",
+      "api/v2beta2/helmrelease_types.go",
+      "api/v2beta2/condition_types.go",
+      "helmrelease_controller",
+      "helmrelease_types",
+      "condition_types"
+    ],
+    "remediation_proposal": [
+      "internal/controller/helmrelease_controller.go",
+      "helmrelease_controller"
+    ]
   }
 }

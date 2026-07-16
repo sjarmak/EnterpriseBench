@@ -33,5 +33,25 @@
     "googleapis/google-cloud-go"
   ],
   "difficulty": "hard",
-  "confidence": 0.93
+  "confidence": 0.93,
+  "scoring_evidence": {
+    "identify_breaking_api": [
+      "envoyproxy/go-control-plane#714",
+      "envoyproxy/go-control-plane#1075"
+    ],
+    "find_direct_consumers": [
+      "ground_truth",
+      "consumer_repos"
+    ],
+    "trace_transitive_impact": [
+      "envoyproxy/go-control-plane#1075",
+      "grpc/grpc-go#8067"
+    ],
+    "classify_breakage": [
+      "dependency_resolution",
+      "compile_and_runtime",
+      "compile_only",
+      "runtime_only"
+    ]
+  }
 }

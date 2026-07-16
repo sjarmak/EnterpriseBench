@@ -1,56 +1,51 @@
 #!/usr/bin/env bash
-# Checkpoint 3: Verify agent correctly identifies parallelizable steps
+# check_parallelism.sh — checkpoint "parallelism"
+#
+# Re-anchored to ground_truth.json:scoring_evidence[parallelism]
+# (EnterpriseBench-jn73.2.7.3.1). Credits ONLY non-prompt evidence — tokens
+# absent from instruction.md and present in expected_solution.json — so a
+# verbatim prompt copy scores 0. ground_truth.json is sealed root-only.
 set -euo pipefail
 
-ANSWER="${WORKSPACE:-/workspace}/REFACTOR_PLAN.md"
-GT="${TASK_DIR:-$(dirname "$(dirname "$0")")}/ground_truth.json"
+CHECKPOINT="parallelism"
+WORKSPACE="${WORKSPACE:-/workspace}"
+REPORT="$WORKSPACE/REFACTOR_PLAN.md"
+GT="${TASK_DIR:-}/ground_truth.json"
+MAX_REPORT_BYTES=1048576
 
-if [[ ! -f "$ANSWER" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "REFACTOR_PLAN.md not found"}\n'
-  exit 0
-fi
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
 
 if [[ ! -f "$GT" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "ground_truth.json not found"}\n'
-  exit 0
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+if [[ -L "$REPORT" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md is a symlink, not a regular file"
+fi
+if [[ ! -f "$REPORT" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md not found"
+fi
+if [[ "$(wc -c <"$REPORT")" -gt "$MAX_REPORT_BYTES" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md exceeds ${MAX_REPORT_BYTES} bytes"
 fi
 
-export ANSWER_FILE="$ANSWER"
-export GT_FILE="$GT"
-
-python3 -c "
+export REPORT GT CHECKPOINT
+python3 -c '
 import json, os
 
-with open(os.environ['GT_FILE']) as f:
-    gt = json.load(f)
-with open(os.environ['ANSWER_FILE']) as f:
-    answer_text = f.read().lower()
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
-parallel_steps = gt.get('parallelizable_steps', [])
+with open(os.environ["GT"]) as fh:
+    gt = json.load(fh)
+evidence = (gt.get("scoring_evidence") or {}).get(os.environ["CHECKPOINT"]) or []
+if not evidence:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no scoring_evidence for " + os.environ["CHECKPOINT"])
 
-# Check if agent addresses parallelism at all
-mentions_parallel = any(term in answer_text for term in ['parallel', 'concurrent', 'simultaneous', 'independent'])
+with open(os.environ["REPORT"], encoding="utf-8", errors="replace") as fh:
+    text = fh.read().lower()
 
-if not parallel_steps:
-    # No parallel steps expected — agent should note sequential dependency
-    if any(term in answer_text for term in ['sequential', 'serial', 'no parallel', 'cannot.*parallel', 'depends on']):
-        score = 1.0
-        detail = 'Correctly identified no parallelizable steps (sequential chain)'
-    elif mentions_parallel:
-        score = 0.3
-        detail = 'Mentions parallelism but chain is fully sequential'
-    else:
-        score = 0.5
-        detail = 'Did not explicitly address parallelism'
-    passed = score >= 0.5
-else:
-    if mentions_parallel:
-        score = 0.8
-        detail = 'Agent addresses parallelism opportunities'
-    else:
-        score = 0.2
-        detail = 'Agent did not identify parallelism opportunities'
-    passed = score >= 0.5
-
-print(json.dumps({'score': round(score, 2), 'passed': passed, 'reason': detail}))
-"
+found = sum(1 for token in evidence if token.lower() in text)
+verdict(found / len(evidence),
+        "Cited %d/%d non-prompt evidence tokens for %s" % (found, len(evidence), os.environ["CHECKPOINT"]))
+'

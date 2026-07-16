@@ -64,5 +64,44 @@
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.97
+  "confidence": 0.97,
+  "scoring_evidence": {
+    "identify_schema_change": [
+      "zerver/models/groups.py",
+      "BooleanField"
+    ],
+    "find_direct_refs": [
+      "zerver/actions/user_groups.py",
+      "zerver/views/user_groups.py",
+      "zerver/lib/user_groups.py",
+      "zerver/views/streams.py",
+      "zerver/models/groups.py",
+      "user_groups",
+      "get_recursive_subgroups",
+      "access_user_group_by_id"
+    ],
+    "find_indirect_refs": [
+      "zerver/lib/events.py",
+      "zerver/lib/event_schema.py",
+      "zerver/lib/import_realm.py",
+      "zerver/lib/markdown/__init__.py",
+      "zerver/openapi/zulip.yaml",
+      "zerver/openapi/curl_param_value_generators.py",
+      "zerver/models/realm_audit_logs.py",
+      "zproject/urls.py",
+      "event_schema",
+      "import_realm"
+    ],
+    "identify_test_impact": [
+      "zerver/tests/test_user_groups.py",
+      "zerver/tests/test_events.py",
+      "zerver/tests/test_audit_log.py",
+      "zerver/tests/test_markdown.py",
+      "test_user_groups",
+      "test_events",
+      "test_audit_log",
+      "test_markdown",
+      "api_docs"
+    ]
+  }
 }

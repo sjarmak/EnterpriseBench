@@ -70,5 +70,33 @@
       "All multi-arch images with shell script entrypoints missing shebang lines"
     ],
     "remediation": "Ensure all entrypoint scripts include a proper shebang line (e.g., #!/bin/sh). For platform operators, add image validation that checks entrypoint executability and shebang presence. Consider adding architecture-aware error messages in runc to distinguish between 'wrong architecture' and 'missing shebang' failures."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "libcontainer/process_linux.go",
+      "pkg/process/init.go",
+      "daemon/start.go",
+      "process_linux",
+      "ENOEXEC"
+    ],
+    "error_chain_trace": [
+      "daemon/start.go",
+      "pkg/process/init.go",
+      "libcontainer/process_linux.go",
+      "process_linux",
+      "ENOEXEC"
+    ],
+    "affected_components": [
+      "libcontainer/process_linux.go",
+      "pkg/process/init.go",
+      "daemon/start.go",
+      "daemon/oci_linux.go",
+      "process_linux",
+      "oci_linux"
+    ],
+    "remediation_proposal": [
+      "libcontainer/process_linux.go",
+      "pkg/process/init.go"
+    ]
   }
 }

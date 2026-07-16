@@ -1,7 +1,10 @@
 {
   "candidate_id": "refactor-orch-001",
   "description": "etcd 3.6 client library update cascade into Kubernetes",
-  "repos": ["etcd-io/etcd", "kubernetes/kubernetes"],
+  "repos": [
+    "etcd-io/etcd",
+    "kubernetes/kubernetes"
+  ],
   "merge_order": [
     {
       "repo": "etcd-io/etcd",
@@ -17,7 +20,9 @@
   ],
   "dependency_graph": {
     "etcd-io/etcd": [],
-    "kubernetes/kubernetes": ["etcd-io/etcd"]
+    "kubernetes/kubernetes": [
+      "etcd-io/etcd"
+    ]
   },
   "parallelizable_steps": [],
   "difficulty": "medium",
@@ -25,5 +30,20 @@
   "verification": {
     "method": "pr_chronology",
     "verified": true
+  },
+  "scoring_evidence": {
+    "identify_repos": [
+      "check_repo_set",
+      "kubernetes/kubernetes#128419"
+    ],
+    "topological_order": [
+      "kubernetes/kubernetes#128419",
+      "check_topo_order",
+      "dependency_graph"
+    ],
+    "parallelism": [
+      "parallelizable_steps",
+      "kubernetes/kubernetes#128419"
+    ]
   }
 }

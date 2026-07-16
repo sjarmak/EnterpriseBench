@@ -52,5 +52,45 @@
   "remediation": "Update custom seccomp profiles to include newer syscalls from the current moby default profile (clone3, close_range, openat2, faccessat2, pidfd_open). Alternatively, use RuntimeDefault seccomp profile which is automatically kept up to date. For custom profiles, establish a process to periodically sync with the upstream moby default profile at profiles/seccomp/default_linux.go.",
   "fix_files": [],
   "difficulty": "expert",
-  "confidence": 0.92
+  "confidence": 0.92,
+  "scoring_evidence": {
+    "kubelet_seccomp_conversion": [
+      "pkg/kubelet/kuberuntime/security_context.go",
+      "pkg/kubelet/kuberuntime/kuberuntime_container_linux.go",
+      "security_context",
+      "kuberuntime_container_linux",
+      "LinuxContainerSecurityContext",
+      "SeccompProfilePath"
+    ],
+    "containerd_cri_seccomp_mapping": [
+      "pkg/cri/server/container_create_linux.go",
+      "contrib/seccomp/seccomp_default.go",
+      "container_create_linux",
+      "seccomp_default"
+    ],
+    "runc_seccomp_filter": [
+      "libcontainer/seccomp/seccomp_linux.go",
+      "seccomp_linux",
+      "InitSeccomp",
+      "buildFilter",
+      "pidfd_open"
+    ],
+    "moby_default_profile": [
+      "profiles/seccomp/default_linux.go",
+      "default_linux",
+      "pidfd_open"
+    ],
+    "cross_repo_error_chain": [
+      "pkg/kubelet/kuberuntime/security_context.go",
+      "pkg/cri/server/container_create_linux.go",
+      "libcontainer/seccomp/seccomp_linux.go",
+      "profiles/seccomp/default_linux.go",
+      "security_context",
+      "SeccompProfilePath",
+      "CreateContainer",
+      "container_create_linux",
+      "seccomp_linux",
+      "default_linux"
+    ]
+  }
 }

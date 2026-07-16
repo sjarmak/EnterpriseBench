@@ -1,7 +1,9 @@
 {
   "candidate_id": 2,
   "repo": "babel/babel",
-  "pr_refs": ["#16242"],
+  "pr_refs": [
+    "#16242"
+  ],
   "release": "v7.24.0",
   "description": "Decorator 2023-11 normative updates in helper-create-class-features-plugin cascade through helpers, plugin-decorators, and test fixtures",
   "changed_package": {
@@ -48,9 +50,34 @@
   "verification": {
     "method": "gh_api_pr_files",
     "pr_file_count": 31,
-    "packages_touched": ["babel-helper-create-class-features-plugin", "babel-helpers", "babel-plugin-proposal-decorators"],
+    "packages_touched": [
+      "babel-helper-create-class-features-plugin",
+      "babel-helpers",
+      "babel-plugin-proposal-decorators"
+    ],
     "verified": true
   },
   "difficulty": "expert",
-  "confidence": 0.94
+  "confidence": 0.94,
+  "scoring_evidence": {
+    "identify_affected_packages": [
+      "packages/babel-helper-create-class-features-plugin/src/decorators.ts",
+      "packages/babel-helper-create-class-features-plugin/src/index.ts",
+      "packages/babel-helpers/src/helpers-generated.ts",
+      "packages/babel-helpers/src/helpers/applyDecs2311.ts",
+      "packages/babel-plugin-proposal-decorators/src/index.ts",
+      "applyDecs2311",
+      "applyDecs2305"
+    ],
+    "classify_change_impact": [
+      "applyDecs2311",
+      "packages/babel-helper-create-class-features-plugin/src/decorators.ts"
+    ],
+    "identify_boundary_violations": [
+      "packages/babel-helper-create-class-features-plugin/src/decorators.ts",
+      "packages/babel-helper-create-class-features-plugin/src/index.ts",
+      "packages/babel-plugin-proposal-decorators/src/index.ts",
+      "applyDecs2311"
+    ]
+  }
 }

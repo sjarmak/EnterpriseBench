@@ -1,7 +1,11 @@
 {
   "candidate_id": "refactor-orch-008",
   "description": "go-grpc-middleware v1 removal cascade across etcd and Kubernetes",
-  "repos": ["grpc-ecosystem/go-grpc-middleware", "etcd-io/etcd", "kubernetes/kubernetes"],
+  "repos": [
+    "grpc-ecosystem/go-grpc-middleware",
+    "etcd-io/etcd",
+    "kubernetes/kubernetes"
+  ],
   "merge_order": [
     {
       "repo": "etcd-io/etcd",
@@ -24,14 +28,36 @@
   ],
   "dependency_graph": {
     "grpc-ecosystem/go-grpc-middleware": [],
-    "etcd-io/etcd": ["grpc-ecosystem/go-grpc-middleware"],
-    "kubernetes/kubernetes": ["etcd-io/etcd", "grpc-ecosystem/go-grpc-middleware"]
+    "etcd-io/etcd": [
+      "grpc-ecosystem/go-grpc-middleware"
+    ],
+    "kubernetes/kubernetes": [
+      "etcd-io/etcd",
+      "grpc-ecosystem/go-grpc-middleware"
+    ]
   },
   "parallelizable_steps": [],
   "difficulty": "expert",
-  "confidence": 0.90,
+  "confidence": 0.9,
   "verification": {
     "method": "pr_chronology",
     "verified": true
+  },
+  "scoring_evidence": {
+    "identify_repos": [
+      "OpenTelemetry",
+      "check_repo_set"
+    ],
+    "topological_order": [
+      "etcd-io/etcd#20420",
+      "kubernetes/kubernetes#135538",
+      "etcd-io/etcd#21295",
+      "dependency_graph",
+      "OpenTelemetry"
+    ],
+    "parallelism": [
+      "etcd-io/etcd#21295",
+      "parallelizable_steps"
+    ]
   }
 }

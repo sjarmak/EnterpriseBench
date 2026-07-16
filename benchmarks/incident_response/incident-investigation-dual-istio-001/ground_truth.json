@@ -55,5 +55,31 @@
       "All VirtualServices using regex-based header matching"
     ],
     "remediation": "Update VirtualService configurations to use the new regex syntax compatible with Istio 1.20, or configure Istio to use the legacy regex engine setting via mesh configuration."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "pilot/pkg/networking/core/v1alpha3/route/route.go",
+      "source/common/router/config_impl.cc",
+      "config_impl"
+    ],
+    "error_chain_trace": [
+      "pilot/pkg/networking/core/v1alpha3/route/route.go",
+      "source/common/router/config_impl.cc",
+      "route.go",
+      "config_impl.cc",
+      "config_impl"
+    ],
+    "affected_components": [
+      "pilot/pkg/networking/core/v1alpha3/route/route.go",
+      "source/common/router/config_impl.cc",
+      "source/common/http/header_utility.cc",
+      "route.go",
+      "config_impl",
+      "header_utility"
+    ],
+    "remediation_proposal": [
+      "pilot/pkg/networking/core/v1alpha3/route/route.go",
+      "source/common/router/config_impl.cc"
+    ]
   }
 }

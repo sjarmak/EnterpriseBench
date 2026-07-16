@@ -1,7 +1,11 @@
 {
   "candidate_id": "refactor-orch-003",
   "description": "grpc-go v1.72 version bump cascade through etcd into Kubernetes",
-  "repos": ["grpc/grpc-go", "etcd-io/etcd", "kubernetes/kubernetes"],
+  "repos": [
+    "grpc/grpc-go",
+    "etcd-io/etcd",
+    "kubernetes/kubernetes"
+  ],
   "merge_order": [
     {
       "repo": "grpc/grpc-go",
@@ -23,8 +27,13 @@
   ],
   "dependency_graph": {
     "grpc/grpc-go": [],
-    "etcd-io/etcd": ["grpc/grpc-go"],
-    "kubernetes/kubernetes": ["grpc/grpc-go", "etcd-io/etcd"]
+    "etcd-io/etcd": [
+      "grpc/grpc-go"
+    ],
+    "kubernetes/kubernetes": [
+      "grpc/grpc-go",
+      "etcd-io/etcd"
+    ]
   },
   "parallelizable_steps": [],
   "difficulty": "hard",
@@ -32,5 +41,21 @@
   "verification": {
     "method": "pr_chronology",
     "verified": true
+  },
+  "scoring_evidence": {
+    "identify_repos": [
+      "grpc.go",
+      "kubernetes/kubernetes#131838",
+      "check_repo_set"
+    ],
+    "topological_order": [
+      "kubernetes/kubernetes#131838",
+      "check_topo_order",
+      "dependency_graph"
+    ],
+    "parallelism": [
+      "parallelizable_steps",
+      "kubernetes/kubernetes#131838"
+    ]
   }
 }

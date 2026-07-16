@@ -1,7 +1,9 @@
 {
   "candidate_id": 10,
   "repo": "vercel/next.js",
-  "pr_refs": ["#56662"],
+  "pr_refs": [
+    "#56662"
+  ],
   "release": "v14.0.0",
   "description": "Move ImageResponse from next/server to next/og crosses JS/Rust boundary via next-swc import map",
   "changed_package": {
@@ -49,11 +51,45 @@
   "verification": {
     "method": "gh_api_pr_files",
     "pr_file_count": 29,
-    "packages_touched": ["next", "next-swc"],
+    "packages_touched": [
+      "next",
+      "next-swc"
+    ],
     "cross_language_boundary": true,
-    "languages": ["typescript", "rust"],
+    "languages": [
+      "typescript",
+      "rust"
+    ],
     "verified": true
   },
   "difficulty": "medium",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "scoring_evidence": {
+    "identify_affected_packages": [
+      "packages/next/og.js",
+      "packages/next/og.d.ts",
+      "packages/next/src/server/og/image-response.ts",
+      "packages/next/src/server/web/spec-extension/image-response.ts",
+      "packages/next/src/build/webpack-config.ts",
+      "packages/next/src/build/webpack/plugins/middleware-plugin.ts",
+      "packages/next/taskfile.js",
+      "packages/next-swc/crates/next-core/src/next_import_map.rs",
+      "next_import_map"
+    ],
+    "classify_change_impact": [
+      "packages/next/og.js",
+      "packages/next/og.d.ts"
+    ],
+    "identify_boundary_violations": [
+      "packages/next/og.js",
+      "packages/next/og.d.ts",
+      "packages/next/src/server/og/image-response.ts",
+      "packages/next/src/server/web/spec-extension/image-response.ts",
+      "packages/next/src/build/webpack-config.ts",
+      "packages/next/src/build/webpack/plugins/middleware-plugin.ts",
+      "packages/next/taskfile.js",
+      "packages/next-swc/crates/next-core/src/next_import_map.rs",
+      "next_import_map"
+    ]
+  }
 }

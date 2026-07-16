@@ -54,5 +54,44 @@
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.96
+  "confidence": 0.96,
+  "scoring_evidence": {
+    "identify_schema_change": [
+      "zerver/models/realms.py",
+      "zerver/models/users.py",
+      "zerver/lib/avatar.py"
+    ],
+    "find_direct_refs": [
+      "zerver/lib/avatar.py",
+      "zerver/models/realms.py",
+      "zerver/models/users.py",
+      "zerver/openapi/python_examples.py",
+      "avatar_source_for_user",
+      "python_examples"
+    ],
+    "find_indirect_refs": [
+      "zerver/tests/test_mattermost_importer.py",
+      "zerver/tests/test_rocketchat_importer.py",
+      "zerver/tests/test_slack_importer.py",
+      "zerver/migrations/0001_squashed_0569.py",
+      "zerver/migrations/0031_remove_system_avatar_source.py",
+      "organization_settings_admin",
+      "test_mattermost_importer",
+      "test_rocketchat_importer",
+      "test_slack_importer",
+      "UserProfiles"
+    ],
+    "identify_test_impact": [
+      "zerver/tests/test_events.py",
+      "zerver/tests/test_upload.py",
+      "zerver/tests/test_upload_s3.py",
+      "zerver/tests/test_mattermost_importer.py",
+      "zerver/tests/test_rocketchat_importer.py",
+      "zerver/tests/test_slack_importer.py",
+      "test_events",
+      "test_upload",
+      "test_upload_s3",
+      "test_mattermost_importer"
+    ]
+  }
 }

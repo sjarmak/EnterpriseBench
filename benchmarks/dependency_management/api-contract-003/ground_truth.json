@@ -39,5 +39,43 @@
     "transport.NewClientTransport"
   ],
   "difficulty": "expert",
-  "confidence": 0.93
+  "confidence": 0.93,
+  "scoring_evidence": {
+    "identify_breaking_api": [
+      "internal/transport/transport.go",
+      "internal/transport/http2_client.go",
+      "internal/transport/http2_server.go",
+      "internal/transport/handler_server.go",
+      "internal/transport/controlbuf.go",
+      "internal/transport/flowcontrol.go",
+      "internal/transport/http_util.go",
+      "clientconn.go",
+      "server.go",
+      "stream.go"
+    ],
+    "find_direct_consumers": [
+      "vendor/google.golang.org/grpc/clientconn.go",
+      "staging/src/k8s.io/apiserver/pkg/server/genericapiserver.go",
+      "pkg/kubelet/kubelet.go",
+      "clientconn.go",
+      "genericapiserver.go",
+      "kubelet.go",
+      "ClientTransport",
+      "ServerTransport",
+      "NewClientTransport",
+      "ground_truth"
+    ],
+    "trace_transitive_impact": [
+      "kubernetes/kubernetes#57160",
+      "ClientTransport",
+      "ServerTransport",
+      "NewClientTransport"
+    ],
+    "classify_breakage": [
+      "compile_error",
+      "compile_and_runtime",
+      "compile_only",
+      "runtime_only"
+    ]
+  }
 }

@@ -1,7 +1,10 @@
 {
   "candidate_id": 5,
   "repo": "babel/babel",
-  "pr_refs": ["#16166", "#16011"],
+  "pr_refs": [
+    "#16166",
+    "#16011"
+  ],
   "release": "v7.23.6",
   "description": "retainLines indentation fix in generator + for-of iterableIsArray fix cascade to preset-env and plugin-transform-for-of",
   "changed_package": {
@@ -51,9 +54,29 @@
     "method": "gh_api_pr_files",
     "pr_file_count_16166": 2,
     "pr_file_count_16011": 13,
-    "packages_touched": ["babel-generator", "babel-plugin-transform-for-of", "babel-preset-env"],
+    "packages_touched": [
+      "babel-generator",
+      "babel-plugin-transform-for-of",
+      "babel-preset-env"
+    ],
     "verified": true
   },
   "difficulty": "medium",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "scoring_evidence": {
+    "identify_affected_packages": [
+      "packages/babel-generator/src/printer.ts",
+      "packages/babel-generator/test/index.js",
+      "packages/babel-plugin-transform-for-of/src/index.ts"
+    ],
+    "classify_change_impact": [
+      "packages/babel-generator/src/printer.ts",
+      "packages/babel-generator/test/index.js"
+    ],
+    "identify_boundary_violations": [
+      "packages/babel-generator/src/printer.ts",
+      "packages/babel-generator/test/index.js",
+      "packages/babel-plugin-transform-for-of/src/index.ts"
+    ]
+  }
 }

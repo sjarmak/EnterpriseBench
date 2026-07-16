@@ -90,5 +90,22 @@
   "verification": {
     "method": "source_analysis",
     "verified": true
+  },
+  "scoring_evidence": {
+    "identify_tls_entry": [
+      "http.c",
+      "x509_vfy.c",
+      "http.h",
+      "urldata.h",
+      "x509_vfy"
+    ],
+    "trace_curl_integration": [
+      "urldata.h",
+      "task.toml"
+    ],
+    "openssl_verification": [
+      "x509_vfy.c",
+      "x509_vfy"
+    ]
   }
 }

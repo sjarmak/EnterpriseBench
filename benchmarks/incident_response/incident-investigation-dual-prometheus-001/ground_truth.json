@@ -56,5 +56,23 @@
       "All critical-severity alerts that share the inhibition rule target matcher"
     ],
     "remediation": "Fix the recording rule to preserve the 'condition' label during aggregation, or scope the inhibition rule more narrowly to prevent a single source alert from suppressing unrelated target alerts. Add alerting on inhibition rule match counts to detect over-broad suppression."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "inhibit/inhibit.go",
+      "rules/manager.go"
+    ],
+    "error_chain_trace": [
+      "rules/manager.go",
+      "inhibit/inhibit.go"
+    ],
+    "affected_components": [
+      "rules/manager.go",
+      "inhibit/inhibit.go"
+    ],
+    "remediation_proposal": [
+      "inhibit/inhibit.go",
+      "rules/manager.go"
+    ]
   }
 }

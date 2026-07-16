@@ -57,5 +57,30 @@
       "Any JDBC Sink Connector with large batch.size and database-side timeouts"
     ],
     "remediation": "Reduce batch.size to ensure JDBC transactions complete within the database statement_timeout. Alternatively, increase the database timeout or configure the JDBC connector to use sub-batching within transactions. Align offset.flush.timeout.ms with the expected maximum transaction duration."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "src/main/java/io/confluent/connect/jdbc/sink/JdbcSinkTask.java",
+      "WorkerSinkTask.java",
+      "connect/runtime/src/main/java/org/apache/kafka/connect/runtime/WorkerSinkTask.java",
+      "JdbcSinkTask"
+    ],
+    "error_chain_trace": [
+      "WorkerSinkTask.java",
+      "JdbcSinkTask",
+      "BufferedRecords"
+    ],
+    "affected_connectors": [
+      "connect/runtime/src/main/java/org/apache/kafka/connect/runtime/WorkerSinkTask.java",
+      "JdbcSinkTask.java",
+      "BufferedRecords.java",
+      "WorkerSinkTask.java",
+      "JdbcSinkTask",
+      "BufferedRecords"
+    ],
+    "remediation_proposal": [
+      "src/main/java/io/confluent/connect/jdbc/sink/JdbcSinkTask.java",
+      "connect/runtime/src/main/java/org/apache/kafka/connect/runtime/WorkerSinkTask.java"
+    ]
   }
 }

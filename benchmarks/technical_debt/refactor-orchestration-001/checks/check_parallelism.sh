@@ -1,84 +1,51 @@
 #!/usr/bin/env bash
-# Checkpoint 3: Verify parallelization claims are correct
+# check_parallelism.sh — checkpoint "parallelism"
+#
+# Re-anchored to ground_truth.json:scoring_evidence[parallelism]
+# (EnterpriseBench-jn73.2.7.3.1). Credits ONLY non-prompt evidence — tokens
+# absent from instruction.md and present in expected_solution.json — so a
+# verbatim prompt copy scores 0. ground_truth.json is sealed root-only.
 set -euo pipefail
 
-export ANSWER="${WORKSPACE:-/workspace}/REFACTOR_PLAN.md"
-export GT="${TASK_DIR:-$(dirname "$(dirname "$0")")}/ground_truth.json"
+CHECKPOINT="parallelism"
+WORKSPACE="${WORKSPACE:-/workspace}"
+REPORT="$WORKSPACE/REFACTOR_PLAN.md"
+GT="${TASK_DIR:-}/ground_truth.json"
+MAX_REPORT_BYTES=1048576
 
-if [[ ! -f "$ANSWER" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "REFACTOR_PLAN.md not found"}\n'
-  exit 0
-fi
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
 
 if [[ ! -f "$GT" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "ground_truth.json not found"}\n'
-  exit 0
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+if [[ -L "$REPORT" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md is a symlink, not a regular file"
+fi
+if [[ ! -f "$REPORT" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md not found"
+fi
+if [[ "$(wc -c <"$REPORT")" -gt "$MAX_REPORT_BYTES" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md exceeds ${MAX_REPORT_BYTES} bytes"
 fi
 
-python3 -c "
-import json, os, re
+export REPORT GT CHECKPOINT
+python3 -c '
+import json, os
 
-with open(os.environ['GT']) as f:
-    gt = json.load(f)
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
-with open(os.environ['ANSWER']) as f:
-    answer = f.read()
+with open(os.environ["GT"]) as fh:
+    gt = json.load(fh)
+evidence = (gt.get("scoring_evidence") or {}).get(os.environ["CHECKPOINT"]) or []
+if not evidence:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no scoring_evidence for " + os.environ["CHECKPOINT"])
 
-gt_parallel = set()
-for group in gt.get('parallelizable_steps', []):
-    gt_parallel.add(frozenset(group))
+with open(os.environ["REPORT"], encoding="utf-8", errors="replace") as fh:
+    text = fh.read().lower()
 
-dep_graph = gt.get('dependency_graph', {})
-graph_nodes = set(dep_graph.keys())
-
-# Look for parallel annotations in the answer (e.g., 'parallel:', 'concurrent:', 'independent:')
-parallel_section = re.findall(r'(?:parallel|concurrent|independent|simultaneously)[:\s]*([^\n]+(?:\n\s*[-*]\s*[^\n]+)*)', answer, re.IGNORECASE)
-
-if not parallel_section and not gt_parallel:
-    # No parallelism expected and none claimed
-    print(json.dumps({'score': 1.0, 'passed': True, 'reason': 'No parallelism expected or claimed'}))
-elif not parallel_section and gt_parallel:
-    # Parallelism exists but agent did not identify any
-    print(json.dumps({'score': 0.2, 'passed': False, 'reason': 'Agent did not identify parallelizable steps'}))
-elif parallel_section and not gt_parallel:
-    # Agent claimed parallelism where none exists — check if claims are at least valid
-    raw_tokens = re.findall(r'[@\w/.-]+', ' '.join(parallel_section))
-    claimed = [t for t in raw_tokens if t in graph_nodes]
-    violations = 0
-    for repo in claimed:
-        deps = dep_graph.get(repo, [])
-        for dep in deps:
-            if dep in claimed:
-                violations += 1
-    if violations == 0:
-        print(json.dumps({'score': 0.8, 'passed': True, 'reason': 'Parallel claims are valid (no dependency violations)'}))
-    else:
-        score = max(0.0, 1.0 - violations * 0.3)
-        print(json.dumps({'score': score, 'passed': score >= 0.5, 'reason': f'{violations} dependency violations in parallel claims'}))
-else:
-    # Both exist — check for overlap and correctness
-    raw_tokens = re.findall(r'[@\w/.-]+', ' '.join(parallel_section))
-    claimed_repos = set(t for t in raw_tokens if t in graph_nodes)
-    gt_all_parallel = set()
-    for group in gt_parallel:
-        gt_all_parallel.update(group)
-
-    overlap = claimed_repos & gt_all_parallel
-    if gt_all_parallel:
-        recall = len(overlap) / len(gt_all_parallel)
-    else:
-        recall = 1.0
-
-    # Check that claimed parallel repos have no direct mutual deps
-    violations = 0
-    for repo in claimed_repos:
-        deps = dep_graph.get(repo, [])
-        for dep in deps:
-            if dep in claimed_repos:
-                violations += 1
-    correctness = 1.0 if violations == 0 else max(0.0, 1.0 - violations * 0.3)
-
-    score = recall * 0.6 + correctness * 0.4
-    passed = score >= 0.5
-    print(json.dumps({'score': round(score, 2), 'passed': passed, 'reason': f'Recall={recall:.2f}, correctness={correctness:.2f}'}))
-"
+found = sum(1 for token in evidence if token.lower() in text)
+verdict(found / len(evidence),
+        "Cited %d/%d non-prompt evidence tokens for %s" % (found, len(evidence), os.environ["CHECKPOINT"]))
+'

@@ -1,20 +1,51 @@
 #!/usr/bin/env bash
-# Checkpoint 1: Verify agent identified all repos requiring API migration
+# check_repo_set.sh — checkpoint "identify_repos"
+#
+# Re-anchored to ground_truth.json:scoring_evidence[identify_repos]
+# (EnterpriseBench-jn73.2.7.3.1). Credits ONLY non-prompt evidence — tokens
+# absent from instruction.md and present in expected_solution.json — so a
+# verbatim prompt copy scores 0. ground_truth.json is sealed root-only.
 set -euo pipefail
 
-ANSWER="${WORKSPACE:-/workspace}/REFACTOR_PLAN.md"
-if [[ ! -f "$ANSWER" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "REFACTOR_PLAN.md not found"}\n'
-  exit 0
+CHECKPOINT="identify_repos"
+WORKSPACE="${WORKSPACE:-/workspace}"
+REPORT="$WORKSPACE/REFACTOR_PLAN.md"
+GT="${TASK_DIR:-}/ground_truth.json"
+MAX_REPORT_BYTES=1048576
+
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
+
+if [[ ! -f "$GT" ]]; then
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+if [[ -L "$REPORT" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md is a symlink, not a regular file"
+fi
+if [[ ! -f "$REPORT" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md not found"
+fi
+if [[ "$(wc -c <"$REPORT")" -gt "$MAX_REPORT_BYTES" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md exceeds ${MAX_REPORT_BYTES} bytes"
 fi
 
-FOUND=0
-TOTAL=3
-if grep -qiE 'grpc-go|grpc.go' "$ANSWER"; then FOUND=$((FOUND + 1)); fi
-if grep -qiE 'etcd' "$ANSWER"; then FOUND=$((FOUND + 1)); fi
-if grep -qiE 'kubernetes' "$ANSWER"; then FOUND=$((FOUND + 1)); fi
+export REPORT GT CHECKPOINT
+python3 -c '
+import json, os
 
-SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
-if [ "$FOUND" -ge "$TOTAL" ]; then PASSED=true; else PASSED=false; fi
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
-printf '{"score": %s, "passed": %s, "reason": "Found %d/%d repos in plan"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"
+with open(os.environ["GT"]) as fh:
+    gt = json.load(fh)
+evidence = (gt.get("scoring_evidence") or {}).get(os.environ["CHECKPOINT"]) or []
+if not evidence:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no scoring_evidence for " + os.environ["CHECKPOINT"])
+
+with open(os.environ["REPORT"], encoding="utf-8", errors="replace") as fh:
+    text = fh.read().lower()
+
+found = sum(1 for token in evidence if token.lower() in text)
+verdict(found / len(evidence),
+        "Cited %d/%d non-prompt evidence tokens for %s" % (found, len(evidence), os.environ["CHECKPOINT"]))
+'

@@ -1,7 +1,9 @@
 {
   "candidate_id": 1,
   "repo": "babel/babel",
-  "pr_refs": ["#16154"],
+  "pr_refs": [
+    "#16154"
+  ],
   "release": "v7.23.6",
   "description": "Remove TSPropertySignature.initializer from @babel/types cascades to parser and generator",
   "changed_package": {
@@ -45,9 +47,32 @@
   "verification": {
     "method": "gh_api_pr_files",
     "pr_file_count": 7,
-    "packages_touched": ["babel-types", "babel-parser", "babel-generator"],
+    "packages_touched": [
+      "babel-types",
+      "babel-parser",
+      "babel-generator"
+    ],
     "verified": true
   },
   "difficulty": "medium",
-  "confidence": 0.97
+  "confidence": 0.97,
+  "scoring_evidence": {
+    "identify_affected_packages": [
+      "packages/babel-types/src/ast-types/generated/index.ts",
+      "packages/babel-types/src/builders/generated/index.ts",
+      "packages/babel-parser/src/types.d.ts",
+      "packages/babel-generator/src/generators/typescript.ts"
+    ],
+    "classify_change_impact": [
+      "packages/babel-types/src/ast-types/generated/index.ts",
+      "packages/babel-types/src/builders/generated/index.ts"
+    ],
+    "identify_boundary_violations": [
+      "packages/babel-parser/src/types.d.ts",
+      "packages/babel-generator/src/generators/typescript.ts",
+      "packages/babel-types/src/ast-types/generated/index.ts",
+      "packages/babel-types/src/builders/generated/index.ts",
+      "packages/babel-parser/test/fixtures/typescript/interface/property-initializer/input.ts"
+    ]
+  }
 }

@@ -1,7 +1,10 @@
 {
   "candidate_id": 6,
   "repo": "pnpm/pnpm",
-  "pr_refs": ["#7470", "#7476"],
+  "pr_refs": [
+    "#7470",
+    "#7476"
+  ],
   "release": "v9.0.0",
   "description": "Lockfile v6 format change in @pnpm/constants and @pnpm/dependency-path cascades through lockfile and resolution packages",
   "changed_package": {
@@ -71,7 +74,7 @@
       "affected_files": [
         "lockfile/prune-lockfile/test/index.ts"
       ],
-      "confidence": 0.90
+      "confidence": 0.9
     },
     {
       "name": "@pnpm/filter-lockfile",
@@ -124,9 +127,47 @@
   "verification": {
     "method": "gh_api_pr_files",
     "pr_file_count": 30,
-    "packages_touched": ["constants", "dependency-path", "lockfile-file", "lockfile-utils", "lockfile-to-pnp", "merge-lockfile-changes", "prune-lockfile", "filter-lockfile", "calc-dep-state", "plugin-commands-rebuild", "audit"],
+    "packages_touched": [
+      "constants",
+      "dependency-path",
+      "lockfile-file",
+      "lockfile-utils",
+      "lockfile-to-pnp",
+      "merge-lockfile-changes",
+      "prune-lockfile",
+      "filter-lockfile",
+      "calc-dep-state",
+      "plugin-commands-rebuild",
+      "audit"
+    ],
     "verified": true
   },
   "difficulty": "expert",
-  "confidence": 0.92
+  "confidence": 0.92,
+  "scoring_evidence": {
+    "identify_affected_packages": [
+      "packages/constants/src/index.ts",
+      "packages/dependency-path/src/index.ts",
+      "packages/dependency-path/test/index.ts",
+      "lockfile/lockfile-file/src/write.ts",
+      "lockfile/lockfile-file/src/experiments/inlineSpecifiersLockfileConverters.ts",
+      "inlineSpecifiersLockfileConverters"
+    ],
+    "classify_change_impact": [
+      "lockfile/lockfile-file/src/experiments/inlineSpecifiersLockfileConverters.ts",
+      "inlineSpecifiersLockfileConverters"
+    ],
+    "identify_boundary_violations": [
+      "packages/constants/src/index.ts",
+      "packages/dependency-path/src/index.ts",
+      "packages/dependency-path/test/index.ts",
+      "lockfile/lockfile-file/src/write.ts",
+      "lockfile/lockfile-file/src/experiments/inlineSpecifiersLockfileConverters.ts",
+      "lockfile/lockfile-file/test/lockfileV6Converters.test.ts",
+      "lockfile/lockfile-file/test/normalizeLockfile.test.ts",
+      "lockfile/lockfile-file/test/write.test.ts",
+      "lockfile/lockfile-utils/test/nameVerFromPkgSnapshot.ts",
+      "lockfile/lockfile-utils/test/pkgSnapshotToResolution.ts"
+    ]
+  }
 }

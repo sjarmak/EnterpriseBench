@@ -83,5 +83,30 @@
   "verification": {
     "method": "source_analysis",
     "verified": true
+  },
+  "scoring_evidence": {
+    "identify_packages": [
+      "ObjectMapper.java",
+      "MappingJackson2HttpMessageConverter.java",
+      "JacksonAutoConfiguration.java",
+      "Jackson2ObjectMapperBuilder.java",
+      "Module.java"
+    ],
+    "trace_integration_path": [
+      "ObjectMapper.java",
+      "MappingJackson2HttpMessageConverter.java",
+      "JacksonAutoConfiguration.java",
+      "Jackson2ObjectMapperBuilder.java",
+      "Module.java",
+      "task.toml"
+    ],
+    "autoconfiguration_analysis": [
+      "ObjectMapper.java",
+      "MappingJackson2HttpMessageConverter.java",
+      "JacksonAutoConfiguration.java",
+      "Jackson2ObjectMapperBuilder.java",
+      "Module.java",
+      "ConditionalOn"
+    ]
   }
 }

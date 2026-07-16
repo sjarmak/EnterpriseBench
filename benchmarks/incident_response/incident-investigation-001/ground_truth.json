@@ -1,7 +1,11 @@
 {
   "candidate_id": "incident-inv-001",
-  "repos": ["kubernetes/kubernetes"],
-  "issue_refs": ["#49956"],
+  "repos": [
+    "kubernetes/kubernetes"
+  ],
+  "issue_refs": [
+    "#49956"
+  ],
   "fix_pr": "#49992",
   "fix_merged": "2017-08-02",
   "buggy_rev": "v1.7.3",
@@ -46,5 +50,29 @@
     "staging/src/k8s.io/apiserver/pkg/storage/tests/cacher_test.go"
   ],
   "difficulty": "hard",
-  "confidence": 0.97
+  "confidence": 0.97,
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go",
+      "watch_cache",
+      "GetAllEventsSinceThreadUnsafe"
+    ],
+    "error_chain_trace": [
+      "cacher.go",
+      "watch_cache.go",
+      "watcher.go",
+      "watch_cache"
+    ],
+    "affected_services": [
+      "staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go",
+      "staging/src/k8s.io/apiserver/pkg/storage/cacher.go",
+      "watch_cache"
+    ],
+    "remediation_proposal": [
+      "staging/src/k8s.io/apiserver/pkg/storage/watch_cache.go",
+      "staging/src/k8s.io/apiserver/pkg/storage/tests/cacher_test.go",
+      "watch_cache",
+      "cacher_test"
+    ]
+  }
 }

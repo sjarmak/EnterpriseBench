@@ -1,7 +1,9 @@
 {
   "candidate_id": 8,
   "repo": "pnpm/pnpm",
-  "pr_refs": ["#8897"],
+  "pr_refs": [
+    "#8897"
+  ],
   "release": "v10.0.0",
   "description": "Lifecycle scripts allow-list by default in @pnpm/config cascades to installation, core, build-modules, and headless packages",
   "changed_package": {
@@ -21,7 +23,7 @@
       "affected_files": [
         "exec/plugin-commands-rebuild/test/index.ts"
       ],
-      "confidence": 0.90
+      "confidence": 0.9
     },
     {
       "name": "pnpm (CLI)",
@@ -43,9 +45,34 @@
   "verification": {
     "method": "gh_api_pr_files",
     "pr_file_count": 6,
-    "packages_touched": ["config", "plugin-commands-rebuild", "pnpm"],
+    "packages_touched": [
+      "config",
+      "plugin-commands-rebuild",
+      "pnpm"
+    ],
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.91
+  "confidence": 0.91,
+  "scoring_evidence": {
+    "identify_affected_packages": [
+      "exec/plugin-commands-rebuild/test/index.ts",
+      "pnpm/test/install/global.ts",
+      "pnpm/test/install/lifecycleScripts.ts",
+      "pnpm/test/monorepo/index.ts",
+      "onlyBuiltDependencies",
+      "lifecycleScripts"
+    ],
+    "classify_change_impact": [
+      "exec/plugin-commands-rebuild/test/index.ts",
+      "pnpm/test/install/global.ts"
+    ],
+    "identify_boundary_violations": [
+      "exec/plugin-commands-rebuild/test/index.ts",
+      "pnpm/test/install/lifecycleScripts.ts",
+      "pnpm/test/install/global.ts",
+      "pnpm/test/monorepo/index.ts",
+      "lifecycleScripts"
+    ]
+  }
 }

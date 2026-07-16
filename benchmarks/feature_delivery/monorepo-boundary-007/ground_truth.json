@@ -1,7 +1,10 @@
 {
   "candidate_id": 9,
   "repo": "pnpm/pnpm",
-  "pr_refs": ["#8530", "#8557"],
+  "pr_refs": [
+    "#8530",
+    "#8557"
+  ],
   "release": "v10.0.0",
   "description": "SHA256 migration for pnpmfile checksum + escape # in dir names cascades through crypto, dependency-path, and core packages",
   "changed_package": {
@@ -68,9 +71,39 @@
     "method": "gh_api_pr_files",
     "pr_file_count_8530": 9,
     "pr_file_count_8557": 4,
-    "packages_touched": ["crypto/hash", "hooks/pnpmfile", "dependency-path", "pnpm", "pkg-manager/core"],
+    "packages_touched": [
+      "crypto/hash",
+      "hooks/pnpmfile",
+      "dependency-path",
+      "pnpm",
+      "pkg-manager/core"
+    ],
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.91
+  "confidence": 0.91,
+  "scoring_evidence": {
+    "identify_affected_packages": [
+      "packages/dependency-path/src/index.ts",
+      "packages/dependency-path/test/index.ts",
+      "hooks/pnpmfile/src/requireHooks.ts",
+      "pnpm/test/hooks.ts",
+      "pkg-manager/core/test/install/fromRepo.ts",
+      "requireHooks",
+      "fromRepo"
+    ],
+    "classify_change_impact": [
+      "packages/dependency-path/src/index.ts",
+      "packages/dependency-path/test/index.ts"
+    ],
+    "identify_boundary_violations": [
+      "packages/dependency-path/src/index.ts",
+      "packages/dependency-path/test/index.ts",
+      "hooks/pnpmfile/src/requireHooks.ts",
+      "pnpm/test/hooks.ts",
+      "pkg-manager/core/test/install/fromRepo.ts",
+      "requireHooks",
+      "fromRepo"
+    ]
+  }
 }

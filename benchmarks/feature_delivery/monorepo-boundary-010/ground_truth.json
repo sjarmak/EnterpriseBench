@@ -1,13 +1,15 @@
 {
   "candidate_id": 15,
   "repo": "rust-lang/rust",
-  "pr_refs": ["#116564"],
+  "pr_refs": [
+    "#116564"
+  ],
   "release": "nightly-2024-02-15",
   "description": "Store static initializers in metadata instead of MIR cascades through const_eval, codegen, metadata, and mir_build crates",
   "changed_package": {
     "name": "rustc_middle",
     "path": "compiler/rustc_middle",
-    "change_summary": "Changed MIR representation for static initializers — store in metadata directly instead of as MIR bodies",
+    "change_summary": "Changed MIR representation for static initializers \u2014 store in metadata directly instead of as MIR bodies",
     "changed_files": [
       "compiler/rustc_middle/src/mir/interpret/error.rs",
       "compiler/rustc_middle/src/mir/interpret/mod.rs",
@@ -24,7 +26,7 @@
       "name": "rustc_const_eval",
       "path": "compiler/rustc_const_eval",
       "semver_bump": "minor",
-      "impact": "Static initializer evaluation changed — new error types, machine updates, interpreter changes for metadata-based statics",
+      "impact": "Static initializer evaluation changed \u2014 new error types, machine updates, interpreter changes for metadata-based statics",
       "affected_files": [
         "compiler/rustc_const_eval/messages.ftl",
         "compiler/rustc_const_eval/src/const_eval/error.rs",
@@ -66,7 +68,7 @@
       "affected_files": [
         "compiler/rustc_mir_transform/src/gvn.rs"
       ],
-      "confidence": 0.90
+      "confidence": 0.9
     },
     {
       "name": "miri",
@@ -86,10 +88,46 @@
   "verification": {
     "method": "gh_api_pr_files",
     "pr_file_count": 30,
-    "packages_touched": ["rustc_middle", "rustc_const_eval", "rustc_metadata", "rustc_mir_transform", "miri"],
+    "packages_touched": [
+      "rustc_middle",
+      "rustc_const_eval",
+      "rustc_metadata",
+      "rustc_mir_transform",
+      "miri"
+    ],
     "cargo_workspace": true,
     "verified": true
   },
   "difficulty": "hard",
-  "confidence": 0.93
+  "confidence": 0.93,
+  "scoring_evidence": {
+    "identify_affected_packages": [
+      "compiler/rustc_middle/src/mir/interpret/error.rs",
+      "compiler/rustc_middle/src/mir/interpret/mod.rs",
+      "compiler/rustc_middle/src/mir/interpret/queries.rs",
+      "compiler/rustc_middle/src/mir/mod.rs",
+      "compiler/rustc_middle/src/mir/pretty.rs",
+      "compiler/rustc_middle/src/query/erase.rs",
+      "compiler/rustc_middle/src/query/mod.rs",
+      "compiler/rustc_middle/src/ty/parameterized.rs",
+      "src/tools/miri/src/shims/intrinsics/mod.rs",
+      "compiler/rustc_metadata/src/rmeta/encoder.rs"
+    ],
+    "classify_change_impact": [
+      "compiler/rustc_middle/src/mir/interpret/error.rs",
+      "compiler/rustc_middle/src/mir/interpret/mod.rs"
+    ],
+    "identify_boundary_violations": [
+      "compiler/rustc_middle/src/mir/interpret/error.rs",
+      "compiler/rustc_middle/src/mir/interpret/mod.rs",
+      "queries.rs",
+      "compiler/rustc_middle/src/mir/mod.rs",
+      "pretty.rs",
+      "compiler/rustc_middle/src/query/erase.rs",
+      "query/mod.rs",
+      "compiler/rustc_middle/src/ty/parameterized.rs",
+      "compiler/rustc_const_eval/src/const_eval/error.rs",
+      "compiler/rustc_const_eval/src/const_eval/eval_queries.rs"
+    ]
+  }
 }

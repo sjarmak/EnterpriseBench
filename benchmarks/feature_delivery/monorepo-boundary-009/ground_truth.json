@@ -1,7 +1,9 @@
 {
   "candidate_id": 13,
   "repo": "rust-lang/rust",
-  "pr_refs": ["#134381"],
+  "pr_refs": [
+    "#134381"
+  ],
   "release": "nightly-2024-12-18",
   "description": "Split rustc_attr into rustc_attr_parsing + rustc_attr_data_structures cascades through compiler crates",
   "changed_package": {
@@ -85,10 +87,48 @@
   "verification": {
     "method": "gh_api_pr_files",
     "pr_file_count": 31,
-    "packages_touched": ["rustc_attr", "rustc_attr_parsing", "rustc_attr_data_structures", "rustc_ast_passes", "rustc_builtin_macros", "rustc_codegen_llvm", "rustc_codegen_gcc"],
+    "packages_touched": [
+      "rustc_attr",
+      "rustc_attr_parsing",
+      "rustc_attr_data_structures",
+      "rustc_ast_passes",
+      "rustc_builtin_macros",
+      "rustc_codegen_llvm",
+      "rustc_codegen_gcc"
+    ],
     "cargo_workspace": true,
     "verified": true
   },
   "difficulty": "expert",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "scoring_evidence": {
+    "identify_affected_packages": [
+      "lib.rs",
+      "compiler/rustc_attr/src/builtin.rs",
+      "allow_unstable",
+      "session_diagnostics",
+      "rustc_ast_passes",
+      "rustc_builtin_macros",
+      "rustc_codegen_llvm",
+      "rustc_codegen_gcc"
+    ],
+    "classify_change_impact": [
+      "rustc_ast_passes",
+      "rustc_builtin_macros",
+      "rustc_codegen_llvm",
+      "rustc_codegen_gcc"
+    ],
+    "identify_boundary_violations": [
+      "compiler/rustc_attr/src/builtin.rs",
+      "lib.rs",
+      "compiler/rustc_ast_passes/Cargo.toml",
+      "compiler/rustc_ast_passes/src/ast_validation.rs",
+      "compiler/rustc_builtin_macros/Cargo.toml",
+      "compiler/rustc_builtin_macros/src/cfg.rs",
+      "compiler/rustc_builtin_macros/src/deriving/coerce_pointee.rs",
+      "compiler/rustc_builtin_macros/src/deriving/generic/mod.rs",
+      "compiler/rustc_codegen_llvm/Cargo.toml",
+      "compiler/rustc_codegen_llvm/src/attributes.rs"
+    ]
+  }
 }

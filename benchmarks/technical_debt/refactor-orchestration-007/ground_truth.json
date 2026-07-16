@@ -1,7 +1,11 @@
 {
   "candidate_id": "refactor-orch-007",
   "description": "grpc.Dial to grpc.NewClient API migration across grpc-go, etcd, and Kubernetes",
-  "repos": ["grpc/grpc-go", "etcd-io/etcd", "kubernetes/kubernetes"],
+  "repos": [
+    "grpc/grpc-go",
+    "etcd-io/etcd",
+    "kubernetes/kubernetes"
+  ],
   "merge_order": [
     {
       "repo": "grpc/grpc-go",
@@ -23,14 +27,33 @@
   ],
   "dependency_graph": {
     "grpc/grpc-go": [],
-    "etcd-io/etcd": ["grpc/grpc-go"],
-    "kubernetes/kubernetes": ["grpc/grpc-go", "etcd-io/etcd"]
+    "etcd-io/etcd": [
+      "grpc/grpc-go"
+    ],
+    "kubernetes/kubernetes": [
+      "grpc/grpc-go",
+      "etcd-io/etcd"
+    ]
   },
   "parallelizable_steps": [],
   "difficulty": "expert",
-  "confidence": 0.90,
+  "confidence": 0.9,
   "verification": {
     "method": "pr_chronology",
     "verified": true
+  },
+  "scoring_evidence": {
+    "identify_repos": [
+      "grpc.go",
+      "check_repo_set"
+    ],
+    "topological_order": [
+      "dependency_graph",
+      "merged_at"
+    ],
+    "parallelism": [
+      "parallelizable_steps",
+      "dependency_graph"
+    ]
   }
 }

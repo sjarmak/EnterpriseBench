@@ -1,7 +1,13 @@
 {
   "candidate_id": "incident-inv-004",
-  "repos": ["moby/moby", "containerd/containerd"],
-  "issue_refs": ["moby#49784", "containerd#8973"],
+  "repos": [
+    "moby/moby",
+    "containerd/containerd"
+  ],
+  "issue_refs": [
+    "moby#49784",
+    "containerd#8973"
+  ],
   "fix_pr": "moby#49786",
   "fix_status": "open_pr",
   "buggy_rev": "v28.0.0",
@@ -11,7 +17,7 @@
     "repo": "containerd",
     "function": "doUnpackFn (closure in unpack method)",
     "summary": "When pulling an image with WithPullUnpack, containerd's unpacker checks if a snapshot already exists for each layer (via sn.Stat on the chainID). If the snapshot exists, the unpacker returns nil immediately without ever initiating the layer content fetch. This means the compressed layer blob is never downloaded to the content store. On the moby side, daemon/containerd/image_pull.go unconditionally passes containerd.WithPullUnpack during pullTag, triggering this codepath for all pulls regardless of snapshotter type.",
-    "mechanism": "The unpacker's doUnpackFn checks sn.Stat(ctx, chainID) at the start. If the snapshot exists (err == nil), it returns nil — skipping both the snapshot preparation AND the content fetch goroutine (which is only started after sn.Prepare). The layer blob is never written to the content store. When docker save later tries to export the image, the missing blobs cause incomplete archives."
+    "mechanism": "The unpacker's doUnpackFn checks sn.Stat(ctx, chainID) at the start. If the snapshot exists (err == nil), it returns nil \u2014 skipping both the snapshot preparation AND the content fetch goroutine (which is only started after sn.Prepare). The layer blob is never written to the content store. When docker save later tries to export the image, the missing blobs cause incomplete archives."
   },
   "error_chain": [
     {
@@ -32,7 +38,7 @@
     },
     {
       "component": "containerd content store",
-      "action": "Layer blob is never written — content store has no record of the layer's compressed data"
+      "action": "Layer blob is never written \u2014 content store has no record of the layer's compressed data"
     },
     {
       "component": "moby daemon/containerd/image_exporter.go ExportImage",
@@ -53,7 +59,51 @@
     "containerd snapshotter (has snapshots but content not synced)"
   ],
   "remediation": "In moby daemon/containerd/image_pull.go: do not use WithPullUnpack for local snapshotters like overlayfs. Only use it for remote snapshotters where deferred layer download is needed. This is the approach taken by the fix PR (moby#49786). Alternatively, fix containerd's unpacker to always fetch layer content into the content store even when snapshots already exist, decoupling content availability from snapshot existence.",
-  "fix_files": ["daemon/containerd/image_pull.go"],
+  "fix_files": [
+    "daemon/containerd/image_pull.go"
+  ],
   "difficulty": "hard",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "pkg/unpack/unpacker.go",
+      "daemon/containerd/image_pull.go",
+      "WithPullUnpack",
+      "doUnpackFn",
+      "chainID",
+      "image_pull",
+      "pullTag",
+      "AlreadyExists"
+    ],
+    "error_chain_trace": [
+      "daemon/containerd/image_pull.go",
+      "client/pull.go",
+      "daemon/containerd/image_exporter.go",
+      "image_pull.go",
+      "pkg/unpack/unpacker.go",
+      "pullTag",
+      "image_pull",
+      "WithPullUnpack",
+      "pullCtx",
+      "doUnpackFn"
+    ],
+    "affected_services": [
+      "daemon/containerd/image_pull.go",
+      "daemon/containerd/image_exporter.go",
+      "pkg/unpack/unpacker.go",
+      "client/pull.go",
+      "image_pull",
+      "pullTag",
+      "WithPullUnpack",
+      "image_exporter",
+      "ExportImage",
+      "doUnpackFn"
+    ],
+    "remediation_proposal": [
+      "daemon/containerd/image_pull.go",
+      "image_pull.go",
+      "image_pull",
+      "WithPullUnpack"
+    ]
+  }
 }

@@ -1,8 +1,14 @@
 {
   "candidate_id": "AC-8",
   "producer_repo": "envoyproxy/envoy",
-  "consumer_repos": ["envoyproxy/go-control-plane", "istio/istio"],
-  "breaking_change_prs": ["envoyproxy/envoy#14223", "envoyproxy/envoy#15481"],
+  "consumer_repos": [
+    "envoyproxy/go-control-plane",
+    "istio/istio"
+  ],
+  "breaking_change_prs": [
+    "envoyproxy/envoy#14223",
+    "envoyproxy/envoy#15481"
+  ],
   "consumer_fix_prs": [
     "envoyproxy/go-control-plane#415",
     "istio/istio#22919",
@@ -36,5 +42,43 @@
     ]
   },
   "difficulty": "expert",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "scoring_evidence": {
+    "identify_breaking_api": [
+      "source/common/config/api_type_oracle.cc",
+      "test/integration/ads_integration_test.cc",
+      "test/config_test/config_test.cc",
+      "api_type_oracle.cc",
+      "ads_integration_test.cc",
+      "config_test.cc",
+      "envoyproxy/envoy#14223",
+      "envoyproxy/envoy#15481",
+      "api_type_oracle",
+      "ads_integration_test"
+    ],
+    "find_direct_consumers": [
+      "pkg/cache/v2/cache.go",
+      "pkg/cache/v2/resource.go",
+      "pkg/cache/v2/simple_test.go",
+      "pkg/server/v2/server.go",
+      "pilot/pkg/networking/core/v1alpha3/cluster.go",
+      "pilot/pkg/networking/core/v1alpha3/cluster_builder.go",
+      "pilot/pkg/networking/core/v1alpha3/listener.go",
+      "pilot/pkg/networking/core/v1alpha3/route/route.go",
+      "pilot/pkg/proxy/envoy/v2/ads.go",
+      "pilot/pkg/proxy/envoy/v2/cds.go"
+    ],
+    "trace_transitive_impact": [
+      "envoyproxy/go-control-plane#415",
+      "istio/istio#22919",
+      "istio/istio#23962",
+      "istio/istio#24588"
+    ],
+    "classify_breakage": [
+      "runtime_fatal",
+      "compile_and_runtime",
+      "compile_only",
+      "runtime_only"
+    ]
+  }
 }

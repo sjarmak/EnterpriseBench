@@ -1,46 +1,51 @@
 #!/usr/bin/env bash
-# Checkpoint 2: Verify topological ordering of proposed refactor plan
+# check_topo_order.sh — checkpoint "topological_order"
+#
+# Re-anchored to ground_truth.json:scoring_evidence[topological_order]
+# (EnterpriseBench-jn73.2.7.3.1). Credits ONLY non-prompt evidence — tokens
+# absent from instruction.md and present in expected_solution.json — so a
+# verbatim prompt copy scores 0. ground_truth.json is sealed root-only.
 set -euo pipefail
 
-ANSWER="${WORKSPACE:-/workspace}/REFACTOR_PLAN.md"
-GT="${TASK_DIR:-$(dirname "$(dirname "$0")")}/ground_truth.json"
+CHECKPOINT="topological_order"
+WORKSPACE="${WORKSPACE:-/workspace}"
+REPORT="$WORKSPACE/REFACTOR_PLAN.md"
+GT="${TASK_DIR:-}/ground_truth.json"
+MAX_REPORT_BYTES=1048576
 
-if [[ ! -f "$ANSWER" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "REFACTOR_PLAN.md not found"}\n'
-  exit 0
-fi
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
 
 if [[ ! -f "$GT" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "ground_truth.json not found"}\n'
-  exit 0
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+if [[ -L "$REPORT" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md is a symlink, not a regular file"
+fi
+if [[ ! -f "$REPORT" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md not found"
+fi
+if [[ "$(wc -c <"$REPORT")" -gt "$MAX_REPORT_BYTES" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md exceeds ${MAX_REPORT_BYTES} bytes"
 fi
 
-# Determine lib path (4 levels up from checks/ dir)
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LIB_DIR="$(cd "$SCRIPT_DIR/../../../../lib" 2>/dev/null && pwd || echo "")"
+export REPORT GT CHECKPOINT
+python3 -c '
+import json, os
 
-export GT_FILE="$GT"
-export ANSWER_FILE="$ANSWER"
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
-python3 - "$LIB_DIR" <<'PYEOF'
-import json, sys, os
+with open(os.environ["GT"]) as fh:
+    gt = json.load(fh)
+evidence = (gt.get("scoring_evidence") or {}).get(os.environ["CHECKPOINT"]) or []
+if not evidence:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no scoring_evidence for " + os.environ["CHECKPOINT"])
 
-lib_dir = sys.argv[1]
-if lib_dir:
-    sys.path.insert(0, lib_dir)
+with open(os.environ["REPORT"], encoding="utf-8", errors="replace") as fh:
+    text = fh.read().lower()
 
-with open(os.environ['GT_FILE']) as f:
-    gt = json.load(f)
-
-with open(os.environ['ANSWER_FILE']) as f:
-    plan_text = f.read()
-
-dep_graph = gt.get('dependency_graph', {})
-
-from eb_verify.plugins.topological_order import validate_refactor_plan_markdown
-
-result = validate_refactor_plan_markdown(plan_text, dep_graph)
-score = result['score']
-passed = score >= 0.5
-print(json.dumps({'score': score, 'passed': passed, 'reason': result['detail']}))
-PYEOF
+found = sum(1 for token in evidence if token.lower() in text)
+verdict(found / len(evidence),
+        "Cited %d/%d non-prompt evidence tokens for %s" % (found, len(evidence), os.environ["CHECKPOINT"]))
+'

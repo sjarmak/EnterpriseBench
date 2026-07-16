@@ -22,7 +22,9 @@
   ],
   "dependency_graph": {
     "spring-projects/spring-framework": [],
-    "spring-projects/spring-kafka": ["spring-projects/spring-framework"],
+    "spring-projects/spring-kafka": [
+      "spring-projects/spring-framework"
+    ],
     "spring-projects/spring-boot": [
       "spring-projects/spring-framework",
       "spring-projects/spring-kafka"
@@ -58,5 +60,30 @@
   "verification": {
     "method": "dependency_analysis",
     "verified": true
+  },
+  "scoring_evidence": {
+    "identify_repos": [
+      "spring-messaging/src/main/java/org/springframework/messaging/handler/annotation/support/MessageHandlerMethodFactory.java",
+      "spring-kafka/src/main/java/org/springframework/kafka/listener/ConcurrentMessageListenerContainer.java",
+      "spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/kafka/KafkaAutoConfiguration.java",
+      "SmartLifecycle",
+      "MessageHandlerMethodFactory",
+      "KafkaListener",
+      "KafkaAutoConfiguration",
+      "KafkaProperties",
+      "check_repo_set"
+    ],
+    "topological_order": [
+      "SmartLifecycle",
+      "KafkaListener",
+      "KafkaAutoConfiguration",
+      "KafkaProperties",
+      "dependency_graph"
+    ],
+    "parallelism": [
+      "KafkaProperties",
+      "parallelizable_steps",
+      "KafkaAutoConfiguration"
+    ]
   }
 }

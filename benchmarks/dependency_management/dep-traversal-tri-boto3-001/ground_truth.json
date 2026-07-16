@@ -56,7 +56,11 @@
       "from": "boto3",
       "to": "s3transfer",
       "relationship": "boto3 S3 resource upload_file delegates to s3transfer TransferManager",
-      "key_classes": ["S3Transfer", "TransferConfig", "upload_file"]
+      "key_classes": [
+        "S3Transfer",
+        "TransferConfig",
+        "upload_file"
+      ]
     },
     {
       "from": "s3transfer",
@@ -86,5 +90,26 @@
   "verification": {
     "method": "source_analysis",
     "verified": true
+  },
+  "scoring_evidence": {
+    "identify_api_surface": [
+      "transfer.py",
+      "manager.py",
+      "client.py",
+      "tasks.py",
+      "serialize.py"
+    ],
+    "trace_transfer_path": [
+      "transfer.py",
+      "manager.py",
+      "client.py",
+      "tasks.py",
+      "serialize.py",
+      "task.toml"
+    ],
+    "botocore_integration": [
+      "client.py",
+      "serialize.py"
+    ]
   }
 }

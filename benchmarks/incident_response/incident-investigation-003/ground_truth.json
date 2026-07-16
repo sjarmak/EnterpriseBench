@@ -52,5 +52,24 @@
     }
   ],
   "difficulty": "hard",
-  "confidence": 0.96
+  "confidence": 0.96,
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "pkg/util/converter/prom.go",
+      "web/api/v1/api.go"
+    ],
+    "error_chain_trace": [
+      "web/api/v1/api.go",
+      "pkg/util/converter/prom.go"
+    ],
+    "affected_services": [
+      "pkg/util/converter/prom.go",
+      "pkg/util/converter/prom_test.go",
+      "prom_test"
+    ],
+    "remediation_proposal": [
+      "prom.go",
+      "pkg/util/converter/prom.go"
+    ]
+  }
 }
