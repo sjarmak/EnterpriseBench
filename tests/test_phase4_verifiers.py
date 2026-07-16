@@ -371,10 +371,13 @@ CONFIG_DRIFT_TASKS: list[TaskSpec] = [
     TaskSpec(
         task_dir=_CD_DIR / "config-drift-001",
         report_path="charts/DRIFT_REPORT.json",
+        # validate_corrected_config / check_config_valid.sh was removed in
+        # 6cbbc54: instruction.md never asks for a corrected config, so it graded
+        # an artifact a compliant agent has no reason to produce and paid 1.0 for
+        # its absence. Weights redistributed 0.40:0.35 -> 0.55:0.45.
         checks=[
-            CheckSpec("check_drift_points.sh", 0.40),
-            CheckSpec("check_expected_values.sh", 0.35),
-            CheckSpec("check_config_valid.sh", 0.25),
+            CheckSpec("check_drift_points.sh", 0.55),
+            CheckSpec("check_expected_values.sh", 0.45),
         ],
         gt_answer=json.dumps({
             "drift_points": [
@@ -410,45 +413,77 @@ CONFIG_DRIFT_TASKS: list[TaskSpec] = [
     TaskSpec(
         task_dir=_CD_DIR / "config-drift-002",
         report_path="charts/DRIFT_REPORT.json",
+        # Rebuilt in 2c1ac55. check_config_valid.sh removed (never-requested
+        # artifact, paid 1.0 for its absence); determine_expected_values became
+        # config_hierarchy, the instruction's actual first ask.
         checks=[
-            CheckSpec("check_drift_points.sh", 0.40),
-            CheckSpec("check_expected_values.sh", 0.35),
-            CheckSpec("check_config_valid.sh", 0.25),
+            CheckSpec("check_drift_points.sh", 0.55),
+            CheckSpec("check_config_hierarchy.sh", 0.45),
         ],
+        # This fixture previously restated the FABRICATED key it was written
+        # from: it blamed _helpers.tpl for the erlangCookie validation (that file
+        # contains 0 hits for it; NOTES.txt:87 has it) and otherwise paraphrased
+        # instruction.md. It scored 1.0 against the old blob-grep check and 0.0
+        # against the rebuilt one, which is the point — replaced with the answer
+        # verified against the chart at 53aca511 (2c1ac55).
         gt_answer=json.dumps({
             "drift_points": [
                 {
-                    "file": "bitnami/spring-cloud-dataflow/templates/externalrabbitmq-secrets.yaml",
-                    "key": "external rabbitmq secret key parameter",
-                    "expected": "password should be optional when using existingSecret; secret key name should be configurable",
-                    "actual": "password is required even with existingSecret; secret key hardcoded",
-                    "override_chain": ["values.yaml -> _helpers.tpl -> secrets template"]
-                },
-                {
                     "file": "bitnami/spring-cloud-dataflow/values.yaml",
-                    "key": "externalRabbitmq password requirement",
-                    "expected": "password not required when external secret is provided; not mandatory",
-                    "actual": "password field required unconditionally",
-                    "override_chain": ["values.yaml -> validation"]
+                    "key": "externalRabbitmq.existingPasswordSecret",
+                    "expected": "a name + key pair, mirroring externalDatabase.existingPasswordSecret / externalDatabase.existingPasswordKey",
+                    "actual": "a secret name only; no key parameter exists for externalRabbitmq",
+                    "override_chain": [
+                        "values.yaml:externalRabbitmq.existingPasswordSecret",
+                        "_helpers.tpl:scdf.rabbitmq.secretName resolves the NAME only",
+                    ],
                 },
                 {
-                    "file": "bitnami/spring-cloud-dataflow/templates/_helpers.tpl",
-                    "key": "erlangCookie external database inconsistency",
-                    "expected": "consistent with external rabbitmq pattern",
-                    "actual": "inconsistent handling between external database and rabbitmq",
-                    "override_chain": ["values.yaml -> helpers -> templates"]
-                }
+                    "file": "bitnami/spring-cloud-dataflow/templates/skipper/configmap.yaml",
+                    "key": "SPRING_RABBITMQ_PASSWORD",
+                    "expected": "read the password from a configurable key",
+                    "actual": "SPRING_RABBITMQ_PASSWORD=${rabbitmq-password} hardcodes the key rabbitmq-password",
+                    "override_chain": [
+                        "scdf.rabbitmq.secretName",
+                        "skipper/configmap.yaml:${rabbitmq-password}",
+                    ],
+                },
+                {
+                    "file": "bitnami/spring-cloud-dataflow/templates/NOTES.txt",
+                    "key": "rabbitmq.auth.erlangCookie",
+                    "expected": "not validated on the external path",
+                    "actual": "$requiredErlangPassword with field rabbitmq-erlang-cookie is validated whenever externalRabbitmq is enabled without an existing secret",
+                    "override_chain": [
+                        "NOTES.txt:85 guard",
+                        "NOTES.txt:87",
+                        "common.validations.values.multiple.empty",
+                    ],
+                },
+                {
+                    "file": "bitnami/spring-cloud-dataflow/templates/NOTES.txt",
+                    "key": "$secretNameRabbitmq",
+                    "expected": "include scdf.rabbitmq.secretName",
+                    "actual": "include scdf.rabbitmq.fullname names the bundled subchart's secret",
+                    "override_chain": ["NOTES.txt:77"],
+                },
             ]
         }, indent=2),
         partial_answer=json.dumps({
             "drift_points": [
                 {
-                    "file": "bitnami/spring-cloud-dataflow/templates/externalrabbitmq-secrets.yaml",
-                    "key": "external rabbitmq secret key",
-                    "expected": "password optional with existingSecret",
-                    "actual": "password required always",
-                    "override_chain": ["values.yaml -> secrets template"]
-                }
+                    "file": "bitnami/spring-cloud-dataflow/values.yaml",
+                    "key": "externalRabbitmq.existingPasswordSecret",
+                    "expected": "a name + key pair like externalDatabase.existingPasswordKey",
+                    "actual": "name only, no key parameter",
+                    "override_chain": ["values.yaml -> scdf.rabbitmq.secretName"],
+                },
+                {
+                    "file": "bitnami/spring-cloud-dataflow/templates/skipper/configmap.yaml",
+                    "key": "SPRING_RABBITMQ_PASSWORD",
+                    "expected": "configurable key",
+                    "actual": "hardcodes rabbitmq-password",
+                    "override_chain": ["skipper/configmap.yaml"],
+                },
             ]
         }, indent=2),
     ),
@@ -456,40 +491,70 @@ CONFIG_DRIFT_TASKS: list[TaskSpec] = [
     TaskSpec(
         task_dir=_CD_DIR / "config-drift-003",
         report_path="charts/DRIFT_REPORT.json",
+        # Rebuilt in 80ca4f8. check_config_valid.sh removed (never-requested
+        # artifact); determine_expected_values became root_cause_mechanism —
+        # what its description always said it graded.
         checks=[
-            CheckSpec("check_drift_points.sh", 0.40),
-            CheckSpec("check_expected_values.sh", 0.35),
-            CheckSpec("check_config_valid.sh", 0.25),
+            CheckSpec("check_drift_points.sh", 0.55),
+            CheckSpec("check_root_cause.sh", 0.45),
         ],
+        # This fixture named master-statefulset.yaml and replica-statefulset.yaml
+        # — a THIRD set of files, agreeing with neither the old answer key
+        # (health-configmap.yaml / master/application.yaml) nor the chart. A
+        # chart-wide search for `include "redis.password"` at 478a81c9 returns
+        # exactly three hits: secret.yaml:24, secret-svcbind.yaml:15 and
+        # configmap.yaml:55. The statefulsets call it zero times. Replaced with
+        # the two call sites that render under this task's scenario (80ca4f8);
+        # configmap.yaml is gated by auth.acl.enabled, default false.
         gt_answer=json.dumps({
             "drift_points": [
                 {
-                    "file": "bitnami/redis/templates/master-statefulset.yaml",
-                    "key": "redis.password include call",
-                    "expected": "password generated once and reused consistently across all templates",
-                    "actual": "password regenerated (different random value) each time the include is re-evaluated",
-                    "override_chain": ["_helpers.tpl redis.password -> include call in each template"]
+                    "file": "bitnami/redis/templates/secret.yaml",
+                    "key": "redis-password",
+                    "expected": "the same generated password every other call site resolves to",
+                    "actual": "a fresh randAlphaNum value, because this include re-runs the generator",
+                    "override_chain": [
+                        "values.yaml:auth.password unset",
+                        "_helpers.tpl:redis.password",
+                        "common.secrets.passwords.manage",
+                        "secret.yaml",
+                    ],
                 },
                 {
-                    "file": "bitnami/redis/templates/replica-statefulset.yaml",
-                    "key": "redis.password include call",
-                    "expected": "same password as master, stored for reuse",
-                    "actual": "different random password due to re-evaluation; mismatch with master",
-                    "override_chain": ["_helpers.tpl redis.password -> include call"]
-                }
+                    "file": "bitnami/redis/templates/secret-svcbind.yaml",
+                    "key": "password",
+                    "expected": "the same generated password the Secret holds",
+                    "actual": "a second, unrelated randAlphaNum value — the ServiceBinding mismatch of #15626",
+                    "override_chain": [
+                        "values.yaml:auth.password unset",
+                        "_helpers.tpl:redis.password",
+                        "common.secrets.passwords.manage",
+                        "secret-svcbind.yaml",
+                    ],
+                },
             ],
-            "root_cause": "Helm include re-evaluates the helper template each time it is called. When the helper generates a random password, each call produces a different value. The password should be generated once and stored in .Values for consistent reuse."
+            "root_cause": (
+                "redis.password (_helpers.tpl:206-210) does not randomise: it delegates to "
+                "common.secrets.passwords.manage in the common subchart, which calls randAlphaNum "
+                "when no password is set. Helm re-evaluates a named template on every include, so "
+                "that path re-runs per call site and each materialises a different password. "
+                "PR #36231 memoises the first result into .Values.global.redis.password."
+            ),
         }, indent=2),
         partial_answer=json.dumps({
             "drift_points": [
                 {
-                    "file": "bitnami/redis/templates/master-statefulset.yaml",
-                    "key": "redis.password helper",
-                    "expected": "consistent password across templates",
-                    "actual": "different random password on each include call",
-                    "override_chain": ["_helpers.tpl -> template include"]
+                    "file": "bitnami/redis/templates/secret.yaml",
+                    "key": "redis-password",
+                    "expected": "same generated password everywhere",
+                    "actual": "a fresh random value per include",
+                    "override_chain": ["_helpers.tpl:redis.password", "secret.yaml"],
                 }
-            ]
+            ],
+            "root_cause": (
+                "The redis.password helper resolves through common.secrets.passwords.manage, "
+                "which regenerates on each include."
+            ),
         }, indent=2),
     ),
     # 004: ArgoCD redis-ha securityContext null override
