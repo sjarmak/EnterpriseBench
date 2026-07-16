@@ -15,6 +15,20 @@ or repo-specific evidence absent from the prompt), its xfail flips to a failure
 that says "remove me from known_prompt_echo_leaks.json" — the quarantine only
 shrinks.
 
+One-way exception to shrink-only: a leaker the ORIGINAL scan missed may be added
+once, as bookkeeping. refactor-orchestration-tri-tokio-001 is the only such entry
+— it was tracked and leaking at a51e7e8 yet absent from the generated list, so
+main has been red since. It is a pre-existing leak, not a regression; a scan of
+all 141 tracked report tasks at that commit found no other omission. A NEW leak
+is still a failure to fix, never an addition here.
+
+A fix means the check stops crediting prompt vocabulary while a CORRECT answer
+still scores. Padding scoring_evidence with tokens no real answer would contain
+(a check's own filename, a ground_truth JSON key) silences this test by failing
+every deliverable equally — an un-passable task, not a fixed one. Verify a fix
+against a plausible correct answer, not only against expected_solution.json:
+that key can be, and has been, written to fit the grader.
+
 Regenerate the quarantine (a reviewed act, only after fixing tasks):
     python3 scripts/validation/curated_gate_analyzer.py  # then rescan helper
 

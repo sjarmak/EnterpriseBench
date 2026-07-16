@@ -9,5 +9,6 @@
   "platform_engineering/config-drift-dual-prometheus-001",
   "technical_debt/refactor-orchestration-005",
   "technical_debt/refactor-orchestration-006",
-  "technical_debt/refactor-orchestration-tri-babel-001"
+  "technical_debt/refactor-orchestration-tri-babel-001",
+  "technical_debt/refactor-orchestration-tri-tokio-001"
 ]
