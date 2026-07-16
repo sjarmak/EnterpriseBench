@@ -41,8 +41,8 @@ from tests.integrity._probe import (
 SCORER_MODULE = "eb_verify.scorers.file_extraction"
 
 
-@pytest.fixture
-def broken_validator_tree(tmp_path: Path) -> Path:
+@pytest.fixture(scope="module")
+def broken_validator_tree(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """sys.path entry whose ``eb_verify.plugins`` registry raises on import.
 
     Breaking a validator is what actually kills the registry: the 9 non-fact_triples
@@ -50,9 +50,10 @@ def broken_validator_tree(tmp_path: Path) -> Path:
 
     The whole tree is copied because the break must live inside the package:
     sys.path cannot shadow a submodule of ``eb_verify`` without shadowing
-    ``eb_verify`` itself.
+    ``eb_verify`` itself. Module-scoped: every consumer only reads the tree as an
+    import path, so the recursive copy is built once and shared rather than per-test.
     """
-    shadow = tmp_path / "broken_tree"
+    shadow = tmp_path_factory.mktemp("broken_tree")
     shutil.copytree(
         LIB / "eb_verify",
         shadow / "eb_verify",
@@ -483,6 +484,28 @@ class TestScorersPackageStaysImportLight:
             f"eb_verify.scorers imports modules at package import ({sorted(pulled)}); it "
             "exists to be the location that does not, so its submodules pay only for "
             "what they use"
+        )
+
+
+class TestArtifactIOStaysImportLight:
+    """artifact_io sits below the registry, on every validator's import path.
+
+    Its module docstring states 'stdlib only, by design -- anything imported here is
+    paid by every validator', but prose does not fail a build. The scorer and guard
+    allowlists above cannot catch bloat here (neither reaches artifact_io), and the
+    registry's numpy guard only pins the heavy roots, so a mid-weight dependency added
+    here would ride in silently on all 9 validators. This pins the stated invariant the
+    way the rest of this module pins its layering rules.
+    """
+
+    MAY_REACH = {"eb_verify", "eb_verify.artifact_io"}
+
+    def test_artifact_io_reaches_nothing_outside_itself(self) -> None:
+        reached = nonstdlib_modules(modules_pulled_by("eb_verify.artifact_io"))
+        assert reached <= self.MAY_REACH, (
+            f"eb_verify.artifact_io reached modules beyond itself "
+            f"({sorted(reached - self.MAY_REACH)}); it is on every validator's import "
+            "path, so anything it pulls is paid by all of them"
         )
 
 
