@@ -1,0 +1,24 @@
+{
+  "task_id": "config-drift-dual-argocd-001",
+  "_fidelity": "Authored from source at the pinned revs (argo-cd v2.9.0, argo-helm argo-cd-5.51.0); the task previously had no expected_solution and a placeholder ground_truth. The original prompt asked for drift 'around sync timeouts, retry settings', which does not exist at these revs — every such knob matches. instruction.md was re-scoped to the drift that is provable, and now tells the agent not to report settings that agree.",
+  "checkpoints": {
+    "drift_points": {
+      "expected_solution": "One provable drift point: application.instanceLabelKey. argo-cd compiles in app.kubernetes.io/instance (common/common.go:149, LabelKeyAppInstance) and util/settings/settings.go:742-746 falls back to that constant only when the argocd-cm key is absent or empty. argo-helm sets configs.cm.\"application.instanceLabelKey\" to argocd.argoproj.io/instance (charts/argo-cd/values.yaml:165) — under its own comment at :164 reading '@default -- Defaults to app.kubernetes.io/instance'. With the default tracking method (label), this is the label ArgoCD writes and matches resources by, so a chart-installed cluster and a stock cluster disagree about which resources belong to an Application. The controller timeout and retry knobs must NOT be reported: app-resync 180 vs timeout.reconciliation 180s, status-processors 20, operation-processors 10, self-heal-timeout-seconds 5, repo-server-timeout-seconds 60 all match exactly. application.resourceTrackingMethod is absent from values.yaml, so it is not overridden either.",
+      "evaluation_criteria": [
+        "Reports application.instanceLabelKey as a drift point",
+        "Does NOT report the controller timeout/retry knobs: they match at these revs, and inventing drift there to satisfy the prompt is penalised",
+        "May report applicationsetcontroller.policy ('' vs sync) as a literal difference — neither credited nor penalised. It has no behavioural effect: applicationset/utils/policy.go maps '' and 'sync' to the same ApplicationsSyncPolicySync",
+        "Reporting no drift at all is closer to correct than reporting fabricated timeout drift, but misses the real point"
+      ]
+    },
+    "expected_values": {
+      "expected_solution": "Both sides of the one drift point, each cited from its own repo. argo-cd default: app.kubernetes.io/instance, from common/common.go:149 (LabelKeyAppInstance), with util/settings/settings.go GetAppInstanceLabelKey establishing that the constant is the fallback when the ConfigMap key is empty. argo-helm override: argocd.argoproj.io/instance at charts/argo-cd/values.yaml:165, key path configs.cm.\"application.instanceLabelKey\". Override chain: values.yaml:configs.cm -> templates/argocd-configs/argocd-cm.yaml -> argocd-cm ConfigMap -> settings.GetAppInstanceLabelKey.",
+      "evaluation_criteria": [
+        "States the argo-cd default value app.kubernetes.io/instance and points at the Go source that establishes it",
+        "States the argo-helm override value argocd.argoproj.io/instance and its values.yaml key path",
+        "Neither value appears anywhere in instruction.md, so citing either requires having read the repo it lives in; citing both is what a real cross-repo comparison produces",
+        "Explains the impact in terms of resource tracking/pruning rather than sync timeouts"
+      ]
+    }
+  }
+}

@@ -70,25 +70,28 @@ dependency_depth = 2
 frameworks = ["argocd", "helm", "kubernetes"]
 multi_repo_pattern = "enforce"
 
-[[checkpoints]]
-name = "config_valid"
-weight = 0.20
-verifier = "checks/check_config_valid.sh"
-description = "Agent produces valid configuration analysis"
-timeout_seconds = 60
-
+# All three checks were byte-identical copies of the bitnami/consul task
+# config-drift-001's verifiers: they graded serflan/serfwan Helm port drift,
+# read $WORKSPACE/charts/DRIFT_REPORT.json (this task's instruction says
+# /workspace/DRIFT_REPORT.json) and used the field names file/key/expected
+# (this task's schema is config_key/argocd_source_file/helm_source_path/...).
+# Every checkpoint therefore scored 0.0 for a perfect answer — the task was
+# un-passable for its whole life, which tests/test_task_output_path_consistency.py
+# has been failing on. config_valid is dropped rather than rewritten:
+# instruction.md asks only for DRIFT_REPORT.json, so it had no artifact to
+# validate. The remaining 0.45:0.35 is rescaled to sum to 1.0.
 [[checkpoints]]
 name = "drift_points"
-weight = 0.45
+weight = 0.55
 verifier = "checks/check_drift_points.sh"
-description = "Agent identifies all drift points across repos"
+description = "Agent finds the real drift (application.instanceLabelKey) and does not fabricate drift in the knobs that match"
 timeout_seconds = 120
 
 [[checkpoints]]
 name = "expected_values"
-weight = 0.35
+weight = 0.45
 verifier = "checks/check_expected_values.sh"
-description = "Agent determines correct expected values"
+description = "Agent cites both sides: the argo-cd compiled-in default and the argo-helm override value"
 timeout_seconds = 120
 
 [artifacts]
