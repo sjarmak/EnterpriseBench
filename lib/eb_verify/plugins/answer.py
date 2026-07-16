@@ -24,6 +24,40 @@ from eb_verify.artifact_io import safe_read
 from eb_verify.plugins import ValidationResult
 from eb_verify.plugins.path_match import extract_claimed_paths, path_match_score
 
+# The graded answer is pinned to /workspace/agent_output/ — the file the check
+# scripts (test_runner.sh:373) and run_task's grounding gate
+# (ANSWER_ARTIFACT_PATH) actually read. Preferring it here stops a
+# workspace-root or other decoy from shadowing the real artifact, since
+# pathlib.glob yields the anchor directory before subdirectories.
+PINNED_ANSWER_SUBDIR = "agent_output"
+
+
+def _select_answer_file(workspace: Path, name: str) -> tuple[Optional[Path], Optional[str]]:
+    """Choose the answer file to grade for *name* (``answer.json`` / ``answer.txt``).
+
+    Prefers the pinned ``agent_output/<name>`` so a decoy elsewhere in the
+    workspace cannot shadow the file every check actually grades. Falls back to
+    a workspace-wide glob only when the pinned file is absent, and in that
+    fallback rejects ambiguity (>1 candidate) instead of silently grading the
+    first glob hit.
+
+    Returns ``(path, error)``: at most one is non-None. Both are None when no
+    candidate exists (so the caller can try the other artifact type).
+    """
+    pinned = workspace / PINNED_ANSWER_SUBDIR / name
+    if pinned.is_file():
+        return pinned, None
+    candidates = list(workspace.glob(f"**/{name}"))
+    if not candidates:
+        return None, None
+    if len(candidates) > 1:
+        rels = sorted(str(c.relative_to(workspace)) for c in candidates)
+        return None, (
+            f"ambiguous {name}: multiple candidates {rels}; "
+            f"write the graded answer to {PINNED_ANSWER_SUBDIR}/{name}"
+        )
+    return candidates[0], None
+
 
 def _normalize(text: str) -> str:
     """Lowercase and collapse whitespace for comparison."""
@@ -179,30 +213,35 @@ class AnswerValidator:
         gate runs before oracle matching, and missing/malformed citations or
         any ungrounded span fail validation with per-citation reasons.
         """
-        json_candidates = list(workspace.glob("**/answer.json"))
-        txt_candidates = list(workspace.glob("**/answer.txt"))
+        json_path, json_err = _select_answer_file(workspace, "answer.json")
+        if json_err:
+            return ValidationResult(valid=False, detail=json_err)
 
         answer_text: Optional[str] = None
         data: Optional[dict[str, Any]] = None
+        used_json = json_path is not None
 
-        if json_candidates:
+        if json_path is not None:
             try:
-                data = json.loads(safe_read(json_candidates[0], workspace))
+                data = json.loads(safe_read(json_path, workspace))
                 if not isinstance(data, dict):
                     return ValidationResult(valid=False, detail="answer.json should be a JSON object")
                 answer_text = _extract_text(data)
             except (json.JSONDecodeError, ValueError) as e:
                 return ValidationResult(valid=False, detail=f"answer.json invalid: {e}")
-        elif txt_candidates:
+        else:
+            txt_path, txt_err = _select_answer_file(workspace, "answer.txt")
+            if txt_err:
+                return ValidationResult(valid=False, detail=txt_err)
+            if txt_path is None:
+                return ValidationResult(valid=False, detail="No answer file found")
             try:
-                content = safe_read(txt_candidates[0], workspace).strip()
+                content = safe_read(txt_path, workspace).strip()
             except ValueError as e:
                 return ValidationResult(valid=False, detail=str(e))
             if not content:
                 return ValidationResult(valid=False, detail="answer.txt is empty")
             answer_text = content
-        else:
-            return ValidationResult(valid=False, detail="No answer file found")
 
         # Optional groundedness gate (task ground truth: require_grounded_citations)
         if require_grounded_citations:
@@ -226,7 +265,7 @@ class AnswerValidator:
 
         # Structure-only validation (no oracle)
         if ground_truth is None:
-            source = "answer.json" if json_candidates else "answer.txt"
+            source = "answer.json" if used_json else "answer.txt"
             return ValidationResult(valid=True, detail=f"{source} found and valid")
 
         # Oracle matching. The file_path dimension scores against the agent's

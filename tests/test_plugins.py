@@ -263,6 +263,61 @@ class TestAnswerValidator:
         assert result.valid is False
         assert "too large" in result.detail.lower()
 
+    def test_pinned_answer_wins_over_root_decoy(self, tmp_path):
+        # The graded file lives at agent_output/answer.json; a workspace-root
+        # decoy must NOT shadow it (pathlib globs the anchor dir first).
+        pinned_dir = tmp_path / "agent_output"
+        pinned_dir.mkdir()
+        (pinned_dir / "answer.json").write_text('{"answer": "real"}')
+        (tmp_path / "answer.json").write_text('{"answer": "decoy"}')
+        validator = AnswerValidator()
+        result = validator.validate(tmp_path)
+        assert result.valid is True
+
+    def test_grounded_root_decoy_ignored_when_pinned_present(self, tmp_path):
+        # A perfectly-grounded root decoy must not be graded when the real
+        # pinned answer is present. Score the pinned (uncited) answer; the
+        # decoy's grounded citation must not leak in.
+        pinned_dir = tmp_path / "agent_output"
+        pinned_dir.mkdir()
+        (pinned_dir / "answer.json").write_text(
+            json.dumps({"answer": "the culprit is unrelated_symbol"})
+        )
+        (tmp_path / "answer.json").write_text(
+            json.dumps({"answer": "handleRequest leaks memory"})
+        )
+        validator = AnswerValidator()
+        result = validator.validate(
+            tmp_path,
+            ground_truth={"keywords": ["handleRequest"]},
+            thresholds={"keyword_weight": 1.0, "min_score": 0.5},
+        )
+        # The pinned answer lacks the keyword, so grading it must fail — proof
+        # the decoy (which has the keyword) was not the file read.
+        assert result.valid is False
+
+    def test_ambiguous_answer_json_rejected_without_pinned(self, tmp_path):
+        # No pinned agent_output/answer.json, and >1 glob candidate: reject
+        # rather than silently grading the first.
+        (tmp_path / "answer.json").write_text('{"answer": "a"}')
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "answer.json").write_text('{"answer": "b"}')
+        validator = AnswerValidator()
+        result = validator.validate(tmp_path)
+        assert result.valid is False
+        assert "ambiguous" in result.detail.lower()
+
+    def test_ambiguous_answer_txt_rejected_without_pinned(self, tmp_path):
+        (tmp_path / "answer.txt").write_text("a")
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "answer.txt").write_text("b")
+        validator = AnswerValidator()
+        result = validator.validate(tmp_path)
+        assert result.valid is False
+        assert "ambiguous" in result.detail.lower()
+
 
 # ---------------------------------------------------------------------------
 # CodePatchValidator
