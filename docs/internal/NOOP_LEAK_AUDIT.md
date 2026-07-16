@@ -20,14 +20,16 @@ answer key (`expected_solution.json`, `ground_truth.json`).
 `scripts/validation/noop_leak_sweep.py` reproduces the no-op condition offline:
 
 - **WORKSPACE** = a scratch dir containing only `instruction.md` (planted at
-  `$WORKSPACE/instruction.md`, as `_setup_container` does) plus empty repo dirs.
-  No `agent_output/`.
+  `$WORKSPACE/instruction.md`, as `_setup_container` does). No `agent_output/`
+  and no repo source.
 - **TASK_DIR** = the real task directory (the answer key).
 
-A no-op leaves the repos pristine; empty repo dirs are the conservative proxy —
-any score under empty repos proves the credited evidence came from
-`instruction.md` or the answer key, never from the agent. Any check scoring >0
-is a leak.
+Each check is run through the real scorer's own boundary
+(`eb_verify.scorer_guard.run_verifier_subprocess`), so "did this check reach a
+score" is defined once by the codebase rather than re-parsed here. A no-op
+leaves the cloned repos pristine and writes nothing, so any check that still
+scores >0 is crediting `instruction.md` or the answer key, never the agent —
+that is a leak.
 
 The sweep is CI-enforced by `tests/integrity/test_noop_leak_sweep.py`, which
 fails on any leaking checkpoint outside the known-open allowlist.
@@ -49,7 +51,7 @@ file).
 
 ## Coverage of the repo-source-pristine class
 
-The offline sweep plants empty repo dirs, so it cannot see a check that credits
+The offline sweep plants no repo source, so it cannot see a check that credits
 *unchanged* cloned source. That class was closed by manual audit of every check
 that reads a non-agent `$WORKSPACE` subpath (85 checks): each one gates on an
 **agent-written artifact**, absent under a no-op —

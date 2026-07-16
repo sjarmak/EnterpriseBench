@@ -10,23 +10,24 @@ on ANY checkpoint because the expected evidence already exists in the
 agent-visible tree (instruction.md, the ``$TASK_DIR`` answer key, or an
 eb_verify plugin that defaults to pass)?
 
-Method — reproduce the no-op condition offline, faithfully to the real scorer
-(scripts/sandbox/test_runner.sh runs each check as ``bash check.sh $WORKSPACE``
-with ``WORKSPACE``/``TASK_DIR`` exported):
+Method — reproduce the no-op condition offline. Each check is run through the
+real scorer's own boundary (``eb_verify.scorer_guard.run_verifier_subprocess``,
+the shared ladder behind the Python runners), so "did this check reach a score"
+is defined once, by the codebase, not re-derived here:
 
   * WORKSPACE: a scratch dir holding ONLY ``instruction.md`` (planted where the
-    harness puts it, at ``$WORKSPACE/instruction.md``) plus empty repo dirs. No
-    ``agent_output/``. A no-op leaves pristine repos; empty dirs are the
-    conservative proxy — a score under empty repos means the credited evidence
-    came from instruction.md or the answer key, never from the agent.
+    harness puts it, at ``$WORKSPACE/instruction.md``). No ``agent_output/`` and
+    no repo source — a no-op leaves the cloned repos pristine and writes nothing,
+    so any check that still scores >0 is crediting instruction.md or the answer
+    key, never the agent.
   * TASK_DIR: the real task directory (mirrors ``/workspace/.task``): the answer
     key — ``expected_solution.json``, ``ground_truth.json``.
 
 Any check scoring >0 under that condition is a LEAK. Repo-source-pristine leaks
 (a check crediting UNCHANGED cloned source) are out of this sweep's scope — it
-plants empty repo dirs, not the pinned trees — and are covered by the manual
-audit recorded in docs/internal/NOOP_LEAK_AUDIT.md, which found every repo-path
-reader gates on an agent-written artifact.
+plants no repo source, only instruction.md — and are covered by the manual audit
+recorded in docs/internal/NOOP_LEAK_AUDIT.md, which found every repo-path reader
+gates on an agent-written artifact.
 
 Usage:
     python3 scripts/validation/noop_leak_sweep.py                 # sweep benchmarks/
@@ -44,8 +45,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
-import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -53,14 +52,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EB_VERIFY_PARENT = REPO_ROOT / "lib"  # PYTHONPATH root: `import eb_verify`
+sys.path.insert(0, str(EB_VERIFY_PARENT))
+from eb_verify.scorer_guard import run_verifier_subprocess  # noqa: E402
+
 SKIP_TREE_PARTS = frozenset({"_archived", "mined"})
 CHECK_TIMEOUT_SEC = 60
 SCORE_EPS = 1e-6
-
-# task.toml repo entries carry a ``name = "..."`` on a line the block scopes to a
-# repo; this pulls those names so the scratch workspace mirrors the cloned dirs.
-_REPO_NAME_RE = re.compile(r'name\s*=\s*"([^"]+)"')
-_SCORE_RE = re.compile(r'"score"\s*:\s*([0-9]*\.?[0-9]+)')
 
 
 @dataclass(frozen=True)
@@ -79,52 +76,6 @@ def _iter_task_dirs(root: Path):
         yield toml.parent
 
 
-def _repo_dir_names(task_dir: Path) -> list[str]:
-    toml = task_dir / "task.toml"
-    if not toml.exists():
-        return []
-    names: list[str] = []
-    for line in toml.read_text(errors="ignore").splitlines():
-        if "repo" in line.lower():
-            m = _REPO_NAME_RE.search(line)
-            if m:
-                names.append(m.group(1))
-    return names
-
-
-def _parse_score(stdout: str) -> float | None:
-    """The score a check attested, or None if it printed no parseable score.
-
-    Prefers strict JSON on the last object-looking line (what test_runner's
-    structural scanner credits); falls back to a tolerant regex so a check that
-    prints diagnostics around its verdict is still read rather than silently
-    dropped to None (which would hide a leak).
-    """
-    text = stdout.strip()
-    if not text:
-        return None
-    for line in reversed(text.splitlines()):
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            obj = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(obj, dict) and "score" in obj:
-            try:
-                return float(obj["score"])
-            except (TypeError, ValueError):
-                return None
-    m = _SCORE_RE.findall(text)
-    if m:
-        try:
-            return float(m[-1])
-        except ValueError:
-            return None
-    return None
-
-
 def _checkpoint_name(check_file: Path) -> str:
     stem = check_file.stem
     return stem[len("check_"):] if stem.startswith("check_") else stem
@@ -140,8 +91,6 @@ def _run_task(task_dir: Path) -> list[tuple[str, Path, float | None]]:
         ws = Path(ws_str)
         if instruction.exists():
             (ws / "instruction.md").write_text(instruction.read_text(errors="ignore"))
-        for name in _repo_dir_names(task_dir):
-            (ws / name).mkdir(parents=True, exist_ok=True)
         env = dict(os.environ)
         env["WORKSPACE"] = str(ws)
         env["TASK_DIR"] = str(task_dir)  # mirrors /workspace/.task
@@ -149,19 +98,22 @@ def _run_task(task_dir: Path) -> list[tuple[str, Path, float | None]]:
             [str(EB_VERIFY_PARENT), env.get("PYTHONPATH", "")]
         ).rstrip(os.pathsep)
         for check in sorted(checks_dir.glob("*.sh")):
-            try:
-                proc = subprocess.run(
-                    ["bash", str(check), str(ws)],
-                    env=env,
-                    cwd=str(ws),
-                    capture_output=True,
-                    text=True,
-                    timeout=CHECK_TIMEOUT_SEC,
-                )
-                score = _parse_score(proc.stdout)
-            except (subprocess.TimeoutExpired, OSError):
-                score = None
-            out.append((_checkpoint_name(check), check, score))
+            checkpoint = _checkpoint_name(check)
+            # run through the real scorer's boundary: a verdict dict carries a
+            # validated score; an InfraError (timeout, crash, no verdict) is not
+            # a dict, and a check that never reached a score can't be a leak.
+            verdict = run_verifier_subprocess(
+                check.name,
+                base_dir=checks_dir,
+                argv_prefix=("bash",),
+                argv_suffix=(str(ws),),
+                cwd=ws,
+                env=env,
+                timeout=CHECK_TIMEOUT_SEC,
+                checkpoint=checkpoint,
+            )
+            score = verdict["score"] if isinstance(verdict, dict) else None
+            out.append((checkpoint, check, score))
     return out
 
 

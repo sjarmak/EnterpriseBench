@@ -7,8 +7,8 @@ plugin) pays a NO-OP agent full marks — the answer key grading itself. That is
 benchmark-defensibility hole, not a per-task curation slip.
 
 ``scripts/validation/noop_leak_sweep.py`` reproduces the no-op condition offline
-(WORKSPACE = only instruction.md + empty repo dirs, no agent_output; TASK_DIR =
-the real answer key) and reports every checkpoint scoring >0. This test freezes
+(WORKSPACE = only instruction.md, no agent_output; TASK_DIR = the real answer
+key) and reports every checkpoint scoring >0. This test freezes
 the audit result: the leak set must never grow beyond the known-open allowlist.
 
 KNOWN_OPEN is the single checkpoint whose fix lives on its own bead (hpcsv). It
@@ -20,6 +20,7 @@ regression this guard exists to catch.
 
 from __future__ import annotations
 
+import functools
 import sys
 from pathlib import Path
 
@@ -36,7 +37,10 @@ KNOWN_OPEN = frozenset(
 )
 
 
+@functools.lru_cache(maxsize=1)
 def _leak_keys():
+    # The sweep shells out one subprocess per check (~400); both tests below
+    # consume the same immutable result, so compute it once.
     benchmarks = REPO_ROOT / "benchmarks"
     leaks, n_tasks, n_checks = sweep(benchmarks, benchmarks)
     assert n_tasks > 0, "swept zero tasks — path or discovery is broken"
