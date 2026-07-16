@@ -1,7 +1,6 @@
 [
   "feature_delivery/monorepo-boundary-003",
   "platform_engineering/config-drift-002",
-  "platform_engineering/config-drift-003",
   "platform_engineering/config-drift-004",
   "platform_engineering/config-drift-dual-argocd-001",
   "platform_engineering/config-drift-dual-prometheus-001",

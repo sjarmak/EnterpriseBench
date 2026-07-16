@@ -2,9 +2,9 @@
 
 ## Context
 
-We deployed the bitnami/redis Helm chart with `serviceBindings.enabled=true` and without setting an explicit password (expecting the chart to auto-generate one). After deployment, the Redis server, health checks, and service binding all have DIFFERENT passwords, causing intermittent authentication failures.
+We deployed the bitnami/redis Helm chart with `serviceBindings.enabled=true` and without setting an explicit password (expecting the chart to auto-generate one). Applications binding through the ServiceBinding then fail to authenticate against Redis.
 
-Running `helm template` with `--set serviceBindings.enabled=true` and no password produces output where the secret, the configmap health check script, and the ServiceBinding resource contain different password values.
+Running `helm template` with `--set serviceBindings.enabled=true` and no password produces output where rendered resources disagree about the password.
 
 ## What I Need
 

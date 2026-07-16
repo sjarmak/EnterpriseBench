@@ -1,54 +1,75 @@
 {
   "candidate_id": 3,
   "repo": "bitnami/charts",
+  "repo_rev": "478a81c9e91d2c2cf867e70aeea81e10cbcab9ce",
   "pr_refs": ["#36231"],
   "issues_refs": ["#15626", "#32497"],
-  "description": "Redis password generation drift caused by Helm include re-evaluation producing different random passwords across templates",
-  "root_cause": "Helm's {{ include }} directive re-evaluates the named template on every call. When the redis.password helper generates a random password (no explicit password set), each {{ include \"redis.password\" }} invocation produces a DIFFERENT random value. This means templates/secret.yaml, templates/health-configmap.yaml, and the ServiceBinding resource all get different passwords.",
+  "description": "Redis password generation drift caused by Helm include re-evaluation producing a different random password at every call site",
+  "_fidelity": "Rebuilt from source at the pinned SHA. The previous key was 1-of-3 correct: it named templates/health-configmap.yaml and templates/master/application.yaml as drift points, and NEITHER contains a call to the redis.password helper (verified: `include \"redis.password\"` occurs 0 times in each). health-configmap.yaml reads the password at container RUNTIME from $REDIS_PASSWORD_FILE, and master/application.yaml consumes the secret by reference — neither can drift at template time. Both real call sites were missing: templates/secret-svcbind.yaml (the ServiceBinding — the mismatch PR #36231's title actually names) and templates/configmap.yaml. The old key was also internally inconsistent: its root_cause prose said 'the ServiceBinding resource' while its drift_points array listed master/application.yaml instead. Its root_cause further claimed _helpers.tpl 'calls randAlphaNum on every invocation'; randAlphaNum occurs 0 times in redis/_helpers.tpl — the randomness is one level down in the common subchart.",
+  "root_cause": "Helm re-evaluates a named template on every {{ include }}. The redis.password helper (bitnami/redis/templates/_helpers.tpl:206-210) does not itself randomise: it delegates to common.secrets.passwords.manage in the common subchart (bitnami/common/templates/_secrets.tpl), which calls randAlphaNum when no password is provided and no existing secret is found. Because each include re-runs that path, every call site materialises a DIFFERENT random password. PR #36231 fixes it by memoising the first result into .Values.global.redis.password and returning that thereafter.",
+  "scenario": {
+    "values": "serviceBindings.enabled=true, auth.password unset; all else default (auth.enabled=true, auth.acl.enabled=false, auth.existingSecret unset, auth.usePasswordFileFromSecret=true)",
+    "note": "The rendered call sites — and therefore the drift points — depend on this scenario. Verified against the guards at the pinned SHA."
+  },
   "drift_points": [
     {
       "file": "bitnami/redis/templates/secret.yaml",
-      "key": "{{ include \"redis.password\" . }}",
-      "expected": "Same generated password as all other templates",
-      "actual": "Unique random password generated per include call",
-      "override_chain": [
-        "values.yaml: auth.password not set, serviceBindings.enabled=true",
-        "templates/_helpers.tpl: redis.password helper calls randAlphaNum on every invocation",
-        "templates/secret.yaml: {{ include \"redis.password\" }} generates password A"
-      ],
-      "severity": "functional_break"
+      "line": 24,
+      "key": "redis-password",
+      "call_site": "redis-password: {{ include \"redis.password\" . | b64enc | quote }}",
+      "renders_when": "auth.enabled and not auth.existingSecret and (auth.usePasswordFileFromSecret or not auth.usePasswordFiles) — true under the scenario",
+      "expected": "the same generated password every other call site resolves to, memoised via global.redis.password",
+      "actual": "a fresh randAlphaNum value, because this include re-runs common.secrets.passwords.manage",
+      "override_chain": "values.yaml:auth.password (unset) -> _helpers.tpl:redis.password -> common.secrets.passwords.manage -> common/_secrets.tpl:randAlphaNum -> secret.yaml:redis-password",
+      "evidence_tokens": {
+        "identifies": ["secret.yaml"],
+        "chain": ["common.secrets.passwords.manage"]
+      }
+    },
+    {
+      "file": "bitnami/redis/templates/secret-svcbind.yaml",
+      "line": 15,
+      "key": "password",
+      "call_site": "{{- $password := include \"redis.password\" . }}",
+      "renders_when": "serviceBindings.enabled — set true by the scenario",
+      "expected": "the same generated password the Secret holds, so the ServiceBinding authenticates",
+      "actual": "a second, unrelated randAlphaNum value — the mismatch reported in #15626 and fixed by PR #36231",
+      "override_chain": "values.yaml:auth.password (unset) -> _helpers.tpl:redis.password -> common.secrets.passwords.manage -> common/_secrets.tpl:randAlphaNum -> secret-svcbind.yaml:$password",
+      "evidence_tokens": {
+        "identifies": ["secret-svcbind.yaml"],
+        "chain": ["common.secrets.passwords.manage"]
+      }
+    }
+  ],
+  "not_drifted": [
+    {
+      "file": "bitnami/redis/templates/configmap.yaml",
+      "line": 55,
+      "note": "A REAL third call site ({{- $password := include \"redis.password\" . }}) but gated by auth.acl.enabled, which defaults to false — it does not render under this scenario. Credit it if the scenario ever enables ACL; do not grade it now."
     },
     {
       "file": "bitnami/redis/templates/health-configmap.yaml",
-      "key": "{{ include \"redis.password\" . }}",
-      "expected": "Same generated password as secret.yaml",
-      "actual": "Different random password generated by separate include call",
-      "override_chain": [
-        "values.yaml: auth.password not set, serviceBindings.enabled=true",
-        "templates/_helpers.tpl: redis.password helper re-evaluates randAlphaNum",
-        "templates/health-configmap.yaml: {{ include \"redis.password\" }} generates password B"
-      ],
-      "severity": "functional_break"
+      "note": "Named by the OLD key and wrong: 0 calls to redis.password. Reads the password at container runtime from $REDIS_PASSWORD_FILE, so it cannot drift at template time."
     },
     {
       "file": "bitnami/redis/templates/master/application.yaml",
-      "key": "{{ include \"redis.password\" . }}",
-      "expected": "Same generated password as secret.yaml and health-configmap.yaml",
-      "actual": "Yet another random password generated by separate include call",
-      "override_chain": [
-        "values.yaml: auth.password not set, serviceBindings.enabled=true",
-        "templates/_helpers.tpl: redis.password helper re-evaluates randAlphaNum",
-        "templates/master/application.yaml: {{ include \"redis.password\" }} generates password C"
-      ],
-      "severity": "functional_break"
+      "note": "Named by the OLD key and wrong: 0 calls to redis.password. Consumes the secret by reference (volume name / mount path), so it cannot drift at template time."
     }
   ],
-  "fix_approach": "Store the generated password in .Values.global.redis.password on first call so subsequent include calls reuse it instead of regenerating",
+  "fix_approach": "Memoise: store the generated password in .Values.global.redis.password on the first call and return it on subsequent calls, so every include resolves to the same value (PR #36231).",
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md (verified with fixed-string grep -coF). The prompt DOES supply 'redis.password' (2), 'serviceBindings.enabled' (2), '_helpers.tpl' (1), 'ServiceBinding' (1) and the whole re-evaluation story, so none of those may be graded. It never names common.secrets.passwords.manage, randAlphaNum, global.redis.password or secret-svcbind.yaml — reaching those requires opening the chart and following the helper into the common subchart.",
+    "root_cause": [
+      "common.secrets.passwords.manage",
+      "randAlphaNum"
+    ]
+  },
   "verification": {
-    "method": "gh_api_pr_files",
+    "method": "gh_api_pr_files + raw source at pinned SHA",
     "pr_url": "https://github.com/bitnami/charts/pull/36231",
-    "verified": true
+    "verified": true,
+    "verified_at_sha": "Chart-wide fixed-string search for 'include \"redis.password\"' at 478a81c9 returns exactly three hits: secret.yaml:24, secret-svcbind.yaml:15, configmap.yaml:55. health-configmap.yaml and master/application.yaml return zero. Guards checked against values.yaml defaults: auth.enabled=true, auth.acl.enabled=false, auth.usePasswordFileFromSecret=true, serviceBindings.enabled=false (set true by the scenario). randAlphaNum: 0 hits in redis/_helpers.tpl; the helper delegates to common.secrets.passwords.manage at _helpers.tpl:208. Pinned SHA is dated one day before PR #36231 merged, so the buggy state is present."
   },
   "difficulty": "hard",
-  "confidence": 0.92
+  "confidence": 0.95
 }

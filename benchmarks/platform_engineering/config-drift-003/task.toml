@@ -59,30 +59,30 @@ dependency_depth = 1
 frameworks = ["helm", "kubernetes", "redis"]
 multi_repo_pattern = "enforce"
 
+# validate_corrected_config (0.25, checks/check_config_valid.sh) was removed, not
+# repaired: instruction.md asks only for DRIFT_REPORT.json, so it graded an
+# artifact a compliant agent has no reason to produce and paid 1.0 for its
+# absence. Weight redistributed in the original 0.40:0.35 ratio (the schema
+# requires the sum to be 1.0). determine_expected_values is renamed to match what
+# its own description always said it graded — the root-cause mechanism — since
+# "expected value" for every drift point here is the same string ("the same
+# password as the other call sites") and grading that measures nothing.
 [[checkpoints]]
 name = "identify_drift_points"
-weight = 0.40
+weight = 0.55
 verifier = "checks/check_drift_points.sh"
-description = "Agent identifies that multiple template includes of redis.password produce different values"
+description = "Agent finds both rendered call sites of the redis.password helper (secret.yaml and secret-svcbind.yaml)"
 timeout_seconds = 60
 
 [[checkpoints]]
-name = "determine_expected_values"
-weight = 0.35
-verifier = "checks/check_expected_values.sh"
-description = "Agent correctly identifies the root cause as Helm include re-evaluation generating different random passwords"
+name = "root_cause_mechanism"
+weight = 0.45
+verifier = "checks/check_root_cause.sh"
+description = "Agent traces the randomness to common.secrets.passwords.manage / randAlphaNum in the common subchart, not just 'Helm re-evaluates includes' (which the prompt states)"
 timeout_seconds = 60
-
-[[checkpoints]]
-name = "validate_corrected_config"
-weight = 0.25
-verifier = "checks/check_config_valid.sh"
-description = "If corrected config provided, validate password consistency across templates"
-timeout_seconds = 120
 
 [artifacts]
 required = ["answer"]
-optional = ["config"]
 
 [tool_access]
 sourcegraph_mirror_config = "configs/sg_mirrors/config-drift-redis-password-003.json"

@@ -1,0 +1,24 @@
+{
+  "task_id": "config-drift-redis-password-003",
+  "_fidelity": "Rebuilt from the chart at the pinned SHA 478a81c9. The previous key named templates/health-configmap.yaml and templates/master/application.yaml as drift points; a chart-wide fixed-string search for 'include \"redis.password\"' returns 0 hits in each, while the two files that DO call it (secret-svcbind.yaml, configmap.yaml) were absent. It called master/application.yaml 'the ServiceBinding resource' — the ServiceBinding is secret-svcbind.yaml. It also claimed _helpers.tpl 'falls back to randAlphaNum on every call'; randAlphaNum occurs 0 times in that file. An agent following the old key scores 0.25 on identify_drift_points. instruction.md was corrected in the same commit: it asserted the health-check configmap holds a differing password, but that file reads REDIS_PASSWORD_FILE at container runtime and has no template-time password at all.",
+  "checkpoints": {
+    "identify_drift_points": {
+      "expected_solution": "At the pinned SHA, `include \"redis.password\"` appears in exactly three templates: bitnami/redis/templates/secret.yaml (line 24), bitnami/redis/templates/secret-svcbind.yaml (line 15) and bitnami/redis/templates/configmap.yaml (line 55). Under this task's scenario (serviceBindings.enabled=true, auth.password unset, everything else default) only the first two render — configmap.yaml's call site is gated by auth.acl.enabled, which defaults to false. So there are exactly TWO drift points, secret.yaml and secret-svcbind.yaml, and they disagree because each include re-runs the generator. secret.yaml renders because auth.enabled=true, auth.existingSecret is unset and auth.usePasswordFileFromSecret=true; secret-svcbind.yaml renders because the scenario sets serviceBindings.enabled=true. This is the mismatch issue #15626 reports and PR #36231 fixes.",
+      "evaluation_criteria": [
+        "Names bitnami/redis/templates/secret.yaml as a call site",
+        "Names bitnami/redis/templates/secret-svcbind.yaml as a call site — this is the ServiceBinding side of the mismatch, the prompt never mentions it, and it is the checkpoint's real discriminator",
+        "Does NOT report health-configmap.yaml or master/application.yaml: neither calls the helper. health-configmap.yaml reads the password at container runtime from REDIS_PASSWORD_FILE; master/application.yaml mounts the secret by reference. Reporting them is penalised",
+        "May note configmap.yaml as a third call site that does not render under this scenario (auth.acl.enabled=false); neither credited nor penalised"
+      ]
+    },
+    "root_cause_mechanism": {
+      "expected_solution": "The redis.password helper (bitnami/redis/templates/_helpers.tpl:206-210) does not randomise anything itself. It delegates to common.secrets.passwords.manage in the common subchart (bitnami/common/templates/_secrets.tpl), which calls randAlphaNum when no password is provided and no existing secret is found. Helm re-evaluates a named template on every {{ include }}, so that path re-runs at each call site and every one materialises a different random password. PR #36231 fixes it by memoising the first result into .Values.global.redis.password and returning that on subsequent calls.",
+      "evaluation_criteria": [
+        "Traces the helper to common.secrets.passwords.manage — the delegation is visible only at _helpers.tpl:208",
+        "Locates randAlphaNum in the common subchart's _secrets.tpl, NOT in redis/_helpers.tpl, which does not contain it",
+        "'Helm re-evaluates includes' alone earns nothing: the prompt already states the mechanism is 'a fundamental issue with how Helm evaluates template includes'. The evidence is where the randomness actually lives",
+        "May cite the fix shape (memoise into global.redis.password), consistent with PR #36231"
+      ]
+    }
+  }
+}
