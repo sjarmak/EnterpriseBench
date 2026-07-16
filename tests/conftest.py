@@ -4,9 +4,22 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
+
+# Import provenance: prepend THIS repo's lib/ so every test imports the package
+# under test, not whatever tree a machine-global editable install
+# (site-packages __editable__*.pth) happens to point at. conftest.py is imported
+# before any test module in its subtree is collected, so this runs before the
+# first `import eb_verify`. Without it, a bare `pytest` (no PYTHONPATH) on a box
+# with a stale editable install silently exercises a different worktree's
+# eb_verify/eb_metrics — see EnterpriseBench-iqp6x. Guarded by
+# tests/integrity/test_eb_verify_import_provenance.py.
+_LIB = str(Path(__file__).resolve().parent.parent / "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
 
 
 def pytest_configure(config):
