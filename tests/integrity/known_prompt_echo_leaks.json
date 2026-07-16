@@ -1,6 +1,5 @@
 [
   "feature_delivery/monorepo-boundary-003",
-  "incident_response/ansible-galaxy-tar-regression-prove-001",
   "platform_engineering/config-drift-001",
   "platform_engineering/config-drift-002",
   "platform_engineering/config-drift-003",
