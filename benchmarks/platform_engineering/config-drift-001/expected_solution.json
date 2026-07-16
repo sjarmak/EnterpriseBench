@@ -1,29 +1,23 @@
 {
   "task_id": "config-drift-consul-serf-port-001",
+  "_fidelity": "Corrected against bitnami/charts PR #33114 and the sources at the pinned SHA 130ffd16. The previous key asserted 'The single drift point is therefore the serflan-udp port mapping' and 'The serfwan-udp port entry ... is correct as-is'. Both are false: consul-headless-service.yaml wires serfwan-udp to .Values.containerPorts.serfLAN at that SHA, and PR #33114 is a +2/-2 diff that fixes BOTH UDP entries. An agent following the old key would report one drift point and miss the other. Verified: values.yaml declares serfLAN 8301 / serfWAN 8302, and statefulset.yaml wires both UDP entries correctly — the headless Service is the only drifted file.",
   "checkpoints": {
     "identify_drift_points": {
-      "expected_solution": "Drift between bitnami/consul/values.yaml and bitnami/consul/templates/consul-headless-service.yaml after serfWAN port support was added. values.yaml declares two distinct keys under containerPorts: serfLAN (default 8301) and serfWAN (default 8302). The StatefulSet template was updated to expose both ports correctly, but the consul-headless-service template's serflan-udp port entry was incorrectly wired to .Values.containerPorts.serfWAN instead of .Values.containerPorts.serfLAN. The result is that the headless Service exposes the WAN port number under the LAN port name, breaking serfLAN gossip on cluster members that resolve through the headless Service. The single drift point is therefore the serflan-udp port mapping in bitnami/consul/templates/consul-headless-service.yaml that references the wrong containerPorts key.",
+      "expected_solution": "bitnami/consul/values.yaml declares containerPorts.serfLAN (8301) and containerPorts.serfWAN (8302). bitnami/consul/templates/statefulset.yaml consumes both correctly. bitnami/consul/templates/consul-headless-service.yaml does not: its two UDP port entries are swapped against each other. serflan-udp resolves to {{ .Values.containerPorts.serfWAN }} and serfwan-udp resolves to {{ .Values.containerPorts.serfLAN }}, so the headless Service publishes serflan-udp on 8302 and serfwan-udp on 8301 — each UDP gossip port advertised under the other's name, while the StatefulSet binds them the other way round. Both serflan-tcp and serfwan-tcp are already correct at this SHA and are NOT drift points. There are exactly two drift points, both in consul-headless-service.yaml; PR #33114 fixes both in a +2/-2 diff.",
       "evaluation_criteria": [
-        "Must identify bitnami/consul/templates/consul-headless-service.yaml as the file with the drift",
-        "Must identify the serflan-udp port entry that incorrectly references .Values.containerPorts.serfWAN",
-        "Must identify bitnami/consul/values.yaml as the source of containerPorts.serfLAN and containerPorts.serfWAN",
-        "Must explain the symptom: serfLAN gossip is broken because the headless service exposes the WAN port under the LAN name"
+        "Identifies bitnami/consul/templates/consul-headless-service.yaml as the drifted file",
+        "Reports BOTH drift points, not just the serflan-udp one the prompt names: serfwan-udp is equally drifted and the prompt never mentions it",
+        "For each, names the wrong expression it currently resolves to — serflan-udp -> containerPorts.serfWAN, serfwan-udp -> containerPorts.serfLAN. The swap direction is only visible in the template",
+        "Traces the values.yaml containerPorts key path; 'values.yaml' alone is prompt vocabulary, the containerPorts key is not",
+        "Does NOT report serflan-tcp or serfwan-tcp as drifted — both are correct at the pinned SHA"
       ]
     },
     "determine_expected_values": {
-      "expected_solution": "Expected value for the serflan-udp port in bitnami/consul/templates/consul-headless-service.yaml is .Values.containerPorts.serfLAN (8301 by default), matching the StatefulSet's serflan-udp container port. The override chain is values.yaml containerPorts.serfLAN -> bitnami/consul/templates/statefulset.yaml (correctly wired) and values.yaml containerPorts.serfLAN -> bitnami/consul/templates/consul-headless-service.yaml serflan-udp (currently wired to serfWAN, should be serfLAN). The serfwan-udp port entry in the same headless service template should reference .Values.containerPorts.serfWAN — this is correct as-is.",
+      "expected_solution": "serflan-udp should resolve to {{ .Values.containerPorts.serfLAN }} (8301), matching the StatefulSet's serflan-udp containerPort. serfwan-udp should resolve to {{ .Values.containerPorts.serfWAN }} (8302), matching the StatefulSet's serfwan-udp containerPort. Override chain for each: values.yaml:containerPorts.<key> -> consul-headless-service.yaml:spec.ports[name=<entry>].port, with statefulset.yaml consuming the same key correctly and the headless Service being where the chain breaks.",
       "evaluation_criteria": [
-        "Must state the expected value: .Values.containerPorts.serfLAN for the serflan-udp port",
-        "Must state that the serfwan-udp entry referencing .Values.containerPorts.serfWAN is correct",
-        "Must include the override chain values.yaml -> bitnami/consul/templates/consul-headless-service.yaml"
-      ]
-    },
-    "validate_corrected_config": {
-      "expected_solution": "Corrected config: in bitnami/consul/templates/consul-headless-service.yaml, change the serflan-udp port from `port: {{ .Values.containerPorts.serfWAN }}` to `port: {{ .Values.containerPorts.serfLAN }}` (and ensure targetPort uses the same key). After the fix, helm template renders matching port numbers between the StatefulSet (containerPorts.serfLAN) and the headless Service (port name serflan-udp -> 8301). The override_chain is values.yaml containerPorts.serfLAN -> templates/consul-headless-service.yaml serflan-udp port. Validation: helm template bitnami/consul --debug should render serflan-udp at 8301 and serfwan-udp at 8302; helm lint should pass.",
-      "evaluation_criteria": [
-        "Must provide a fix description (so check_config_valid awards full credit when paired with override_chain)",
-        "Must specify the exact change: serflan-udp port should reference .Values.containerPorts.serfLAN, not serfWAN",
-        "Must include a validation step (helm template / helm lint) that confirms the rendered ports are correct"
+        "States the expected expression for BOTH entries via the containerPorts key path: serflan-udp -> containerPorts.serfLAN, serfwan-udp -> containerPorts.serfWAN",
+        "Does not merely restate that serflan-udp should use serfLAN — that is inferable from the prompt's port names; the containerPorts key path is the evidence that the chart was read",
+        "Traces the override chain from values.yaml through to the headless Service and identifies it as the break point, with the StatefulSet as the correctly-wired comparison"
       ]
     }
   }
