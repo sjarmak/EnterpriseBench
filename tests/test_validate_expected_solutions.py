@@ -307,7 +307,7 @@ def test_path_pattern_rejects_version_prefix() -> None:
     crit = [
         "Reproduces on v1.2.3/something.go but not on src/real/path.go",
     ]
-    paths = ves._extract_paths_from_criteria(crit)
+    paths = ves._extract_paths(crit)
     # Only the real-looking path should be extracted, not the version-y one
     assert "src/real/path.go" in paths
     assert not any(p.startswith("v1.") for p in paths), paths
@@ -394,6 +394,79 @@ def test_path_attribution_records_each_checkpoint(monkeypatch, task_dir: Path) -
     rc_errs = [e for e in result.errors if "root_cause_identification" in e]
     rem_errs = [e for e in result.errors if "remediation_proposal" in e]
     assert rc_errs and rem_errs, result.errors
+
+
+def test_expected_solution_prose_paths_are_checked(monkeypatch, task_dir: Path) -> None:
+    """A path cited only in the answer-key prose is checked too.
+
+    The prose IS the answer key — it is what a curator grades against — so a
+    path that 404s there grades agents against something no honest agent can
+    produce. Scanning only evaluation_criteria let camel-routing-arch-001 ship
+    a RouteDefinition path that does not exist at its pinned tag
+    (EnterpriseBench-c7iik).
+    """
+    monkeypatch.setenv("GITHUB_TOKEN", "fake-token")
+    monkeypatch.setattr(ves, "_github_path_exists", lambda *args, **kwargs: False)
+    _write_solution(
+        task_dir,
+        {
+            "task_id": "fake-task-001",
+            "checkpoints": {
+                "root_cause_identification": {
+                    "expected_solution": "Reified by core/wrong-module/src/Thing.java",
+                    # No path in the criteria: the prose is the only citation.
+                    "evaluation_criteria": [
+                        "Must explain the reification chain",
+                        "Must name the owning module",
+                    ],
+                },
+                "remediation_proposal": {
+                    "expected_solution": "y",
+                    "evaluation_criteria": ["a", "b"],
+                },
+            },
+        },
+    )
+
+    result = ves.validate_task(task_dir, check_paths=True)
+
+    assert not result.ok
+    assert any("core/wrong-module/src/Thing.java" in e for e in result.errors), (
+        result.errors
+    )
+
+
+def test_prose_and_criteria_paths_dedupe_per_checkpoint(
+    monkeypatch, task_dir: Path
+) -> None:
+    """One bad path cited in both prose and criteria is reported once per
+    checkpoint, not once per citation site."""
+    monkeypatch.setenv("GITHUB_TOKEN", "fake-token")
+    monkeypatch.setattr(ves, "_github_path_exists", lambda *args, **kwargs: False)
+    _write_solution(
+        task_dir,
+        {
+            "task_id": "fake-task-001",
+            "checkpoints": {
+                "root_cause_identification": {
+                    "expected_solution": "Bug in path/to/file.go, see path/to/file.go",
+                    "evaluation_criteria": [
+                        "Must reference path/to/file.go",
+                        "Must explain why",
+                    ],
+                },
+                "remediation_proposal": {
+                    "expected_solution": "y",
+                    "evaluation_criteria": ["a", "b"],
+                },
+            },
+        },
+    )
+
+    result = ves.validate_task(task_dir, check_paths=True)
+
+    rc_errs = [e for e in result.errors if "root_cause_identification" in e]
+    assert len(rc_errs) == 1, rc_errs
 
 
 def test_path_existence_check_skipped_without_token(task_dir: Path, monkeypatch) -> None:

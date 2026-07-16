@@ -37,6 +37,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -119,11 +120,11 @@ def _declared_repos(task_toml: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _extract_paths_from_criteria(criteria: list[Any]) -> list[str]:
-    """Pull file-like path fragments out of the prose criteria."""
+def _extract_paths(texts: Iterable[Any]) -> list[str]:
+    """Pull file-like path fragments out of answer-key prose, in order, deduped."""
     seen: set[str] = set()
     paths: list[str] = []
-    for c in criteria:
+    for c in texts:
         if not isinstance(c, str):
             continue
         for match in _PATH_PATTERN.finditer(c):
@@ -304,9 +305,13 @@ def _validate_paths(
         if not isinstance(body, dict):
             continue
         crit = body.get("evaluation_criteria")
-        if not isinstance(crit, list):
-            continue
-        for path in _extract_paths_from_criteria(crit):
+        # The prose is the answer key a curator grades against, so a path that
+        # 404s there is the same defect as one in the criteria — it grades
+        # agents against a file no honest agent can cite (EnterpriseBench-c7iik).
+        cited: list[Any] = [body.get("expected_solution")]
+        if isinstance(crit, list):
+            cited.extend(crit)
+        for path in _extract_paths(cited):
             if path not in path_status:
                 path_status[path] = [
                     (r["url"], r["rev"], _github_path_exists(r["url"], r["rev"], path, token))

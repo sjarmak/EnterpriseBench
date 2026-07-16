@@ -10,7 +10,7 @@ Trace how Apache Camel routes a message from endpoint reception through the EIP 
 - **Codebase**: Available at `/workspace/camel/`
 - **Category**: Architectural Understanding
 - **Difficulty**: hard
-- **Subsystem Focus**: core/ — the Camel core routing engine (camel-api, camel-support, camel-core-processor, camel-base-engine, camel-core-reifier)
+- **Subsystem Focus**: core/ — the Camel core routing engine (camel-api, camel-core-model, camel-support, camel-core-processor, camel-base-engine, camel-core-reifier)
 
 ## Requirements
 
@@ -18,33 +18,6 @@ Trace how Apache Camel routes a message from endpoint reception through the EIP 
 2. Trace the dependency chain from route definition through reification to runtime message processing
 3. Document the Pipeline and Channel architecture (how processors are chained and intercepted)
 4. Explain how the RouteReifier bridges the DSL model (RouteDefinition) to the runtime Route
-
-## Expected Output
-
-Write your analysis to `/logs/agent/solution.md` with the following structure:
-
-```
-## Files Examined
-- path/to/file1.ext — role in architecture
-- path/to/file2.ext — role in architecture
-...
-
-## Dependency Chain
-1. Entry point: path/to/entry.ext
-2. Calls: path/to/next.ext (via function/method name)
-3. Delegates to: path/to/impl.ext
-...
-
-## Analysis
-[Detailed architectural analysis including:
-- Design patterns identified
-- Component responsibilities
-- Data flow description
-- Interface contracts between components]
-
-## Summary
-[Concise 2-3 sentence summary answering the task question]
-```
 
 ## Evaluation Criteria
 
