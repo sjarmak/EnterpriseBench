@@ -1,0 +1,37 @@
+{
+  "task_id": "incident-investigation-dual-nomad-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify the Nomad-side leader/plan-applier path (nomad/leader.go::establishLeadership and nomad/plan_apply.go::planApply) AND the hashicorp/raft FSM goroutine (fsm.go::runFSM) plus the leader commit path (raft.go / commitment.go). The report must explain the asymmetry: raft reports entries committed (quorum-acked) before the FSM goroutine has applied them to nomad/state/state_store.go, and the plan applier starts running while the FSM backlog is still draining.",
+      "evaluation_criteria": [
+        "Names nomad/leader.go and/or nomad/plan_apply.go on the Nomad side",
+        "Names hashicorp/raft fsm.go (runFSM) and/or raft.go / commitment.go as the consensus side",
+        "States that committed-index advances ahead of applied-index, so state_store reads lag the committed log"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Agent must trace at least four hops: leader transition / establishLeadership -> raft commits backlog entries -> runFSM has not finished draining -> planApply queries stale state_store -> plan rejected (or stuck pending). The report must explicitly connect the leader-transition trigger to the apply/ack asymmetry.",
+      "evaluation_criteria": [
+        "Mentions the leader transition (or leadership transfer / leader election) as the trigger",
+        "Mentions establishLeadership or the leader.go path",
+        "Mentions planApply or plan_apply.go (and that it rejects plans / sees stale state)",
+        "Mentions the raft FSM goroutine (runFSM / fsm.go) or applied-vs-committed index gap"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Agent must name the Nomad leader manager, the plan applier (or scheduler workers / state_store), and the hashicorp/raft library / FSM goroutine.",
+      "evaluation_criteria": [
+        "Names Nomad leader manager (leader.go / establishLeadership) or scheduler workers",
+        "Names the plan applier or state_store (plan_apply.go / state_store.go / fsm.go on the Nomad side)",
+        "Names the hashicorp/raft library (runFSM, raft.go, commitment.go, or 'raft FSM goroutine')"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Agent must propose at least one concrete remediation: (a) FSM drain barrier on leadership establish (apply a no-op and wait), (b) gate planApply on applied-index >= committed-index, OR (c) upstream raft contract change to expose applied-index notifications. The report must say where the fix lives.",
+      "evaluation_criteria": [
+        "Proposes one of: barrier/drain on FSM, applied-index gating, or upstream raft contract change",
+        "Identifies where the fix would live (nomad/leader.go, nomad/plan_apply.go, or hashicorp/raft fsm.go)"
+      ]
+    }
+  }
+}

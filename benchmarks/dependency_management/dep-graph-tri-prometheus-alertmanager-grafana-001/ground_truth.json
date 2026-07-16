@@ -1,0 +1,71 @@
+{
+  "task_id": "dep-graph-tri-prometheus-alertmanager-grafana-001",
+  "task_type": "dependency_graph",
+  "repos": [
+    {
+      "url": "https://github.com/prometheus/prometheus",
+      "rev": "v2.47.0",
+      "path": "prometheus"
+    },
+    {
+      "url": "https://github.com/prometheus/alertmanager",
+      "rev": "v0.26.0",
+      "path": "alertmanager"
+    },
+    {
+      "url": "https://github.com/grafana/grafana",
+      "rev": "v10.2.0",
+      "path": "grafana"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "prometheus/rules/alerting.go",
+      "repo": "prometheus",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "alertmanager/api/v2/restapi/operations/alert/post_alerts.go",
+      "repo": "alertmanager",
+      "confidence": 0.85,
+      "source": "deterministic"
+    },
+    {
+      "path": "grafana/pkg/services/ngalert/api/api_prometheus.go",
+      "repo": "grafana",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "prometheus/notifier/notifier.go",
+      "repo": "prometheus",
+      "confidence": 0.8
+    }
+  ],
+  "dependency_depth": 3,
+  "scoring_evidence": {
+    "prometheus_alert_api": [
+      "alerting.go",
+      "notifier.go"
+    ],
+    "alertmanager_receiver": [
+      "post_alerts.go",
+      "post_alerts"
+    ],
+    "grafana_query": [
+      "api_prometheus.go",
+      "api_prometheus"
+    ],
+    "cascade_analysis": [
+      "alerting.go",
+      "post_alerts.go",
+      "api_prometheus.go",
+      "notifier.go",
+      "post_alerts",
+      "api_prometheus"
+    ]
+  }
+}

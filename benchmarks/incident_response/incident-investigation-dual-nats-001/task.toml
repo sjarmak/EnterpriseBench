@@ -1,0 +1,187 @@
+# Incident Investigation: NATS JetStream pull consumer "bad pending entry" after retention reaps stream messages
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "nats-jetstream-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "incident-investigation-dual-nats-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Trace a cross-repo contract bug between nats.go pull consumers and nats-server's JetStream filestore: client retries pending sequences while server-side checkPending compares against a filestore that has already EraseMsg'd the underlying block, surfacing as 'bad pending entry, sequence X out of range' and silently dropped messages on the consumer."
+prompt = """
+Your platform team operates a NATS 2.10 cluster with JetStream. A FORWARDER
+service uses nats.go's PullSubscribe to drain a high-volume stream. Under
+sustained load the consumer logs intermittent errors and a downstream
+auditor reports gaps in delivery:
+
+  [WRN] Consumer 'STX_DATA > FORWARDER' error on write store state from
+        check pending: bad pending entry, sequence [7762827] out of range
+  nats: pull subscribe: no messages available
+  audit: gap detected: stream seq 7762820..7762830 missing from sink
+
+The errors only occur after the stream's MaxBytes/MaxAge limits cause
+retention to evict older blocks. When retention is disabled the failure
+goes away. Restarting the consumer recreates the durable but does not heal
+the underlying state — only deleting and recreating the consumer clears
+the error.
+
+Investigation notes from the platform engineer:
+- The client (nats.go v1.37.0) issues pull requests via
+  `js.go::PullSubscribe`, which sends a `nextRequest` to the server's
+  `$JS.API.CONSUMER.MSG.NEXT.<stream>.<consumer>` subject.
+- The server (nats-server v2.10.22) tracks outstanding deliveries per
+  consumer in `server/consumer.go::checkPending`, which compares pending
+  sequences against the stream's first/last sequence.
+- The stream's `server/filestore.go::EraseMsg` (and the underlying
+  `msgBlock.eraseMsg`) is invoked by retention enforcement and truncates
+  message blocks below the retention floor.
+- When `checkPending` runs concurrently with retention eviction, a sequence
+  that was valid when handed to the client is no longer in the filestore
+  — the consumer's pending map references a sequence below `state.FirstSeq`,
+  producing `bad pending entry`. The client's retry against
+  `server/consumer.go::nextWaiting` returns the next available sequence,
+  silently skipping the evicted range.
+- The contract is implicit: the client assumes that an acknowledged-pending
+  sequence remains addressable until ack timeout, but the server enforces
+  retention on its own clock.
+
+Repos and revisions:
+- /workspace/nats-server/ — `nats-io/nats-server` at v2.10.22
+- /workspace/nats.go/ — `nats-io/nats.go` at v1.37.0
+
+Both are Go projects.
+
+Reference upstream issue: https://github.com/nats-io/nats-server/issues/4286
+
+Your task:
+1. Find the client-side pull-request entry point in nats.go
+   (`js.go::PullSubscribe` and the `nextRequest` it sends).
+2. Find the server-side pull dispatcher in nats-server
+   (`server/consumer.go::nextWaiting` and `checkPending`).
+3. Identify the retention/erase path
+   (`server/filestore.go::EraseMsg` and its msgBlock helper) that races
+   against `checkPending`.
+4. Trace the cross-repo failure: client sends pull -> server checkPending
+   races filestore EraseMsg -> pending sequence falls below FirstSeq ->
+   "bad pending entry, sequence out of range" -> client retries, server
+   returns the next live sequence -> consumer silently skips the evicted
+   range.
+
+Write your incident report to `/workspace/nats-server/INCIDENT_REPORT.md`
+with:
+- Root cause (file and function in each repo)
+- Full error chain across the cross-repo seam
+- Affected components
+- Remediation: tighten the client's pending-sequence handling OR have the
+  server clamp pending entries at retention time OR add an explicit
+  delivery-gap signal to the pull protocol so the client can detect skips
+"""
+
+[[repos]]
+url = "https://github.com/nats-io/nats-server"
+rev = "v2.10.22"
+path = "nats-server"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/nats-io/nats.go"
+rev = "v1.37.0"
+path = "nats.go"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 350_000
+dependency_depth = 2
+frameworks = ["nats", "jetstream"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies the nats.go pull entry point (js.go::PullSubscribe / nextRequest) and the nats-server consumer + filestore seam (consumer.go::checkPending and filestore.go::EraseMsg) as the racing components"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces client PullSubscribe -> server nextWaiting/checkPending -> filestore EraseMsg -> pending-sequence-out-of-range -> silent gap on retry"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent names the nats.go JetStream client, the nats-server consumer subsystem, and the JetStream filestore"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes clamping pending entries at retention, hardening the client retry loop, or extending the pull protocol with an explicit gap signal"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The bug spans two Go modules connected only by a wire protocol (the JetStream pull request/response). Tracing it requires navigating from the client's PullSubscribe call into nats-server's consumer.go and then into filestore.go's retention path — three files in two repos with no compile-time dependency, which LLMs are unlikely to memorize end-to-end."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "server/consumer.go"
+repo = "nats-server"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "server/filestore.go"
+repo = "nats-server"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "js.go"
+repo = "nats.go"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "jsm.go"
+repo = "nats.go"
+confidence = 0.80
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "server/jetstream.go"
+repo = "nats-server"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "nats.go"
+repo = "nats.go"
+confidence = 0.65
+
+[qa]
+
+[[qa.waivers]]
+code = "F2"
+token = "nats.go"
+decision = "waive"
+rationale = "Token is the repository directory name (nats-io/nats.go, mounted at /workspace/nats.go/), used in the prompt as the client/project name -- non-discriminative, comparable to a generic build-manifest basename. The real oracle source files (js.go, jsm.go, server/consumer.go, server/filestore.go) are NOT named; the agent must discover them. NB: the ground_truth sufficient_files entry path='nats.go' is the repo basename rather than a real file -- a GT-quality nit, not an answer leak."
+approved_by = "stephanie.jarmak (dec-uon CLOSED)"
+bead = "EnterpriseBench-1is"
+date = "2026-06-04"

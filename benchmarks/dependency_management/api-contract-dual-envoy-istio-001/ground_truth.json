@@ -1,0 +1,61 @@
+{
+  "task_id": "api-contract-dual-envoy-istio-001",
+  "task_type": "api_contract",
+  "repos": [
+    {
+      "url": "https://github.com/envoyproxy/envoy",
+      "rev": "v1.28.0",
+      "path": "envoy"
+    },
+    {
+      "url": "https://github.com/istio/istio",
+      "rev": "1.20.0",
+      "path": "istio"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "envoy/api/envoy/config/cluster/v3/cluster.proto",
+      "repo": "envoy",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "istio/pilot/pkg/xds/ads.go",
+      "repo": "istio",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "istio/pilot/pkg/model/push_context.go",
+      "repo": "istio",
+      "confidence": 0.85
+    },
+    {
+      "path": "envoy/api/envoy/config/listener/v3/listener.proto",
+      "repo": "envoy",
+      "confidence": 0.8
+    }
+  ],
+  "api_contract_type": "protobuf_api",
+  "scoring_evidence": {
+    "envoy_xds_api": [
+      "cluster.proto",
+      "listener.proto"
+    ],
+    "istio_xds_gen": [
+      "ads.go",
+      "push_context.go",
+      "push_context"
+    ],
+    "v2_v3_drift": [
+      "cluster.proto",
+      "ads.go",
+      "push_context.go",
+      "listener.proto",
+      "push_context"
+    ]
+  }
+}

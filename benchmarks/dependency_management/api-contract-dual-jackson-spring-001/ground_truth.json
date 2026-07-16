@@ -1,0 +1,64 @@
+{
+  "task_id": "api-contract-dual-jackson-spring-001",
+  "task_type": "api_contract",
+  "repos": [
+    {
+      "url": "https://github.com/FasterXML/jackson-databind",
+      "rev": "jackson-databind-2.15.0",
+      "path": "jackson-databind"
+    },
+    {
+      "url": "https://github.com/spring-projects/spring-boot",
+      "rev": "v3.1.0",
+      "path": "spring-boot"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "jackson-databind/src/main/java/com/fasterxml/jackson/databind/ObjectMapper.java",
+      "repo": "jackson-databind",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "spring-boot/spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/jackson/JacksonAutoConfiguration.java",
+      "repo": "spring-boot",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "jackson-databind/src/main/java/com/fasterxml/jackson/databind/cfg/MapperConfig.java",
+      "repo": "jackson-databind",
+      "confidence": 0.8
+    }
+  ],
+  "api_contract_type": "java_default_behavior",
+  "scoring_evidence": {
+    "jackson_defaults": [
+      "ObjectMapper.java",
+      "JacksonAutoConfiguration.java",
+      "MapperConfig.java",
+      "JacksonAutoConfiguration",
+      "MapperConfig",
+      "MapperFeature",
+      "DeserializationFeature"
+    ],
+    "spring_autoconfig": [
+      "ObjectMapper.java",
+      "JacksonAutoConfiguration.java",
+      "MapperConfig.java",
+      "JacksonAutoConfiguration",
+      "MapperConfig",
+      "ObjectMapperBuilder"
+    ],
+    "behavior_drift": [
+      "ObjectMapper.java",
+      "JacksonAutoConfiguration.java",
+      "MapperConfig.java",
+      "JacksonAutoConfiguration",
+      "MapperConfig"
+    ]
+  }
+}

@@ -1,0 +1,102 @@
+# error_provenance: Trace urllib3 2.0 SSL error chain through requests adapter l
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "python-packaging-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "error-prov-dual-urllib3-requests-001"
+suite = "customer_escalation"
+task_type = "error_provenance"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace urllib3 2.0 SSL error chain through requests adapter layer"
+prompt = """
+After upgrading urllib3 to 2.0, requests is raising different SSL
+exceptions than expected. The error messages have changed and some
+error types were restructured.
+
+Your task:
+1. Find how urllib3 2.0 restructured its exception hierarchy for SSL errors
+2. Find where requests catches and wraps urllib3 exceptions
+3. Trace an SSL connection error from urllib3 through requests' adapter layer
+4. Identify where error context is transformed or lost
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/urllib3/urllib3"
+rev = "2.0.0"
+path = "urllib3"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/psf/requests"
+rev = "v2.28.2"
+path = "requests"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+total_loc = 200_000
+dependency_depth = 2
+frameworks = ["urllib3", "requests"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "urllib3_exceptions"
+weight = 0.30
+verifier = "checks/check_urllib3_exceptions.sh"
+description = "Agent identifies urllib3 2.0 exception changes"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "requests_wrapping"
+weight = 0.40
+verifier = "checks/check_requests_wrapping.sh"
+description = "Agent traces requests exception wrapping"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "error_chain"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent documents error transformation chain"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Exception hierarchy tracing across two repos benefits from cross-repo search"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "urllib3/src/urllib3/exceptions.py"
+repo = "urllib3"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "requests/requests/adapters.py"
+repo = "requests"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "requests/requests/exceptions.py"
+repo = "requests"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "urllib3/src/urllib3/connectionpool.py"
+repo = "urllib3"
+confidence = 0.8

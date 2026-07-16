@@ -1,0 +1,114 @@
+# dependency_graph: Trace three-layer async runtime dependency: tokio → hyper → 
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "rust-async-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "dep-graph-tri-tokio-hyper-tonic-001"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "expert"
+estimated_duration_minutes = 60
+session_type = "single"
+description = "Trace three-layer async runtime dependency: tokio → hyper → tonic gRPC stack"
+prompt = """
+The Rust gRPC stack uses tonic (gRPC) → hyper (HTTP/2) → tokio (async
+runtime). A tokio version bump can cascade through hyper into tonic.
+
+Your task:
+1. Map the full dependency chain: tonic → hyper → tokio with exact
+   version constraints from each Cargo.toml
+2. Identify which tokio APIs hyper uses that tonic depends on transitively
+3. Find any version pinning conflicts across the three repos
+4. Document the upgrade coordination strategy
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/tokio-rs/tokio"
+rev = "tokio-1.0.0"
+path = "tokio"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/hyperium/hyper"
+rev = "v0.14.0"
+path = "hyper"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/hyperium/tonic"
+rev = "v0.6.0"
+path = "tonic"
+role = "primary"
+
+[metadata]
+languages = ["rust"]
+total_loc = 200_000
+dependency_depth = 3
+frameworks = ["tokio", "hyper", "tonic"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "map_dep_chain"
+weight = 0.30
+verifier = "checks/check_map_dep_chain.sh"
+description = "Agent maps full dependency chain with versions"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "identify_transitive"
+weight = 0.40
+verifier = "checks/check_identify_transitive.sh"
+description = "Agent identifies transitive tokio APIs used by tonic"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "upgrade_strategy"
+weight = 0.30
+verifier = "checks/check_upgrade_strategy.sh"
+description = "Agent documents coordination strategy"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Three-repo Cargo.toml dependency tracing benefits from cross-repo search"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "tonic/tonic/Cargo.toml"
+repo = "tonic"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "hyper/Cargo.toml"
+repo = "hyper"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "tokio/tokio/Cargo.toml"
+repo = "tokio"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "tonic/tonic/src/transport/server.rs"
+repo = "tonic"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "hyper/src/server/tcp.rs"
+repo = "hyper"
+confidence = 0.8

@@ -1,0 +1,116 @@
+# dependency_graph: Trace Prometheus alert rule API changes cascading through Al
+
+difficulty_stratum = "tri_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "cncf-observability-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "dep-graph-tri-prometheus-alertmanager-grafana-001"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "expert"
+estimated_duration_minutes = 55
+session_type = "single"
+description = "Trace Prometheus alert rule API changes cascading through Alertmanager and Grafana"
+prompt = """
+Prometheus changed its alerting rule evaluation and notification API.
+Alertmanager receives alerts from Prometheus, and Grafana reads alert
+state from both. Changes in Prometheus' alert format cascade downstream.
+
+Your task:
+1. Find where Prometheus defines alert rule evaluation and notification format
+2. Find where Alertmanager receives and processes Prometheus alerts
+3. Find where Grafana queries Prometheus and Alertmanager for alert state
+4. Document the three-way API contract and cascade points
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/prometheus/prometheus"
+rev = "v2.47.0"
+path = "prometheus"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/prometheus/alertmanager"
+rev = "v0.26.0"
+path = "alertmanager"
+role = "intermediary"
+
+[[repos]]
+url = "https://github.com/grafana/grafana"
+rev = "v10.2.0"
+path = "grafana"
+role = "primary"
+
+[metadata]
+languages = ["go"]
+total_loc = 200_000
+dependency_depth = 3
+frameworks = ["prometheus", "alertmanager", "grafana"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "prometheus_alert_api"
+weight = 0.25
+verifier = "checks/check_prometheus_alert_api.sh"
+description = "Agent identifies Prometheus alert notification format"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "alertmanager_receiver"
+weight = 0.25
+verifier = "checks/check_alertmanager_receiver.sh"
+description = "Agent finds Alertmanager alert processing"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "grafana_query"
+weight = 0.25
+verifier = "checks/check_grafana_query.sh"
+description = "Agent finds Grafana alert state queries"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "cascade_analysis"
+weight = 0.25
+verifier = "checks/check_cascade_analysis.sh"
+description = "Agent documents three-way cascade"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Three-repo alert API tracing across large Go codebases needs extensive search"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "prometheus/rules/alerting.go"
+repo = "prometheus"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "alertmanager/api/v2/restapi/operations/alert/post_alerts.go"
+repo = "alertmanager"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "grafana/pkg/services/ngalert/api/api_prometheus.go"
+repo = "grafana"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "prometheus/notifier/notifier.go"
+repo = "prometheus"
+confidence = 0.8

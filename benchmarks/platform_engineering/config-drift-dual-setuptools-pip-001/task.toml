@@ -1,0 +1,103 @@
+# config_drift: Trace setuptools pkg_resources deprecation affecting pip's m
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "python-packaging-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "config-drift-dual-setuptools-pip-001"
+suite = "platform_engineering"
+task_type = "config_drift"
+difficulty = "expert"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Trace setuptools pkg_resources deprecation affecting pip's metadata resolution"
+prompt = """
+setuptools 67.0 deprecated pkg_resources in favor of importlib.metadata.
+pip vendors its own copy of pkg_resources and uses it for metadata
+resolution, entry point discovery, and namespace package handling.
+
+Your task:
+1. Find where setuptools deprecated/changed pkg_resources APIs
+2. Find where pip vendors and uses pkg_resources internally
+3. Identify which pip features depend on deprecated pkg_resources behavior
+4. Document the drift between setuptools' intended migration path and
+   pip's vendored copy
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/pypa/setuptools"
+rev = "v67.0.0"
+path = "setuptools"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/pypa/pip"
+rev = "23.0"
+path = "pip"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+total_loc = 200_000
+dependency_depth = 2
+frameworks = ["setuptools", "pip"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "setuptools_deprecation"
+weight = 0.25
+verifier = "checks/check_setuptools_deprecation.sh"
+description = "Agent identifies setuptools deprecation"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "pip_vendored_usage"
+weight = 0.40
+verifier = "checks/check_pip_vendored_usage.sh"
+description = "Agent finds pip's vendored pkg_resources usage"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "drift_analysis"
+weight = 0.35
+verifier = "checks/check_drift_analysis.sh"
+description = "Agent documents configuration drift"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Large vendored copy requires cross-repo diff to identify drift points"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "setuptools/pkg_resources/__init__.py"
+repo = "setuptools"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pip/src/pip/_vendor/pkg_resources/__init__.py"
+repo = "pip"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pip/src/pip/_internal/metadata/pkg_resources.py"
+repo = "pip"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "setuptools/setuptools/_entry_points.py"
+repo = "setuptools"
+confidence = 0.8

@@ -1,0 +1,27 @@
+{
+  "task_id": "dep-graph-dual-cryptography-paramiko-001",
+  "checkpoints": {
+    "crypto_api_changes": {
+      "expected_solution": "Agent identifies cryptography API removals The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: __init__.py, transport.py, kex_group1.py, and base.py). The judge looks for the following concept tokens in the agent output: default_backend, backend.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (__init__.py, transport.py, kex_group1.py, and base.py) in the agent output",
+        "Mentions at least three of the canonical concept tokens: default_backend and backend"
+      ]
+    },
+    "paramiko_crypto_usage": {
+      "expected_solution": "Agent finds paramiko's cryptography usage The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: transport.py and kex_group1.py). The judge looks for the following concept tokens in the agent output: transport, kex, packet.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (transport.py and kex_group1.py) in the agent output",
+        "Mentions at least three of the canonical concept tokens: transport and packet",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "impact_scope": {
+      "expected_solution": "Agent documents full impact scope The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: __init__.py, transport.py, kex_group1.py, and base.py). The judge looks for the following concept tokens in the agent output: kex_group, transport, ssh.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (__init__.py, transport.py, kex_group1.py, and base.py) in the agent output",
+        "Mentions at least three of the canonical concept tokens: kex_group and transport"
+      ]
+    }
+  }
+}

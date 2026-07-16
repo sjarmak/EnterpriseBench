@@ -1,0 +1,120 @@
+{
+  "task_id": "incident-investigation-dual-nomad-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/hashicorp/nomad",
+      "rev": "v1.9.3",
+      "path": "nomad"
+    },
+    {
+      "url": "https://github.com/hashicorp/raft",
+      "rev": "v1.7.1",
+      "path": "raft"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "nomad/leader.go",
+      "repo": "nomad",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "nomad/plan_apply.go",
+      "repo": "nomad",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "fsm.go",
+      "repo": "raft",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "raft.go",
+      "repo": "raft",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "nomad/fsm.go",
+      "repo": "nomad",
+      "confidence": 0.8
+    },
+    {
+      "path": "commitment.go",
+      "repo": "raft",
+      "confidence": 0.7
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "On leader transition, hashicorp/raft's commitment path (raft.go + commitment.go) marks plan-apply log entries committed once a quorum acks them, but the FSM that actually mutates Nomad's state_store runs in a separate goroutine (fsm.go::runFSM) that consumes a commitTuple channel asynchronously. Nomad's nomad/leader.go::establishLeadership starts the plan applier (nomad/plan_apply.go::planApply) and scheduler workers as soon as leadership is acquired, before runFSM has drained the backlog of committed-but-unapplied entries through nomad/fsm.go::Apply into nomad/state/state_store.go. planApply therefore validates new plans against a state_store that is behind the committed index, sees in-flight plan apply futures it doesn't know about, and rejects new plans with 'plan submitted before last plan applied'. The result is that allocations whose plans landed in this window stay pending indefinitely.",
+    "error_chain": [
+      "Old leader is drained; raft holds an election and a new leader is chosen",
+      "On the new leader, raft.go marks recently replicated plan-apply log entries committed via commitment.go once quorum is reached",
+      "raft's runFSM goroutine in fsm.go starts draining the commitTuple channel and invoking the user FSM",
+      "Concurrently, nomad/leader.go::establishLeadership starts the eval broker, plan applier, and scheduler workers",
+      "nomad/plan_apply.go::planApply begins reading plans from the queue and validates them against nomad/state/state_store.go",
+      "state_store reflects only the entries runFSM has finished applying so far; the backlog is still in flight",
+      "planApply detects an in-flight plan it can't reconcile, logs 'plan submitted before last plan applied', and rejects",
+      "Allocations whose plans were rejected stay pending; new plans for the same jobs collide with the same backlog and are also rejected",
+      "Cluster surfaces the failure as indefinite pending allocations with 'plan rejected' / 'eval broker disabled' messages"
+    ],
+    "affected_components": [
+      "Nomad leader manager (nomad/leader.go::establishLeadership)",
+      "Nomad plan applier (nomad/plan_apply.go::planApply)",
+      "Nomad FSM apply path (nomad/fsm.go::Apply -> nomad/state/state_store.go)",
+      "hashicorp/raft FSM goroutine (fsm.go::runFSM)",
+      "hashicorp/raft commitment / leader replication path (raft.go, commitment.go)",
+      "All evaluations and allocations whose plan-apply landed during the leader transition window"
+    ],
+    "remediation": "Three layered options: (1) Gate establishLeadership on FSM drain \u2014 apply a barrier no-op log entry on leadership acquisition and wait for runFSM to acknowledge it before starting the plan applier and scheduler workers. (2) Have planApply read raft's applied-index (not committed-index) and refuse to dequeue plans until applied-index >= committed-index-at-leadership. (3) Upstream the contract change in hashicorp/raft so callers can subscribe to an FSM applied-index notification instead of inferring it from Apply() futures. Fix lives primarily in nomad/leader.go (option 1), nomad/plan_apply.go (option 2), or raft fsm.go (option 3)."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "nomad/leader.go",
+      "nomad/plan_apply.go",
+      "fsm.go",
+      "raft.go",
+      "commitment.go",
+      "nomad/state/state_store.go",
+      "establishLeadership",
+      "plan_apply",
+      "planApply",
+      "runFSM"
+    ],
+    "error_chain_trace": [
+      "leader.go",
+      "plan_apply.go",
+      "fsm.go",
+      "establishLeadership",
+      "runFSM",
+      "planApply",
+      "state_store",
+      "plan_apply"
+    ],
+    "affected_components": [
+      "leader.go",
+      "plan_apply.go",
+      "state_store.go",
+      "fsm.go",
+      "raft.go",
+      "commitment.go",
+      "state_store",
+      "establishLeadership",
+      "plan_apply",
+      "runFSM"
+    ],
+    "remediation_proposal": [
+      "nomad/leader.go",
+      "nomad/plan_apply.go",
+      "fsm.go",
+      "planApply",
+      "plan_apply"
+    ]
+  }
+}

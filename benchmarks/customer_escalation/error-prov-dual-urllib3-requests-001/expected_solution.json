@@ -1,0 +1,29 @@
+{
+  "task_id": "error-prov-dual-urllib3-requests-001",
+  "checkpoints": {
+    "urllib3_exceptions": {
+      "expected_solution": "For checkpoint 'urllib3 exceptions': the relevant code lives in urllib3/src/urllib3/exceptions.py. Context: Trace urllib3 2.0 SSL error chain through requests adapter layer. Error type: ssl_exception_chain.",
+      "evaluation_criteria": [
+        "Must reference urllib3/src/urllib3/exceptions.py as relevant to urllib3 exceptions",
+        "Must reference a specific function, class, or method handling urllib3 exceptions",
+        "Must scope the explanation to the urllib3 side of the integration"
+      ]
+    },
+    "requests_wrapping": {
+      "expected_solution": "For checkpoint 'requests wrapping': the relevant code lives in requests/adapters.py. Context: Trace urllib3 2.0 SSL error chain through requests adapter layer. Error type: ssl_exception_chain.",
+      "evaluation_criteria": [
+        "Must reference requests/adapters.py as relevant to requests wrapping",
+        "Must reference a specific function, class, or method handling requests wrapping",
+        "Must scope the explanation to the requests side of the integration"
+      ]
+    },
+    "error_chain": {
+      "expected_solution": "Error chain spans these files in causal order: urllib3/src/urllib3/exceptions.py \u2192 requests/adapters.py.",
+      "evaluation_criteria": [
+        "Must trace the propagation through urllib3/src/urllib3/exceptions.py",
+        "Must connect urllib3/src/urllib3/exceptions.py to requests/adapters.py",
+        "Must explain how each layer transforms or wraps the error"
+      ]
+    }
+  }
+}

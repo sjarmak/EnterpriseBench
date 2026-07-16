@@ -1,0 +1,29 @@
+{
+  "task_id": "dep-graph-dual-tokio-hyper-001",
+  "checkpoints": {
+    "identify_runtime_deps": {
+      "expected_solution": "Agent identifies tokio runtime dependencies in hyper The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Cargo.toml, tcp.rs, and builder.rs). The judge looks for the following concept tokens in the agent output: rt-core, rt-threaded, rt-multi-thread.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Cargo.toml, tcp.rs, and builder.rs) in the agent output",
+        "Mentions at least three of the canonical concept tokens: rt-core, rt-threaded, and rt-multi-thread",
+        "States the dependency type/relationship: `cargo_feature_flags`"
+      ]
+    },
+    "trace_server_chain": {
+      "expected_solution": "Agent traces hyper server \u2192 tokio runtime chain The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Cargo.toml, tcp.rs, and builder.rs). The judge looks for the following concept tokens in the agent output: Runtime, Builder.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Cargo.toml, tcp.rs, and builder.rs) in the agent output",
+        "Mentions at least three of the canonical concept tokens: Runtime and Builder",
+        "States the dependency type/relationship: `cargo_feature_flags`"
+      ]
+    },
+    "document_impact": {
+      "expected_solution": "Agent documents API changes and migration path The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Cargo.toml, tcp.rs, and builder.rs). The judge looks for the following concept tokens in the agent output: migration, update, change.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Cargo.toml, tcp.rs, and builder.rs) in the agent output",
+        "Mentions at least three of the canonical concept tokens: migration, update, and change",
+        "States the dependency type/relationship: `cargo_feature_flags`"
+      ]
+    }
+  }
+}

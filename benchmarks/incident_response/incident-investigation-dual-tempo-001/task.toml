@@ -1,0 +1,178 @@
+# Incident Investigation: Tempo distributor shuffle-shard funnels traces to one ingester via stale dskit ring health
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "tempo-ingest-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "incident-investigation-dual-tempo-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Trace why one Grafana Tempo ingester out of N saturates 'live traces' to the 3M cap while peers stay flat: a stale unhealthy peer in the dskit ring is incorrectly counted as healthy, so the distributor's shuffle-shard returns the same hot ingester for every trace ID until heartbeats time out."
+prompt = """
+Your platform team operates a Grafana Tempo 2.6.0 distributed cluster on
+Kubernetes with 12 ingesters fronted by N distributors. After a noisy-neighbor
+deploy, one ingester (ingester-7) starts to saturate while the other 11 stay
+flat:
+
+  ingester-7  tempo_ingester_live_traces ~ 250K -> 2.97M (3M cap)
+  ingester-*  tempo_ingester_live_traces ~ 240K-260K (steady)
+  distributor level=warn msg="pusher failed" err="TRACE_TOO_LARGE limit hit on ingester-7"
+  distributor level=warn msg="ring has 1 unhealthy instance" instance=ingester-3
+  ingester-7  level=warn msg="flush queue length high" queue=1024 lock_wait_ms=18000
+
+The skewed load only happens when at least one ingester in the ring is
+unresponsive but has not yet been removed (heartbeat still within the
+unhealthy timeout window). Once heartbeats time out and the unhealthy
+instance is forgotten, traffic rebalances. Restarting the affected ingester
+or kicking the unhealthy peer out of the KV store immediately clears the
+hot spot.
+
+Investigation notes from the platform engineer:
+- Tempo distributors use the dskit ring with shuffle-sharding to choose
+  ingester replicas per trace ID. Healthy-instance counting is delegated to
+  the dskit `ring` package.
+- The Tempo ingester maintains a "live traces" map and periodically calls
+  `modules/ingester/instance.go::CutCompleteTraces` to move completed
+  traces out of the live set toward the flush queue.
+- The ingester's `modules/ingester/flush.go::handleFlush` runs the flush
+  loop and contends on a global block-builder lock when serializing blocks
+  to the WAL/object store; under heavy load this contention causes
+  back-pressure that should slow ingest, but the slow ingester keeps being
+  picked by the distributor instead of being skipped.
+- The dskit `ring/ring.go::IsHealthy` function is the gate the distributor
+  consults when computing shuffle-shard membership. If it disagrees with
+  the actual liveness of the peer, the shard set degenerates.
+
+Repos and revisions:
+- /workspace/tempo/ — `grafana/tempo` at v2.6.0
+- /workspace/dskit/ — `grafana/dskit` pinned via tempo's go.mod (pseudoversion
+  v0.0.0-20240801171758-736c44c85382)
+
+Both are Go projects.
+
+Your task:
+1. Find the Tempo ingester live-trace path:
+   `modules/ingester/instance.go::CutCompleteTraces` and
+   `modules/ingester/flush.go::handleFlush`. Explain why the slow ingester
+   falls behind on cutting/flushing under lock contention.
+2. Find the dskit ring health gate at `ring/ring.go::IsHealthy` and the
+   lifecycle owner `ring/lifecycler.go` that updates instance heartbeats.
+   Explain how a stale-but-not-yet-evicted peer is counted as healthy and
+   skews shuffle-shard selection toward the same ingester.
+3. Trace the chain: distributor calls shuffle-shard -> dskit ring
+   `IsHealthy` returns wrong answer for the unhealthy peer ->
+   shuffle-shard set degenerates so every trace ID hashes to the same hot
+   ingester -> ingester's `CutCompleteTraces` falls behind because
+   `handleFlush` is contending on the block-builder lock -> live traces
+   spike to the 3M cap on that one ingester.
+4. Propose a remediation: tighten `IsHealthy` semantics (or its callers in
+   shuffle-shard) so a stale peer is excluded; OR reduce
+   block-builder lock contention in `handleFlush`; OR make shuffle-shard
+   aware of per-ingester saturation.
+
+Write your incident report to `/workspace/tempo/INCIDENT_REPORT.md` with:
+- Root cause (file and function in each repo)
+- Full error chain
+- Affected components
+- Remediation proposal
+
+Source: https://github.com/grafana/tempo/issues/3761
+"""
+
+[[repos]]
+url = "https://github.com/grafana/tempo"
+rev = "v2.6.0"
+path = "tempo"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/grafana/dskit"
+rev = "736c44c85382"
+path = "dskit"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 600_000
+dependency_depth = 2
+frameworks = ["grafana-tempo", "grafana-dskit"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies dskit ring/ring.go::IsHealthy as the wrong-answer gate and tempo modules/ingester/instance.go::CutCompleteTraces (with flush.go::handleFlush lock contention) as the saturation surface"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces distributor shuffle-shard -> dskit ring IsHealthy returns wrong answer -> hot ingester picked -> instance.go falls behind -> live trace spike"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent names the Tempo distributor, Tempo ingester, and the dskit ring as affected components"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes tightening IsHealthy/shuffle-shard awareness, or fixing block-builder lock contention in handleFlush"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The bug spans two Go modules where the failure surface (Tempo ingester saturation) is several call hops away from the root cause (dskit ring health-check semantics). Cross-repo navigation through go.mod into a less-famous infrastructure library (dskit) and back into Tempo's distributor/ingester paths is exactly what Sourcegraph cross-repo search and call-graph navigation accelerate; LLMs are unlikely to memorize dskit internals."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "modules/ingester/instance.go"
+repo = "tempo"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "modules/ingester/flush.go"
+repo = "tempo"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "ring/ring.go"
+repo = "dskit"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "ring/lifecycler.go"
+repo = "dskit"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "modules/distributor/distributor.go"
+repo = "tempo"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "ring/replication_strategy.go"
+repo = "dskit"
+confidence = 0.70

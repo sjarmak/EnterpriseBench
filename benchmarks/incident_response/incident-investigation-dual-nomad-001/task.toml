@@ -1,0 +1,184 @@
+# Incident Investigation: Nomad allocations stuck pending after leader transition due to FSM apply/ack timing in raft
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "nomad-scheduler-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "incident-investigation-dual-nomad-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Trace a stuck-pending allocation incident across Nomad's scheduler/plan_apply path and the underlying hashicorp/raft FSM goroutine, where committed plan-apply log entries are observable on the new leader before the FSM has actually finished applying them, so newly elected scheduler workers see torn state and treat in-flight plans as fresh."
+prompt = """
+Your platform team operates a HashiCorp Nomad 1.9 cluster running batch and
+service jobs across ~80 clients. After a routine leader transition (the old
+leader was drained for OS patching), operators report that allocations
+submitted in the minutes around the handover are stuck in "pending"
+indefinitely. The Nomad agent and server logs show:
+
+  [INFO]  nomad: cluster leadership acquired
+  [WARN]  nomad.plan: plan for node rejected: node_id=... reason="node is not ready for placements"
+  [ERROR] worker: failed to dequeue evaluation: error="eval broker disabled"
+  [WARN]  nomad: plan submitted before last plan applied; refusing
+  [INFO]  client.alloc_runner: waiting for allocation: alloc_id=... status=pending
+
+The pending allocations have already been written to raft (operators can see
+them in `nomad operator raft list-peers` style introspection), but the new
+leader's scheduler workers behave as if the allocations never existed. New
+plan submissions for the same jobs are also stuck. Restarting the new leader
+clears the failure transiently. A clean handover (without the patching window)
+does not reproduce.
+
+Investigation notes from the platform engineer:
+- After leader election, `nomad/leader.go::establishLeadership` starts the
+  eval broker, plan applier, and scheduler workers.
+- The plan applier (`nomad/plan_apply.go::planApply`) reads from the plan
+  queue, validates plans against the current state in
+  `nomad/state/state_store.go`, and submits accepted plans through raft via
+  `nomad/fsm.go::Apply`.
+- `hashicorp/raft` runs the FSM in a dedicated goroutine
+  (`fsm.go::runFSM`), which consumes a `commitTuple` channel. The FSM
+  goroutine is what actually mutates the Nomad `state_store` via
+  `nomad/fsm.go::Apply`.
+- raft's leader-side commit path (`raft.go`, `commitment.go`) marks log
+  entries committed once a quorum acks them, which is what `Apply()` futures
+  observe — but the FSM goroutine processes commits asynchronously of the
+  raft thread.
+- During a leader transition, the new leader replays a backlog of recently
+  committed plan-apply entries through the FSM. The plan applier is started
+  before the FSM goroutine has finished draining that backlog.
+- Result: scheduler workers query `state_store` and see a state that is
+  behind the committed index. Plans built against this stale state collide
+  with in-flight FSM applies, the plan applier rejects them ("plan submitted
+  before last plan applied"), and allocations stay pending forever.
+
+Repos and revisions:
+- /workspace/nomad/ — `hashicorp/nomad` at v1.9.3
+- /workspace/raft/  — `hashicorp/raft`  at v1.7.1
+
+Both are Go projects.
+
+Real-world reference: hashicorp/nomad #5363 ("alloc stuck in pending and
+zombie allocs") and hashicorp/raft #275 (FSM/raft goroutine race) describe
+related classes of failure where committed state and FSM-applied state can
+diverge across a leadership change.
+
+Your task:
+1. Find Nomad's leader-establishment path and the plan applier
+   (`nomad/leader.go::establishLeadership`, `nomad/plan_apply.go::planApply`).
+2. Locate the Nomad FSM apply path that mutates state
+   (`nomad/fsm.go::Apply`, `nomad/state/state_store.go`).
+3. In `hashicorp/raft`, find `fsm.go::runFSM` and the surrounding commit
+   path (`raft.go`, `commitment.go`) that explains why a log entry can be
+   "committed" before the FSM has applied it.
+4. Trace the race: leader transition -> commitment marks entries committed
+   -> establishLeadership starts plan applier and workers -> runFSM has not
+   yet drained backlog -> state_store reads return pre-backlog state ->
+   planApply rejects new plans -> allocations stuck pending.
+
+Write your incident report to `/workspace/nomad/INCIDENT_REPORT.md` with:
+- Root cause (file and function in each repo)
+- Full incident chain
+- Affected components
+- Remediation: gate establishLeadership on FSM drain (e.g. apply a barrier
+  no-op and wait for it) OR have planApply check committed index vs applied
+  index OR fix the upstream raft contract so callers can observe FSM
+  applied-index, not just committed-index.
+"""
+
+[[repos]]
+url = "https://github.com/hashicorp/nomad"
+rev = "v1.9.3"
+path = "nomad"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/hashicorp/raft"
+rev = "v1.7.1"
+path = "raft"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 850_000
+dependency_depth = 2
+frameworks = ["nomad", "hashicorp-raft"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies the Nomad leader/plan_apply path and the hashicorp/raft runFSM goroutine as the two sides of the apply/ack timing gap"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces leader transition -> establishLeadership -> planApply -> stale state_store read -> rejected plan -> stuck pending allocation"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent names the Nomad leader manager, plan applier, FSM/state_store, and the hashicorp/raft library FSM goroutine"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes barrier/drain on FSM, applied-index gating in planApply, or upstream raft contract change to expose applied-index"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The race spans two Go modules (Nomad and hashicorp/raft) and a non-obvious contract: raft reports an entry 'committed' (quorum-acked) before the FSM goroutine has processed it. Tracing this requires cross-repo navigation from Nomad's leader-establishment / planApply through fsm.Apply into the raft FSM goroutine. The seam is small, lives in a less-celebrated library, and is easy to misread without ground-truth code lookup."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "nomad/leader.go"
+repo = "nomad"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "nomad/plan_apply.go"
+repo = "nomad"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "fsm.go"
+repo = "raft"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "raft.go"
+repo = "raft"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "nomad/fsm.go"
+repo = "nomad"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "commitment.go"
+repo = "raft"
+confidence = 0.70

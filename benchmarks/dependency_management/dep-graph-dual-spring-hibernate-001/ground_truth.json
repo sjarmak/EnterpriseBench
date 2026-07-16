@@ -1,0 +1,67 @@
+{
+  "task_id": "dep-graph-dual-spring-hibernate-001",
+  "task_type": "dependency_graph",
+  "repos": [
+    {
+      "url": "https://github.com/hibernate/hibernate-orm",
+      "rev": "6.2.0",
+      "path": "hibernate-orm"
+    },
+    {
+      "url": "https://github.com/spring-projects/spring-boot",
+      "rev": "v3.1.0",
+      "path": "spring-boot"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "hibernate-orm/hibernate-core/src/main/java/org/hibernate/cfg/Configuration.java",
+      "repo": "hibernate-orm",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "spring-boot/spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/orm/jpa/HibernateJpaAutoConfiguration.java",
+      "repo": "spring-boot",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "hibernate-orm/hibernate-core/src/main/java/org/hibernate/cfg/AvailableSettings.java",
+      "repo": "hibernate-orm",
+      "confidence": 0.85
+    }
+  ],
+  "dependency_type": "jpa_provider",
+  "scoring_evidence": {
+    "hibernate_changes": [
+      "Configuration.java",
+      "HibernateJpaAutoConfiguration.java",
+      "AvailableSettings.java",
+      "HibernateJpaAutoConfiguration",
+      "AvailableSettings",
+      "StandardServiceRegistry",
+      "jpa_provider"
+    ],
+    "spring_jpa_config": [
+      "Configuration.java",
+      "HibernateJpaAutoConfiguration.java",
+      "AvailableSettings.java",
+      "HibernateJpaAutoConfiguration",
+      "AvailableSettings",
+      "JpaProperties",
+      "EntityManagerFactory",
+      "jpa_provider"
+    ],
+    "migration_path": [
+      "Configuration.java",
+      "HibernateJpaAutoConfiguration.java",
+      "AvailableSettings.java",
+      "HibernateJpaAutoConfiguration",
+      "AvailableSettings",
+      "jpa_provider"
+    ]
+  }
+}

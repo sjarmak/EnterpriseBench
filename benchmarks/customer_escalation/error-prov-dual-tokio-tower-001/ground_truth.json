@@ -1,0 +1,58 @@
+{
+  "task_id": "error-prov-dual-tokio-tower-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/tokio-rs/tokio",
+      "rev": "tokio-1.35.0",
+      "path": "tokio"
+    },
+    {
+      "url": "https://github.com/tower-rs/tower",
+      "rev": "tower-0.4.13",
+      "path": "tower"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "tokio/tokio/src/task/join.rs",
+      "repo": "tokio",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "tower/tower/src/util/mod.rs",
+      "repo": "tower",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "tokio/tokio/src/runtime/task/error.rs",
+      "repo": "tokio",
+      "confidence": 0.8
+    },
+    {
+      "path": "tower/tower/src/buffer/service.rs",
+      "repo": "tower",
+      "confidence": 0.8
+    }
+  ],
+  "error_type": "panic_propagation",
+  "scoring_evidence": {
+    "tokio_panic_handling": [
+      "tokio/src/runtime/task/error.rs",
+      "panic_propagation"
+    ],
+    "tower_error_chain": [
+      "tower/src/util/mod.rs",
+      "panic_propagation"
+    ],
+    "context_loss": [
+      "tokio/src/runtime/task/error.rs",
+      "tower/src/util/mod.rs",
+      "panic_propagation"
+    ]
+  }
+}

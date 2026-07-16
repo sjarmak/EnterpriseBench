@@ -1,0 +1,103 @@
+{
+  "task_id": "incident-investigation-dual-tempo-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/grafana/tempo",
+      "rev": "v2.6.0",
+      "path": "tempo"
+    },
+    {
+      "url": "https://github.com/grafana/dskit",
+      "rev": "736c44c85382",
+      "path": "dskit"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "modules/ingester/instance.go",
+      "repo": "tempo",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "modules/ingester/flush.go",
+      "repo": "tempo",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "ring/ring.go",
+      "repo": "dskit",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "ring/lifecycler.go",
+      "repo": "dskit",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "modules/distributor/distributor.go",
+      "repo": "tempo",
+      "confidence": 0.75
+    },
+    {
+      "path": "ring/replication_strategy.go",
+      "repo": "dskit",
+      "confidence": 0.7
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "The Tempo distributor uses dskit shuffle-sharding to choose ingester replicas per trace ID, and the dskit ring/ring.go::IsHealthy gate is consulted to decide which ring members are eligible. When a peer ingester becomes unresponsive but its heartbeat in ring/lifecycler.go is still inside the unhealthy-timeout window, IsHealthy returns true for that peer and the shuffle-shard set degenerates: every trace ID hashes onto the same surviving ingester. That ingester's modules/ingester/instance.go::CutCompleteTraces cannot keep up because modules/ingester/flush.go::handleFlush is contending on the global block-builder lock, so live traces accumulate to the 3M cap while peers stay flat. Back-pressure does not trip because the distributor keeps selecting the saturated ingester until heartbeats finally time out and the unhealthy peer is evicted.",
+    "error_chain": [
+      "Distributor receives a trace and computes a shuffle-shard over the dskit ring",
+      "dskit ring/ring.go::IsHealthy returns true for the stale (but not yet timed-out) peer in ring/lifecycler.go",
+      "Shuffle-shard set degenerates because the unhealthy peer occupies a slot but is unreachable, so the distributor's replication path repeatedly falls back to the same surviving ingester for every trace ID",
+      "All inbound traces land on the same hot ingester (ingester-7)",
+      "The hot ingester's modules/ingester/instance.go::CutCompleteTraces falls behind moving completed traces out of the live set",
+      "modules/ingester/flush.go::handleFlush contends on the global block-builder lock, increasing lock_wait_ms and queue length",
+      "Live traces accumulate from ~250K to the 3M cap on the hot ingester while peers remain at ~250K",
+      "Back-pressure never trips because the distributor keeps picking the same hot ingester until the unhealthy peer's heartbeat finally times out"
+    ],
+    "affected_components": [
+      "Tempo distributor (modules/distributor) \u2014 consults the ring for shuffle-shard membership",
+      "Tempo ingester (modules/ingester/instance.go, modules/ingester/flush.go) \u2014 saturates on the funneled load",
+      "dskit ring (ring/ring.go, ring/lifecycler.go) \u2014 health/heartbeat semantics that drive shard selection",
+      "All trace ingestion during the heartbeat-timeout window for an unresponsive peer"
+    ],
+    "remediation": "Three layered options: (1) Tighten ring/ring.go::IsHealthy (or its callers in shuffle-shard) to exclude peers whose heartbeat is older than a configurable threshold below the full unhealthy timeout, so degenerate shard sets are avoided. (2) Make shuffle-shard saturation-aware: have the distributor consult per-ingester live-trace headroom and rotate off saturated members. (3) Reduce block-builder lock contention in modules/ingester/flush.go::handleFlush so the ingester can drain its live trace set fast enough that the funneled load doesn't reach the 3M cap. The structural fix lives in dskit; the throughput fix lives in Tempo's flush path."
+  },
+  "source": "https://github.com/grafana/tempo/issues/3761",
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "ring/ring.go",
+      "ring/lifecycler.go",
+      "modules/ingester/instance.go",
+      "modules/ingester/flush.go",
+      "IsHealthy",
+      "CutCompleteTraces",
+      "handleFlush"
+    ],
+    "error_chain_trace": [
+      "instance.go",
+      "flush.go",
+      "IsHealthy",
+      "CutCompleteTraces",
+      "handleFlush"
+    ],
+    "affected_components": [
+      "instance.go",
+      "flush.go",
+      "ring/ring.go"
+    ],
+    "remediation_proposal": [
+      "modules/ingester/flush.go",
+      "IsHealthy",
+      "handleFlush"
+    ]
+  }
+}

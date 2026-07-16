@@ -1,0 +1,58 @@
+{
+  "task_id": "dep-graph-dual-junit-mockito-001",
+  "task_type": "dependency_graph",
+  "repos": [
+    {
+      "url": "https://github.com/junit-team/junit5",
+      "rev": "r5.10.0",
+      "path": "junit5"
+    },
+    {
+      "url": "https://github.com/mockito/mockito",
+      "rev": "v5.5.0",
+      "path": "mockito"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "junit5/junit-jupiter-api/src/main/java/org/junit/jupiter/api/extension/Extension.java",
+      "repo": "junit5",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "mockito/subprojects/junit-jupiter/src/main/java/org/mockito/junit/jupiter/MockitoExtension.java",
+      "repo": "mockito",
+      "confidence": 0.95,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "junit5/junit-jupiter-api/src/main/java/org/junit/jupiter/api/extension/BeforeEachCallback.java",
+      "repo": "junit5",
+      "confidence": 0.8
+    }
+  ],
+  "api_contract_type": "java_interface_api",
+  "scoring_evidence": {
+    "junit5_extension": [
+      "Extension.java",
+      "BeforeEachCallback.java",
+      "BeforeEachCallback",
+      "AfterEachCallback"
+    ],
+    "mockito_integration": [
+      "MockitoExtension.java",
+      "MockitoExtension",
+      "MockitoSession"
+    ],
+    "migration_doc": [
+      "Extension.java",
+      "MockitoExtension.java",
+      "BeforeEachCallback.java",
+      "MockitoExtension",
+      "BeforeEachCallback"
+    ]
+  }
+}

@@ -1,0 +1,103 @@
+# api_contract: Trace hyper 1.0 Body type split affecting reqwest's HTTP cli
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "rust-async-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "api-contract-dual-hyper-reqwest-001"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "hard"
+estimated_duration_minutes = 40
+session_type = "single"
+description = "Trace hyper 1.0 Body type split affecting reqwest's HTTP client internals"
+prompt = """
+hyper 1.0 split the monolithic `Body` type into `hyper::body::Incoming`
+(for servers) and requires clients to use `http-body-util` adapters.
+The reqwest HTTP client depends heavily on hyper's Body type.
+
+Your task:
+1. Find where hyper defines Body-related types and traits
+2. Find where reqwest uses hyper's Body type in its client implementation
+3. Identify the contract mismatch between hyper 1.0's new body types
+   and reqwest's existing usage
+4. Document the migration path for each affected reqwest module
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/hyperium/hyper"
+rev = "v1.0.0"
+path = "hyper"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/seanmonstar/reqwest"
+rev = "v0.11.22"
+path = "reqwest"
+role = "primary"
+
+[metadata]
+languages = ["rust"]
+total_loc = 200_000
+dependency_depth = 2
+frameworks = ["hyper", "reqwest", "http-body"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_body_types"
+weight = 0.35
+verifier = "checks/check_identify_body_types.sh"
+description = "Agent identifies hyper Body type changes"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trace_reqwest_usage"
+weight = 0.35
+verifier = "checks/check_trace_reqwest_usage.sh"
+description = "Agent finds reqwest's hyper Body usage"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "migration_analysis"
+weight = 0.30
+verifier = "checks/check_migration_analysis.sh"
+description = "Agent documents migration path"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Type-level cross-repo search helps trace Body usage patterns"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "hyper/src/body/mod.rs"
+repo = "hyper"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "reqwest/src/async_impl/client.rs"
+repo = "reqwest"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "reqwest/src/async_impl/body.rs"
+repo = "reqwest"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "hyper/src/body/incoming.rs"
+repo = "hyper"
+confidence = 0.8

@@ -1,0 +1,57 @@
+{
+  "task_id": "error-prov-dual-netty-spring-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/netty/netty",
+      "rev": "netty-4.1.100.Final",
+      "path": "netty"
+    },
+    {
+      "url": "https://github.com/spring-projects/spring-framework",
+      "rev": "v6.0.11",
+      "path": "spring-framework"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "netty/handler/src/main/java/io/netty/handler/codec/http/HttpServerCodec.java",
+      "repo": "netty",
+      "confidence": 0.85,
+      "source": "deterministic"
+    },
+    {
+      "path": "spring-framework/spring-web/src/main/java/org/springframework/http/server/reactive/ReactorHttpHandlerAdapter.java",
+      "repo": "spring-framework",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "netty/transport/src/main/java/io/netty/channel/DefaultChannelPipeline.java",
+      "repo": "netty",
+      "confidence": 0.8
+    }
+  ],
+  "error_type": "channel_pipeline_exception",
+  "scoring_evidence": {
+    "netty_error_handling": [
+      "codec-http/src/main/java/io/netty/handler/codec/http/HttpServerCodec.java",
+      "HttpServerCodec",
+      "channel_pipeline_exception"
+    ],
+    "spring_webflux_bridge": [
+      "spring-web/src/main/java/org/springframework/http/server/reactive/ReactorHttpHandlerAdapter.java",
+      "ReactorHttpHandlerAdapter",
+      "channel_pipeline_exception"
+    ],
+    "error_context_loss": [
+      "codec-http/src/main/java/io/netty/handler/codec/http/HttpServerCodec.java",
+      "spring-web/src/main/java/org/springframework/http/server/reactive/ReactorHttpHandlerAdapter.java",
+      "HttpServerCodec",
+      "ReactorHttpHandlerAdapter",
+      "channel_pipeline_exception"
+    ]
+  }
+}

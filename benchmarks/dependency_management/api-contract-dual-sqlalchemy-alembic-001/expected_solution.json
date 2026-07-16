@@ -1,0 +1,27 @@
+{
+  "task_id": "api-contract-dual-sqlalchemy-alembic-001",
+  "checkpoints": {
+    "sqla_api_changes": {
+      "expected_solution": "Agent identifies SQLAlchemy 2.0 execute API changes The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: base.py, migration.py, ops.py, and session.py). The judge looks for the following concept tokens in the agent output: execute, text, Connection.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (base.py, migration.py, ops.py, and session.py) in the agent output",
+        "Mentions at least three of the canonical concept tokens: execute, text, and Connection"
+      ]
+    },
+    "alembic_usage": {
+      "expected_solution": "Agent finds Alembic's SQLAlchemy API usage The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: migration.py and ops.py). The judge looks for the following concept tokens in the agent output: MigrationContext, operations, execute.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (migration.py and ops.py) in the agent output",
+        "Mentions at least three of the canonical concept tokens: MigrationContext, operations, and execute",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "contract_drift": {
+      "expected_solution": "Agent documents breaking contract points The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: base.py, migration.py, ops.py, and session.py). The judge looks for the following concept tokens in the agent output: text, 2.0, legacy, deprecat.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (base.py, migration.py, ops.py, and session.py) in the agent output",
+        "Mentions at least three of the canonical concept tokens: text, legacy, and deprecat"
+      ]
+    }
+  }
+}

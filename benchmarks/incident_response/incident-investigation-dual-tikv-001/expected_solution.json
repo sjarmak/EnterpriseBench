@@ -1,0 +1,39 @@
+{
+  "task_id": "incident-investigation-dual-tikv-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify the TiKV-side accounting (Peer::collect_down_peers in components/raftstore/src/store/peer.rs) and the missing hibernate-state check (GroupState in components/raftstore/src/store/hibernate_state.rs), AND the PD-side ingest path (RaftCluster.processRegionHeartbeat in server/cluster/cluster.go). The report must explain that hibernated-but-healthy peers are misclassified as down because the leader does not consult GroupState before reporting, and that PD trusts the resulting list.",
+      "evaluation_criteria": [
+        "Names components/raftstore/src/store/peer.rs (or collect_down_peers) on the TiKV side",
+        "Mentions hibernate / GroupState / hibernate_state.rs as the missing check",
+        "Names server/cluster/cluster.go (or processRegionHeartbeat) on the PD side",
+        "States that silent-but-healthy hibernated peers are misclassified as down"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Agent must trace at least four hops across both repos: hibernated region -> collect_down_peers in TiKV reports silent peers as down -> store/region heartbeat carries the down list to PD -> processRegionHeartbeat schedules removal -> peer awakens and flap repeats.",
+      "evaluation_criteria": [
+        "Mentions hibernation / idle group state as the trigger condition",
+        "Mentions collect_down_peers (or peer.rs) producing the false down list",
+        "Mentions the region/store heartbeat carrying the down peers to PD",
+        "Mentions processRegionHeartbeat (or HandleRegionHeartbeat) feeding the scheduler / scheduling removal",
+        "Mentions the resulting peer flap / removal-then-reappear cycle"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Agent must name the TiKV raftstore (peer logic and hibernation), PD's cluster heartbeat ingest / scheduler, and the region heartbeat protocol that carries the bad signal across the boundary.",
+      "evaluation_criteria": [
+        "Names TiKV raftstore (components/raftstore or peer logic)",
+        "Names PD cluster scheduler / heartbeat ingest (server/cluster)",
+        "Names the region (or store) heartbeat protocol / message"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Agent must propose at least one concrete remediation: (a) TiKV-side hibernate-aware filter in collect_down_peers (skip peers when GroupState is Idle, or refresh peer_heartbeats on hibernation entry), OR (b) PD-side suppression / multi-heartbeat confirmation in processRegionHeartbeat for peers that may be hibernated.",
+      "evaluation_criteria": [
+        "Proposes a TiKV-side fix (hibernate-aware collect_down_peers or refresh on hibernate) OR a PD-side fix (suppress / require confirmation in processRegionHeartbeat)",
+        "Identifies where the fix would live (peer.rs / collect_down_peers OR cluster.go / processRegionHeartbeat)"
+      ]
+    }
+  }
+}

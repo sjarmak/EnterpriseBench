@@ -1,0 +1,27 @@
+{
+  "task_id": "dep-graph-dual-junit-mockito-001",
+  "checkpoints": {
+    "junit5_extension": {
+      "expected_solution": "Agent identifies JUnit 5 extension API The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Extension.java and BeforeEachCallback.java). The judge looks for the following concept tokens in the agent output: Extension, ExtendWith, BeforeEachCallback, AfterEachCallback.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Extension.java and BeforeEachCallback.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: Extension, ExtendWith, BeforeEachCallback, and AfterEachCallback"
+      ]
+    },
+    "mockito_integration": {
+      "expected_solution": "Agent finds Mockito's JUnit 5 integration The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: MockitoExtension.java). The judge looks for the following concept tokens in the agent output: MockitoExtension, MockitoSession, ExtendWith.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (MockitoExtension.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: MockitoExtension, MockitoSession, and ExtendWith",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "migration_doc": {
+      "expected_solution": "Agent documents Runner \u2192 Extension migration The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Extension.java, MockitoExtension.java, and BeforeEachCallback.java). The judge looks for the following concept tokens in the agent output: RunWith, Runner, Extension, migration.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Extension.java, MockitoExtension.java, and BeforeEachCallback.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: RunWith, Runner, Extension, and migration"
+      ]
+    }
+  }
+}

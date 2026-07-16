@@ -1,0 +1,107 @@
+{
+  "task_id": "incident-investigation-dual-nats-001",
+  "task_type": "incident_investigation",
+  "upstream_issue": "https://github.com/nats-io/nats-server/issues/4286",
+  "repos": [
+    {
+      "url": "https://github.com/nats-io/nats-server",
+      "rev": "v2.10.22",
+      "path": "nats-server"
+    },
+    {
+      "url": "https://github.com/nats-io/nats.go",
+      "rev": "v1.37.0",
+      "path": "nats.go"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "server/consumer.go",
+      "repo": "nats-server",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "server/filestore.go",
+      "repo": "nats-server",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "js.go",
+      "repo": "nats.go",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "jsm.go",
+      "repo": "nats.go",
+      "confidence": 0.8,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "server/jetstream.go",
+      "repo": "nats-server",
+      "confidence": 0.7
+    },
+    {
+      "path": "nats.go",
+      "repo": "nats.go",
+      "confidence": 0.65
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "The nats.go client (js.go::PullSubscribe) sends a nextRequest for batches of messages on a durable pull consumer. The nats-server consumer (server/consumer.go::checkPending and nextWaiting) tracks outstanding deliveries against the stream's filestore. JetStream retention drives server/filestore.go::EraseMsg (and msgBlock.eraseMsg) on its own clock; when retention erases a block whose sequence is still in the consumer's pending map, checkPending finds the entry below state.FirstSeq and emits 'bad pending entry, sequence X out of range'. The cross-repo contract is implicit \u2014 the client assumes an acknowledged-pending sequence remains addressable until ack timeout, but the server enforces retention independently. The client's retry against nextWaiting returns the next live sequence, so the evicted range is silently dropped.",
+    "error_chain": [
+      "Client calls js.go::PullSubscribe and ships a nextRequest for batch of N messages",
+      "nats-server consumer.go::nextWaiting picks up the waiting request and dispatches messages",
+      "Each delivered message is recorded in the consumer's pending map (sequence -> deadline)",
+      "JetStream retention enforcement invokes server/filestore.go::EraseMsg, which calls msgBlock.eraseMsg to truncate blocks below the MaxBytes/MaxAge floor",
+      "consumer.go::checkPending runs on its timer and compares pending sequences against the stream state",
+      "A pending sequence now falls below state.FirstSeq -> writes 'bad pending entry, sequence [X] out of range' and drops the entry",
+      "Client receives 'no messages available' on its in-flight pull (or simply does not get the message)",
+      "Client retries via PullSubscribe; server returns the next live sequence above the erased range",
+      "Downstream sink observes a gap in stream sequences with no error surfaced to the application"
+    ],
+    "affected_components": [
+      "nats.go JetStream client (js.go PullSubscribe / nextRequest, jsm.go AddConsumer)",
+      "nats-server consumer subsystem (server/consumer.go: checkPending, nextWaiting, pending map)",
+      "JetStream filestore retention (server/filestore.go: EraseMsg, msgBlock.eraseMsg)",
+      "All durable pull consumers on streams with MaxBytes or MaxAge retention",
+      "Any downstream sink that relies on contiguous stream sequence delivery"
+    ],
+    "remediation": "Three layered options: (1) Server-side: have retention (filestore.go::EraseMsg) consult active consumers' pending maps and clamp/notify before erasing a block whose sequences are still pending \u2014 i.e., fail closed with an explicit error rather than letting checkPending discover the inconsistency later. (2) Protocol: extend the pull response with an explicit 'gap' header so the client can detect skipped sequences and surface a typed error to the application instead of silently advancing. (3) Client-side: in nats.go js.go, track the highest contiguous sequence delivered and emit ErrSequenceGap when the next pulled message jumps; require explicit consumer reconfiguration to acknowledge data loss."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "js.go",
+      "server/consumer.go",
+      "server/filestore.go",
+      "PullSubscribe",
+      "nextRequest",
+      "checkPending",
+      "nextWaiting",
+      "EraseMsg"
+    ],
+    "error_chain_trace": [
+      "PullSubscribe",
+      "nextWaiting",
+      "checkPending",
+      "EraseMsg",
+      "FirstSeq",
+      "nextRequest"
+    ],
+    "affected_components": [
+      "js.go",
+      "server/consumer.go",
+      "server/filestore.go",
+      "PullSubscribe"
+    ],
+    "remediation_proposal": [
+      "js.go",
+      "ErrSequenceGap"
+    ]
+  }
+}

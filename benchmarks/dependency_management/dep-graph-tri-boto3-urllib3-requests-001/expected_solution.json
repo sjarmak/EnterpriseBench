@@ -1,0 +1,28 @@
+{
+  "task_id": "dep-graph-tri-boto3-urllib3-requests-001",
+  "checkpoints": {
+    "dep_chain_map": {
+      "expected_solution": "Agent maps three-repo dependency chain The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: CHANGES.rst, setup.cfg, setup.py, httpsession.py, and adapters.py). The judge looks for the following concept tokens in the agent output: setup.cfg, setup.py, pyproject.toml.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (CHANGES.rst, setup.cfg, setup.py, httpsession.py, and adapters.py) in the agent output",
+        "Mentions at least three of the canonical concept tokens: setup.cfg, setup.py, and pyproject.toml"
+      ]
+    },
+    "version_conflicts": {
+      "expected_solution": "Agent identifies version pin conflicts The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: CHANGES.rst, setup.cfg, setup.py, httpsession.py, and adapters.py). The judge looks for the following concept tokens in the agent output: urllib3.1.27, urllib3.2.0, vendor.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (CHANGES.rst, setup.cfg, setup.py, httpsession.py, and adapters.py) in the agent output",
+        "Mentions at least three of the canonical concept tokens: urllib3.1.27, urllib3.2.0, and vendor",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "upgrade_strategy": {
+      "expected_solution": "Agent documents upgrade coordination The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: CHANGES.rst, setup.cfg, setup.py, httpsession.py, and adapters.py). The judge looks for the following concept tokens in the agent output: upgrade, migrate, de-vendor.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (CHANGES.rst, setup.cfg, setup.py, httpsession.py, and adapters.py) in the agent output",
+        "Mentions at least three of the canonical concept tokens: upgrade, migrate, and de-vendor",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    }
+  }
+}

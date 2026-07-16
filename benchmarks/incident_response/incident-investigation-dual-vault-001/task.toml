@@ -1,0 +1,173 @@
+# Incident Investigation: Vault Integrated Storage snapshot install fails on follower rejoin (term mismatch -> candidate loop)
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "vault-storage-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "incident-investigation-dual-vault-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Trace a snapshot install failure across the Vault Integrated Storage layer and the underlying hashicorp/raft library, where a stale-state follower fed a pre-leadership-change snapshot loops in candidate state after the raft.installSnapshot RPC handler rejects/aborts the restore."
+prompt = """
+Your platform team operates a Vault 1.18 cluster using Integrated Storage (raft).
+After a hardware failure on a follower, the SRE on call replaced the node and
+seeded its data directory from a backup. The backup predates a leadership
+change that occurred ~2 hours before the snapshot was taken. On rejoin, the
+new follower never catches up; the leader logs:
+
+  [WARN]  storage.raft: failed to install snapshot: error="..."
+  [ERROR] storage.raft: failed to copy snapshot: error="short read"
+  [INFO]  storage.raft: ignoring installSnapshot request with older term than current term: request-term=14 current-term=17
+  [INFO]  storage.raft: entering candidate state: node="follower-3" term=18
+
+The follower then loops between candidate and follower state, never advancing
+its committed index, and serves no traffic. Restarting the follower does not
+help. The cluster is otherwise healthy.
+
+Investigation notes from the platform engineer:
+- Vault Integrated Storage stores raft state under
+  `physical/raft/` and uses `hashicorp/raft` for the consensus protocol.
+- Snapshot create/install on the Vault side goes through
+  `physical/raft/snapshot.go` (BoltSnapshotStore / BoltSnapshotSink).
+- On the consensus side, when a leader sends an InstallSnapshot RPC the
+  follower handles it in `hashicorp/raft` `raft.go::installSnapshot`,
+  which checks the request term, creates a sink via the snapshot store,
+  copies bytes, then dispatches a restore future to the FSM mutate channel.
+- The Vault FSM's Restore lives in `physical/raft/fsm.go`; the raft library
+  invokes restore via `fsm.go::fsmRestoreAndMeasure`.
+- Because the seeded backup predates a leadership change, the follower's
+  persisted CurrentTerm is stale; on rejoin it short-circuits or aborts the
+  install path, and the Vault FSM never gets the new BoltDB file.
+
+Repos and revisions:
+- /workspace/vault/ — `hashicorp/vault` at v1.18.1
+- /workspace/raft/  — `hashicorp/raft` at v1.7.1
+
+Both are Go projects.
+
+Real-world reference: hashicorp/vault issue #28880 ("Error when unsealing
+restored raft snapshot") and #21022 ("Only first pod of stateful set enables
+after raft restore") describe related class-of-failures in the
+Vault-raft snapshot install seam.
+
+Your task:
+1. Find Vault's snapshot install path on the storage side
+   (`physical/raft/snapshot.go`, BoltSnapshotSink Create/Write/Close;
+   `physical/raft/raft.go` and `physical/raft/fsm.go` for restore).
+2. Identify the hashicorp/raft handler that decides whether to accept and
+   apply the snapshot (`raft.go::installSnapshot`,
+   `fsm.go::fsmRestoreAndMeasure`).
+3. Trace the failure: stale-backup follower rejoins -> leader streams
+   InstallSnapshot RPC -> raft.installSnapshot inspects term -> term/version
+   gating + short-read on copy -> sink.Cancel() -> FSM Restore never runs ->
+   follower transitions to candidate -> loop.
+4. Name the affected components: Vault physical/raft layer (BoltSnapshotStore,
+   FSM), the hashicorp/raft library (installSnapshot handler, fsm restore
+   plumbing), and the FSM apply path that never advances.
+
+Write your incident report to `/workspace/vault/INCIDENT_REPORT.md` with:
+- Root cause (file and function in each repo)
+- Full error chain from rejoin to candidate loop
+- Affected components
+- Remediation: prune/quarantine stale snapshots before seeding, OR fence the
+  install with an explicit term/index check on the Vault side, OR document
+  that backup-seeded restores must be paired with peers.json reset.
+"""
+
+[[repos]]
+url = "https://github.com/hashicorp/vault"
+rev = "v1.18.1"
+path = "vault"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/hashicorp/raft"
+rev = "v1.7.1"
+path = "raft"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 1_400_000
+dependency_depth = 2
+frameworks = ["vault", "hashicorp-raft"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies the Vault physical/raft snapshot install path and the hashicorp/raft installSnapshot handler as the failure seam, naming the term mismatch and aborted restore"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces follower replaced -> stale snapshot seeded -> InstallSnapshot RPC -> raft installSnapshot term/short-read abort -> sink.Cancel -> FSM Restore skipped -> candidate loop"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent names Vault physical/raft (BoltSnapshotStore + FSM), hashicorp/raft library (installSnapshot + fsmRestoreAndMeasure), and the FSM apply path"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes pruning/quarantining stale snapshots, fencing snapshot install with an explicit term/index check, or pairing backup-seeded restores with peers.json reset"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The failure straddles two Go modules where Vault's BoltSnapshotStore implements an interface owned by hashicorp/raft and the term/abort decision lives in the library. Tracing it requires cross-repo navigation from Vault's physical/raft package into hashicorp/raft's installSnapshot handler, which is a less-famous internal API that LLMs are unlikely to recall verbatim."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "physical/raft/snapshot.go"
+repo = "vault"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "physical/raft/fsm.go"
+repo = "vault"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "raft.go"
+repo = "raft"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "fsm.go"
+repo = "raft"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "physical/raft/raft.go"
+repo = "vault"
+confidence = 0.80
+
+[[ground_truth.sufficient_files]]
+path = "file_snapshot.go"
+repo = "raft"
+confidence = 0.65

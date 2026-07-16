@@ -1,0 +1,27 @@
+{
+  "task_id": "api-contract-dual-envoy-istio-001",
+  "checkpoints": {
+    "envoy_xds_api": {
+      "expected_solution": "Agent identifies Envoy xDS v3 proto definitions The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: cluster.proto and listener.proto). The judge looks for the following concept tokens in the agent output: Cluster, Listener, Route, v3.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (cluster.proto and listener.proto) in the agent output",
+        "Mentions at least three of the canonical concept tokens: Cluster, Listener, and Route"
+      ]
+    },
+    "istio_xds_gen": {
+      "expected_solution": "Agent finds Istio's xDS configuration generation The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: ads.go and push_context.go). The judge looks for the following concept tokens in the agent output: xds, ads, pilot, discovery.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (ads.go and push_context.go) in the agent output",
+        "Mentions at least three of the canonical concept tokens: pilot and discovery",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "v2_v3_drift": {
+      "expected_solution": "Agent documents v2\u2192v3 contract changes The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: cluster.proto, ads.go, push_context.go, and listener.proto). The judge looks for the following concept tokens in the agent output: v2, v3, deprecated, migration.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (cluster.proto, ads.go, push_context.go, and listener.proto) in the agent output",
+        "Mentions at least three of the canonical concept tokens: deprecated and migration"
+      ]
+    }
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "task_id": "incident-investigation-dual-tikv-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/tikv/tikv",
+      "rev": "v8.5.0",
+      "path": "tikv"
+    },
+    {
+      "url": "https://github.com/tikv/pd",
+      "rev": "v8.5.0",
+      "path": "pd"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "components/raftstore/src/store/peer.rs",
+      "repo": "tikv",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "components/raftstore/src/store/hibernate_state.rs",
+      "repo": "tikv",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "server/cluster/cluster.go",
+      "repo": "pd",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "server/cluster/cluster_worker.go",
+      "repo": "pd",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "components/raftstore/src/store/fsm/peer.rs",
+      "repo": "tikv",
+      "confidence": 0.7
+    },
+    {
+      "path": "server/cluster/scheduling_controller.go",
+      "repo": "pd",
+      "confidence": 0.65
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "TiKV's Peer::collect_down_peers in components/raftstore/src/store/peer.rs determines down peers purely by comparing each peer's last heartbeat instant against cfg.max_peer_down_duration. It does not consult the hibernate machinery in components/raftstore/src/store/hibernate_state.rs::GroupState \u2014 when a region is Idle, peers stop sending raft messages, peer_heartbeats ages out, and healthy hibernated peers are reported as down. That down-peer list is attached to the region heartbeat sent to PD. On the PD side, server/cluster/cluster_worker.go::RaftCluster.HandleRegionHeartbeat dispatches into server/cluster/cluster.go::RaftCluster.processRegionHeartbeat, which trusts the down list and feeds it to the scheduler, which then schedules peer removal. The scheduling activity wakes the peer, heartbeats resume, the peer reappears \u2014 and the cycle repeats the next time the region hibernates. The defect is the missing hibernate-state check at the TiKV reporting boundary; PD inherits the bad signal because it has no way to distinguish hibernated from failed peers.",
+    "error_chain": [
+      "Region traffic drops; raft group transitions to GroupState::Idle in hibernate_state.rs",
+      "Idle peers stop sending raft messages; their entries in peer_heartbeats stop being refreshed",
+      "components/raftstore/src/store/peer.rs::Peer::collect_down_peers compares peer_heartbeats[id].elapsed() against cfg.max_peer_down_duration",
+      "Threshold trips for hibernated peers; they are pushed into the down_peers list with no hibernate check",
+      "Down-peer list is attached to the store/region heartbeat sent to PD",
+      "PD: server/cluster/cluster_worker.go::RaftCluster.HandleRegionHeartbeat dispatches the heartbeat",
+      "PD: server/cluster/cluster.go::RaftCluster.processRegionHeartbeat ingests the region info including the down-peer list",
+      "Down peers feed the scheduling pipeline; PD schedules peer removal for the 'down' peers",
+      "Scheduling activity wakes the hibernated peers; raft heartbeats resume, peer_heartbeats refreshes",
+      "Down list clears in the next region heartbeat; PD cancels/reverses the remove",
+      "Region hibernates again -> cycle repeats -> peers flap"
+    ],
+    "affected_components": [
+      "TiKV raftstore peer logic (components/raftstore/src/store/peer.rs)",
+      "TiKV raftstore hibernation machinery (components/raftstore/src/store/hibernate_state.rs)",
+      "PD cluster heartbeat ingest (server/cluster/cluster.go, server/cluster/cluster_worker.go)",
+      "PD scheduler (driven by processRegionHeartbeat output)",
+      "Region/store heartbeat protocol carrying the down-peer list across the TiKV<->PD boundary"
+    ],
+    "remediation": "Two layered options. (1) TiKV-side fix in components/raftstore/src/store/peer.rs::Peer::collect_down_peers: when the leader's GroupState is Idle (or PreChaos), skip peers whose silence is explained by hibernation rather than absence. Concretely, gate the peer_heartbeats elapsed >= max_peer_down_duration check on a 'group not hibernated' precondition, OR refresh peer_heartbeats on hibernation entry so the timer doesn't drift. (2) PD-side fix in server/cluster/cluster.go::RaftCluster.processRegionHeartbeat (or its scheduler downstream): treat down-peer reports as advisory when PD's view of the region indicates idle/hibernated state, requiring confirmation across multiple consecutive heartbeats before scheduling removal. The TiKV-side fix is preferred \u2014 it stops the bad signal at the source; the PD-side fix is a defense-in-depth backstop."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "components/raftstore/src/store/peer.rs",
+      "components/raftstore/src/store/hibernate_state.rs",
+      "server/cluster/cluster.go",
+      "hibernate_state.rs",
+      "collect_down_peers",
+      "GroupState",
+      "hibernate_state",
+      "RaftCluster",
+      "processRegionHeartbeat"
+    ],
+    "error_chain_trace": [
+      "peer.rs",
+      "collect_down_peers",
+      "processRegionHeartbeat",
+      "HandleRegionHeartbeat"
+    ],
+    "affected_components": [
+      "components/raftstore/src/store/peer.rs",
+      "components/raftstore/src/store/hibernate_state.rs"
+    ],
+    "remediation_proposal": [
+      "peer.rs",
+      "cluster.go",
+      "collect_down_peers",
+      "GroupState",
+      "peer_heartbeats",
+      "processRegionHeartbeat"
+    ]
+  }
+}

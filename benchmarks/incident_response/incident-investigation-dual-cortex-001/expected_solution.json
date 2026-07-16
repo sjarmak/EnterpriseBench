@@ -1,0 +1,38 @@
+{
+  "task_id": "incident-investigation-dual-cortex-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify the Cortex ruler notifier construction (pkg/ruler/notifier.go::newRulerNotifier, wired from pkg/ruler/manager.go) AND the Alertmanager validation that rejects non-ASCII labels (types/types.go::validateLs or matchers/compat.IsValidLabelName, called from notify/notify.go). The report must explain that the ruler swallows the resulting 400, producing a silent drop, and that the name-validation scheme mismatch is the trigger.",
+      "evaluation_criteria": [
+        "Names pkg/ruler/notifier.go (or newRulerNotifier) on the Cortex side",
+        "Names types/types.go::validateLs OR matchers/compat.IsValidLabelName (or notify/notify.go) on the Alertmanager side",
+        "States that the name-validation scheme (legacy/classic vs UTF-8) is the trigger",
+        "States that the alertmanager client error is silently swallowed by the ruler notifier"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Agent must trace at least four hops: rule evaluation produces a UTF-8 label -> ruler notifier (newRulerNotifier / pkg/ruler/notifier.go) serializes and POSTs to Alertmanager -> Alertmanager validateLs / IsValidLabelName rejects the label and returns 400 -> ruler swallows the 400 without surfacing a tenant-level error metric. The chain must show why no failure metric is incremented.",
+      "evaluation_criteria": [
+        "Mentions rule evaluation emitting a UTF-8 / non-ASCII label as the trigger",
+        "Mentions the ruler notifier (newRulerNotifier or pkg/ruler/notifier.go) as the sender",
+        "Mentions Alertmanager validation rejecting the label with HTTP 400",
+        "Mentions that the 400 is swallowed / not surfaced as a ruler error metric"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Agent must name the Cortex ruler (notifier and/or multi-tenant manager), the Alertmanager notify package, and the name-validation scheme as affected components.",
+      "evaluation_criteria": [
+        "Names the Cortex ruler (pkg/ruler/notifier.go, manager.go, or ruler.go)",
+        "Names the Alertmanager notify package or types/types.go alert validation",
+        "Names the name-validation scheme (legacy/classic vs UTF-8) or matchers/compat"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Agent must propose at least one concrete remediation: (a) propagate the alertmanager client error up into a tenant-visible ruler error metric, (b) align the name-validation scheme between ruler and Alertmanager (UTF-8 mode on both, or classic mode on both), OR (c) reject UTF-8 rule label output at evaluation time so the failure is visible.",
+      "evaluation_criteria": [
+        "Proposes one of: propagate/surface the validation error, align validation schemes, or reject UTF-8 labels at rule-eval time",
+        "Identifies where the fix would live (Cortex ruler notifier/manager, Alertmanager configuration, or rule evaluation path)"
+      ]
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "task_id": "dep-graph-dual-tokio-hyper-001",
+  "task_type": "dependency_graph",
+  "repos": [
+    {
+      "url": "https://github.com/tokio-rs/tokio",
+      "rev": "tokio-1.0.0",
+      "path": "tokio"
+    },
+    {
+      "url": "https://github.com/hyperium/hyper",
+      "rev": "v0.14.0",
+      "path": "hyper"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "hyper/Cargo.toml",
+      "repo": "hyper",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "tokio/tokio/Cargo.toml",
+      "repo": "tokio",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "hyper/src/server/tcp.rs",
+      "repo": "hyper",
+      "confidence": 0.85
+    },
+    {
+      "path": "tokio/tokio/src/runtime/builder.rs",
+      "repo": "tokio",
+      "confidence": 0.8
+    }
+  ],
+  "dependency_type": "cargo_feature_flags",
+  "scoring_evidence": {
+    "identify_runtime_deps": [
+      "tcp.rs",
+      "builder.rs",
+      "cargo_feature_flags"
+    ],
+    "trace_server_chain": [
+      "tcp.rs",
+      "builder.rs",
+      "cargo_feature_flags"
+    ],
+    "document_impact": [
+      "tcp.rs",
+      "builder.rs",
+      "cargo_feature_flags"
+    ]
+  }
+}

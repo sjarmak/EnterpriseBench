@@ -1,0 +1,62 @@
+{
+  "task_id": "error-prov-dual-otel-jaeger-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/open-telemetry/opentelemetry-go",
+      "rev": "v1.21.0",
+      "path": "otel-go"
+    },
+    {
+      "url": "https://github.com/jaegertracing/jaeger",
+      "rev": "v1.51.0",
+      "path": "jaeger"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "otel-go/sdk/trace/batch_span_processor.go",
+      "repo": "otel-go",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "jaeger/cmd/collector/app/handler/grpc_handler.go",
+      "repo": "jaeger",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "otel-go/sdk/trace/span.go",
+      "repo": "otel-go",
+      "confidence": 0.8
+    },
+    {
+      "path": "jaeger/cmd/collector/app/span_handler_builder.go",
+      "repo": "jaeger",
+      "confidence": 0.8
+    }
+  ],
+  "error_type": "silent_span_drop",
+  "scoring_evidence": {
+    "otel_batch_processor": [
+      "sdk/trace/batch_span_processor.go",
+      "batch_span_processor",
+      "silent_span_drop"
+    ],
+    "jaeger_exporter": [
+      "cmd/collector/app/handler/grpc_handler.go",
+      "grpc_handler",
+      "silent_span_drop"
+    ],
+    "silent_drop": [
+      "sdk/trace/batch_span_processor.go",
+      "cmd/collector/app/handler/grpc_handler.go",
+      "batch_span_processor",
+      "grpc_handler",
+      "silent_span_drop"
+    ]
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "task_id": "incident-investigation-dual-loki-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/grafana/loki",
+      "rev": "v3.3.0",
+      "path": "loki"
+    },
+    {
+      "url": "https://github.com/grafana/dskit",
+      "rev": "53283a0f6b415a1cdb0952aa5f60e86161f0dcc1",
+      "path": "dskit"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "pkg/storage/stores/series/series_index_gateway_store.go",
+      "repo": "loki",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "pkg/storage/stores/series/index/caching_index_client.go",
+      "repo": "loki",
+      "confidence": 0.85,
+      "source": "deterministic"
+    },
+    {
+      "path": "ring/ring.go",
+      "repo": "dskit",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "ring/replication_strategy.go",
+      "repo": "dskit",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pkg/indexgateway/gateway.go",
+      "repo": "loki",
+      "confidence": 0.75
+    },
+    {
+      "path": "ring/model.go",
+      "repo": "dskit",
+      "confidence": 0.7
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "Loki's query-frontend-side index gateway client in pkg/storage/stores/series/series_index_gateway_store.go (GetChunkRefs) routes through the dskit ring using the Read operation. During a rolling restart of the index-gateway StatefulSet, instances enter the LEAVING state. dskit's ring.IsHealthy in ring/ring.go applies an op-dependent policy: for the Reporting operation (used by the gateway-server side) LEAVING is treated as healthy, but for Read (used by the gateway-client side) LEAVING is treated as unhealthy. This asymmetric health policy means the same LEAVING instance is reported healthy by the server and unhealthy by the client. The replication strategy in ring/replication_strategy.go::Filter then drops all candidates, the caching index client in caching_index_client.go::QueryPages surfaces the resulting 'too many unhealthy instances' error, and the query frontend fails the user request even though the gateway pods are online.",
+    "error_chain": [
+      "Operator triggers a rolling restart of the index-gateway StatefulSet",
+      "One pod (loki-index-gateway-1) enters the LEAVING ring state while still serving gRPC",
+      "Query frontend calls pkg/storage/stores/series/series_index_gateway_store.go::GetChunkRefs",
+      "The client invokes ring.ReadRing.GetReplicationSetForOperation with op=Read on the dskit ring",
+      "dskit returns the LEAVING instance in the candidate set, then per-instance ring.IsHealthy(instance, Read, heartbeatTimeout) is evaluated in ring/ring.go",
+      "IsHealthy treats LEAVING as unhealthy for op=Read but healthy for op=Reporting (asymmetric policy)",
+      "ring/replication_strategy.go::Filter drops the LEAVING instance and the remaining set is below the minimum quorum",
+      "pkg/storage/stores/series/index/caching_index_client.go::QueryPages surfaces the error to the query frontend as 'too many unhealthy instances in the ring'",
+      "User-facing query fails with 'no replicas found' even though the gateway-server side of the same ring reports the same instance as healthy"
+    ],
+    "affected_components": [
+      "Loki query frontend (caller of GetChunkRefs)",
+      "Loki index gateway client (pkg/storage/stores/series/series_index_gateway_store.go)",
+      "Loki caching index client (pkg/storage/stores/series/index/caching_index_client.go)",
+      "Loki index gateway server (the LEAVING pods themselves, still serving)",
+      "dskit ring (ring/ring.go::IsHealthy and ring/replication_strategy.go::Filter)",
+      "All chunk-ref lookups during rolling restarts of the index-gateway StatefulSet"
+    ],
+    "remediation": "Two layered options: (1) Fix dskit's ring.IsHealthy in ring/ring.go so that LEAVING is treated as healthy for the Read operation, matching the Reporting semantics \u2014 a LEAVING instance is still able to serve reads until the rolling restart completes. (2) On the Loki side, change the gateway-client's call to GetReplicationSetForOperation to use a health-op enum that already treats LEAVING as healthy (e.g., a custom Read op with ShouldExtendReplicaSetOnState(LEAVING)==false), so the gateway-client's view aligns with the gateway-server's view. Either option restores symmetric health semantics; the dskit-side fix is preferred because it removes the foot-gun for every downstream consumer."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "pkg/storage/stores/series/series_index_gateway_store.go",
+      "ring/ring.go",
+      "series_index_gateway_store",
+      "GetChunkRefs",
+      "IsHealthy"
+    ],
+    "error_chain_trace": [
+      "GetReplicationSetForOperation",
+      "IsHealthy"
+    ],
+    "affected_components": [
+      "GetChunkRefs",
+      "IsHealthy",
+      "replication_strategy"
+    ],
+    "remediation_proposal": [
+      "ring/ring.go",
+      "IsHealthy",
+      "series_index_gateway_store"
+    ]
+  }
+}

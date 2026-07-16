@@ -1,0 +1,102 @@
+# error_provenance: Trace OpenTelemetry SDK span export error propagation throug
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "cncf-observability-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "error-prov-dual-otel-jaeger-001"
+suite = "customer_escalation"
+task_type = "error_provenance"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace OpenTelemetry SDK span export error propagation through Jaeger exporter"
+prompt = """
+An application using OpenTelemetry SDK to export traces to Jaeger is
+silently dropping spans. The export errors are being swallowed somewhere
+in the pipeline between OTel SDK and Jaeger collector.
+
+Your task:
+1. Find how OTel SDK handles span export errors in the batch processor
+2. Find how Jaeger exporter reports errors back to OTel SDK
+3. Trace the error path from Jaeger collector rejection to OTel SDK
+4. Identify where errors are silently swallowed
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/open-telemetry/opentelemetry-go"
+rev = "v1.21.0"
+path = "otel-go"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/jaegertracing/jaeger"
+rev = "v1.51.0"
+path = "jaeger"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 200_000
+dependency_depth = 2
+frameworks = ["opentelemetry", "jaeger"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "otel_batch_processor"
+weight = 0.30
+verifier = "checks/check_otel_batch_processor.sh"
+description = "Agent identifies OTel batch export error handling"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "jaeger_exporter"
+weight = 0.40
+verifier = "checks/check_jaeger_exporter.sh"
+description = "Agent finds Jaeger exporter error reporting"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "silent_drop"
+weight = 0.30
+verifier = "checks/check_silent_drop.sh"
+description = "Agent identifies where errors are swallowed"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Error path tracing across OTel SDK and Jaeger benefits from cross-repo search"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "otel-go/sdk/trace/batch_span_processor.go"
+repo = "otel-go"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "jaeger/cmd/collector/app/handler/grpc_handler.go"
+repo = "jaeger"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "otel-go/sdk/trace/span.go"
+repo = "otel-go"
+confidence = 0.8
+
+[[ground_truth.sufficient_files]]
+path = "jaeger/cmd/collector/app/span_handler_builder.go"
+repo = "jaeger"
+confidence = 0.8

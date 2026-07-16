@@ -1,0 +1,62 @@
+{
+  "task_id": "api-contract-dual-sqlalchemy-alembic-001",
+  "task_type": "api_contract",
+  "repos": [
+    {
+      "url": "https://github.com/sqlalchemy/sqlalchemy",
+      "rev": "rel_2_0_0",
+      "path": "sqlalchemy"
+    },
+    {
+      "url": "https://github.com/sqlalchemy/alembic",
+      "rev": "rel_1_12_0",
+      "path": "alembic"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "sqlalchemy/lib/sqlalchemy/engine/base.py",
+      "repo": "sqlalchemy",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "alembic/alembic/runtime/migration.py",
+      "repo": "alembic",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "alembic/alembic/operations/ops.py",
+      "repo": "alembic",
+      "confidence": 0.85
+    },
+    {
+      "path": "sqlalchemy/lib/sqlalchemy/orm/session.py",
+      "repo": "sqlalchemy",
+      "confidence": 0.8
+    }
+  ],
+  "api_contract_type": "python_method_api",
+  "scoring_evidence": {
+    "sqla_api_changes": [
+      "base.py",
+      "migration.py",
+      "ops.py",
+      "session.py"
+    ],
+    "alembic_usage": [
+      "migration.py",
+      "ops.py",
+      "MigrationContext"
+    ],
+    "contract_drift": [
+      "base.py",
+      "migration.py",
+      "ops.py",
+      "session.py"
+    ]
+  }
+}

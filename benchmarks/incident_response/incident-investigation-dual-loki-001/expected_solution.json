@@ -1,0 +1,40 @@
+{
+  "task_id": "incident-investigation-dual-loki-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify both sides of the asymmetric ring-health policy: the Loki gateway-client store (pkg/storage/stores/series/series_index_gateway_store.go::GetChunkRefs) and the dskit ring health policy (ring/ring.go::IsHealthy). The report must explain that LEAVING is treated differently between the Read op (client) and the Reporting op (server), and that this asymmetry — not gateway downtime — is the source of the user-facing failure.",
+      "evaluation_criteria": [
+        "Names pkg/storage/stores/series/series_index_gateway_store.go (or series_index_gateway_store) on the Loki side",
+        "Names ring/ring.go::IsHealthy (or equivalent dskit health function) as the consumer of the op enum",
+        "Identifies LEAVING as the instance state that triggers the failure",
+        "States that the policy is asymmetric between Read and Reporting (or between gateway-client and gateway-server)",
+        "Frames the issue as a ring-health-policy / op-enum problem, not a network or process outage"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Agent must trace at least four hops: rolling restart of the index-gateway StatefulSet -> one or more instances enter LEAVING -> GetReplicationSetForOperation(Read) returns the LEAVING instance -> IsHealthy mismatch between Read and Reporting (LEAVING is healthy for Reporting but unhealthy for Read) -> the caller surfaces 'no replicas found' / 'too many unhealthy instances'.",
+      "evaluation_criteria": [
+        "Mentions the rolling restart of the index-gateway StatefulSet (or rolling deploy / rolling update) as the trigger",
+        "Mentions LEAVING as the ring state of the affected instance",
+        "Mentions GetReplicationSetForOperation (or the dskit replication-set lookup) as the candidate-set step",
+        "Mentions IsHealthy returning different verdicts for Read vs Reporting (asymmetric op-dependent health)",
+        "Surfaces the user-visible error as 'too many unhealthy instances' or 'no replicas found' or 'at least 1 healthy replica required'"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Agent must name the Loki query frontend, the Loki index gateway (client and/or server), and the dskit ring as the affected components.",
+      "evaluation_criteria": [
+        "Names the Loki query frontend (the caller of GetChunkRefs)",
+        "Names the Loki index gateway (client store and/or the gateway-server pods)",
+        "Names the dskit ring (ring package, IsHealthy, or replication_strategy)"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Agent must propose at least one concrete remediation: (a) fix dskit's IsHealthy / ring health policy so LEAVING is healthy under Read, OR (b) align Loki's chosen health-op enum on the gateway-client with the gateway-server side so both views agree on LEAVING.",
+      "evaluation_criteria": [
+        "Proposes either a dskit-side fix (IsHealthy / op policy / LEAVING semantics) or a Loki-side fix (op enum alignment between gateway-client and gateway-server)",
+        "Identifies where the fix would live (dskit ring/ring.go, Loki series_index_gateway_store, or Loki gateway client)"
+      ]
+    }
+  }
+}

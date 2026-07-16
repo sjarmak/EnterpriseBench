@@ -1,0 +1,114 @@
+{
+  "task_id": "incident-investigation-dual-cockroach-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/cockroachdb/cockroach",
+      "rev": "v24.2.5",
+      "path": "cockroach"
+    },
+    {
+      "url": "https://github.com/cockroachdb/pebble",
+      "rev": "v1.1.2",
+      "path": "pebble"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "pkg/kv/kvserver/replica_raft.go",
+      "repo": "cockroach",
+      "confidence": 0.92,
+      "source": "deterministic"
+    },
+    {
+      "path": "pkg/kv/kvserver/replica_sst_snapshot_storage.go",
+      "repo": "cockroach",
+      "confidence": 0.85,
+      "source": "deterministic"
+    },
+    {
+      "path": "compaction.go",
+      "repo": "pebble",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "ingest.go",
+      "repo": "pebble",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pkg/storage/pebble.go",
+      "repo": "cockroach",
+      "confidence": 0.75
+    },
+    {
+      "path": "range_keys.go",
+      "repo": "pebble",
+      "confidence": 0.7
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "CockroachDB's pkg/kv/kvserver/replica_raft.go::replicaAppBatch.ApplyToStateMachine ingests a bulk SST produced by TRUNCATE (containing RANGEKEYDEL range tombstones over the tenant keyspan) and forwards it to Pebble via ingest.go::(*DB).Ingest. Pebble links the SST into L6. Later, a background L6 compaction runs compaction.go::compactionIter.skipInStripe to decide whether each key in the current snapshot stripe should be dropped or carried forward. skipInStripe mishandles a RANGEKEYDEL whose synthetic MVCC timestamp suffix collides with an existing range key in the same stripe: instead of preserving the deletion, it treats it as already-shadowed and drops it from the output sstable. The point keys the deletion was supposed to elide are no longer covered, so subsequent reads on the range surface the deleted rows.",
+    "error_chain": [
+      "Tenant issues TRUNCATE against a large table on range r4217",
+      "CockroachDB SQL layer translates TRUNCATE into a bulk SST containing RANGEKEYDEL range tombstones over the keyspan",
+      "The SST is finalized via pkg/kv/kvserver/replica_sst_snapshot_storage.go::SSTSnapshotStorageScratch.Finish",
+      "pkg/kv/kvserver/replica_raft.go::replicaAppBatch.ApplyToStateMachine applies the AddSSTable command at the Raft apply seam",
+      "ApplyToStateMachine forwards the SST to Pebble via ingest.go::(*DB).Ingest",
+      "Pebble links the ingested SST into L6 alongside an older SST containing the point keys to be deleted",
+      "A background L6 compaction iterates both SSTs and invokes compaction.go::compactionIter.skipInStripe for each key in the snapshot stripe",
+      "skipInStripe sees a RANGEKEYDEL whose synthetic MVCC suffix matches an existing range key in the same stripe and incorrectly drops the deletion from the output",
+      "The output L6 sstable no longer covers the point keys the RANGEKEYDEL was supposed to elide",
+      "Subsequent reads on r4217 return the resurrected (deleted) rows; the consistency checker flags the divergence"
+    ],
+    "affected_components": [
+      "CockroachDB KV layer (pkg/kv/kvserver/replica_raft.go, pkg/kv/kvserver/replica_sst_snapshot_storage.go)",
+      "CockroachDB storage adapter (pkg/storage/pebble.go)",
+      "Pebble ingest path (ingest.go::(*DB).Ingest)",
+      "Pebble compaction iterator (compaction.go::compactionIter.skipInStripe)",
+      "Pebble range key subsystem (range_keys.go)",
+      "Any tenant range that ingests a bulk SST whose RANGEKEYDEL suffixes collide with existing range keys at L6"
+    ],
+    "remediation": "Three layered options: (1) Fix Pebble's compaction.go::compactionIter.skipInStripe to never drop a RANGEKEYDEL that has live point keys beneath it within the same stripe, even when the synthetic MVCC suffix matches an existing range key. (2) Patch upstream Pebble's range_keys.go to disambiguate RANGEKEYDEL identity beyond suffix equality (include the sequence number / kind in the stripe-skip predicate). (3) On the CockroachDB side, mitigate by splitting the TRUNCATE bulk SST in pkg/kv/kvserver/replica_sst_snapshot_storage.go so RANGEKEYDEL tombstones are written with suffixes that cannot collide with the snapshot's existing range keys, or by issuing the deletion as point Clears on small ranges until the Pebble fix lands."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "pkg/kv/kvserver/replica_raft.go",
+      "pkg/kv/kvserver/replica_sst_snapshot_storage.go",
+      "compaction.go",
+      "ingest.go",
+      "replica_raft",
+      "replicaAppBatch",
+      "ApplyToStateMachine",
+      "replica_sst_snapshot_storage",
+      "compactionIter",
+      "skipInStripe"
+    ],
+    "error_chain_trace": [
+      "ingest.go",
+      "AddSSTable",
+      "RANGEKEYDEL",
+      "ApplyToStateMachine",
+      "replica_raft",
+      "compactionIter",
+      "skipInStripe"
+    ],
+    "affected_components": [
+      "replica_raft",
+      "RANGEKEYDEL",
+      "range_keys"
+    ],
+    "remediation_proposal": [
+      "compaction.go",
+      "range_keys.go",
+      "compactionIter",
+      "skipInStripe",
+      "RANGEKEYDEL",
+      "range_keys"
+    ]
+  }
+}

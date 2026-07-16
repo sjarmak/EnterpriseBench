@@ -1,0 +1,180 @@
+# Incident Investigation: TiKV hibernated regions reported as down peers cause PD scheduling flap
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "tikv-pd-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "incident-investigation-dual-tikv-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "expert"
+estimated_duration_minutes = 55
+session_type = "single"
+description = "Trace why TiKV hibernated regions are wrongly reported as down peers in store heartbeats, causing PD's RaftCluster.processRegionHeartbeat to schedule peer removal and producing region peer flapping during low-traffic periods"
+prompt = """
+Your storage platform team operates a TiKV 8.5 cluster fronted by PD 8.5. During
+low-traffic periods, the operations dashboard shows region peers flapping:
+peers are reported down, PD schedules them for removal, then the same peers
+re-appear seconds later only to be reported down again. Cluster health
+oscillates without any underlying node failure.
+
+Symptoms from the operators:
+
+  pd  | level=info msg="region heartbeat" region-id=4521 down-peers=[7]
+  pd  | level=info msg="schedule peer remove" region-id=4521 peer-id=7
+  tikv| INFO peer 7 awaken from hibernation, store=3
+  pd  | level=info msg="region heartbeat" region-id=4521 down-peers=[]
+
+The flap correlates with periods where regions hibernate (no proposals for
+several seconds) — exactly the windows where TiKV's heartbeat interval has
+elapsed but the underlying peers have not actually failed. Restarting a TiKV
+node clears the flap transiently while regions are awake, then it returns.
+
+Investigation notes from the storage engineer:
+
+- TiKV's raftstore tracks per-peer last-heartbeat timestamps and reports
+  silent peers via `Peer::collect_down_peers` in
+  `components/raftstore/src/store/peer.rs`. The function compares
+  `peer_heartbeats[id].elapsed()` against `cfg.max_peer_down_duration` and
+  pushes any peer past the threshold into the down list.
+- The hibernate machinery (`components/raftstore/src/store/hibernate_state.rs`)
+  carries a `GroupState` enum (`Ordered`/`Chaos`/`PreChaos`/`Idle`) that
+  governs when a raft group is allowed to skip ticks. When the group is
+  `Idle`, peers stop sending raft messages — so `peer_heartbeats` ages out
+  even though the peer is healthy.
+- The down-peer list is attached to the store heartbeat that flows to PD.
+- On the PD side, `server/cluster/cluster.go::RaftCluster.processRegionHeartbeat`
+  ingests the region info (including down peers) and feeds it to the region
+  heartbeat pipeline. The entry point `server/cluster/cluster_worker.go::
+  RaftCluster.HandleRegionHeartbeat` dispatches into processRegionHeartbeat,
+  which then drives the scheduler's removal logic.
+
+Repos and revisions:
+- /workspace/tikv/ — `tikv/tikv` at v8.5.0 (Rust)
+- /workspace/pd/   — `tikv/pd`   at v8.5.0 (Go)
+
+This is a cross-language investigation: TiKV is Rust, PD is Go.
+
+Your task:
+1. In TiKV (Rust), find `Peer::collect_down_peers` in
+   `components/raftstore/src/store/peer.rs` and explain how it determines
+   whether a peer is down.
+2. In TiKV, find the hibernation machinery
+   (`components/raftstore/src/store/hibernate_state.rs::GroupState`) and
+   explain why an `Idle` group's peers will trip `collect_down_peers`'s
+   threshold even though they are healthy.
+3. In PD (Go), find `RaftCluster.processRegionHeartbeat` in
+   `server/cluster/cluster.go` and the heartbeat dispatch in
+   `server/cluster/cluster_worker.go::HandleRegionHeartbeat`. Show that
+   PD trusts the down-peer list on the wire and feeds it to the scheduler.
+4. Trace the chain end-to-end: hibernated region with idle peers ->
+   `peer_heartbeats` ages past `max_peer_down_duration` ->
+   `collect_down_peers` returns those silent peers as down ->
+   store heartbeat to PD carries them -> `HandleRegionHeartbeat` ->
+   `processRegionHeartbeat` schedules removal -> peer awakens, heartbeats
+   resume, peer flap.
+
+Write your incident report to `/workspace/tikv/INCIDENT_REPORT.md` with:
+- Root cause (file and function in each repo)
+- Full error chain across both repos
+- Affected components (TiKV raftstore, PD cluster scheduler, region
+  heartbeat protocol)
+- Remediation: either a TiKV-side fix to skip hibernated peers in
+  `collect_down_peers`, or a PD-side fix to ignore down-peer reports for
+  groups that PD knows are hibernated
+"""
+
+[[repos]]
+url = "https://github.com/tikv/tikv"
+rev = "v8.5.0"
+path = "tikv"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/tikv/pd"
+rev = "v8.5.0"
+path = "pd"
+role = "dependency"
+
+[metadata]
+languages = ["rust", "go"]
+total_loc = 900_000
+dependency_depth = 2
+frameworks = ["tikv", "pd", "raft-rs"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies TiKV's collect_down_peers + hibernate GroupState and PD's processRegionHeartbeat as participants in the flap"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces hibernated region -> collect_down_peers -> store heartbeat -> processRegionHeartbeat schedules removal -> peer flap"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent names TiKV raftstore, PD cluster scheduler, and the region heartbeat protocol as affected components"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes a TiKV-side hibernate-aware fix in collect_down_peers OR a PD-side fix to ignore down peers from hibernated groups"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The bug spans two large repos in different languages (Rust raftstore + Go PD), connected by a heartbeat protocol rather than a direct call. Tracing it requires cross-repo, cross-language navigation from TiKV's hibernate state to PD's scheduling logic — exactly the kind of distributed-system seam where memorized training-data shortcuts fail and indexed code search shines."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "components/raftstore/src/store/peer.rs"
+repo = "tikv"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "components/raftstore/src/store/hibernate_state.rs"
+repo = "tikv"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "server/cluster/cluster.go"
+repo = "pd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "server/cluster/cluster_worker.go"
+repo = "pd"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "components/raftstore/src/store/fsm/peer.rs"
+repo = "tikv"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "server/cluster/scheduling_controller.go"
+repo = "pd"
+confidence = 0.65

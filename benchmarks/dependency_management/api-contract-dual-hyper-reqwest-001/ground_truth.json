@@ -1,0 +1,62 @@
+{
+  "task_id": "api-contract-dual-hyper-reqwest-001",
+  "task_type": "api_contract",
+  "repos": [
+    {
+      "url": "https://github.com/hyperium/hyper",
+      "rev": "v1.0.0",
+      "path": "hyper"
+    },
+    {
+      "url": "https://github.com/seanmonstar/reqwest",
+      "rev": "v0.11.22",
+      "path": "reqwest"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "hyper/src/body/mod.rs",
+      "repo": "hyper",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "reqwest/src/async_impl/client.rs",
+      "repo": "reqwest",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "reqwest/src/async_impl/body.rs",
+      "repo": "reqwest",
+      "confidence": 0.85
+    },
+    {
+      "path": "hyper/src/body/incoming.rs",
+      "repo": "hyper",
+      "confidence": 0.8
+    }
+  ],
+  "api_contract_type": "rust_trait_api",
+  "scoring_evidence": {
+    "identify_body_types": [
+      "mod.rs",
+      "client.rs",
+      "body.rs",
+      "incoming.rs"
+    ],
+    "trace_reqwest_usage": [
+      "client.rs",
+      "body.rs",
+      "async_impl"
+    ],
+    "migration_analysis": [
+      "mod.rs",
+      "client.rs",
+      "body.rs",
+      "incoming.rs"
+    ]
+  }
+}

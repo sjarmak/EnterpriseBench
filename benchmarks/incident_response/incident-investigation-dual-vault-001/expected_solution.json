@@ -1,0 +1,37 @@
+{
+  "task_id": "incident-investigation-dual-vault-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify the Vault-side snapshot install seam (physical/raft/snapshot.go BoltSnapshotStore / BoltSnapshotSink, and physical/raft/fsm.go FSM.Restore) AND the hashicorp/raft handler that gates the install (raft.go::installSnapshot, fsm.go::fsmRestoreAndMeasure). The report must explain that a stale persisted term / stale snapshot from the backup causes the install to abort before the FSM restore runs.",
+      "evaluation_criteria": [
+        "Names physical/raft/snapshot.go (BoltSnapshotStore or BoltSnapshotSink) on the Vault side",
+        "Names raft.go::installSnapshot (or fsmRestoreAndMeasure) on the hashicorp/raft side",
+        "States that a term mismatch / stale snapshot / aborted restore is the cause"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Agent must trace at least four hops: follower replaced and seeded with stale backup -> leader sends InstallSnapshot RPC -> raft.installSnapshot gates on term and copies into BoltSnapshotSink -> copy short-reads or term gates abort the install -> FSM Restore never runs -> follower transitions to candidate and loops.",
+      "evaluation_criteria": [
+        "Mentions follower replacement / backup seeding as the trigger",
+        "Mentions the InstallSnapshot RPC or hashicorp/raft installSnapshot handler",
+        "Mentions Vault's BoltSnapshotSink / physical/raft snapshot path or FSM Restore",
+        "Mentions the candidate-state loop or follower failing to catch up"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Agent must name Vault's physical/raft layer (BoltSnapshotStore + FSM), the hashicorp/raft library (installSnapshot handler / fsm restore plumbing), and the FSM apply path that never advances.",
+      "evaluation_criteria": [
+        "Names Vault physical/raft (BoltSnapshotStore or FSM in physical/raft)",
+        "Names the hashicorp/raft library (installSnapshot or fsmRestoreAndMeasure)",
+        "Names the FSM apply / restore path or follower state machine"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Agent must propose at least one concrete remediation: (a) prune or quarantine stale snapshot files before seeding the follower, (b) add an explicit term/index fence in BoltSnapshotSink that rejects stale snapshots with a clear error, OR (c) pair backup-seeded restores with a peers.json or raft remove-peer/add reset.",
+      "evaluation_criteria": [
+        "Proposes one of: prune/quarantine stale snapshots, term/index fence on snapshot install, or peers.json / remove-peer reset",
+        "Identifies where the fix would live (Vault physical/raft, hashicorp/raft installSnapshot, or operator runbook)"
+      ]
+    }
+  }
+}

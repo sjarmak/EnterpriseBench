@@ -1,0 +1,28 @@
+{
+  "task_id": "api-contract-dual-hyper-reqwest-001",
+  "checkpoints": {
+    "identify_body_types": {
+      "expected_solution": "Agent identifies hyper Body type changes The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: mod.rs, client.rs, body.rs, and incoming.rs). The judge looks for the following concept tokens in the agent output: Body, Incoming.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (mod.rs, client.rs, body.rs, and incoming.rs) in the agent output",
+        "Mentions at least three of the canonical concept tokens: Body and Incoming",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "trace_reqwest_usage": {
+      "expected_solution": "Agent finds reqwest's hyper Body usage The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: client.rs and body.rs). The judge looks for the following concept tokens in the agent output: async_impl, client.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (client.rs and body.rs) in the agent output",
+        "Mentions at least three of the canonical concept tokens: async_impl and client",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "migration_analysis": {
+      "expected_solution": "Agent documents migration path The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: mod.rs, client.rs, body.rs, and incoming.rs). The judge looks for the following concept tokens in the agent output: http-body-util, adapter.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (mod.rs, client.rs, body.rs, and incoming.rs) in the agent output",
+        "Mentions at least three of the canonical concept tokens: http-body-util and adapter"
+      ]
+    }
+  }
+}

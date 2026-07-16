@@ -1,0 +1,104 @@
+# dependency_graph: Trace tokio 1.0 runtime API changes affecting hyper's server
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "rust-async-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "dep-graph-dual-tokio-hyper-001"
+suite = "dependency_management"
+task_type = "dependency_graph"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace tokio 1.0 runtime API changes affecting hyper's server implementation"
+prompt = """
+The tokio async runtime released v1.0, renaming feature flags from
+`rt-core`/`rt-threaded` to `rt`/`rt-multi-thread` and changing
+`Runtime::new()` behavior. The hyper HTTP library depends on tokio
+for its server implementation.
+
+Your task:
+1. Identify where hyper depends on tokio runtime features in Cargo.toml
+2. Find all files in hyper that create or reference tokio runtimes
+3. Trace the dependency chain from hyper's server module to tokio's
+   runtime builder API
+4. Document which tokio API changes affect hyper and how
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/tokio-rs/tokio"
+rev = "tokio-1.0.0"
+path = "tokio"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/hyperium/hyper"
+rev = "v0.14.0"
+path = "hyper"
+role = "primary"
+
+[metadata]
+languages = ["rust"]
+total_loc = 200_000
+dependency_depth = 2
+frameworks = ["tokio", "hyper"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "identify_runtime_deps"
+weight = 0.30
+verifier = "checks/check_identify_runtime_deps.sh"
+description = "Agent identifies tokio runtime dependencies in hyper"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "trace_server_chain"
+weight = 0.40
+verifier = "checks/check_trace_server_chain.sh"
+description = "Agent traces hyper server → tokio runtime chain"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "document_impact"
+weight = 0.30
+verifier = "checks/check_document_impact.sh"
+description = "Agent documents API changes and migration path"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "Cross-repo Cargo.toml feature search useful but repos are navigable"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "hyper/Cargo.toml"
+repo = "hyper"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "tokio/tokio/Cargo.toml"
+repo = "tokio"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "hyper/src/server/tcp.rs"
+repo = "hyper"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "tokio/tokio/src/runtime/builder.rs"
+repo = "tokio"
+confidence = 0.8

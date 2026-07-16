@@ -1,0 +1,165 @@
+# Incident Investigation: CockroachDB tenant range surfaces deleted rows after TRUNCATE due to Pebble range-tombstone elision bug
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "cockroachdb-storage-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "incident-investigation-dual-cockroach-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "expert"
+estimated_duration_minutes = 55
+session_type = "single"
+description = "Trace a storage-layer corruption in which range tombstones written via AddSSTable are not properly elided during Pebble L6 compaction, causing deleted rows to resurface on a CockroachDB tenant range after TRUNCATE"
+prompt = """
+Your storage SRE team operates a multi-tenant CockroachDB v24.2.5 cluster
+backed by Pebble v1.1.2. After a tenant ran a TRUNCATE against a large table
+on a single range, customer-facing reads on that range began returning rows
+that should have been deleted:
+
+  ERROR: consistency check failed: range r4217 has 1432 keys above MVCC GC
+         threshold that should have been removed by TRUNCATE
+  WARN:  pebble: range key invariant violated during compaction of L6 sstable
+  WARN:  replica r4217: read returned 1432 deleted rows; expected 0
+
+The corruption only manifests after a background L6 compaction runs against
+the affected sstable. Newly written ranges are unaffected. Restarting the
+node does not clear the stale data; only manual range repair removes it.
+
+Investigation notes from the storage engineer:
+- TRUNCATE on a tenant range translates into a bulk SST containing range
+  tombstones (RANGEKEYDEL) covering the entire keyspan.
+- The SST is ingested through CockroachDB's KV layer at the Raft apply seam,
+  which forwards to Pebble's ingest path.
+- Pebble accepts the SST and links it into L6.
+- Some time later, an L6 compaction runs across the ingested SST and an
+  older SST that contains the to-be-deleted point keys.
+- During that compaction, the iterator that decides whether a range key
+  should be retained or dropped in the output sstable mishandles a
+  RANGEKEYDEL whose synthetic MVCC suffix collides with an existing range
+  key in the same stripe. The deletion is silently dropped from the output.
+- The point keys it was supposed to elide are then resurrected on read.
+
+Repos and revisions:
+- /workspace/cockroach/ — `cockroachdb/cockroach` at v24.2.5
+- /workspace/pebble/ — `cockroachdb/pebble` at v1.1.2
+
+Both are Go projects. CockroachDB depends directly on Pebble as the storage
+engine.
+
+Your task:
+1. Find CockroachDB's Raft-apply entry point that ingests a bulk SST and the
+   helper that finalizes a snapshot scratch SST before handing it to Pebble.
+2. Identify the Pebble entry point that accepts an ingested SST and the
+   compaction-iteration helper that decides whether a key is dropped within
+   an existing snapshot stripe.
+3. Trace the bug: TRUNCATE -> AddSSTable bulk SST with range tombstones ->
+   CockroachDB Raft apply -> Pebble Ingest -> background L6 compaction ->
+   the per-stripe drop decision incorrectly elides the RANGEKEYDEL ->
+   underlying point keys resurface on subsequent reads.
+4. Propose a fix on either the Pebble side (correct the per-stripe handling
+   of range-key deletes whose suffix matches an existing range key) or a
+   CockroachDB-side mitigation (avoid the SST shape that triggers it).
+
+Write your incident report to `/workspace/cockroach/INCIDENT_REPORT.md` with:
+- Root cause (file and function in each repo)
+- Full corruption chain
+- Affected components
+- Remediation: Pebble fix to the per-stripe range-key handling OR CRDB-side
+  workaround that splits the bulk SST OR upstream Pebble patch.
+"""
+
+[[repos]]
+url = "https://github.com/cockroachdb/cockroach"
+rev = "v24.2.5"
+path = "cockroach"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/cockroachdb/pebble"
+rev = "v1.1.2"
+path = "pebble"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 1_900_000
+dependency_depth = 2
+frameworks = ["cockroachdb", "pebble"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies the CockroachDB Raft-apply SST ingest seam and the Pebble compaction-iter per-stripe drop helper as participants in the elision bug"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces TRUNCATE -> AddSSTable -> Pebble Ingest -> L6 compaction -> RANGEKEYDEL elision failure"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent names the CockroachDB KV layer, the Pebble storage engine, and the range key system"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes a Pebble per-stripe fix, an upstream patch, or a CRDB-side workaround that avoids the offending SST shape"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The bug spans two large Go modules (CockroachDB ~1.5M LOC, Pebble ~200K LOC) connected by a single ingest/compaction seam. Tracing it requires cross-repo navigation from CRDB's Raft apply path into Pebble's compaction iterator helpers, which are not well-known APIs and are unlikely to be memorized from training data."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pkg/kv/kvserver/replica_raft.go"
+repo = "cockroach"
+confidence = 0.92
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/kv/kvserver/replica_sst_snapshot_storage.go"
+repo = "cockroach"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "compaction.go"
+repo = "pebble"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "ingest.go"
+repo = "pebble"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pkg/storage/pebble.go"
+repo = "cockroach"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "range_keys.go"
+repo = "pebble"
+confidence = 0.70

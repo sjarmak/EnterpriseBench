@@ -1,0 +1,38 @@
+{
+  "task_id": "incident-investigation-dual-nerdctl-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify (a) nerdctl's pull wrapper (pkg/imgutil/pull/pull.go) constructing RemoteOpts without WithPlatformMatcher when a non-default snapshotter is supplied, AND (b) containerd's pkg/unpack/unpacker.go requiring a non-empty platforms list. Report must cite both files and explain that the defaulting branch is skipped for override snapshotters.",
+      "evaluation_criteria": [
+        "Names pkg/imgutil/pull/pull.go (or equivalent) on the nerdctl side",
+        "Names pkg/unpack/unpacker.go on the containerd side",
+        "States that the platforms list is empty because the defaulting branch is skipped for non-default snapshotters",
+        "References WithPlatformMatcher (or the equivalent RemoteOpt) as the missing piece"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Agent must trace at least 4 hops from `nerdctl pull` through to the unpacker error. The chain must include nerdctl building opts, the snapshotter resolution, containerd's client.Pull entry, and the unpacker's empty-platforms branch.",
+      "evaluation_criteria": [
+        "Mentions nerdctl Pull or pkg/imgutil/pull as the entry",
+        "Mentions snapshotter override or ResolveSnapshotter",
+        "Mentions client.Pull or containerd's pull.go (containerd v1.7.x has pull.go at the repository root)",
+        "Mentions the empty platforms list / 'no unpack platforms defined' as the failure point"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Agent must name the nerdctl pull wrapper, the snapshotter resolver, and containerd's pkg/unpack module.",
+      "evaluation_criteria": [
+        "Names nerdctl pull wrapper (pkg/imgutil/pull)",
+        "Names nerdctl snapshotter resolver (pkg/imgutil/snapshotter.go)",
+        "Names containerd unpack module (pkg/unpack)"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Agent must propose at least one concrete fix: (a) nerdctl-side adds WithPlatformMatcher to its RemoteOpt list, (b) containerd-side keeps defaulting platforms even when snapshotter is overridden, OR (c) both, with documentation update.",
+      "evaluation_criteria": [
+        "Proposes nerdctl-side WithPlatformMatcher OR containerd-side defaulting fix",
+        "Identifies where the fix would live (nerdctl pull wrapper or containerd unpacker)"
+      ]
+    }
+  }
+}

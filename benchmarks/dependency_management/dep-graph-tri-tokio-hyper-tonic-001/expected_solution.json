@@ -1,0 +1,27 @@
+{
+  "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+  "checkpoints": {
+    "map_dep_chain": {
+      "expected_solution": "Agent maps full dependency chain with versions The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Cargo.toml, server.rs, and tcp.rs). The judge looks for the following concept tokens in the agent output: tokio.=, hyper.=.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Cargo.toml, server.rs, and tcp.rs) in the agent output",
+        "Mentions at least three of the canonical concept tokens: tokio.= and hyper.="
+      ]
+    },
+    "identify_transitive": {
+      "expected_solution": "Agent identifies transitive tokio APIs used by tonic The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Cargo.toml, server.rs, and tcp.rs). The judge looks for the following concept tokens in the agent output: runtime, spawn, JoinHandle.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Cargo.toml, server.rs, and tcp.rs) in the agent output",
+        "Mentions at least three of the canonical concept tokens: runtime, spawn, and JoinHandle",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "upgrade_strategy": {
+      "expected_solution": "Agent documents coordination strategy The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Cargo.toml, server.rs, and tcp.rs). The judge looks for the following concept tokens in the agent output: upgrade, version, compat, pin.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Cargo.toml, server.rs, and tcp.rs) in the agent output",
+        "Mentions at least three of the canonical concept tokens: upgrade, version, and compat"
+      ]
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "task_id": "error-prov-dual-netty-spring-001",
+  "checkpoints": {
+    "netty_error_handling": {
+      "expected_solution": "For checkpoint 'netty error handling': the relevant code lives in codec-http/src/main/java/io/netty/handler/codec/http/HttpServerCodec.java. Context: Trace Netty channel pipeline error propagation through Spring WebFlux reactive stack. Error type: channel_pipeline_exception.",
+      "evaluation_criteria": [
+        "Must reference codec-http/src/main/java/io/netty/handler/codec/http/HttpServerCodec.java as relevant to netty error handling",
+        "Must reference a specific function, class, or method handling netty error handling",
+        "Must scope the explanation to the netty side of the integration"
+      ]
+    },
+    "spring_webflux_bridge": {
+      "expected_solution": "For checkpoint 'spring webflux bridge': the relevant code lives in spring-web/src/main/java/org/springframework/http/server/reactive/ReactorHttpHandlerAdapter.java. Context: Trace Netty channel pipeline error propagation through Spring WebFlux reactive stack. Error type: channel_pipeline_exception.",
+      "evaluation_criteria": [
+        "Must reference spring-web/src/main/java/org/springframework/http/server/reactive/ReactorHttpHandlerAdapter.java as relevant to spring webflux bridge",
+        "Must reference a specific function, class, or method handling spring webflux bridge",
+        "Must scope the explanation to the spring-framework side of the integration"
+      ]
+    },
+    "error_context_loss": {
+      "expected_solution": "For checkpoint 'error context loss': the relevant code lives in codec-http/src/main/java/io/netty/handler/codec/http/HttpServerCodec.java. spring-web/src/main/java/org/springframework/http/server/reactive/ReactorHttpHandlerAdapter.java. Error type: channel_pipeline_exception.",
+      "evaluation_criteria": [
+        "Must reference codec-http/src/main/java/io/netty/handler/codec/http/HttpServerCodec.java as relevant to error context loss",
+        "Must reference spring-web/src/main/java/org/springframework/http/server/reactive/ReactorHttpHandlerAdapter.java as relevant to error context loss",
+        "Must reference a specific function, class, or method handling error context loss",
+        "Must explain how the cited code participates in the failure mode"
+      ]
+    }
+  }
+}

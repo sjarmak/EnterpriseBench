@@ -1,0 +1,69 @@
+{
+  "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+  "task_type": "dependency_graph",
+  "repos": [
+    {
+      "url": "https://github.com/tokio-rs/tokio",
+      "rev": "tokio-1.0.0",
+      "path": "tokio"
+    },
+    {
+      "url": "https://github.com/hyperium/hyper",
+      "rev": "v0.14.0",
+      "path": "hyper"
+    },
+    {
+      "url": "https://github.com/hyperium/tonic",
+      "rev": "v0.6.0",
+      "path": "tonic"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "tonic/tonic/Cargo.toml",
+      "repo": "tonic",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "hyper/Cargo.toml",
+      "repo": "hyper",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "tokio/tokio/Cargo.toml",
+      "repo": "tokio",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "tonic/tonic/src/transport/server.rs",
+      "repo": "tonic",
+      "confidence": 0.85
+    },
+    {
+      "path": "hyper/src/server/tcp.rs",
+      "repo": "hyper",
+      "confidence": 0.8
+    }
+  ],
+  "dependency_depth": 3,
+  "scoring_evidence": {
+    "map_dep_chain": [
+      "server.rs",
+      "tcp.rs"
+    ],
+    "identify_transitive": [
+      "server.rs",
+      "tcp.rs",
+      "JoinHandle"
+    ],
+    "upgrade_strategy": [
+      "server.rs",
+      "tcp.rs"
+    ]
+  }
+}

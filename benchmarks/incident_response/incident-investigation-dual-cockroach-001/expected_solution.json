@@ -1,0 +1,37 @@
+{
+  "task_id": "incident-investigation-dual-cockroach-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify the CockroachDB-side ingest/Raft-apply seam (pkg/kv/kvserver/replica_raft.go::replicaAppBatch.ApplyToStateMachine, supported by pkg/kv/kvserver/replica_sst_snapshot_storage.go) AND the Pebble-side compaction helper (compaction.go::compactionIter.skipInStripe, with ingest.go::(*DB).Ingest as the entry point) that mishandles a RANGEKEYDEL whose suffix collides with an existing range key. The report must name both repos' files and explain that a per-stripe drop decision in compaction is incorrectly eliding the range tombstone.",
+      "evaluation_criteria": [
+        "Names pkg/kv/kvserver/replica_raft.go (or replicaAppBatch.ApplyToStateMachine) on the CockroachDB side",
+        "Names Pebble compaction.go (or compactionIter.skipInStripe) and/or ingest.go on the Pebble side",
+        "States that a RANGEKEYDEL / range tombstone is being incorrectly elided during L6 compaction"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Agent must trace at least four hops: TRUNCATE -> bulk SST with range tombstones (AddSSTable) -> CockroachDB Raft apply -> Pebble Ingest -> background L6 compaction -> RANGEKEYDEL elision -> deleted point keys resurface on read.",
+      "evaluation_criteria": [
+        "Mentions TRUNCATE producing a bulk SST / AddSSTable",
+        "Mentions CockroachDB Raft apply (or ApplyToStateMachine / replica_raft) ingesting the SST",
+        "Mentions Pebble Ingest (or ingest.go) linking the SST into L6",
+        "Mentions L6 compaction (or compactionIter / skipInStripe) eliding the RANGEKEYDEL"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Agent must name the CockroachDB KV layer, the Pebble storage engine, and the Pebble range-key subsystem as the affected components.",
+      "evaluation_criteria": [
+        "Names CockroachDB KV layer (pkg/kv/kvserver or replica_raft)",
+        "Names Pebble storage engine (compaction or ingest)",
+        "Names the range key subsystem (RANGEKEYDEL / range tombstone / range_keys)"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Agent must propose at least one concrete remediation: (a) Pebble fix to compactionIter.skipInStripe so RANGEKEYDEL is not dropped on suffix collision, (b) upstream Pebble patch to disambiguate range-key identity, OR (c) CRDB-side workaround that splits or reshapes the TRUNCATE bulk SST.",
+      "evaluation_criteria": [
+        "Proposes one of: Pebble per-stripe fix, upstream Pebble patch, or CRDB-side workaround / SST reshaping",
+        "Identifies where the fix would live (Pebble compaction.go / range_keys.go, or CRDB pkg/kv/kvserver / pkg/storage)"
+      ]
+    }
+  }
+}

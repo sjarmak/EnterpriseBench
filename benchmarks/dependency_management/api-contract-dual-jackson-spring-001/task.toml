@@ -1,0 +1,97 @@
+# api_contract: Trace Jackson 2.15 ObjectMapper default changes breaking Spr
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "java-enterprise-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "api-contract-dual-jackson-spring-001"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace Jackson 2.15 ObjectMapper default changes breaking Spring Boot serialization"
+prompt = """
+Jackson 2.15 changed ObjectMapper default settings: FAIL_ON_UNKNOWN_PROPERTIES
+is now disabled by default, and date serialization format changed.
+Spring Boot auto-configures Jackson as its default JSON serializer.
+
+Your task:
+1. Find where Jackson defines ObjectMapper defaults and feature flags
+2. Find where Spring Boot auto-configures Jackson ObjectMapper
+3. Identify default behavior changes that affect Spring REST endpoints
+4. Document the migration path for Spring Boot applications
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/FasterXML/jackson-databind"
+rev = "jackson-databind-2.15.0"
+path = "jackson-databind"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/spring-projects/spring-boot"
+rev = "v3.1.0"
+path = "spring-boot"
+role = "primary"
+
+[metadata]
+languages = ["java"]
+total_loc = 200_000
+dependency_depth = 2
+frameworks = ["jackson", "spring-boot"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "jackson_defaults"
+weight = 0.30
+verifier = "checks/check_jackson_defaults.sh"
+description = "Agent identifies Jackson default changes"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "spring_autoconfig"
+weight = 0.40
+verifier = "checks/check_spring_autoconfig.sh"
+description = "Agent finds Spring Boot's Jackson auto-configuration"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "behavior_drift"
+weight = 0.30
+verifier = "checks/check_behavior_drift.sh"
+description = "Agent documents behavioral changes"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "Large repos; cross-repo search helps find Jackson config in Spring autoconfigure"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "jackson-databind/src/main/java/com/fasterxml/jackson/databind/ObjectMapper.java"
+repo = "jackson-databind"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "spring-boot/spring-boot-project/spring-boot-autoconfigure/src/main/java/org/springframework/boot/autoconfigure/jackson/JacksonAutoConfiguration.java"
+repo = "spring-boot"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "jackson-databind/src/main/java/com/fasterxml/jackson/databind/cfg/MapperConfig.java"
+repo = "jackson-databind"
+confidence = 0.8

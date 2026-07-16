@@ -1,0 +1,162 @@
+# Incident Investigation: nerdctl pull intermittently fails to initialize unpacker for non-default snapshotter
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "containerd-snapshotter-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "incident-investigation-dual-nerdctl-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 45
+session_type = "single"
+description = "Trace why `nerdctl pull --snapshotter=devmapper` intermittently fails with 'no unpack platforms defined' across the nerdctl pull wrapper and containerd's unpacker initialization"
+prompt = """
+Your build farm uses nerdctl 2.0.0 against containerd 1.7.24. Some hosts use
+the default `overlayfs` snapshotter while air-gapped hosts use `devmapper`.
+Recently, image pulls on the devmapper hosts started failing intermittently:
+
+  $ nerdctl pull --snapshotter=devmapper my.registry/myimage:1.2.3
+  ERROR: failed to pull and unpack image: unable to initialize unpacker:
+    no unpack platforms defined
+
+Same image, same registry, same nerdctl version. The failure happens about
+20% of the time. On overlayfs hosts, the same pull always succeeds.
+
+Investigation notes:
+- nerdctl's `pkg/imgutil/pull/pull.go::Pull` constructs an `[]containerd.RemoteOpt`
+  slice and forwards it into `client.Pull(ctx, ref, opts...)`.
+- Some opts originate from nerdctl-side defaults; in particular the snapshotter
+  override is wired via `pkg/imgutil/snapshotter.go::ResolveSnapshotter`.
+- Containerd's `pkg/unpack/unpacker.go::Unpacker.Unpack` consults a list of
+  unpack platforms set by the client; when the list is empty it returns
+  "no unpack platforms defined" and the pull aborts.
+- A recent containerd refactor changed the default-platform resolution: when
+  the snapshotter is the default `overlayfs`, the unpacker auto-selects the
+  current host platform; when an override snapshotter is supplied, the
+  defaulting branch is skipped and the platforms list stays empty unless the
+  caller passed `WithPlatformMatcher`.
+- nerdctl never passes `WithPlatformMatcher` for non-default snapshotters,
+  so the empty-platforms branch is hit.
+
+Repos and revisions:
+- /workspace/nerdctl/ — `containerd/nerdctl` at v2.0.0
+- /workspace/containerd/ — `containerd/containerd` at v1.7.24
+
+Both Go projects.
+
+Your task:
+1. Find the nerdctl-side pull entry that builds the RemoteOpt list and the
+   snapshotter resolution helper.
+2. Find the containerd-side unpacker initialization that fails when the
+   platforms list is empty.
+3. Trace the contract: when does the platforms list need to come from the
+   client (nerdctl) versus from containerd's defaulting? Identify the
+   refactor that changed the defaulting branch.
+4. Trace the failure: nerdctl Pull -> WithImageHandler/WithPullUnpack ->
+   client.Pull -> containerd Unpacker.Unpack -> empty platforms -> error
+   -> surfaced as `nerdctl pull` failure.
+
+Write your incident report to `/workspace/nerdctl/INCIDENT_REPORT.md` with:
+- Root cause (file and function in each repo)
+- Full pull-and-unpack chain with the exact branching point
+- Affected components
+- Remediation: nerdctl should pass an explicit platform matcher, OR
+  containerd should keep defaulting platforms even when snapshotter is
+  overridden, OR both
+"""
+
+[[repos]]
+url = "https://github.com/containerd/nerdctl"
+rev = "v2.0.0"
+path = "nerdctl"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/containerd/containerd"
+rev = "v1.7.24"
+path = "containerd"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 800_000
+dependency_depth = 2
+frameworks = ["containerd", "nerdctl"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies nerdctl pull missing platform matcher and containerd unpacker requiring non-empty platforms list"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces: nerdctl Pull -> RemoteOpt build -> client.Pull -> containerd unpacker -> empty platforms branch -> error"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent names nerdctl pull wrapper, snapshotter resolution, and containerd's pkg/unpack"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes nerdctl-side WithPlatformMatcher OR containerd-side defaulting fix"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The contract between nerdctl's high-level pull wrapper and containerd's unpack pipeline is implicit: a refactor changed when defaults apply, but the change was internal to containerd's pkg/unpack. Tracing this requires cross-repo navigation between two Go modules that share a client-server contract via RemoteOpt; the symptom is in nerdctl logs but the cause is in containerd's interior unpacker module."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pkg/imgutil/pull/pull.go"
+repo = "nerdctl"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/imgutil/snapshotter.go"
+repo = "nerdctl"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/unpack/unpacker.go"
+repo = "containerd"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "client/pull.go"
+repo = "containerd"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pkg/imgutil/imgutil.go"
+repo = "nerdctl"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "client/client_opts.go"
+repo = "containerd"
+confidence = 0.75

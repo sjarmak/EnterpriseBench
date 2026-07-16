@@ -1,0 +1,57 @@
+{
+  "task_id": "error-prov-dual-urllib3-requests-001",
+  "task_type": "error_provenance",
+  "repos": [
+    {
+      "url": "https://github.com/urllib3/urllib3",
+      "rev": "2.0.0",
+      "path": "urllib3"
+    },
+    {
+      "url": "https://github.com/psf/requests",
+      "rev": "v2.28.2",
+      "path": "requests"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "urllib3/src/urllib3/exceptions.py",
+      "repo": "urllib3",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "requests/requests/adapters.py",
+      "repo": "requests",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "requests/requests/exceptions.py",
+      "repo": "requests",
+      "confidence": 0.85
+    },
+    {
+      "path": "urllib3/src/urllib3/connectionpool.py",
+      "repo": "urllib3",
+      "confidence": 0.8
+    }
+  ],
+  "error_type": "ssl_exception_chain",
+  "scoring_evidence": {
+    "urllib3_exceptions": [
+      "urllib3/src/urllib3/exceptions.py",
+      "ssl_exception_chain"
+    ],
+    "requests_wrapping": [
+      "requests/adapters.py",
+      "ssl_exception_chain"
+    ],
+    "error_chain": [
+      "urllib3/src/urllib3/exceptions.py",
+      "requests/adapters.py"
+    ]
+  }
+}

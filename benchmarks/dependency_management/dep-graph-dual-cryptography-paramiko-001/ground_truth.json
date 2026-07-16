@@ -1,0 +1,65 @@
+{
+  "task_id": "dep-graph-dual-cryptography-paramiko-001",
+  "task_type": "dependency_graph",
+  "repos": [
+    {
+      "url": "https://github.com/pyca/cryptography",
+      "rev": "41.0.0",
+      "path": "cryptography"
+    },
+    {
+      "url": "https://github.com/paramiko/paramiko",
+      "rev": "3.2.0",
+      "path": "paramiko"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "cryptography/src/cryptography/hazmat/backends/__init__.py",
+      "repo": "cryptography",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "paramiko/paramiko/transport.py",
+      "repo": "paramiko",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "paramiko/paramiko/kex_group1.py",
+      "repo": "paramiko",
+      "confidence": 0.85
+    },
+    {
+      "path": "cryptography/src/cryptography/hazmat/primitives/ciphers/base.py",
+      "repo": "cryptography",
+      "confidence": 0.8
+    }
+  ],
+  "breakage_type": "deprecated_api_removal",
+  "scoring_evidence": {
+    "crypto_api_changes": [
+      "__init__.py",
+      "transport.py",
+      "kex_group1.py",
+      "base.py",
+      "kex_group1"
+    ],
+    "paramiko_crypto_usage": [
+      "transport.py",
+      "kex_group1.py",
+      "kex_group1"
+    ],
+    "impact_scope": [
+      "__init__.py",
+      "transport.py",
+      "kex_group1.py",
+      "base.py",
+      "kex_group1",
+      "kex_group"
+    ]
+  }
+}

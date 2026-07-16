@@ -1,0 +1,113 @@
+{
+  "task_id": "incident-investigation-dual-vault-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/hashicorp/vault",
+      "rev": "v1.18.1",
+      "path": "vault"
+    },
+    {
+      "url": "https://github.com/hashicorp/raft",
+      "rev": "v1.7.1",
+      "path": "raft"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "physical/raft/snapshot.go",
+      "repo": "vault",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "physical/raft/fsm.go",
+      "repo": "vault",
+      "confidence": 0.85,
+      "source": "deterministic"
+    },
+    {
+      "path": "raft.go",
+      "repo": "raft",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "fsm.go",
+      "repo": "raft",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "physical/raft/raft.go",
+      "repo": "vault",
+      "confidence": 0.8
+    },
+    {
+      "path": "file_snapshot.go",
+      "repo": "raft",
+      "confidence": 0.65
+    }
+  ],
+  "real_world_references": [
+    {
+      "type": "issue",
+      "repo": "hashicorp/vault",
+      "number": 28880,
+      "title": "Error when unsealing restored raft snapshot"
+    },
+    {
+      "type": "issue",
+      "repo": "hashicorp/vault",
+      "number": 21022,
+      "title": "Only first pod of stateful set enables after raft restore"
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "A backup-seeded follower carries a stale persisted CurrentTerm (and stale snapshot metadata) that predates a leadership change. When the leader sends an InstallSnapshot RPC, hashicorp/raft's raft.go::installSnapshot inspects the request term and the follower's persisted state, then streams bytes into a sink created by Vault's physical/raft/snapshot.go::BoltSnapshotStore.Create. The copy aborts (short read / size mismatch / term gating) and the sink is cancelled, so the restoreFuture is never dispatched to fsmMutateCh, and physical/raft/fsm.go::FSM.Restore (invoked by raft fsm.go::fsmRestoreAndMeasure) never executes. Without an applied snapshot, the follower cannot match the leader's last log term and transitions to candidate, raising its term and looping.",
+    "error_chain": [
+      "SRE replaces failed follower and seeds /vault/raft from a backup that predates a recent leadership change",
+      "Follower starts and rejoins; persisted CurrentTerm is stale",
+      "Leader sends InstallSnapshot RPC to follower",
+      "hashicorp/raft raft.go::installSnapshot inspects req.Term vs persisted CurrentTerm and version gating",
+      "Vault physical/raft/snapshot.go::BoltSnapshotStore.Create produces a BoltSnapshotSink, io.Copy runs into the sink",
+      "Copy short-reads or term gating triggers; sink.Cancel() is called and the restoreFuture path is skipped",
+      "Without a successful restoreFuture on fsmMutateCh, raft fsm.go::fsmRestoreAndMeasure never invokes physical/raft/fsm.go::FSM.Restore",
+      "Follower's local state stays behind the leader's lastLogTerm/Index",
+      "Follower election timeout fires; it transitions to candidate, increments term, and loops"
+    ],
+    "affected_components": [
+      "Vault physical/raft snapshot store (physical/raft/snapshot.go, BoltSnapshotStore + BoltSnapshotSink)",
+      "Vault physical/raft FSM (physical/raft/fsm.go, FSM.Restore)",
+      "hashicorp/raft installSnapshot RPC handler (raft.go::installSnapshot)",
+      "hashicorp/raft FSM restore plumbing (fsm.go::fsmRestoreAndMeasure)",
+      "Follower election / state machine (candidate transition path)"
+    ],
+    "remediation": "Three layered options: (1) Prune or quarantine snapshot files under physical/raft/snapshots/ on the seeded follower before bringing it online, so the leader's InstallSnapshot is the only source of truth; (2) Add an explicit term/index fence in the Vault BoltSnapshotSink Write/Close path that refuses to finalize a sink whose meta term is older than the local persisted CurrentTerm, surfacing a clear error instead of a silent short-read; (3) Document and tool the backup-seeded recovery flow to require a peers.json / raft state reset (e.g. via `vault operator raft remove-peer` followed by a fresh add) so the follower starts empty and lets the leader fully rebuild state."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "physical/raft/snapshot.go",
+      "physical/raft/fsm.go",
+      "raft.go",
+      "fsm.go",
+      "BoltSnapshotStore",
+      "BoltSnapshotSink",
+      "fsmRestoreAndMeasure"
+    ],
+    "error_chain_trace": [
+      "BoltSnapshotSink",
+      "physical/raft/snapshot.go"
+    ],
+    "affected_components": [
+      "BoltSnapshotStore",
+      "fsmRestoreAndMeasure"
+    ],
+    "remediation_proposal": [
+      "BoltSnapshotSink",
+      "physical/raft/snapshot.go"
+    ]
+  }
+}

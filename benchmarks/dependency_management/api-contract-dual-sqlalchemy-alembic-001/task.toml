@@ -1,0 +1,102 @@
+# api_contract: Trace SQLAlchemy 2.0 session API changes affecting Alembic m
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "python-packaging-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "api-contract-dual-sqlalchemy-alembic-001"
+suite = "dependency_management"
+task_type = "api_contract"
+difficulty = "hard"
+estimated_duration_minutes = 35
+session_type = "single"
+description = "Trace SQLAlchemy 2.0 session API changes affecting Alembic migration engine"
+prompt = """
+SQLAlchemy 2.0 changed the Session and Connection APIs: `session.execute()`
+now requires explicit `text()` wrapping for raw SQL, and the engine/connection
+model was restructured. Alembic uses SQLAlchemy internally for migration execution.
+
+Your task:
+1. Find where SQLAlchemy 2.0 changed Session and Connection execute APIs
+2. Find where Alembic uses SQLAlchemy Session/Connection for migrations
+3. Identify breaking contract points between the two
+4. Document the impact on Alembic's migration runner
+
+Write your analysis to /workspace/analysis/IMPACT_REPORT.md
+"""
+
+[[repos]]
+url = "https://github.com/sqlalchemy/sqlalchemy"
+rev = "rel_2_0_0"
+path = "sqlalchemy"
+role = "dependency"
+
+[[repos]]
+url = "https://github.com/sqlalchemy/alembic"
+rev = "rel_1_12_0"
+path = "alembic"
+role = "primary"
+
+[metadata]
+languages = ["python"]
+total_loc = 200_000
+dependency_depth = 2
+frameworks = ["sqlalchemy", "alembic"]
+multi_repo_pattern = "propagate"
+
+[[checkpoints]]
+name = "sqla_api_changes"
+weight = 0.30
+verifier = "checks/check_sqla_api_changes.sh"
+description = "Agent identifies SQLAlchemy 2.0 execute API changes"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "alembic_usage"
+weight = 0.40
+verifier = "checks/check_alembic_usage.sh"
+description = "Agent finds Alembic's SQLAlchemy API usage"
+timeout_seconds = 120
+
+[[checkpoints]]
+name = "contract_drift"
+weight = 0.30
+verifier = "checks/check_contract_drift.sh"
+description = "Agent documents breaking contract points"
+timeout_seconds = 120
+
+[artifacts]
+required = ["answer"]
+optional = ["migration_guide"]
+
+[tool_access]
+expected_mcp_benefit = "medium"
+mcp_benefit_rationale = "SQLAlchemy API tracing through Alembic's migration engine"
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "sqlalchemy/lib/sqlalchemy/engine/base.py"
+repo = "sqlalchemy"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "alembic/alembic/runtime/migration.py"
+repo = "alembic"
+confidence = 0.9
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "alembic/alembic/operations/ops.py"
+repo = "alembic"
+confidence = 0.85
+
+[[ground_truth.sufficient_files]]
+path = "sqlalchemy/lib/sqlalchemy/orm/session.py"
+repo = "sqlalchemy"
+confidence = 0.8

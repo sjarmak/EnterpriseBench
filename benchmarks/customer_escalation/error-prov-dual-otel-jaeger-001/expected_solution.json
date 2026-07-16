@@ -1,0 +1,30 @@
+{
+  "task_id": "error-prov-dual-otel-jaeger-001",
+  "checkpoints": {
+    "otel_batch_processor": {
+      "expected_solution": "For checkpoint 'otel batch processor': the relevant code lives in sdk/trace/batch_span_processor.go. Context: Trace OpenTelemetry SDK span export error propagation through Jaeger exporter. Error type: silent_span_drop.",
+      "evaluation_criteria": [
+        "Must reference sdk/trace/batch_span_processor.go as relevant to otel batch processor",
+        "Must reference a specific function, class, or method handling otel batch processor",
+        "Must scope the explanation to the otel-go side of the integration"
+      ]
+    },
+    "jaeger_exporter": {
+      "expected_solution": "For checkpoint 'jaeger exporter': the relevant code lives in cmd/collector/app/handler/grpc_handler.go. Context: Trace OpenTelemetry SDK span export error propagation through Jaeger exporter. Error type: silent_span_drop.",
+      "evaluation_criteria": [
+        "Must reference cmd/collector/app/handler/grpc_handler.go as relevant to jaeger exporter",
+        "Must reference a specific function, class, or method handling jaeger exporter",
+        "Must scope the explanation to the jaeger side of the integration"
+      ]
+    },
+    "silent_drop": {
+      "expected_solution": "For checkpoint 'silent drop': the relevant code lives in sdk/trace/batch_span_processor.go. cmd/collector/app/handler/grpc_handler.go. Context: Trace OpenTelemetry SDK span export error propagation through Jaeger exporter. Error type: silent_span_drop.",
+      "evaluation_criteria": [
+        "Must reference sdk/trace/batch_span_processor.go as relevant to silent drop",
+        "Must reference cmd/collector/app/handler/grpc_handler.go as relevant to silent drop",
+        "Must reference a specific function, class, or method handling silent drop",
+        "Must explain how the cited code participates in the failure mode"
+      ]
+    }
+  }
+}

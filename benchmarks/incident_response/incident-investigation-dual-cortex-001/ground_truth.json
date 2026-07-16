@@ -1,0 +1,102 @@
+{
+  "task_id": "incident-investigation-dual-cortex-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/cortexproject/cortex",
+      "rev": "v1.18.0",
+      "path": "cortex"
+    },
+    {
+      "url": "https://github.com/prometheus/alertmanager",
+      "rev": "v0.27.0",
+      "path": "alertmanager"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "pkg/ruler/notifier.go",
+      "repo": "cortex",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "pkg/ruler/manager.go",
+      "repo": "cortex",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "notify/notify.go",
+      "repo": "alertmanager",
+      "confidence": 0.85,
+      "source": "deterministic"
+    },
+    {
+      "path": "types/types.go",
+      "repo": "alertmanager",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pkg/ruler/ruler.go",
+      "repo": "cortex",
+      "confidence": 0.7
+    },
+    {
+      "path": "matchers/compat/parse.go",
+      "repo": "alertmanager",
+      "confidence": 0.75
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "The Cortex ruler constructs a per-tenant notifier in pkg/ruler/notifier.go::newRulerNotifier (wired from pkg/ruler/manager.go::DefaultMultiTenantManager.SyncRuleGroups) that wraps the upstream Prometheus notifier.Manager with a fixed name-validation scheme. When a tenant's recording rule emits UTF-8 label names while Alertmanager v0.27.0 runs in classic label-validation mode, the alertmanager client POSTs the alerts and Alertmanager's types/types.go::validateLs (which calls matchers/compat.IsValidLabelName, configured by the active scheme in matchers/compat/parse.go) rejects the labels with HTTP 400. The ruler-side notifier treats the 400 as non-recoverable and does not propagate the alertmanager client error up to a tenant-visible error counter, so the batch is silently dropped. Affected alerts are never retried and never page; the failure is invisible to cortex_prometheus_rule_group_iterations_failed_total.",
+    "error_chain": [
+      "Recording rule for tenant team-utf8 evaluates and produces an alert with UTF-8 label names (e.g. http.status_code)",
+      "DefaultMultiTenantManager.SyncRuleGroups in pkg/ruler/manager.go has wired this tenant's rule group to a notifier built by newRulerNotifier in pkg/ruler/notifier.go with the default (legacy) name-validation scheme",
+      "The ruler notifier serializes the firing alert and the alertmanager client POSTs it to Alertmanager",
+      "Alertmanager's notify/notify.go ingestion path validates incoming alerts via types/types.go::validateLs, which calls compat.IsValidLabelName from matchers/compat/parse.go in classic mode and rejects the non-ASCII label name",
+      "Alertmanager returns HTTP 400 with body 'bad_data: invalid label name'",
+      "The ruler-side alertmanager client treats 400 as non-recoverable and surfaces the error to the ruler notifier wrapper, which logs it at debug/warn but does not propagate it into cortex_prometheus_rule_group_iterations_failed_total or any tenant-level error counter",
+      "The alert batch is dropped on the floor; no retry, no page, no visible failure metric"
+    ],
+    "affected_components": [
+      "Cortex ruler notifier (pkg/ruler/notifier.go::newRulerNotifier)",
+      "Cortex ruler multi-tenant manager (pkg/ruler/manager.go::DefaultMultiTenantManager.SyncRuleGroups)",
+      "Prometheus Alertmanager notify package (notify/notify.go)",
+      "Prometheus Alertmanager alert validation (types/types.go::validateLs)",
+      "Alertmanager name-validation scheme (matchers/compat/parse.go::IsValidLabelName, classic vs UTF-8 mode)"
+    ],
+    "remediation": "Three layered options: (1) Propagate the alertmanager client error from newRulerNotifier into a per-tenant error counter (e.g. cortex_ruler_notify_alerts_dropped_total) so the silent drop becomes a visible failure. (2) Align the name-validation scheme: enable Alertmanager's UTF-8 label-name mode (so matchers/compat.IsValidLabelName accepts the ruler's labels) or switch the ruler to the legacy/classic scheme so it cannot emit UTF-8 labels. (3) Validate rule output at evaluation time in the ruler so a UTF-8 label produces a per-group iteration failure rather than a downstream silent drop."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "pkg/ruler/notifier.go",
+      "pkg/ruler/manager.go",
+      "types/types.go",
+      "notify/notify.go",
+      "newRulerNotifier",
+      "validateLs",
+      "IsValidLabelName"
+    ],
+    "error_chain_trace": [
+      "pkg/ruler/notifier.go",
+      "newRulerNotifier",
+      "POSTs",
+      "validateLs",
+      "IsValidLabelName"
+    ],
+    "affected_components": [
+      "pkg/ruler/notifier.go",
+      "manager.go",
+      "ruler.go",
+      "types/types.go"
+    ],
+    "remediation_proposal": [
+      "pkg/ruler/notifier.go",
+      "pkg/ruler/manager.go"
+    ]
+  }
+}

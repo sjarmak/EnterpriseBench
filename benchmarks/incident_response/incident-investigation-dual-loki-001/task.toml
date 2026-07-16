@@ -1,0 +1,177 @@
+# Incident Investigation: Loki query frontend reports "too many unhealthy instances" during rolling index-gateway restarts
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "loki-chunk-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "incident-investigation-dual-loki-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Trace an asymmetric ring-health policy between Loki's index-gateway client (Read op) and the dskit ring's IsHealthy semantics that causes spurious 'too many unhealthy instances' errors during rolling index-gateway restarts when instances enter the LEAVING state"
+prompt = """
+Your observability platform team operates a Grafana Loki 3.3 cluster on
+Kubernetes. After a routine rolling restart of the index-gateway StatefulSet,
+the query frontend begins returning errors to users:
+
+  level=error caller=index_gateway_client.go:182 msg="failed to get chunk refs"
+  err="too many unhealthy instances in the ring"
+  level=warn caller=ring.go:467 msg="ring instance LEAVING" instance=loki-index-gateway-1
+  level=error caller=series_index_gateway_store.go:62 msg="GetChunkRefs failed"
+  err="at least 1 healthy replica required, could only find 0 - unhealthy
+  instances: loki-index-gateway-1 (LEAVING)"
+
+The errors only occur during the brief window where one or more index-gateway
+pods are in the `LEAVING` state during the rolling restart. The pods themselves
+are still serving requests on their gRPC port — `kubectl exec` confirms the
+process is healthy and the gateway-server side of the ring reports them as
+healthy under the `Reporting` operation. But the gateway-client side, which
+runs inside Loki's query frontend, treats LEAVING as unhealthy and refuses
+to route the request, producing "no replicas found" while the gateway is
+in fact online.
+
+Investigation notes from the platform engineer:
+- The query frontend calls into Loki's
+  `pkg/storage/stores/series/series_index_gateway_store.go::GetChunkRefs`,
+  which goes through the gateway client and ultimately into the dskit ring.
+- The cilent-side resolution uses `ReadRing.GetReplicationSetForOperation`
+  with operation `Read`. dskit returns the LEAVING instance in the candidate
+  set, then `ring.IsHealthy(instance, Read, heartbeatTimeout)` is consulted
+  per-instance.
+- `IsHealthy` in `ring/ring.go` treats LEAVING as healthy *only* for ops
+  whose `ShouldExtendReplicaSetOnState(LEAVING) == false` — but for the
+  `Read` op the policy classifies LEAVING as unhealthy, while the
+  `Reporting` op (used by the gateway-server side) treats LEAVING as
+  healthy. This asymmetry between client and server health view is the
+  root cause.
+- The caching index client in
+  `pkg/storage/stores/series/index/caching_index_client.go::QueryPages`
+  surfaces the resulting error to the query frontend as
+  "too many unhealthy instances".
+
+Repos and revisions:
+- /workspace/loki/  — `grafana/loki` at v3.3.0
+- /workspace/dskit/ — `grafana/dskit` at commit 53283a0f6b41 (the pin from
+  loki v3.3.0's go.mod, pseudo-version v0.0.0-20241007172036-53283a0f6b41)
+
+Both are Go projects.
+
+Your task:
+1. Find Loki's gateway-client entry point that issues `GetChunkRefs` to the
+   index gateway (`series_index_gateway_store.go::GetChunkRefs`).
+2. Identify the caching client wrapper that surfaces the error to the
+   query frontend (`caching_index_client.go::QueryPages`).
+3. In dskit, find `ring.IsHealthy` and the surrounding code that decides
+   whether a LEAVING instance is healthy for a given operation. Show that
+   the policy differs between `Read` and `Reporting`.
+4. Trace the failure: rolling restart -> instance enters LEAVING ->
+   `GetReplicationSetForOperation(Read)` returns the LEAVING instance ->
+   `IsHealthy(... ,Read, ...)` rejects it -> gateway-client surfaces
+   "no replicas found" while the gateway-server is still online.
+
+Write your incident report to `/workspace/loki/INCIDENT_REPORT.md` with:
+- Root cause (file and function in each repo)
+- Full error chain
+- Affected components
+- Remediation: either fix dskit's IsHealthy semantics so LEAVING is healthy
+  for Read at trust-boundary level, OR align Loki's chosen health-op enum
+  with dskit's so the gateway-client uses an op that treats LEAVING as
+  healthy (matching the gateway-server side)
+"""
+
+[[repos]]
+url = "https://github.com/grafana/loki"
+rev = "v3.3.0"
+path = "loki"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/grafana/dskit"
+rev = "53283a0f6b415a1cdb0952aa5f60e86161f0dcc1"
+path = "dskit"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 850_000
+dependency_depth = 2
+frameworks = ["loki", "dskit", "grafana"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies the loki-side index-gateway client (series_index_gateway_store.go) and the dskit ring health policy (ring/ring.go::IsHealthy) as the asymmetric pair, with LEAVING state being the trigger"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces rolling restart -> instance LEAVING -> GetReplicationSetForOperation -> IsHealthy mismatch (Read vs Reporting) -> 'no replicas found'"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent names the Loki query frontend, the Loki index gateway, and the dskit ring as the affected components"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes either fixing dskit's IsHealthy semantics for LEAVING under Read, or aligning Loki's health-op enum on the gateway-client with the gateway-server side"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The bug spans two Go modules with a subtle asymmetric policy: Loki's gateway-client picks one ring operation (Read), the gateway-server picks another (Reporting), and dskit's IsHealthy applies different rules per op. Tracing this requires cross-repo navigation from Loki's storage layer into dskit's ring internals — neither end of the asymmetry makes sense in isolation, and dskit is a less-famous library that LLMs are unlikely to memorize from training data."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pkg/storage/stores/series/series_index_gateway_store.go"
+repo = "loki"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/storage/stores/series/index/caching_index_client.go"
+repo = "loki"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "ring/ring.go"
+repo = "dskit"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "ring/replication_strategy.go"
+repo = "dskit"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pkg/indexgateway/gateway.go"
+repo = "loki"
+confidence = 0.75
+
+[[ground_truth.sufficient_files]]
+path = "ring/model.go"
+repo = "dskit"
+confidence = 0.70

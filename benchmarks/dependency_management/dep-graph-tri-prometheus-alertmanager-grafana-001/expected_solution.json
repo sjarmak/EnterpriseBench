@@ -1,0 +1,33 @@
+{
+  "task_id": "dep-graph-tri-prometheus-alertmanager-grafana-001",
+  "checkpoints": {
+    "prometheus_alert_api": {
+      "expected_solution": "Agent identifies Prometheus alert notification format The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: alerting.go and notifier.go). The judge looks for the following concept tokens in the agent output: rules, alert, notifier, api.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (alerting.go and notifier.go) in the agent output",
+        "Mentions at least three of the canonical concept tokens: rules, alert, and notifier"
+      ]
+    },
+    "alertmanager_receiver": {
+      "expected_solution": "Agent finds Alertmanager alert processing The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: post_alerts.go). The judge looks for the following concept tokens in the agent output: api.v2, receiver, dispatch.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (post_alerts.go) in the agent output",
+        "Mentions at least three of the canonical concept tokens: api.v2, receiver, and dispatch"
+      ]
+    },
+    "grafana_query": {
+      "expected_solution": "Agent finds Grafana alert state queries The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: api_prometheus.go). The judge looks for the following concept tokens in the agent output: datasource.prometheus, alerting, ruler.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (api_prometheus.go) in the agent output",
+        "Mentions at least three of the canonical concept tokens: datasource.prometheus, alerting, and ruler"
+      ]
+    },
+    "cascade_analysis": {
+      "expected_solution": "Agent documents three-way cascade The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: alerting.go, post_alerts.go, api_prometheus.go, and notifier.go). The judge looks for the following concept tokens in the agent output: cascade, propagat, format.change.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (alerting.go, post_alerts.go, api_prometheus.go, and notifier.go) in the agent output",
+        "Mentions at least three of the canonical concept tokens: cascade, propagat, and format.change"
+      ]
+    }
+  }
+}

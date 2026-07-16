@@ -1,0 +1,31 @@
+{
+  "task_id": "config-drift-dual-setuptools-pip-001",
+  "checkpoints": {
+    "setuptools_deprecation": {
+      "expected_solution": "setuptools v67.0.0 deprecated pkg_resources in favor of importlib.metadata. The deprecation lives in pkg_resources/__init__.py: the module emits a DeprecationWarning at import time and the changelog notes the recommended migration to importlib.metadata for distribution metadata, importlib.resources for resource access, and importlib.metadata.entry_points for entry-point discovery. The setuptools side also continued to ship the legacy pkg_resources for backwards compatibility, but new APIs (e.g., setuptools/_entry_points.py) were rewritten on top of importlib.metadata. Concrete replacements: pkg_resources.iter_entry_points -> importlib.metadata.entry_points; pkg_resources.get_distribution -> importlib.metadata.distribution; pkg_resources.working_set -> importlib.metadata.distributions; pkg_resources.resource_filename / resource_stream -> importlib.resources.files() API.",
+      "evaluation_criteria": [
+        "Must identify pkg_resources/__init__.py as the location of the deprecation in setuptools",
+        "Must explain that setuptools recommends importlib.metadata / importlib.resources as the replacements",
+        "Must list at least two concrete API replacements (e.g., iter_entry_points -> entry_points, get_distribution -> distribution, resource_filename -> resources.files)"
+      ]
+    },
+    "pip_vendored_usage": {
+      "expected_solution": "pip 23.0 vendors its own copy of pkg_resources at src/pip/_vendor/pkg_resources/__init__.py and uses it through src/pip/_internal/metadata/pkg_resources.py (the Distribution and Environment adapters that wrap pkg_resources.Distribution). The vendored copy is a forked-and-frozen snapshot — it does NOT track upstream setuptools deprecations automatically. pip's runtime uses pkg_resources for: (1) locating installed distributions to compute install plans, (2) reading entry points for console_scripts, (3) resolving namespace packages, (4) looking up package metadata (PKG-INFO/METADATA). pip 22.x began migrating internal callers to importlib.metadata via src/pip/_internal/metadata/importlib/, but at 23.0 the pkg_resources adapter is still the default selectable backend and several call sites in src/pip/_internal/ remain on the vendored pkg_resources path.",
+      "evaluation_criteria": [
+        "Must identify src/pip/_vendor/pkg_resources/__init__.py as pip's vendored copy",
+        "Must identify src/pip/_internal/metadata/pkg_resources.py as the adapter that wraps the vendored copy",
+        "Must explain at least two pip features that depend on pkg_resources (entry points, namespace packages, distribution lookup, metadata reading)",
+        "Must mention the parallel src/pip/_internal/metadata/importlib/ migration path"
+      ]
+    },
+    "drift_analysis": {
+      "expected_solution": "Drift between setuptools' deprecation and pip's vendored copy: (1) Vendored snapshot is frozen — pip 23.0's src/pip/_vendor/pkg_resources/__init__.py does not include the deprecation warnings or the importlib-backed reimplementations from setuptools v67.0; pip users running pip itself never see the deprecation. (2) Behavior divergence — setuptools/_entry_points.py uses importlib.metadata semantics (which yields EntryPoint objects with .load() backed by importlib.metadata), while pip's vendored pkg_resources.iter_entry_points yields legacy EntryPoint objects backed by .egg-info/.dist-info parsing — so the same package can be enumerated differently depending on which API the consumer uses. (3) Namespace package handling — pkg_resources legacy namespace package support (declare_namespace) is preserved in pip's vendored copy but removed/deprecated in importlib.metadata, leading to drift for packages that ship namespace packages (e.g., google.*, zope.*). (4) Metadata format — pkg_resources reads PKG-INFO via Distribution.get_metadata, while setuptools' new path uses importlib.metadata.metadata which normalizes to email.Message — small differences in how multi-line fields are parsed. The migration path: pip's importlib.metadata backend (src/pip/_internal/metadata/importlib/) is the eventual replacement; users / tooling should prefer it.",
+      "evaluation_criteria": [
+        "Must explicitly contrast pip's frozen vendored copy with setuptools' updated upstream",
+        "Must identify at least two concrete drift behaviors (entry-point enumeration, namespace packages, metadata parsing)",
+        "Must reference the migration path via src/pip/_internal/metadata/importlib/",
+        "Must reference both repos by file path (setuptools pkg_resources/__init__.py and pip src/pip/_vendor/pkg_resources/__init__.py)"
+      ]
+    }
+  }
+}

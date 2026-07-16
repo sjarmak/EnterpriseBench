@@ -1,0 +1,173 @@
+# Incident Investigation: Cortex ruler silently drops alerts at Alertmanager federation boundary under legacy name-validation scheme
+
+difficulty_stratum = "dual_repo"
+mcp_suite = "eb_v1"
+repo_set_id = "cortex-ruler-ecosystem"
+org_scale = true
+verification_modes = ["deterministic", "llm_curator"]
+
+[task]
+id = "incident-investigation-dual-cortex-001"
+suite = "incident_response"
+task_type = "incident_investigation"
+difficulty = "hard"
+estimated_duration_minutes = 50
+session_type = "single"
+description = "Trace why alerts evaluated by the Cortex ruler are silently lost at the federation hand-off to Alertmanager when the deployment runs under the legacy name-validation scheme but rule expressions emit UTF-8 labels"
+prompt = """
+Your platform team operates a Cortex 1.18-managed multi-tenant Prometheus
+deployment. After enabling a new tenant whose recording-rule expressions emit
+UTF-8 label names (e.g. http.status_code, k8s.namespace), the on-call SRE
+reports that some alerts evaluated by the ruler never reach Alertmanager and
+never page anyone:
+
+  level=error msg="alert delivery failed" tenant=team-utf8 alerts=4
+  level=warn  msg="non-recoverable error sending alert" status_code=400
+  level=warn  msg="error sending alerts" err="bad_data: invalid label name"
+  (no further entries — affected alerts never retry, never page)
+
+Symptoms:
+- Affects only tenants whose rules produce UTF-8 label names. Classic ASCII
+  tenants are unaffected.
+- Cortex ruler's evaluation metrics show the alert firing at evaluation time.
+- Alertmanager never records a receive for the alert; the metric
+  alertmanager_alerts_received_total is flat for the affected receiver.
+- The cluster runs Cortex with the default (legacy) name-validation scheme
+  and Alertmanager v0.27.0 in classic-mode label validation.
+- Nothing in cortex_prometheus_rule_group_iterations_failed_total. The
+  failure is invisible to the ruler's group-level error counters.
+
+Investigation notes from the platform engineer:
+- The ruler's notifier is constructed in pkg/ruler/notifier.go::newRulerNotifier
+  and wired up per-tenant from pkg/ruler/manager.go::DefaultMultiTenantManager
+  (look around SyncRuleGroups). The notifier passes a name-validation scheme
+  through to the Prometheus notifier.Manager that backs it.
+- The downstream alertmanager rejects the POSTed alerts with HTTP 400 because
+  it runs validation through the matchers/compat IsValidLabelName path, which
+  in classic mode rejects non-ASCII label names. The validation entry on the
+  alertmanager side is types/types.go::validateLs, called from the alert
+  ingestion path in notify/notify.go.
+- The ruler's send path treats 400 as non-retryable and drops the batch; the
+  failure does not surface as a ruler-level error because the per-tenant
+  notifier swallows the alertmanager client error into a debug log.
+
+Repos and revisions:
+- /workspace/cortex/ — `cortexproject/cortex` at v1.18.0
+- /workspace/alertmanager/ — `prometheus/alertmanager` at v0.27.0
+
+Both are Go projects.
+
+Your task:
+1. Find Cortex's ruler notifier construction and the per-tenant manager that
+   wires it (newRulerNotifier, DefaultMultiTenantManager.SyncRuleGroups).
+2. Identify how the name-validation scheme is propagated from Cortex into
+   the Prometheus notifier.Manager, and what happens to the alertmanager
+   client's 400 response.
+3. In Alertmanager, find the label validation entry (types/types.go::validateLs)
+   and the alert ingestion path in notify/notify.go that calls it.
+4. Trace the silent-drop chain: rule evaluates with UTF-8 labels -> ruler
+   notifier serializes the alert -> alertmanager client POST -> validateLs
+   rejects non-ASCII label name in classic mode -> 400 returned -> ruler
+   notifier swallows the error -> alert never delivered, no surfaced metric.
+
+Write your incident report to `/workspace/cortex/INCIDENT_REPORT.md` with:
+- Root cause (file and function in each repo)
+- Full error chain (at least four hops)
+- Affected components
+- Remediation: propagate the alertmanager validation error up to a ruler-level
+  error counter, OR align the name-validation scheme between ruler and
+  alertmanager (e.g. switch alertmanager to UTF-8 mode), OR reject UTF-8
+  rule label output at evaluation time so the failure is visible.
+"""
+
+[[repos]]
+url = "https://github.com/cortexproject/cortex"
+rev = "v1.18.0"
+path = "cortex"
+role = "primary"
+
+[[repos]]
+url = "https://github.com/prometheus/alertmanager"
+rev = "v0.27.0"
+path = "alertmanager"
+role = "dependency"
+
+[metadata]
+languages = ["go"]
+total_loc = 600_000
+dependency_depth = 2
+frameworks = ["cortex", "prometheus-alertmanager"]
+multi_repo_pattern = "investigate"
+
+[[checkpoints]]
+name = "root_cause_identification"
+weight = 0.35
+verifier = "checks/check_root_cause.sh"
+description = "Agent identifies newRulerNotifier, the silent-drop on the alertmanager client error, and validateLs / IsValidLabelName as the rejecting validator"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "error_chain_trace"
+weight = 0.30
+verifier = "checks/check_error_chain.sh"
+description = "Agent traces rule evaluation -> ruler notifier -> alertmanager client POST -> validation rejection -> 400 swallowed"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "affected_components"
+weight = 0.15
+verifier = "checks/check_affected_components.sh"
+description = "Agent names the Cortex ruler, the Prometheus alertmanager notify package, and the name-validation scheme as affected"
+timeout_seconds = 60
+
+[[checkpoints]]
+name = "remediation_proposal"
+weight = 0.20
+verifier = "checks/check_remediation.sh"
+description = "Agent proposes propagating the validation error up, aligning the validation scheme, or rejecting UTF-8 labels at rule eval"
+timeout_seconds = 60
+
+[artifacts]
+required = ["incident_report"]
+optional = ["code_patch"]
+
+[tool_access]
+expected_mcp_benefit = "high"
+mcp_benefit_rationale = "The drop spans two Go modules joined by an HTTP boundary: a Cortex notifier wrapper that hides the alertmanager client error, and an Alertmanager validation function that gates ingestion in classic vs UTF-8 mode. Resolving the bug requires cross-repo navigation from cortex/pkg/ruler into prometheus/alertmanager's types/notify packages, including a function (validateLs) that lives in a small, less-trafficked area of the alertmanager codebase."
+
+[ground_truth]
+tiers = ["deterministic"]
+
+[[ground_truth.required_files]]
+path = "pkg/ruler/notifier.go"
+repo = "cortex"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "pkg/ruler/manager.go"
+repo = "cortex"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "notify/notify.go"
+repo = "alertmanager"
+confidence = 0.85
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "types/types.go"
+repo = "alertmanager"
+confidence = 0.90
+source = "deterministic"
+
+[[ground_truth.sufficient_files]]
+path = "pkg/ruler/ruler.go"
+repo = "cortex"
+confidence = 0.70
+
+[[ground_truth.sufficient_files]]
+path = "matchers/compat/parse.go"
+repo = "alertmanager"
+confidence = 0.75

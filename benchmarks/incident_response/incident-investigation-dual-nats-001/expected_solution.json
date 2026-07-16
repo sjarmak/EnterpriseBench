@@ -1,0 +1,38 @@
+{
+  "task_id": "incident-investigation-dual-nats-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify the nats.go pull entry point (js.go::PullSubscribe and the nextRequest it sends) AND the server-side seam (server/consumer.go::checkPending or nextWaiting plus server/filestore.go::EraseMsg). The report must name both repos and explain that retention erasing a message while it is still in the consumer's pending map is the source of the 'bad pending entry, sequence out of range' error.",
+      "evaluation_criteria": [
+        "Names js.go (or PullSubscribe / nextRequest) on the nats.go side",
+        "Names server/consumer.go (checkPending or nextWaiting) on the nats-server side",
+        "Names server/filestore.go (EraseMsg / retention) as the racing path",
+        "States that a pending sequence is erased by retention before the consumer reconciles, producing 'out of range' or a silent skip"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Agent must trace at least four hops: client PullSubscribe -> server nextWaiting/checkPending -> filestore EraseMsg -> pending-sequence-below-FirstSeq -> client receives no-messages-available and silently advances to next live sequence on retry.",
+      "evaluation_criteria": [
+        "Mentions client pull request entry (PullSubscribe / nextRequest / fetch)",
+        "Mentions server consumer pending tracking (checkPending or nextWaiting)",
+        "Mentions filestore retention / EraseMsg as the racing actor",
+        "Mentions the silent gap or skipped sequence range observed by the downstream sink"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Agent must name the nats.go JetStream client, the nats-server consumer subsystem, and the JetStream filestore as the affected components.",
+      "evaluation_criteria": [
+        "Names the nats.go JetStream client (js.go / PullSubscribe / pull consumer)",
+        "Names the nats-server consumer subsystem (server/consumer.go or pending map)",
+        "Names the JetStream filestore (server/filestore.go) or retention path"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Agent must propose at least one concrete remediation: (a) server-side clamp of pending entries before retention erases blocks, (b) protocol-level explicit gap/skip signal in the pull response, OR (c) client-side sequence-contiguity check that surfaces ErrSequenceGap.",
+      "evaluation_criteria": [
+        "Proposes one of: server-side clamp/lock, protocol gap signal, or client-side gap detection",
+        "Identifies where the fix would live (nats-server filestore/consumer, the wire protocol, or nats.go js.go)"
+      ]
+    }
+  }
+}

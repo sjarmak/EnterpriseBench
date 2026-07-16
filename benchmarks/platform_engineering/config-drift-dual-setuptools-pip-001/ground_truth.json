@@ -1,0 +1,70 @@
+{
+  "task_id": "config-drift-dual-setuptools-pip-001",
+  "task_type": "config_drift",
+  "repos": [
+    {
+      "url": "https://github.com/pypa/setuptools",
+      "rev": "v67.0.0",
+      "path": "setuptools"
+    },
+    {
+      "url": "https://github.com/pypa/pip",
+      "rev": "23.0",
+      "path": "pip"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "setuptools/pkg_resources/__init__.py",
+      "repo": "setuptools",
+      "confidence": 0.9,
+      "source": "deterministic"
+    },
+    {
+      "path": "pip/src/pip/_vendor/pkg_resources/__init__.py",
+      "repo": "pip",
+      "confidence": 0.9,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pip/src/pip/_internal/metadata/pkg_resources.py",
+      "repo": "pip",
+      "confidence": 0.85
+    },
+    {
+      "path": "setuptools/setuptools/_entry_points.py",
+      "repo": "setuptools",
+      "confidence": 0.8
+    }
+  ],
+  "drift_type": "vendored_copy_divergence",
+  "scoring_evidence": {
+    "setuptools_deprecation": [
+      "pkg_resources/__init__.py",
+      "setuptools/_entry_points.py",
+      "DeprecationWarning",
+      "entry_points",
+      "iter_entry_points",
+      "get_distribution",
+      "working_set",
+      "resource_filename",
+      "resource_stream"
+    ],
+    "pip_vendored_usage": [
+      "src/pip/_vendor/pkg_resources/__init__.py",
+      "src/pip/_internal/metadata/pkg_resources.py",
+      "console_scripts"
+    ],
+    "drift_analysis": [
+      "src/pip/_vendor/pkg_resources/__init__.py",
+      "setuptools/_entry_points.py",
+      "pkg_resources/__init__.py",
+      "EntryPoint",
+      "iter_entry_points",
+      "declare_namespace",
+      "get_metadata"
+    ]
+  }
+}

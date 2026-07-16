@@ -1,0 +1,27 @@
+{
+  "task_id": "api-contract-dual-jackson-spring-001",
+  "checkpoints": {
+    "jackson_defaults": {
+      "expected_solution": "Agent identifies Jackson default changes The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: ObjectMapper.java, JacksonAutoConfiguration.java, and MapperConfig.java). The judge looks for the following concept tokens in the agent output: ObjectMapper, MapperFeature, DeserializationFeature.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (ObjectMapper.java, JacksonAutoConfiguration.java, and MapperConfig.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: ObjectMapper, MapperFeature, and DeserializationFeature"
+      ]
+    },
+    "spring_autoconfig": {
+      "expected_solution": "Agent finds Spring Boot's Jackson auto-configuration The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: ObjectMapper.java, JacksonAutoConfiguration.java, and MapperConfig.java). The judge looks for the following concept tokens in the agent output: JacksonAutoConfiguration, ObjectMapperBuilder.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (ObjectMapper.java, JacksonAutoConfiguration.java, and MapperConfig.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: JacksonAutoConfiguration and ObjectMapperBuilder",
+        "Connects the source artifacts to their downstream impact in the consumer code path"
+      ]
+    },
+    "behavior_drift": {
+      "expected_solution": "Agent documents behavioral changes The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: ObjectMapper.java, JacksonAutoConfiguration.java, and MapperConfig.java). The judge looks for the following concept tokens in the agent output: default.changed, behavior, breaking.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (ObjectMapper.java, JacksonAutoConfiguration.java, and MapperConfig.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: default.changed, behavior, and breaking"
+      ]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "task_id": "dep-graph-dual-spring-hibernate-001",
+  "checkpoints": {
+    "hibernate_changes": {
+      "expected_solution": "Agent identifies Hibernate 6 SessionFactory changes The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Configuration.java, HibernateJpaAutoConfiguration.java, and AvailableSettings.java). The judge looks for the following concept tokens in the agent output: SessionFactory, Configuration, StandardServiceRegistry.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Configuration.java, HibernateJpaAutoConfiguration.java, and AvailableSettings.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: SessionFactory, Configuration, and StandardServiceRegistry",
+        "States the dependency type/relationship: `jpa_provider`"
+      ]
+    },
+    "spring_jpa_config": {
+      "expected_solution": "Agent finds Spring JPA auto-configuration The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Configuration.java, HibernateJpaAutoConfiguration.java, and AvailableSettings.java). The judge looks for the following concept tokens in the agent output: HibernateJpaAutoConfiguration, JpaProperties, EntityManagerFactory.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Configuration.java, HibernateJpaAutoConfiguration.java, and AvailableSettings.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: HibernateJpaAutoConfiguration, JpaProperties, and EntityManagerFactory",
+        "States the dependency type/relationship: `jpa_provider`"
+      ]
+    },
+    "migration_path": {
+      "expected_solution": "Agent documents property migrations The answer must reference the canonical artifact(s) for this checkpoint at the pinned revision (basenames: Configuration.java, HibernateJpaAutoConfiguration.java, and AvailableSettings.java). The judge looks for the following concept tokens in the agent output: property, replacement, migration.",
+      "evaluation_criteria": [
+        "Cites at least one canonical file by basename (Configuration.java, HibernateJpaAutoConfiguration.java, and AvailableSettings.java) in the agent output",
+        "Mentions at least three of the canonical concept tokens: property, replacement, and migration",
+        "States the dependency type/relationship: `jpa_provider`"
+      ]
+    }
+  }
+}

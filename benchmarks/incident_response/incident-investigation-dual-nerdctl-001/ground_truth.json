@@ -1,0 +1,97 @@
+{
+  "task_id": "incident-investigation-dual-nerdctl-001",
+  "task_type": "incident_investigation",
+  "repos": [
+    {
+      "url": "https://github.com/containerd/nerdctl",
+      "rev": "v2.0.0",
+      "path": "nerdctl"
+    },
+    {
+      "url": "https://github.com/containerd/containerd",
+      "rev": "v1.7.24",
+      "path": "containerd"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "pkg/imgutil/pull/pull.go",
+      "repo": "nerdctl",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "pkg/imgutil/snapshotter.go",
+      "repo": "nerdctl",
+      "confidence": 0.85,
+      "source": "deterministic"
+    },
+    {
+      "path": "pkg/unpack/unpacker.go",
+      "repo": "containerd",
+      "confidence": 0.95,
+      "source": "deterministic"
+    },
+    {
+      "path": "client/pull.go",
+      "repo": "containerd",
+      "confidence": 0.85,
+      "source": "deterministic"
+    }
+  ],
+  "sufficient_files": [
+    {
+      "path": "pkg/imgutil/imgutil.go",
+      "repo": "nerdctl",
+      "confidence": 0.7
+    },
+    {
+      "path": "client/client_opts.go",
+      "repo": "containerd",
+      "confidence": 0.75
+    }
+  ],
+  "expected_answer": {
+    "root_cause": "nerdctl's pkg/imgutil/pull/pull.go::Pull builds an []containerd.RemoteOpt slice for client.Pull but does not include WithPlatformMatcher when the user supplies a non-default snapshotter. Containerd's pkg/unpack/unpacker.go::Unpacker.Unpack requires a non-empty platforms list \u2014 when overlayfs is the snapshotter, an internal defaulting branch fills it in, but when an override snapshotter is supplied that branch is skipped (containerd refactor). Since nerdctl never passes WithPlatformMatcher for non-default snapshotters, the platforms list stays empty and Unpack returns 'no unpack platforms defined'.",
+    "error_chain": [
+      "User runs `nerdctl pull --snapshotter=devmapper <image>`",
+      "nerdctl's pkg/imgutil/pull/pull.go::Pull constructs []containerd.RemoteOpt without WithPlatformMatcher",
+      "nerdctl's pkg/imgutil/snapshotter.go::ResolveSnapshotter sets the snapshotter override on the opts",
+      "nerdctl calls client.Pull(ctx, ref, opts...)",
+      "containerd's client/pull.go forwards options to the unpacker",
+      "containerd's pkg/unpack/unpacker.go::Unpacker.Unpack checks the platforms list",
+      "Because the snapshotter is non-default, the auto-defaulting branch is skipped",
+      "platforms list is empty -> Unpack returns 'no unpack platforms defined'",
+      "Error propagates back through client.Pull and surfaces in nerdctl as 'unable to initialize unpacker'"
+    ],
+    "affected_components": [
+      "nerdctl pull wrapper (pkg/imgutil/pull/pull.go)",
+      "nerdctl snapshotter resolver (pkg/imgutil/snapshotter.go)",
+      "containerd unpack module (pkg/unpack/unpacker.go)",
+      "containerd client pull entry point (client/pull.go)",
+      "All `nerdctl pull` invocations using a non-default snapshotter"
+    ],
+    "remediation": "Two layered options: (1) nerdctl-side: always include WithPlatformMatcher(platforms.Default()) when constructing the RemoteOpt list, regardless of snapshotter, so containerd's defaulting branch is unnecessary. (2) containerd-side: keep defaulting platforms when the snapshotter is overridden; the original refactor's reasoning for skipping the branch should be revisited. Long-term, document the platforms-list requirement clearly in the containerd RemoteOpt API."
+  },
+  "scoring_evidence": {
+    "root_cause_identification": [
+      "pkg/imgutil/pull/pull.go",
+      "pkg/unpack/unpacker.go",
+      "RemoteOpts",
+      "WithPlatformMatcher",
+      "RemoteOpt"
+    ],
+    "error_chain_trace": [
+      "pull.go",
+      "ResolveSnapshotter"
+    ],
+    "affected_components": [
+      "pkg/imgutil/snapshotter.go",
+      "pkg/imgutil/pull/pull.go"
+    ],
+    "remediation_proposal": [
+      "WithPlatformMatcher",
+      "RemoteOpt"
+    ]
+  }
+}

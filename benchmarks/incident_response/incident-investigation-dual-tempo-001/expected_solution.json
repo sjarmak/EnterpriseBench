@@ -1,0 +1,38 @@
+{
+  "task_id": "incident-investigation-dual-tempo-001",
+  "checkpoints": {
+    "root_cause_identification": {
+      "expected_solution": "Agent must identify dskit ring/ring.go::IsHealthy (and the heartbeat-owning ring/lifecycler.go) as the wrong-answer gate that lets a stale peer remain in the shuffle-shard set, AND tempo modules/ingester/instance.go::CutCompleteTraces with modules/ingester/flush.go::handleFlush as the saturation surface where the global block-builder lock contention prevents draining.",
+      "evaluation_criteria": [
+        "Names dskit ring/ring.go IsHealthy (or equivalent ring health gate) as the source of the wrong answer",
+        "Names tempo modules/ingester/instance.go (CutCompleteTraces) as the live-traces accumulator",
+        "Mentions modules/ingester/flush.go::handleFlush and the block-builder lock contention",
+        "States that a stale-but-not-yet-evicted peer or shuffle-shard degeneracy is what funnels load to one ingester"
+      ]
+    },
+    "error_chain_trace": {
+      "expected_solution": "Agent must trace at least four hops: distributor shuffle-shard call -> dskit ring IsHealthy returns wrong answer for stale peer -> shuffle-shard set degenerates so the same hot ingester is picked -> ingester's CutCompleteTraces / handleFlush falls behind under lock contention -> live trace count spikes to the 3M cap while peers stay flat.",
+      "evaluation_criteria": [
+        "Mentions distributor shuffle-shard / replication selection as the entry point",
+        "Mentions dskit ring IsHealthy returning the wrong answer (or stale heartbeat / unhealthy timeout)",
+        "Mentions that the same hot ingester is repeatedly selected (shard degeneracy / funneling)",
+        "Mentions instance.go CutCompleteTraces or flush.go handleFlush falling behind, ending in the live-traces spike"
+      ]
+    },
+    "affected_components": {
+      "expected_solution": "Agent must name the Tempo distributor, the Tempo ingester, and the dskit ring as the affected components.",
+      "evaluation_criteria": [
+        "Names the Tempo distributor (modules/distributor)",
+        "Names the Tempo ingester (modules/ingester / instance.go / flush.go)",
+        "Names the dskit ring (ring/ring.go / ring package)"
+      ]
+    },
+    "remediation_proposal": {
+      "expected_solution": "Agent must propose at least one concrete remediation: (a) tighten dskit IsHealthy / shuffle-shard so a stale-but-not-yet-evicted peer is excluded; (b) make shuffle-shard saturation-aware so it skips an ingester that is at its live-traces cap; OR (c) reduce block-builder lock contention in modules/ingester/flush.go::handleFlush so the funneled ingester can drain.",
+      "evaluation_criteria": [
+        "Proposes one of: tightening IsHealthy/heartbeat semantics, shuffle-shard saturation awareness, or block-builder lock contention fix",
+        "Identifies where the fix would live (dskit ring, Tempo distributor shuffle-shard caller, or Tempo ingester flush path)"
+      ]
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "task_id": "error-prov-dual-tokio-tower-001",
+  "checkpoints": {
+    "tokio_panic_handling": {
+      "expected_solution": "For checkpoint 'tokio panic handling': the relevant code lives in tokio/src/runtime/task/error.rs. Context: Trace tokio task panic propagation through tower service layers. Error type: panic_propagation.",
+      "evaluation_criteria": [
+        "Must reference tokio/src/runtime/task/error.rs as relevant to tokio panic handling",
+        "Must reference a specific function, class, or method handling tokio panic handling",
+        "Must scope the explanation to the tokio side of the integration"
+      ]
+    },
+    "tower_error_chain": {
+      "expected_solution": "For checkpoint 'tower error chain': the relevant code lives in tower/src/util/mod.rs. Context: Trace tokio task panic propagation through tower service layers. Error type: panic_propagation.",
+      "evaluation_criteria": [
+        "Must reference tower/src/util/mod.rs as relevant to tower error chain",
+        "Must reference a specific function, class, or method handling tower error chain",
+        "Must scope the explanation to the tower side of the integration"
+      ]
+    },
+    "context_loss": {
+      "expected_solution": "For checkpoint 'context loss': the relevant code lives in tokio/src/runtime/task/error.rs. tower/src/util/mod.rs. Context: Trace tokio task panic propagation through tower service layers. Error type: panic_propagation.",
+      "evaluation_criteria": [
+        "Must reference tokio/src/runtime/task/error.rs as relevant to context loss",
+        "Must reference tower/src/util/mod.rs as relevant to context loss",
+        "Must reference a specific function, class, or method handling context loss",
+        "Must explain how the cited code participates in the failure mode"
+      ]
+    }
+  }
+}
