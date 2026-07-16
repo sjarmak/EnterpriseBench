@@ -18,6 +18,7 @@ from eb_verify.plugins import (
 )
 from eb_verify.plugins.answer import (
     AnswerValidator,
+    extract_claimed_paths,
     file_path_match_score,
     fuzzy_match_score,
     keyword_match_score,
@@ -627,22 +628,68 @@ class TestAnswerOracleMatching:
         assert symbol_match_score("anything", []) == 1.0
 
     def test_file_path_match_full_path(self):
-        text = "The bug is in src/server/handler.go"
+        # Structured claimed list (EnterpriseBench-6py4v) — not flattened text.
+        claimed = ["src/server/handler.go"]
         files = ["src/server/handler.go"]
-        assert file_path_match_score(text, files) == 1.0
+        assert file_path_match_score(claimed, files) == 1.0
 
     def test_file_path_match_basename_only(self):
-        text = "Check handler.go for the issue."
+        claimed = ["handler.go"]
         files = ["src/server/handler.go"]
-        assert file_path_match_score(text, files) == 1.0
+        assert file_path_match_score(claimed, files) == 1.0
 
     def test_file_path_match_none(self):
-        text = "The issue is somewhere in the codebase."
+        claimed = ["src/other/unrelated.go"]
         files = ["src/server/handler.go"]
-        assert file_path_match_score(text, files) == 0.0
+        assert file_path_match_score(claimed, files) == 0.0
 
     def test_file_path_match_empty(self):
-        assert file_path_match_score("anything", []) == 1.0
+        assert file_path_match_score(["anything.go"], []) == 1.0
+
+    def test_file_path_match_shotgun_is_precision_penalised(self):
+        # Recall-only scoring gave 1.0 here; precision-aware gives 1/8 < 0.5.
+        claimed = [f"src/pkg{i}/handler.go" for i in range(7)] + ["src/server/handler.go"]
+        files = ["src/server/handler.go"]
+        assert file_path_match_score(claimed, files) == pytest.approx(1 / 8)
+
+    def test_file_path_match_rejects_bare_string_first_arg(self):
+        # Old free-text calling convention must fail loud, not silently score 0.
+        with pytest.raises(TypeError):
+            file_path_match_score("src/server/handler.go mentioned here", ["src/server/handler.go"])
+
+    def test_extract_claimed_paths_source_files_dicts(self):
+        data = {"source_files": [{"path": "a/b.py"}, {"file": "c/d.py"}]}
+        assert extract_claimed_paths(data) == ["a/b.py", "c/d.py"]
+
+    def test_extract_claimed_paths_bare_strings(self):
+        assert extract_claimed_paths({"source_files": ["a/b.py", "  c/d.py  "]}) == ["a/b.py", "c/d.py"]
+
+    def test_extract_claimed_paths_files_field(self):
+        assert extract_claimed_paths({"files": [{"path": "x/y.py"}]}) == ["x/y.py"]
+
+    def test_extract_claimed_paths_code_paths_field(self):
+        # run_task.py advertises code_paths; it must be read (was a gap).
+        assert extract_claimed_paths({"code_paths": [{"path": "x/y.py"}]}) == ["x/y.py"]
+
+    def test_extract_claimed_paths_error_source_files(self):
+        assert extract_claimed_paths({"error_source": {"files": ["x/y.py"]}}) == ["x/y.py"]
+
+    def test_extract_claimed_paths_unions_all_fields(self):
+        data = {
+            "source_files": [{"path": "a.py"}],
+            "files": ["b.py"],
+            "code_paths": [{"path": "c.py"}],
+            "error_source": {"files": ["d.py"]},
+        }
+        assert extract_claimed_paths(data) == ["a.py", "b.py", "c.py", "d.py"]
+
+    def test_extract_claimed_paths_drops_empty_and_nonstr(self):
+        data = {"source_files": [{"path": ""}, {"nope": "z"}, 123, {"path": "keep.py"}]}
+        assert extract_claimed_paths(data) == ["keep.py"]
+
+    def test_extract_claimed_paths_non_dict_returns_empty(self):
+        assert extract_claimed_paths("not a dict") == []
+        assert extract_claimed_paths(None) == []
 
     def test_fuzzy_match_identical(self):
         text = "The root cause is a memory leak in the connection pool."
@@ -674,12 +721,23 @@ class TestAnswerOracleMatching:
             "expected_files": ["src/server/handler.go"],
             "expected_answer": "memory leak in the connection pool in handleRequest",
         }
-        score, dims = oracle_score(text, ground_truth)
+        # file_path dimension scores against the STRUCTURED claimed list, not text.
+        score, dims = oracle_score(
+            text, ground_truth, claimed_paths=["src/server/handler.go"]
+        )
         assert score > 0.5
         assert "keyword" in dims
         assert "symbol" in dims
-        assert "file_path" in dims
+        assert dims["file_path"] == 1.0
         assert "fuzzy" in dims
+
+    def test_oracle_score_file_dimension_ignores_flattened_text(self):
+        # A path mentioned only in prose (no structured claimed list) no longer
+        # earns the file_path dimension — that flattening was the defect.
+        text = "The bug is in src/server/handler.go somewhere."
+        ground_truth = {"expected_files": ["src/server/handler.go"]}
+        score, dims = oracle_score(text, ground_truth, claimed_paths=None)
+        assert dims["file_path"] == 0.0
 
     def test_oracle_score_no_ground_truth(self):
         score, dims = oracle_score("anything", {})
@@ -694,7 +752,10 @@ class TestAnswerOracleMatching:
         assert score == 1.0
 
     def test_answer_validator_with_oracle(self, tmp_path):
-        data = {"answer": "The bug is in handleRequest in src/server/handler.go causing a memory leak."}
+        data = {
+            "answer": "The bug is in handleRequest causing a memory leak.",
+            "source_files": [{"path": "src/server/handler.go"}],
+        }
         (tmp_path / "answer.json").write_text(json.dumps(data))
         v = AnswerValidator()
         gt = {
@@ -705,6 +766,20 @@ class TestAnswerOracleMatching:
         result = v.validate(tmp_path, ground_truth=gt)
         assert result.valid is True
         assert "oracle_score" in result.detail
+        assert "file_path=1.00" in result.detail
+
+    def test_answer_validator_oracle_file_shotgun_penalised(self, tmp_path):
+        # End-to-end: a structured guess shotgun no longer clears the file dim.
+        data = {
+            "answer": "memory leak in handleRequest",
+            "source_files": [{"path": f"src/pkg{i}/handler.go"} for i in range(9)]
+            + [{"path": "src/server/handler.go"}],
+        }
+        (tmp_path / "answer.json").write_text(json.dumps(data))
+        v = AnswerValidator()
+        gt = {"expected_files": ["src/server/handler.go"]}
+        result = v.validate(tmp_path, ground_truth=gt)
+        assert "file_path=0.10" in result.detail  # 1/10
 
     def test_answer_validator_oracle_low_score(self, tmp_path):
         data = {"answer": "I don't know."}

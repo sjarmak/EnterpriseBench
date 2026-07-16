@@ -47,16 +47,35 @@ fi
 
 export ANSWER_FILE GT_FILE
 
-python3 -c '
-import json, os
+# Locate the repo lib/ (4 levels up from this checks/ dir) so scoring uses the
+# shared precision-aware eb_verify.plugins.path_match primitive
+# (EnterpriseBench-6py4v) instead of the recall-only substring pattern.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LIB_DIR="$(cd "$SCRIPT_DIR/../../../../lib" 2>/dev/null && pwd || echo "")"
+
+python3 - "$LIB_DIR" <<'PYEOF'
+import json, os, sys
 
 def verdict(score, detail):
     print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
     raise SystemExit(0)
 
+lib_dir = sys.argv[1]
+if lib_dir:
+    sys.path.insert(0, lib_dir)
+
+try:
+    from eb_verify.plugins.path_match import path_match_score
+except Exception as exc:  # import miss => our infra, not the agent's fault
+    verdict(0.0, f"VERIFIER_INFRA_ERROR: cannot import path_match: {exc}")
+
 with open(os.environ["GT_FILE"]) as fh:
     gt = json.load(fh)
 required = [f["path"] for f in gt.get("required_files", []) if f.get("path")]
+# sufficient_files are GT-blessed supporting evidence: neutral for scoring
+# (excluded from the precision denominator), so a thorough answer that cites
+# them is not penalised.
+sufficient = [f["path"] for f in gt.get("sufficient_files", []) if isinstance(f, dict) and f.get("path")]
 if not required:
     verdict(0.0, "VERIFIER_INFRA_ERROR: no required_files in ground_truth.json")
 
@@ -88,12 +107,14 @@ for entry in raw:
         path = entry
     else:
         path = ""
-    if path.strip():
+    # A non-str path value (e.g. {"path": 123}) must not crash the grader into
+    # a verifier_infra_error free re-run — treat it as no path.
+    if isinstance(path, str) and path.strip():
         claimed.append(path.strip())
 
 if not claimed:
     verdict(0.0, "answer.json names no source files")
 
-found = sum(1 for gt_path in required if any(gt_path in c for c in claimed))
-verdict(found / len(required), f"Found {found}/{len(required)} required source files")
-'
+score = path_match_score(claimed, required, sufficient=sufficient)
+verdict(score, f"Matched {score:.2f} of {len(required)} required source files (precision-aware)")
+PYEOF

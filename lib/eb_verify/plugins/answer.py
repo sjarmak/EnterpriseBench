@@ -22,6 +22,7 @@ from typing import Any, Optional
 from eb_verify.groundedness import CitationParseError, ground_citations
 from eb_verify.artifact_io import safe_read
 from eb_verify.plugins import ValidationResult
+from eb_verify.plugins.path_match import path_match_score
 
 
 def _normalize(text: str) -> str:
@@ -65,17 +66,64 @@ def symbol_match_score(answer_text: str, symbols: list[str]) -> float:
     return hits / len(symbols)
 
 
-def file_path_match_score(answer_text: str, expected_files: list[str]) -> float:
-    """Return fraction of expected file paths referenced in answer."""
-    if not expected_files:
-        return 1.0
-    hits = 0
-    for fp in expected_files:
-        # Match full path or just the basename
-        basename = fp.rsplit("/", 1)[-1] if "/" in fp else fp
-        if fp in answer_text or basename in answer_text:
-            hits += 1
-    return hits / len(expected_files)
+# Answer fields that carry claimed source-file paths, unioned. Matches the
+# converted check scripts and run_task.py's advertised output schema
+# (source_files + code_paths are both offered to the agent). Deliberately
+# excludes ``citations`` (a distinct evidence-span artifact, see
+# EnterpriseBench-fsb4d).
+_CLAIMED_PATH_FIELDS = ("source_files", "files", "code_paths")
+
+
+def extract_claimed_paths(data: object) -> list[str]:
+    """Pull the agent's claimed source-file paths from answer data as a
+    STRUCTURED list — never by flattening free text.
+
+    Unions the ``source_files``/``files``/``code_paths`` fields plus
+    ``error_source.files``; each entry may be a str or a dict with a
+    ``path``/``file`` key. Free-text flattening is deliberately not used: it is
+    the over-permissive path that let any mention anywhere count
+    (EnterpriseBench-6py4v).
+    """
+    if not isinstance(data, dict):
+        return []
+    raw: list[Any] = []
+    for field in _CLAIMED_PATH_FIELDS:
+        value = data.get(field)
+        if isinstance(value, list):
+            raw.extend(value)
+    error_source = data.get("error_source")
+    if isinstance(error_source, dict) and isinstance(error_source.get("files"), list):
+        raw.extend(error_source["files"])
+
+    paths: list[str] = []
+    for entry in raw:
+        resolved: object
+        if isinstance(entry, str):
+            resolved = entry
+        elif isinstance(entry, dict):
+            resolved = entry.get("path", entry.get("file", ""))
+        else:
+            resolved = ""
+        if isinstance(resolved, str) and resolved.strip():
+            paths.append(resolved.strip())
+    return paths
+
+
+def file_path_match_score(claimed_paths: list[str], expected_files: list[str]) -> float:
+    """Precision-aware score for *claimed_paths* against *expected_files*.
+
+    Delegates to the path_match primitive. *claimed_paths* is a STRUCTURED list
+    of path strings (see :func:`extract_claimed_paths`), not flattened answer
+    text — recall-only substring matching over flattened text is the defect this
+    replaces. A bare string first argument is a caller using the old free-text
+    convention; fail loud rather than silently scoring 0.
+    """
+    if isinstance(claimed_paths, str):
+        raise TypeError(
+            "file_path_match_score expects a structured list of claimed paths, "
+            "not flattened answer text (EnterpriseBench-6py4v)"
+        )
+    return path_match_score(claimed_paths, expected_files)
 
 
 def fuzzy_match_score(answer_text: str, expected: str, threshold: float = 0.6) -> float:
@@ -92,6 +140,7 @@ def oracle_score(
     answer_text: str,
     ground_truth: dict[str, Any],
     thresholds: Optional[dict[str, float]] = None,
+    claimed_paths: Optional[list[str]] = None,
 ) -> tuple[float, dict[str, float]]:
     """Score an answer against ground_truth oracle data.
 
@@ -100,6 +149,12 @@ def oracle_score(
         symbols: list[str]
         expected_files: list[str]
         expected_answer: str  (for fuzzy matching)
+
+    *claimed_paths* is the agent's STRUCTURED claimed-file list (see
+    :func:`extract_claimed_paths`). The file_path dimension scores against this
+    list, not flattened *answer_text* — flattening is the recall-only defect
+    (EnterpriseBench-6py4v). A missing/empty list scores the file dimension 0
+    when expected_files are required.
 
     Returns (aggregate_score, per_dimension_scores).
     """
@@ -118,7 +173,9 @@ def oracle_score(
         weights["symbol"] = thresholds.get("symbol_weight", 0.3)
 
     if "expected_files" in ground_truth:
-        scores["file_path"] = file_path_match_score(answer_text, ground_truth["expected_files"])
+        scores["file_path"] = file_path_match_score(
+            claimed_paths or [], ground_truth["expected_files"]
+        )
         weights["file_path"] = thresholds.get("file_path_weight", 0.2)
 
     if "expected_answer" in ground_truth:
@@ -215,8 +272,12 @@ class AnswerValidator:
             source = "answer.json" if json_candidates else "answer.txt"
             return ValidationResult(valid=True, detail=f"{source} found and valid")
 
-        # Oracle matching
-        score, dimension_scores = oracle_score(answer_text, ground_truth, thresholds)
+        # Oracle matching. The file_path dimension scores against the agent's
+        # STRUCTURED claimed-file list, not the flattened answer text.
+        claimed_paths = extract_claimed_paths(data)
+        score, dimension_scores = oracle_score(
+            answer_text, ground_truth, thresholds, claimed_paths=claimed_paths
+        )
         min_score = (thresholds or {}).get("min_score", 0.3)
 
         dims = ", ".join(f"{k}={v:.2f}" for k, v in dimension_scores.items())
