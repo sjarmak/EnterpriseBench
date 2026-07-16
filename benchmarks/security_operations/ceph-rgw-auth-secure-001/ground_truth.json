@@ -39,5 +39,23 @@
       "confidence": 0.6,
       "rationale": "Auth framework implementation"
     }
-  ]
+  ],
+  "scoring_evidence": {
+    "auth_flow_documented": [
+      "rgw::auth::Engine",
+      "rgw::auth::Strategy",
+      "rgw::auth::IdentityApplier",
+      "rgw_auth.cc"
+    ],
+    "findings_identified": [
+      "HMAC-SHA1",
+      "CRYPTO_memcmp",
+      "clock skew",
+      "rgw_auth.cc"
+    ],
+    "remediations_proposed": [
+      "CRYPTO_memcmp",
+      "replay cache"
+    ]
+  }
 }

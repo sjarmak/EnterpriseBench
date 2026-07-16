@@ -1,0 +1,32 @@
+{
+  "task_id": "camel-routing-arch-001",
+  "checkpoints": {
+    "source_files_identified": {
+      "expected_solution": "The Apache Camel routing hierarchy at the camel-4.4.0 tag is anchored on five public API interfaces in `core/camel-api/src/main/java/org/apache/camel/`: (1) `Component.java` — factory for endpoints (`createEndpoint(String uri)`); (2) `Endpoint.java` — the addressable entity that produces a `Consumer` for inbound messages and a `Producer` for outbound; (3) `Consumer.java` — receives messages from the underlying transport and routes them through the EIP pipeline; (4) `Processor.java` — `process(Exchange)` is the unit of work composing the pipeline; (5) `Producer.java` — sends a finished `Exchange` to a downstream endpoint. Concrete defaults live in `core/camel-support/src/main/java/org/apache/camel/support/` (DefaultComponent, DefaultEndpoint, DefaultConsumer, DefaultProducer) and the EIP processors in `core/camel-core-processor/src/main/java/org/apache/camel/processor/` (Pipeline, ChoiceProcessor, etc.).",
+      "evaluation_criteria": [
+        "Must reference core/camel-api/src/main/java/org/apache/camel/Component.java as the top-of-hierarchy factory interface",
+        "Must reference core/camel-api/src/main/java/org/apache/camel/Endpoint.java, core/camel-api/src/main/java/org/apache/camel/Consumer.java, core/camel-api/src/main/java/org/apache/camel/Processor.java, and core/camel-api/src/main/java/org/apache/camel/Producer.java",
+        "Must explain the Component → Endpoint → Consumer → Processor → Producer relationship in routing terms",
+        "Should mention default implementations under core/camel-support/ and the EIP processors under core/camel-core-processor/"
+      ]
+    },
+    "dependency_chain_traced": {
+      "expected_solution": "The reification chain that bridges DSL to runtime Route: a user defines a route via `RouteBuilder` → produces a `RouteDefinition` model object (`core/camel-api/src/main/java/org/apache/camel/model/RouteDefinition.java`) → `RouteReifier` (`core/camel-core-reifier/src/main/java/org/apache/camel/reifier/RouteReifier.java`) walks each `ProcessorDefinition` child and invokes the matching `ProcessorReifier` to construct the runtime `Processor` chain → the resulting list is wired into a `Pipeline` (`core/camel-core-processor/src/main/java/org/apache/camel/processor/Pipeline.java`) wrapped per-step in `Channel` instances (`core/camel-base-engine/src/main/java/org/apache/camel/impl/engine/DefaultChannel.java`), then attached to a `Consumer` produced by the input endpoint. At runtime: Component.createEndpoint → Endpoint.createConsumer → Consumer.start → Consumer reads transport → builds Exchange → first Channel wrapper invokes interceptors → Pipeline routes Exchange through Processor list → Producer (if `to(...)`) ships outgoing message via downstream Endpoint.",
+      "evaluation_criteria": [
+        "Must trace from RouteBuilder/RouteDefinition through RouteReifier to the runtime Route",
+        "Must reference core/camel-core-reifier/src/main/java/org/apache/camel/reifier/RouteReifier.java as the model→runtime bridge",
+        "Must reference the runtime Pipeline at core/camel-core-processor/src/main/java/org/apache/camel/processor/Pipeline.java",
+        "Should mention DefaultChannel at core/camel-base-engine/src/main/java/org/apache/camel/impl/engine/DefaultChannel.java as the per-processor wrapper"
+      ]
+    },
+    "architecture_analysis": {
+      "expected_solution": "Architecturally, Camel implements the Pipes-and-Filters EIP: each `Processor` is a filter, and the `Pipeline` (in `core/camel-core-processor/src/main/java/org/apache/camel/processor/Pipeline.java`) is the pipe linking them in sequence on a single in-flight `Exchange`. Cross-cutting concerns (error handling, transaction binding, MDC, JMX instrumentation, interceptors, debugging) are applied via the `Channel` abstraction — every processor is wrapped in a `DefaultChannel` (`core/camel-base-engine/src/main/java/org/apache/camel/impl/engine/DefaultChannel.java`) that interposes around the call to `Processor.process`. The split between API (`core/camel-api/`), Support (`core/camel-support/`), Reifier (`core/camel-core-reifier/`), Engine (`core/camel-base-engine/`), and Processor (`core/camel-core-processor/`) modules is a textbook Hexagonal/Ports-and-Adapters layering: model + interfaces sit at the core, runtime engine and channels are application services, and Components plug in transports through adapter implementations of `Component`/`Endpoint`. The reifier pattern decouples declarative configuration from execution wiring so the same `RouteDefinition` graph can be replayed, validated, or swapped for a different runtime.",
+      "evaluation_criteria": [
+        "Must identify the Pipes-and-Filters / Pipeline pattern and its role in chaining Processors",
+        "Must identify the Channel pattern and explain it intercepts every processor invocation",
+        "Must reference core/camel-core-processor/src/main/java/org/apache/camel/processor/Pipeline.java in the analysis",
+        "Should explain the layering across core/camel-api/, core/camel-support/, core/camel-core-reifier/, core/camel-base-engine/, and core/camel-core-processor/"
+      ]
+    }
+  }
+}

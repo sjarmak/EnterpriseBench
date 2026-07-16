@@ -1,0 +1,31 @@
+{
+  "task_id": "ceph-rgw-auth-secure-001",
+  "checkpoints": {
+    "auth_flow_documented": {
+      "expected_solution": "The S3 authentication flow in Ceph RADOS Gateway (RGW) is implemented across the auth framework and the S3-specific auth layer. Entry point: the S3 REST handler in src/rgw/rgw_rest_s3.cc routes incoming S3 requests to the auth pipeline defined by the abstract framework in src/rgw/rgw_auth.h (interfaces rgw::auth::Engine, rgw::auth::Strategy, rgw::auth::IdentityApplier). The S3-specific signature handling lives in src/rgw/rgw_auth_s3.h and src/rgw/rgw_auth_s3.cc, which implement AWS Signature V2 and AWS Signature V4 (SigV4) verification — including canonical request construction, string-to-sign computation, HMAC-SHA256 signing key derivation, and the byte-wise comparison against the client-supplied signature. The framework implementation in src/rgw/rgw_auth.cc orchestrates engine selection and identity construction.",
+      "evaluation_criteria": [
+        "Must reference src/rgw/rgw_auth_s3.h and src/rgw/rgw_auth_s3.cc as the S3 signature implementation",
+        "Must reference src/rgw/rgw_rest_s3.cc as the S3 REST entry point that routes to the auth layer",
+        "Must reference src/rgw/rgw_auth.h (auth framework header) and explain the Engine/Strategy/IdentityApplier abstractions",
+        "Must mention AWS Signature V4 (SigV4) and/or Signature V2 handling as the core signing mechanism"
+      ]
+    },
+    "findings_identified": {
+      "expected_solution": "Common S3 auth security findings to surface from the RGW implementation in src/rgw/rgw_auth_s3.cc and src/rgw/rgw_auth.cc: (1) Signature version fallback — if both V2 and V4 signature engines are enabled, a downgrade attack may allow weaker V2 signatures (HMAC-SHA1) to be accepted; severity High; remediate by disabling V2 in production. (2) Timing-attack exposure in signature comparison — naive byte comparison via memcmp/== leaks signature bytes through timing variance; severity Medium; remediate with constant-time comparison (CRYPTO_memcmp). (3) Replay window — SigV4 requires a timestamp tolerance window (default 15 minutes); too-wide a window or missing nonce/replay cache enables replay attacks; severity Medium; remediate by tightening the clock skew window and tracking recently seen signatures. (4) Secret key handling — access secrets are loaded into memory via the user info store; long-lived in-memory secrets and verbose debug logging in rgw_auth_s3.cc risk leakage; severity Low/Medium; remediate by zeroing buffers and scrubbing log output.",
+      "evaluation_criteria": [
+        "Must list at least 3 distinct findings with severity tags (critical/high/medium/low)",
+        "Must include signature version fallback (V2 vs V4) as one finding",
+        "Must include either timing-attack signature comparison OR replay window/timestamp tolerance as a finding",
+        "Each finding must cite a specific RGW source file (e.g. src/rgw/rgw_auth_s3.cc) or a specific function in the auth pipeline"
+      ]
+    },
+    "remediations_proposed": {
+      "expected_solution": "Remediation recommendations: (1) Disable AWS Signature V2 entirely on production endpoints — restrict to SigV4 to eliminate signature downgrade. (2) Replace byte comparisons of computed vs. supplied signatures with constant-time comparison (CRYPTO_memcmp or equivalent) inside src/rgw/rgw_auth_s3.cc to harden against timing attacks. (3) Tighten the SigV4 timestamp tolerance window (currently 15 min) and add a short-lived replay cache keyed on (access-key, signature, timestamp) to block replays. (4) Audit secret-key handling: zero memory after use, scrub debug logs, and ensure access-key material is never written to plaintext logs. Overall risk assessment: Medium-High — exposing RGW S3 endpoints to external partners without addressing fallback, timing, and replay protections introduces realistic exploitation paths against object storage.",
+      "evaluation_criteria": [
+        "Must propose at least one concrete remediation that addresses an identified finding (not just generic advice)",
+        "Must include a summary risk assessment, conclusion, or overall severity statement",
+        "Should reference at least one specific RGW source file (src/rgw/rgw_auth_s3.cc, src/rgw/rgw_auth.cc, src/rgw/rgw_rest_s3.cc) when recommending where to apply the fix"
+      ]
+    }
+  }
+}

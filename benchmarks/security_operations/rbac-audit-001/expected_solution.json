@@ -1,0 +1,38 @@
+{
+  "task_id": "rbac-audit-001",
+  "checkpoints": {
+    "identify_policy_types": {
+      "expected_solution": "Four Calico network policy types under apiserver/pkg/registry/projectcalico/ are subject to tier-based RBAC: GlobalNetworkPolicy (apiserver/pkg/registry/projectcalico/globalpolicy/storage.go), NetworkPolicy (apiserver/pkg/registry/projectcalico/networkpolicy/storage.go), StagedGlobalNetworkPolicy (apiserver/pkg/registry/projectcalico/stagedglobalnetworkpolicy/storage.go), and StagedNetworkPolicy (apiserver/pkg/registry/projectcalico/stagednetworkpolicy/storage.go). Each storage.go implements an Update() method that authorizes tier changes — and each is subject to the same tier-authorization gap described by upstream PR projectcalico/calico#12006.",
+      "evaluation_criteria": [
+        "Must identify all 4 policy types: GlobalNetworkPolicy, NetworkPolicy, StagedGlobalNetworkPolicy, StagedNetworkPolicy",
+        "Must reference at least apiserver/pkg/registry/projectcalico/globalpolicy/storage.go and apiserver/pkg/registry/projectcalico/networkpolicy/storage.go",
+        "Must connect each policy type to its tier-aware storage layer (Update() method)"
+      ]
+    },
+    "apiserver_authorization": {
+      "expected_solution": "In each per-policy storage file under apiserver/pkg/registry/projectcalico/ (e.g. apiserver/pkg/registry/projectcalico/globalpolicy/storage.go and apiserver/pkg/registry/projectcalico/networkpolicy/storage.go), the Update() method authorizes the request against the OLD object's tier only. It does not call objInfo.UpdatedObject() to materialize the incoming new object, so the destination tier is never resolved or checked. A user with permission on the old/source tier — but no permission on the destination tier — passes the apiserver's authorization check on UPDATE, because only the existing/current tier is consulted.",
+      "evaluation_criteria": [
+        "Must reference the apiserver storage layer (e.g. apiserver/pkg/registry/projectcalico/globalpolicy/storage.go) and the Update() method",
+        "Must state that the apiserver checks the OLD/existing/source/current tier only (not the new tier)",
+        "Must explain that objInfo.UpdatedObject() is not called, so the destination tier is never resolved"
+      ]
+    },
+    "webhook_authorization": {
+      "expected_solution": "In webhooks/pkg/rbac/rbac.go, the authorize() function on UPDATE operations only inspects request.Object (the NEW object) to determine the tier to authorize against. It does NOT parse request.OldObject, so the source/old tier is never checked. A user with permission on the destination tier — but no permission on the source tier — passes the webhook's authorization check on UPDATE, because only the new/updated tier is consulted.",
+      "evaluation_criteria": [
+        "Must reference webhooks/pkg/rbac/rbac.go and the authorize() function",
+        "Must state that the webhook checks the NEW/destination/target/updated tier only (not the old tier)",
+        "Must explain that request.OldObject is not parsed, so the source tier is never checked"
+      ]
+    },
+    "bypass_and_remediation": {
+      "expected_solution": "Bypass scenario: the apiserver Update() checks only the OLD tier and the webhook authorize() checks only the NEW tier. Because the two paths disagree on which tier to enforce, neither path independently authorizes both tiers on a tier-changing UPDATE. A user can move a policy from tier A to tier B if they have either (a) permission on tier A but not tier B — apiserver allows because old=A is permitted, webhook is the only line of defense for the new tier — or (b) permission on tier B but not tier A — webhook allows because new=B is permitted while apiserver missed the old-tier check. The dual-path inconsistency creates a gap that bypasses tier RBAC. Severity: High — privilege escalation via policy tier change. Remediation: (1) apiserver Update() must call objInfo.UpdatedObject() to resolve the new object and authorize against the new tier when it differs from the old; (2) webhook authorize() must parse request.OldObject on UPDATE and authorize against the old tier when it differs from the new; (3) both paths must authorize against BOTH old and new tiers on tier-changing updates so the gap is closed defense-in-depth.",
+      "evaluation_criteria": [
+        "Must describe the dual-path inconsistency: apiserver checks OLD only, webhook checks NEW only, neither checks both",
+        "Must describe the bypass scenario as moving/changing a policy between tiers to escalate privilege",
+        "Must include a severity assessment (high/critical) and risk impact",
+        "Must propose remediation that requires BOTH paths to check BOTH old and new tiers (apiserver via objInfo.UpdatedObject(), webhook via parsing request.OldObject)"
+      ]
+    }
+  }
+}

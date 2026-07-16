@@ -1,24 +1,67 @@
 #!/usr/bin/env bash
-# check_architecture.sh — verify agent produced coherent architectural analysis
+# check_architecture.sh — checkpoint "architecture_analysis"
+#
+# Credits ONLY evidence the prompt does not already contain
+# (EnterpriseBench-jn73.2.7.3).
+#
+# The old check wanted the hierarchy arrow-chain and the word EIP —
+# both in either prompt — plus a >=500 char length gate that credits padding.
+# Either prompt echoed back scored 3/3.
+#
+# Instead we grade against ground_truth.json:scoring_evidence[<checkpoint>] —
+# tokens that are (a) absent from every prompt variant this task ships and (b)
+# present in expected_solution.json, so they are reachable only by an agent that
+# actually read the code, never by echoing the prompt. ground_truth.json is
+# sealed root-only (run_task.py GRADING_PATHS), so its tokens cannot leak.
 set -euo pipefail
 
-ANSWER="${WORKSPACE:-/workspace}/agent_output/answer.json"
-if [[ ! -f "$ANSWER" ]]; then
-    printf '{"score": 0.0, "passed": false, "detail": "No agent output found"}\n'
-    exit 0
+CHECKPOINT="architecture_analysis"
+WORKSPACE="${WORKSPACE:-/workspace}"
+REPORT="$WORKSPACE/agent_output/answer.json"
+GT="${TASK_DIR:-}/ground_truth.json"
+MAX_REPORT_BYTES=1048576
+
+# The sentinel rides in `detail`: scorer_guard scans that field and no other, so
+# a sentinel under any other key is invisible and lands as a real agent 0.0.
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
+
+# The answer key is ours: a missing ground_truth means the verifier did not
+# really run — route to re-run rather than bury it under an agent 0.0.
+if [[ ! -f "$GT" ]]; then
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+# answer.json is agent-owned; refuse a symlink rather than read its target.
+if [[ -L "$REPORT" ]]; then
+  verdict 0.0 false "answer.json is a symlink, not a regular file"
+fi
+if [[ ! -f "$REPORT" ]]; then
+  verdict 0.0 false "answer.json not found"
+fi
+if [[ "$(wc -c <"$REPORT")" -gt "$MAX_REPORT_BYTES" ]]; then
+  verdict 0.0 false "answer.json exceeds ${MAX_REPORT_BYTES} bytes"
 fi
 
-TEXT=$(tr '[:upper:]' '[:lower:]' < "$ANSWER")
+export REPORT GT CHECKPOINT
+python3 -c '
+import json, os
 
-FOUND=0
-TOTAL=3
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
-echo "$TEXT" | grep -q "component.*endpoint\|endpoint.*consumer\|consumer.*processor\|processor.*producer" && FOUND=$((FOUND + 1))
-echo "$TEXT" | grep -q "pattern\|design pattern\|eip\|enterprise integration" && FOUND=$((FOUND + 1))
-# Must have reasonable length (at least 500 chars of analysis)
-LEN=$(echo "$TEXT" | wc -c)
-[ "$LEN" -ge 500 ] && FOUND=$((FOUND + 1))
+with open(os.environ["GT"]) as fh:
+    gt = json.load(fh)
+evidence = (gt.get("scoring_evidence") or {}).get(os.environ["CHECKPOINT"]) or []
+if not evidence:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no scoring_evidence for " + os.environ["CHECKPOINT"])
 
-SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
-PASSED=$([ "$FOUND" -ge 2 ] && echo true || echo false)
-printf '{"score": %s, "passed": %s, "detail": "Architecture analysis quality: %d/%d criteria met"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"
+with open(os.environ["REPORT"], encoding="utf-8", errors="replace") as fh:
+    text = fh.read().lower()
+
+# Plain substring, no version-boundary branch: none of this task family grades on
+# a bare version, and test_heterogeneous_prompt_echo pins that so a version token
+# added later fails loudly here instead of silently matching inside a longer one.
+found = sum(1 for token in evidence if token.lower() in text)
+verdict(found / len(evidence),
+        "Cited %d/%d non-prompt evidence tokens for %s" % (found, len(evidence), os.environ["CHECKPOINT"]))
+'

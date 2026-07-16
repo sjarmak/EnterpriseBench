@@ -31,5 +31,27 @@
     "fix_commit": "1ea2a4ea3e0407c97d387cc8dbe5f80db7e2e430"
   },
   "difficulty": "hard",
-  "confidence": 0.95
+  "confidence": 0.95,
+  "scoring_evidence": {
+    "identify_policy_types": [
+      "projectcalico/globalpolicy/storage.go",
+      "projectcalico/networkpolicy/storage.go",
+      "projectcalico/stagedglobalnetworkpolicy/storage.go",
+      "projectcalico/stagednetworkpolicy/storage.go"
+    ],
+    "apiserver_authorization": [
+      "objInfo.UpdatedObject()",
+      "projectcalico/globalpolicy/storage.go",
+      "projectcalico/networkpolicy/storage.go"
+    ],
+    "webhook_authorization": [
+      "request.OldObject",
+      "request.Object"
+    ],
+    "bypass_and_remediation": [
+      "objInfo.UpdatedObject()",
+      "request.OldObject",
+      "privilege escalation"
+    ]
+  }
 }

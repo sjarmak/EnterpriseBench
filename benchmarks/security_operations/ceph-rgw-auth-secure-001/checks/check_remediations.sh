@@ -1,21 +1,67 @@
 #!/usr/bin/env bash
-# check_remediations.sh — verify agent proposed remediation recommendations
+# check_remediations.sh — checkpoint "remediations_proposed"
+#
+# Credits ONLY evidence the prompt does not already contain
+# (EnterpriseBench-jn73.2.7.3).
+#
+# One criterion matched any of remediat|recommend|fix|harden (all
+# prompt vocabulary); the other was dead — `\|` is a literal pipe under ERE, so
+# it only matched the literal string and capped everyone at 0.50.
+#
+# Instead we grade against ground_truth.json:scoring_evidence[<checkpoint>] —
+# tokens that are (a) absent from every prompt variant this task ships and (b)
+# present in expected_solution.json, so they are reachable only by an agent that
+# actually read the code, never by echoing the prompt. ground_truth.json is
+# sealed root-only (run_task.py GRADING_PATHS), so its tokens cannot leak.
 set -euo pipefail
 
+CHECKPOINT="remediations_proposed"
 WORKSPACE="${WORKSPACE:-/workspace}"
-
 REPORT="$WORKSPACE/security_audit.md"
+GT="${TASK_DIR:-}/ground_truth.json"
+MAX_REPORT_BYTES=1048576
+
+# The sentinel rides in `detail`: scorer_guard scans that field and no other, so
+# a sentinel under any other key is invisible and lands as a real agent 0.0.
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
+
+# The answer key is ours: a missing ground_truth means the verifier did not
+# really run — route to re-run rather than bury it under an agent 0.0.
+if [[ ! -f "$GT" ]]; then
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+# security_audit.md is agent-owned; refuse a symlink rather than read its target.
+if [[ -L "$REPORT" ]]; then
+  verdict 0.0 false "security_audit.md is a symlink, not a regular file"
+fi
 if [[ ! -f "$REPORT" ]]; then
-    printf '{"score": 0.0, "passed": false, "detail": "security_audit.md not found"}\n'
-    exit 0
+  verdict 0.0 false "security_audit.md not found"
+fi
+if [[ "$(wc -c <"$REPORT")" -gt "$MAX_REPORT_BYTES" ]]; then
+  verdict 0.0 false "security_audit.md exceeds ${MAX_REPORT_BYTES} bytes"
 fi
 
-FOUND=0
-TOTAL=2
+export REPORT GT CHECKPOINT
+python3 -c '
+import json, os
 
-grep -qiE "remediat|recommend|mitigat|fix|patch|harden" "$REPORT" && FOUND=$((FOUND + 1))
-grep -qiE "risk.*assessment\|summary\|overall\|conclusion" "$REPORT" && FOUND=$((FOUND + 1))
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
-SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
-PASSED=$([ "$FOUND" -ge 1 ] && echo true || echo false)
-printf '{"score": %s, "passed": %s, "detail": "Remediation quality: %d/%d criteria"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"
+with open(os.environ["GT"]) as fh:
+    gt = json.load(fh)
+evidence = (gt.get("scoring_evidence") or {}).get(os.environ["CHECKPOINT"]) or []
+if not evidence:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no scoring_evidence for " + os.environ["CHECKPOINT"])
+
+with open(os.environ["REPORT"], encoding="utf-8", errors="replace") as fh:
+    text = fh.read().lower()
+
+# Plain substring, no version-boundary branch: none of this task family grades on
+# a bare version, and test_heterogeneous_prompt_echo pins that so a version token
+# added later fails loudly here instead of silently matching inside a longer one.
+found = sum(1 for token in evidence if token.lower() in text)
+verdict(found / len(evidence),
+        "Cited %d/%d non-prompt evidence tokens for %s" % (found, len(evidence), os.environ["CHECKPOINT"]))
+'
