@@ -50,6 +50,10 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$(cd "$SCRIPT_DIR/../../../../lib" 2>/dev/null && pwd || echo "")"
+# Trust the fallback only if it carries the module we import: a stale
+# eb_verify four levels up (a -d check would wave through) must not shadow
+# the PYTHONPATH the harness exports. See EnterpriseBench-4du6t.
+[[ -f "$LIB_DIR/eb_verify/plugins/topological_order.py" ]] || LIB_DIR=""
 
 export GT_FILE="$GT"
 export ANSWER_FILE="$ANSWER"
@@ -63,7 +67,7 @@ def verdict(score, detail):
 
 lib_dir = sys.argv[1]
 if lib_dir:
-    sys.path.insert(0, lib_dir)
+    sys.path.append(lib_dir)
 
 with open(os.environ["GT_FILE"]) as fh:
     gt = json.load(fh)
