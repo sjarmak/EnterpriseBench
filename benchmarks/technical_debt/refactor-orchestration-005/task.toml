@@ -14,31 +14,48 @@ difficulty = "hard"
 estimated_duration_minutes = 35
 session_type = "single"
 description = "Plan the ordering for Babel 8 breaking plugin removal across monorepo packages"
+# NEVER SHOWN TO THE AGENT. run_task.py feeds instruction.md
+# (`agent_command < /workspace/instruction.md`); this field is stale
+# CSB-migration metadata. Re-synced anyway: its previous text named three
+# packages that do not exist (@babel/plugin-transform-react-{compat,source,self}
+# are PR #17620 title shorthand for the real -react-jsx-* packages) and asserted
+# "These removals affect @babel/preset-env and @babel/preset-react, which
+# re-export or depend on these plugins" -- both the giveaway this rebuild removed
+# and false at the pinned rev (neither preset depends on any removal target; the
+# only workspace consumer is @babel/standalone). Left as it was, a future
+# regeneration of instruction.md from this field would restore the leak and the
+# false premise together.
 prompt = """
 As the build infrastructure engineer, you need to plan the safe removal of
 deprecated Babel plugins before the Babel 8 major release.
 
-Babel 8 is removing several deprecated plugin-transform packages from the
-monorepo. The removal cascade involves internal package dependencies:
+Babel 8 is removing four deprecated plugin packages from the monorepo:
 
-- @babel/plugin-transform-react-compat (removed)
-- @babel/plugin-transform-react-source (removed)
-- @babel/plugin-transform-react-self (removed)
-- @babel/plugin-transform-property-mutators (removed)
+- @babel/plugin-transform-react-jsx-compat (babel/babel PR #17620)
+- @babel/plugin-transform-react-jsx-self (PR #17620)
+- @babel/plugin-transform-react-jsx-source (PR #17620)
+- @babel/plugin-transform-property-mutators (PR #17882)
 
-These removals affect @babel/preset-env and @babel/preset-react, which
-re-export or depend on these plugins. Consumer packages must update.
+Our Babel 8 tracking notes claim the removals cascade through @babel/preset-env
+and @babel/preset-react, which are said to re-export or depend on the removed
+plugins, and that the affected packages form a diamond through the two presets.
+Do not take that as given. Work out from the manifests under packages/ which
+workspace packages actually reference each removal target, and cite the entry
+that establishes each edge. If a package the notes call affected turns out not
+to be, say so and show what its manifest actually declares.
 
-Your task is to produce a topologically sorted execution plan:
+Your task is to produce an ordered execution plan. Order the steps so the
+workspace still builds after every step: a package cannot be deleted while
+another workspace package still references it.
 
-1. Map the internal dependency graph of affected packages.
-2. Determine the safe removal order (which packages can be updated first).
+1. Work out which workspace packages reference each removal target.
+2. Determine the order the steps must land in.
 3. Produce a numbered, ordered list of packages to update.
-4. Identify any removals that can be done in parallel (independent packages).
+4. Identify any removals that can proceed at the same time, and why.
 
 Write your plan to /workspace/REFACTOR_PLAN.md with:
 - Numbered ordering of packages to update
-- Internal dependency graph
+- Internal dependency graph, citing the manifest entry behind each edge
 - Parallelization annotations
 - Breaking change impact per package
 """
@@ -89,14 +106,30 @@ mcp_benefit_rationale = "Monorepo internal dependency graph requires resolving p
 [ground_truth]
 tiers = ["deterministic"]
 
+# The two preset manifests are required reading precisely because they are NOT
+# affected: they are where the tracking notes' diamond claim is refuted.
+# babel-standalone/package.json is where the real and only consumer edge is
+# declared. See ground_truth.json:_premise_correction.
 [[ground_truth.required_files]]
-path = "packages/babel-preset-env/package.json"
+path = "packages/babel-standalone/package.json"
+repo = "babel"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/babel-standalone/src/generated/plugins.ts"
+repo = "babel"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "packages/babel-preset-react/package.json"
 repo = "babel"
 confidence = 0.90
 source = "deterministic"
 
 [[ground_truth.required_files]]
-path = "packages/babel-plugin-transform-property-mutators/package.json"
+path = "packages/babel-preset-env/package.json"
 repo = "babel"
 confidence = 0.90
 source = "deterministic"

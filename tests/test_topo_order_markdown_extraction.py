@@ -98,6 +98,18 @@ GRAPH_005 = {
     "@babel/preset-env": ["@babel/core", "@babel/plugin-transform-property-mutators"],
 }
 # NOT the task's ground truth, and deliberately not synced to it. This is a
+# fixture for the markdown-extraction regression test below, which replays a real
+# recorded baseline REFACTOR_PLAN.md written against these package names; the
+# graph has to keep them for that replay to mean anything. The task's real graph
+# is @babel/standalone -> four deletions: three of the plugin names above DO NOT
+# EXIST at babel@v7.25.0 (they are PR #17620 title shorthand for the real
+# -react-jsx-compat/-jsx-self/-jsx-source packages), @babel/core is a
+# peerDependency and carries no build-order edge, and neither preset depends on
+# any removal target — so the graph below is the fabricated diamond the task was
+# rebuilt away from. Do not copy it back into
+# benchmarks/technical_debt/refactor-orchestration-005/ground_truth.json — see
+# its _premise_correction (EnterpriseBench-jn73.2.7.3.1.2).
+# NOT the task's ground truth, and deliberately not synced to it. This is a
 # fixture for the markdown-extraction regression tests below, which replay a real
 # recorded baseline REFACTOR_PLAN.md that names all three repos; the graph has to
 # keep all three keys for that replay to mean anything. The task's real graph is

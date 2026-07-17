@@ -1,21 +1,58 @@
 #!/usr/bin/env bash
-# Checkpoint 2: Verify topological ordering of proposed refactor plan
+# check_topo_order.sh — checkpoint "topological_order"
+#
+# Validates the proposed order against ground_truth.json:dependency_graph via
+# the shared eb_verify topological_order plugin (plugin unchanged; three sibling
+# tasks use it). What changed is the graph, and a gate in front of it.
+#
+# The graph made @babel/core the root and ran the cascade out to two presets.
+# Every edge is false at v7.25.0: @babel/core is a peerDependency of the plugins
+# (no build-order edge), preset-react depends on none of the removed react
+# plugins, and preset-env does not depend on property-mutators. Three of the four
+# plugin names in the old graph do not even exist — they are PR #17620 title
+# shorthand for the real -react-jsx-* packages. The graph is now the removal-step
+# graph over the packages the change actually touches: @babel/standalone drops
+# its references, then the four deletions land. See
+# ground_truth.json:_premise_correction.
+#
+# Fixing the graph alone would leave free credit here, and this is the subtle
+# part: resolve_tokens_to_graph drops tokens that are not graph nodes, so the old
+# cascade [core, react-compat, react-source, react-self, property-mutators,
+# preset-react, preset-env] — the old prompt verbatim, and what any model that
+# knows how Babel presets aggregate plugins guesses — resolves to just
+# [property-mutators] and scores 0.0 rather than being credited. But a plan that
+# merely lists the four prompt-supplied targets in some order would still satisfy
+# every constraint it happens to cover. The sequence alone cannot separate a
+# derived plan from a recited one.
+#
+# The order is therefore gated on evidence it was DERIVED: the plan must name the
+# one package that consumes the removal targets ('standalone', ZERO hits in
+# instruction.md). That is the fact that forces the ordering — its reference-drop
+# must precede the deletions or the workspace stops building mid-cascade — and it
+# is readable only in packages/babel-standalone/package.json
+# (EnterpriseBench-jn73.2.7.3.1.2).
 set -euo pipefail
 
-ANSWER="${WORKSPACE:-/workspace}/REFACTOR_PLAN.md"
+WORKSPACE="${WORKSPACE:-/workspace}"
+ANSWER="$WORKSPACE/REFACTOR_PLAN.md"
 GT="${TASK_DIR:-$(dirname "$(dirname "$0")")}/ground_truth.json"
+MAX_ANSWER_BYTES=1048576
 
-if [[ ! -f "$ANSWER" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "REFACTOR_PLAN.md not found"}\n'
-  exit 0
-fi
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
 
 if [[ ! -f "$GT" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "ground_truth.json not found"}\n'
-  exit 0
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+if [[ -L "$ANSWER" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md is a symlink, not a regular file"
+fi
+if [[ ! -f "$ANSWER" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md not found"
+fi
+if [[ "$(wc -c <"$ANSWER")" -gt "$MAX_ANSWER_BYTES" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md exceeds ${MAX_ANSWER_BYTES} bytes"
 fi
 
-# Determine lib path (4 levels up from checks/ dir)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$(cd "$SCRIPT_DIR/../../../../lib" 2>/dev/null && pwd || echo "")"
 
@@ -23,24 +60,42 @@ export GT_FILE="$GT"
 export ANSWER_FILE="$ANSWER"
 
 python3 - "$LIB_DIR" <<'PYEOF'
-import json, sys, os
+import json, os, sys
+
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
 lib_dir = sys.argv[1]
 if lib_dir:
     sys.path.insert(0, lib_dir)
 
-with open(os.environ['GT_FILE']) as f:
-    gt = json.load(f)
+with open(os.environ["GT_FILE"]) as fh:
+    gt = json.load(fh)
 
-with open(os.environ['ANSWER_FILE']) as f:
-    plan_text = f.read()
+with open(os.environ["ANSWER_FILE"], encoding="utf-8", errors="replace") as fh:
+    plan_text = fh.read()
 
-dep_graph = gt.get('dependency_graph', {})
+dep_graph = gt.get("dependency_graph") or {}
+if not dep_graph:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no dependency_graph in ground_truth.json")
+
+tokens = (gt.get("scoring_evidence") or {}).get("topological_order") or []
+if not tokens:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no topological_order evidence in ground_truth.json")
+
+# Fixed-string containment, never a regex.
+lowered = plan_text.lower()
+missing = [t for t in tokens if t.lower() not in lowered]
+if missing:
+    verdict(0.0,
+            "Order not derived: plan never names the package whose references "
+            "force the ordering (%s), so its sequence is an assumption about how "
+            "Babel presets aggregate plugins rather than a reading of these "
+            "manifests" % (", ".join(missing),))
 
 from eb_verify.plugins.topological_order import validate_refactor_plan_markdown
 
 result = validate_refactor_plan_markdown(plan_text, dep_graph)
-score = result['score']
-passed = score >= 0.5
-print(json.dumps({'score': score, 'passed': passed, 'reason': result['detail']}))
+verdict(result["score"], str(result["detail"]).replace('"', "'"))
 PYEOF

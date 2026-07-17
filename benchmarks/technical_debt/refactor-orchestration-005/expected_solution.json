@@ -1,0 +1,32 @@
+{
+  "task_id": "refactor-orch-005",
+  "checkpoints": {
+    "identify_repos": {
+      "expected_solution": "Exactly one workspace package consumes the four removal targets: @babel/standalone. It declares all four under devDependencies in packages/babel-standalone/package.json (\"workspace:^\"), imports them in src/generated/plugins.ts, registers them by short name in scripts/pluginConfig.json, and carries a TypeScript project reference for each in packages/babel-standalone/tsconfig.json. The diamond through @babel/preset-env and @babel/preset-react that instruction.md attributes to the tracking notes is false at v7.25.0 and the plan must say so: preset-react depends on plugin-transform-react-jsx, -jsx-development, -react-display-name and -react-pure-annotations, none of which are removal targets, and preset-env does not list plugin-transform-property-mutators among its ~80 @babel/* dependencies. @babel/core is a peerDependency of the plugins, not a dependent. check_repo_set.sh gates on 'standalone' (zero hits in instruction.md) and then pays half for refuting preset-env and half for refuting preset-react, each stated on one line with the package name.",
+      "evaluation_criteria": [
+        "REFACTOR_PLAN.md must name @babel/standalone as the package that references the removal targets — this gates the checkpoint and no restatement of the prompt produces it",
+        "Plan must state on one line that @babel/preset-env is not affected, and show what its manifest actually declares (no plugin-transform-property-mutators dependency)",
+        "Plan must state on one line that @babel/preset-react is not affected, and show what its manifest actually declares (jsx / jsx-development / display-name / pure-annotations)",
+        "Naming the four removal targets pays nothing: instruction.md lists them. The removal set is given; the consumer set is the finding"
+      ]
+    },
+    "topological_order": {
+      "expected_solution": "Two waves, and the order is the inverse of the package dependency graph. Step 1: @babel/standalone drops the four plugins from devDependencies, removes their imports and registry entries from src/generated/plugins.ts, deletes their entries from scripts/pluginConfig.json, and drops the four project references from tsconfig.json. Steps 2-5 (any order): delete @babel/plugin-transform-react-jsx-compat, -jsx-self, -jsx-source and @babel/plugin-transform-property-mutators. standalone must land first because it is the only package referencing the targets — deleting a package it still imports breaks the workspace build mid-cascade. dependency_graph encodes this as each deletion depending on the standalone step. check_topo_order.sh gates on 'standalone' and then feeds the plan to the shared eb_verify topological_order plugin, which is unmodified.",
+      "evaluation_criteria": [
+        "REFACTOR_PLAN.md must contain a flat numbered list under an '## Order' heading with five entries — the plugin extracts `N. <package>` lines",
+        "@babel/standalone must come first; the four deletions follow in any order",
+        "Package identifiers must use the real @babel/<package> names. The three -react-jsx-* packages do not resolve under the PR #17620 title shorthand (react-compat / react-source / react-self), which is what an agent that never opened packages/ writes",
+        "The old cascade (core, three react-* plugins, property-mutators, preset-react, preset-env) resolves to only [@babel/plugin-transform-property-mutators] against this graph and scores 0.0 on coverage"
+      ]
+    },
+    "parallelism": {
+      "expected_solution": "One parallelizable group: the four deletions — @babel/plugin-transform-react-jsx-compat, -jsx-self, -jsx-source and @babel/plugin-transform-property-mutators — are mutually independent and can land together, but only after @babel/standalone has dropped its references. There is no second wave: neither preset does any work. The plan must mark the group with a parallelization marker ('parallel', 'concurrent', 'independent', 'simultaneous', 'same time', 'together', 'at once'); check_parallelism.sh reads the marker line plus the bullet or numbered lines immediately under it, gates on 'standalone', and scores recall over the four targets named in that claim.",
+      "evaluation_criteria": [
+        "Plan must declare a parallelization claim; saying nothing about parallelism scores 0.0, and an empty or missing REFACTOR_PLAN.md scores 0.0 on every checkpoint",
+        "The parallel group must enumerate the four removal targets by their real names",
+        "@babel/standalone must NOT appear inside the parallel group — every deletion waits on it, so including it inverts the constraint and scores 0.0",
+        "The four-plugin group is prompt-derivable on its own (instruction.md lists the targets), so it pays only behind the 'standalone' gate"
+      ]
+    }
+  }
+}

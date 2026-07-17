@@ -1,62 +1,148 @@
 {
   "candidate_id": "refactor-orch-005",
-  "description": "Babel 8 plugin-transform removal cascade across monorepo packages",
-  "repos": [
-    "@babel/core",
-    "@babel/preset-env",
-    "@babel/preset-react",
-    "@babel/plugin-transform-react-compat",
-    "@babel/plugin-transform-react-source",
-    "@babel/plugin-transform-react-self",
-    "@babel/plugin-transform-property-mutators"
+  "description": "Babel 8 removal of four deprecated plugin packages from the babel monorepo at v7.25.0. Exactly one workspace package consumes any of them: @babel/standalone. The diamond through @babel/preset-env and @babel/preset-react that this task previously asserted is false at every edge.",
+  "repos": ["babel/babel"],
+  "repo_revs": {
+    "babel/babel": "v7.25.0"
+  },
+  "_premise_correction": "The previous key asserted seven affected packages (@babel/core, @babel/preset-env, @babel/preset-react and four plugins), a dependency_graph in which every plugin depends on @babel/core, preset-react depends on the three react plugins and preset-env depends on plugin-transform-property-mutators, and a merge_order core -> plugins -> presets. The previous instruction.md claimed 'the affected packages form a diamond dependency through @babel/preset-env and @babel/preset-react'. VERIFIED FALSE against packages/*/package.json at v7.25.0, on four counts. (1) Three of the four named packages DO NOT EXIST: there is no @babel/plugin-transform-react-compat, -react-source or -react-self. The real packages are -react-jsx-compat, -react-jsx-self and -react-jsx-source. The old names are the shorthand from PR #17620's title ('Remove plugin-transform-react-{compat,source,self}'), copied without opening packages/. (2) @babel/preset-react does NOT depend on any removal target: its dependencies are helper-plugin-utils, helper-validator-option, plugin-transform-react-display-name, plugin-transform-react-jsx, plugin-transform-react-jsx-development and plugin-transform-react-pure-annotations. (3) @babel/preset-env does NOT depend on plugin-transform-property-mutators; property-mutators appears nowhere in its 80-entry dependency list. (4) @babel/core is a peerDependency of the plugins, not a dependency, so it carries no build-order edge; the plugins' only workspace deps are @babel/helper-plugin-utils (all four) and @babel/helper-builder-react-jsx (jsx-compat only), none of which are removed. The one package the old key missed is the only one that needed changing. The diamond was authored from world knowledge about how Babel presets aggregate transform plugins rather than from these manifests.",
+  "dependency_graph": {
+    "@babel/standalone": [],
+    "@babel/plugin-transform-react-jsx-compat": ["@babel/standalone"],
+    "@babel/plugin-transform-react-jsx-self": ["@babel/standalone"],
+    "@babel/plugin-transform-react-jsx-source": ["@babel/standalone"],
+    "@babel/plugin-transform-property-mutators": ["@babel/standalone"]
+  },
+  "_dependency_graph_note": "This is the REMOVAL-STEP ordering graph — what checks/check_topo_order.sh feeds to the shared eb_verify topological_order plugin, where a node's listed deps must land before it. It is deliberately the inverse of the package dependency graph, and that inversion is the task's finding: @babel/standalone consumes all four plugins, so its reference-drop must land BEFORE any of them is deleted, or the workspace stops building mid-cascade. The four deletion steps are mutually independent once standalone has landed. @babel/core, @babel/preset-env and @babel/preset-react are deliberately NOT nodes: they require no work for this change, and including them would make the plugin's missing-repo penalty punish a correct plan for omitting packages that correctly have nothing to do. Their real (non-)relationships are recorded in not_affected below.",
+  "dependency_edges": [
+    {
+      "from": "@babel/standalone",
+      "to": "@babel/plugin-transform-react-jsx-compat",
+      "manifest": "babel/packages/babel-standalone/package.json",
+      "requirement": "\"@babel/plugin-transform-react-jsx-compat\": \"workspace:^\" (devDependencies)",
+      "note": "Real edge, and the only kind of edge any removal target has. standalone also imports it at packages/babel-standalone/src/generated/plugins.ts:88 and registers it as 'transform-react-jsx-compat' in scripts/pluginConfig.json, with a TypeScript project reference in packages/babel-standalone/tsconfig.json. The dependency is declared in devDependencies because standalone bundles its plugins rather than resolving them at install time — an agent that only greps `dependencies` will wrongly conclude nothing in the workspace consumes these plugins at all."
+    },
+    {
+      "from": "@babel/standalone",
+      "to": "@babel/plugin-transform-react-jsx-self",
+      "manifest": "babel/packages/babel-standalone/package.json",
+      "requirement": "\"@babel/plugin-transform-react-jsx-self\": \"workspace:^\" (devDependencies)",
+      "note": "Imported at src/generated/plugins.ts:90; registered as 'transform-react-jsx-self' in scripts/pluginConfig.json."
+    },
+    {
+      "from": "@babel/standalone",
+      "to": "@babel/plugin-transform-react-jsx-source",
+      "manifest": "babel/packages/babel-standalone/package.json",
+      "requirement": "\"@babel/plugin-transform-react-jsx-source\": \"workspace:^\" (devDependencies)",
+      "note": "Imported at src/generated/plugins.ts:91; registered as 'transform-react-jsx-source' in scripts/pluginConfig.json."
+    },
+    {
+      "from": "@babel/standalone",
+      "to": "@babel/plugin-transform-property-mutators",
+      "manifest": "babel/packages/babel-standalone/package.json",
+      "requirement": "\"@babel/plugin-transform-property-mutators\": \"workspace:^\" (devDependencies)",
+      "note": "Imported at src/generated/plugins.ts:82; registered as 'transform-property-mutators' in scripts/pluginConfig.json."
+    }
   ],
-  "merge_order": [
+  "phantom_edges": [
     {
-      "repo": "@babel/core",
-      "description": "Update core to no longer reference removed plugins"
+      "from": "@babel/preset-react",
+      "to": "@babel/plugin-transform-react-jsx-compat / -jsx-self / -jsx-source",
+      "asserted_by": "the old answer key, the old instruction.md ('the affected packages form a diamond dependency through @babel/preset-env and @babel/preset-react'), and general knowledge that Babel presets aggregate transform plugins",
+      "reality": "@babel/preset-react@v7.24.7 declares exactly six dependencies: @babel/helper-plugin-utils, @babel/helper-validator-option, @babel/plugin-transform-react-display-name, @babel/plugin-transform-react-jsx, @babel/plugin-transform-react-jsx-development and @babel/plugin-transform-react-pure-annotations. None of the three removed react plugins is among them. preset-react needs no work for this change.",
+      "evidence_tokens": ["standalone"],
+      "note": "The near-miss that makes this convincing: preset-react DOES depend on @babel/plugin-transform-react-jsx-development, whose name differs from the removal targets by one segment, and PR #17620 does delete eight files under babel-plugin-transform-react-jsx-development. Those eight are all test fixtures under test/fixtures/cross-platform/ that exercised the jsx-self and jsx-source plugins; the package itself survives and still ships on main. An agent that infers 'jsx-development was removed, therefore preset-react is affected' has the right instinct and the wrong answer."
     },
     {
-      "repo": "@babel/plugin-transform-react-compat",
-      "description": "Remove plugin package"
+      "from": "@babel/preset-env",
+      "to": "@babel/plugin-transform-property-mutators",
+      "asserted_by": "the old answer key and the old instruction.md",
+      "reality": "@babel/preset-env@v7.25.0 declares roughly 80 @babel/* dependencies and plugin-transform-property-mutators is not one of them. property-mutators is an ES5-era accessor-syntax transform that no preset aggregates at this rev.",
+      "evidence_tokens": ["standalone"],
+      "note": "The old key also credited preset-env for 'removing its isPluginRequired export', citing PR #17670. That PR is real but is an unrelated preset-env API change that touches none of the four plugins; it was the pretext that pulled preset-env into a scope it has no part in. The reference has been dropped from instruction.md."
     },
     {
-      "repo": "@babel/plugin-transform-react-source",
-      "description": "Remove plugin package"
-    },
+      "from": "the four plugins",
+      "to": "@babel/core",
+      "asserted_by": "the old key's dependency_graph, which made @babel/core the root of the cascade and step 1 of merge_order",
+      "reality": "@babel/core appears in each plugin's peerDependencies as ^7.0.0-0, never in dependencies. A peer range is a host-compatibility constraint, not a build-order edge: nothing in @babel/core references the removed plugins, and it needs no work for this change. Each plugin's actual workspace dependency is @babel/helper-plugin-utils, plus @babel/helper-builder-react-jsx for jsx-compat.",
+      "evidence_tokens": ["standalone"],
+      "note": "@babel/core has ZERO hits in instruction.md yet the old check_repo_set.sh grepped for it, so the old checkpoint rewarded naming a package that is not affected and that the prompt never mentions — pure world-knowledge credit."
+    }
+  ],
+  "not_affected": [
     {
-      "repo": "@babel/plugin-transform-react-self",
-      "description": "Remove plugin package"
-    },
-    {
-      "repo": "@babel/plugin-transform-property-mutators",
-      "description": "Remove plugin package"
+      "repo": "@babel/preset-env",
+      "reason": "No dependency on any removal target. property-mutators is absent from its ~80 @babel/* dependencies at v7.25.0.",
+      "note": "This is the precision half of the task. instruction.md states the tracking notes' diamond claim outright, so restating it is anti-evidence, not a finding: a plan that schedules preset-env work is wrong, and the old checks paid it 1.0."
     },
     {
       "repo": "@babel/preset-react",
-      "description": "Remove references to deleted react plugins"
+      "reason": "Depends on plugin-transform-react-jsx, -jsx-development, -react-display-name and -react-pure-annotations — none of which are removal targets. jsx-development survives PR #17620; only its self/source test fixtures are deleted.",
+      "note": "See phantom_edges: the jsx-development near-miss is the trap. Scheduling preset-react work is wrong."
     },
     {
-      "repo": "@babel/preset-env",
-      "description": "Remove references to deleted plugins, remove isPluginRequired export"
+      "repo": "@babel/core",
+      "reason": "peerDependency of the plugins, not a dependent. It references none of the removal targets.",
+      "note": "The old merge_order made it step 1 of the cascade."
     }
   ],
-  "dependency_graph": {
-    "@babel/core": [],
-    "@babel/plugin-transform-react-compat": ["@babel/core"],
-    "@babel/plugin-transform-react-source": ["@babel/core"],
-    "@babel/plugin-transform-react-self": ["@babel/core"],
-    "@babel/plugin-transform-property-mutators": ["@babel/core"],
-    "@babel/preset-react": ["@babel/core", "@babel/plugin-transform-react-compat", "@babel/plugin-transform-react-source", "@babel/plugin-transform-react-self"],
-    "@babel/preset-env": ["@babel/core", "@babel/plugin-transform-property-mutators"]
-  },
   "parallelizable_steps": [
-    ["@babel/plugin-transform-react-compat", "@babel/plugin-transform-react-source", "@babel/plugin-transform-react-self", "@babel/plugin-transform-property-mutators"],
-    ["@babel/preset-react", "@babel/preset-env"]
+    [
+      "@babel/plugin-transform-react-jsx-compat",
+      "@babel/plugin-transform-react-jsx-self",
+      "@babel/plugin-transform-react-jsx-source",
+      "@babel/plugin-transform-property-mutators"
+    ]
   ],
+  "_parallelism_note": "The four deletions are mutually independent and can land together, but only AFTER @babel/standalone drops its references — the ordering constraint is the whole content of the answer, so the claim is graded together with the standalone gate rather than on the word 'parallel'. The prompt names the four targets, so 'these four are independent of each other' is prompt-derivable and pays nothing alone. The old check turned parallelism into free credit two ways: it paid 0.4 for the bare word 'independent', which the old prompt's 'Parallelization annotations (which removals are independent)' handed over verbatim, and 0.2 for saying nothing about parallelism at all, so an EMPTY REFACTOR_PLAN.md banked 0.06 overall. Absence of work is now 0.0.",
+  "merge_order": [
+    {
+      "repo": "@babel/standalone",
+      "description": "Drop the four plugins from devDependencies in packages/babel-standalone/package.json, remove their imports and registry entries from src/generated/plugins.ts, delete their entries from scripts/pluginConfig.json, and drop the four project references from packages/babel-standalone/tsconfig.json. Must land first: it is the only workspace package that references any removal target, and deleting a package it still imports breaks the build."
+    },
+    {
+      "repo": "@babel/plugin-transform-react-jsx-compat",
+      "description": "Delete the package. Independent of the other three deletions once standalone has landed."
+    },
+    {
+      "repo": "@babel/plugin-transform-react-jsx-self",
+      "description": "Delete the package. Independent of the other three deletions once standalone has landed."
+    },
+    {
+      "repo": "@babel/plugin-transform-react-jsx-source",
+      "description": "Delete the package. Independent of the other three deletions once standalone has landed."
+    },
+    {
+      "repo": "@babel/plugin-transform-property-mutators",
+      "description": "Delete the package. Independent of the other three deletions once standalone has landed."
+    }
+  ],
+  "required_files": [
+    {"path": "packages/babel-standalone/package.json", "repo": "babel", "confidence": 0.98, "source": "deterministic"},
+    {"path": "packages/babel-standalone/src/generated/plugins.ts", "repo": "babel", "confidence": 0.95, "source": "deterministic"},
+    {"path": "packages/babel-preset-react/package.json", "repo": "babel", "confidence": 0.90, "source": "deterministic"},
+    {"path": "packages/babel-preset-env/package.json", "repo": "babel", "confidence": 0.90, "source": "deterministic"}
+  ],
+  "_required_files_note": "The two preset manifests are required reading precisely because they are NOT affected: they are where the tracking notes' diamond claim is refuted. packages/babel-standalone/package.json is where the real and only consumer edge is declared.",
+  "breaking_changes": [
+    "@babel/standalone: drops four plugin names from its public plugin registry, so `Babel.transform(code, {plugins: ['transform-property-mutators']})` and the three transform-react-jsx-{compat,self,source} names stop resolving for CDN consumers. This is the only package with a user-visible break.",
+    "@babel/preset-env: no change. Does not depend on property-mutators.",
+    "@babel/preset-react: no change. Depends on jsx-development, which survives.",
+    "@babel/core: no change. peerDependency only."
+  ],
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md, verified with `grep -coF`: 'standalone' 0 hits, 'pluginConfig' 0, 'generated/plugins.ts' 0, 'helper-builder-react-jsx' 0, 'helper-plugin-utils' 0, 'devDependencies' 0, 'peerDependencies' 0, 'jsx-development' 0. The prompt DOES supply the four removal-target names, 'preset-env', 'preset-react' and 'diamond' — none may be graded alone, which is exactly what the old checks did: check_repo_set.sh grepped for 'preset-env', 'preset-react', 'plugin-transform-react' and 'plugin-transform-property-mutators', four of five targets the prompt states outright, so a `cp instruction.md REFACTOR_PLAN.md` copy scored 0.8 on that checkpoint. Every checkpoint is now gated on 'standalone', the package that is the entire answer and that no restatement of the prompt can produce.",
+    "_residual_risk": "Echo-resistant, NOT proven closed-book-resistant: that @babel/standalone bundles every transform plugin is reasonably well-known, so a model may name it without opening packages/babel-standalone/package.json. 'standalone' is what a reader of that manifest has; it is not proof of retrieval on its own. MEASURED CEILING for that exposure: an otherwise fully fabricated plan (the old diamond, verbatim) with the single word 'standalone' name-dropped into it scores 0.30 — it fails identify_repos (0.0, refutes neither preset) and topological_order (0.0, standalone absent from the ordering), and keeps only check_parallelism, whose four-target group instruction.md supplies. It is 0.30 rather than 0.0 because that check reads 'the two preset updates can run concurrently' as a phantom wave only when a preset is named literally, and this phrasing is generic. Tightening it further was tried and rejected: every variant that catches the generic phrasing also fails a plausible CORRECT plan (one justifying the group by step number, or writing 'no preset work is needed'), and a correct answer scoring 0.0 is the worse error — see EnterpriseBench-jn73.2.7.3.1.2 on padding scoring_evidence to clear a token minimum. The harder tokens (scripts/pluginConfig.json, src/generated/plugins.ts, helper-builder-react-jsx) are NOT gated on for the same reason: a correct plan need not cite them. Tracked separately from the prompt-echo work; do not read a pass here as a closed-book pass.",
+    "identify_repos": ["standalone"],
+    "topological_order": ["standalone"],
+    "parallelism": ["standalone"]
+  },
   "difficulty": "hard",
-  "confidence": 0.88,
+  "confidence": 0.95,
   "verification": {
-    "method": "pr_chronology",
-    "verified": true
+    "method": "raw manifest parse at pinned rev, corroborated by the merged removal PRs",
+    "verified": true,
+    "verified_at_sha": "babel@v7.25.0: all 162 packages/*/package.json parsed. Runtime dependents of each removal target: NONE. devDependency dependents: @babel/standalone, and only @babel/standalone, for all four. A full-text grep for the four package names across packages/ outside their own directories returns exactly three files, all under packages/babel-standalone/ (package.json, src/generated/plugins.ts, tsconfig.json), plus scripts/pluginConfig.json by short name; root-level references are tsconfig.json, tsconfig.paths.json and yarn.lock. @babel/preset-react@v7.24.7 dependencies = [helper-plugin-utils, helper-validator-option, plugin-transform-react-display-name, plugin-transform-react-jsx, plugin-transform-react-jsx-development, plugin-transform-react-pure-annotations] — no removal target. @babel/preset-env@v7.25.0 dependencies contain no plugin-transform-property-mutators. Each plugin declares @babel/core only under peerDependencies (^7.0.0-0). Corroboration: babel/babel PR #17620 (merged 2025-12-16) removed babel-plugin-transform-react-jsx-{compat,self,source} and modified exactly four babel-standalone files plus root tsconfig.json/tsconfig.paths.json/yarn.lock, touching neither preset; PR #17882 (merged 2026-03-19) removed babel-plugin-transform-property-mutators with the same four-file standalone footprint. The eight jsx-development files in PR #17620 are test fixtures under test/fixtures/cross-platform/, not the package: babel-plugin-transform-react-jsx-development/package.json still resolves on main (HTTP 200) while the three removed plugins return 404."
   }
 }
