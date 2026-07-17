@@ -417,9 +417,9 @@ class TestTheChainScoreReachesTheResultsTable:
         assert results["scores"]["task_score"] == pytest.approx(rich["total_score"])
 
     def test_run_benchmark_reader_picks_up_the_earned_chain_score(self, tmp_path):
-        """C2: the whole point. run_task forwards its args to the runner, the runner
-        writes results.json, and run_task reads the earned score into result.score
-        with status=completed instead of dropping it as None."""
+        """C2: run_task forwards its args to the runner, the runner writes
+        results.json, and run_task reads the earned score into result.score with
+        status=completed instead of dropping it as None."""
         from run_benchmark import TaskInfo, run_task
 
         task_toml = chain_task_toml(tmp_path)

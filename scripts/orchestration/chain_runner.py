@@ -546,11 +546,9 @@ def main():
         json.dump(payload, f, indent=2)
     print(f"\nResult written to: {result_path}")
 
-    # The score in the one shape every runner's reader (run_benchmark) expects:
-    # {"scores": {"task_score": ...}}. total_score is null for an invalid run,
-    # but an invalid run also exits nonzero below, so run_benchmark returns at its
-    # error channel and never reads this — the null is only ever read for a valid
-    # chain that legitimately produced no score.
+    # The reader-facing score file, in the shape run_benchmark reads. A null
+    # total_score reaches here only for a valid chain that produced no score: an
+    # invalid run exits nonzero below and is read at run_benchmark's error channel.
     with open(score_path, "w") as f:
         json.dump({"scores": {"task_score": result.total_score}}, f, indent=2)
 
