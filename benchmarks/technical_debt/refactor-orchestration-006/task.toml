@@ -14,32 +14,43 @@ difficulty = "hard"
 estimated_duration_minutes = 40
 session_type = "single"
 description = "Plan the ordering for Go 1.26 toolchain and distroless image update across Kubernetes staging repos"
+# NEVER SHOWN TO THE AGENT. run_task.py feeds instruction.md
+# (`agent_command < /workspace/instruction.md`); this field is stale
+# CSB-migration metadata. Re-synced anyway: its previous text stated the giveaway
+# outright -- "The staging repos have inter-dependencies (e.g., client-go depends
+# on apimachinery, api depends on apimachinery). The Go version bump must
+# propagate in dependency order" -- and that is false for this change. A Go
+# toolchain bump touches NO file under staging/src/ (PR #137080 changed seven
+# files, none of them staging); the 31 published staging repos take their Go
+# version from one line, staging/publishing/rules.yaml:default-go-version. Left
+# as it was, a future regeneration of instruction.md from this field would
+# restore the leak and the false premise together.
 prompt = """
 As the release manager for the next Kubernetes minor version, you need to
-coordinate the Go toolchain bump across the staging repository ecosystem.
+coordinate the Go toolchain bump to 1.26.0 from whatever the checkout currently
+pins.
 
-Go 1.26.0 has been released with performance improvements and language changes.
-Kubernetes needs to update its Go toolchain version, which cascades through:
+Our release notes claim the bump cascades through the staging repository
+ecosystem: that each staging repo carries its own Go version and must be updated
+in dependency order (client-go depends on apimachinery, api depends on
+apimachinery, apiserver depends on client-go), alongside the build
+infrastructure, the distroless base images and the E2E test infrastructure.
 
-1. Build infrastructure (Makefile, go.mod toolchain directive)
-2. Staging repos (k8s.io/client-go, k8s.io/api, k8s.io/apimachinery, etc.)
-3. Distroless base images for container builds
-4. E2E test infrastructure
+Do not take that as given. Work out from the checkout which files a Go toolchain
+bump actually has to change, and what governs that set. Cite the file and the
+entry that establishes each edge. If something the notes call affected turns out
+not to be, say so and show what the checkout actually declares.
 
-The staging repos have inter-dependencies (e.g., client-go depends on
-apimachinery, api depends on apimachinery). The Go version bump must propagate
-in dependency order.
+Your task is to produce an ordered execution plan:
 
-Your task is to produce a topologically sorted execution plan:
-
-1. Identify all staging repos and infrastructure components needing updates.
-2. Map the dependency relationships between staging repos.
-3. Produce a numbered, ordered list of components to update.
-4. Identify any steps that can be done in parallel.
+1. Work out which files a Go toolchain bump has to change, and what governs them.
+2. Determine the order the steps must land in.
+3. Produce a numbered, ordered list of files to update, by repo-relative path.
+4. Identify any steps that can proceed at the same time, and why.
 
 Write your plan to /workspace/REFACTOR_PLAN.md with:
-- Numbered ordering of components to update
-- Staging repo dependency graph
+- Numbered ordering of files to update
+- The dependency graph over those files, citing the entry behind each edge
 - Parallelization annotations
 - Risk assessment per step
 """
@@ -90,8 +101,26 @@ mcp_benefit_rationale = "Kubernetes staging repo dependency graph is complex; re
 [ground_truth]
 tiers = ["deterministic"]
 
+# build/dependencies.yaml is where the real propagation set is declared (a
+# `version` plus a `refPaths` list per entry). staging/src/k8s.io/client-go/go.mod
+# is required reading precisely because it is NOT affected: it is where the
+# release notes' staging-cascade claim is refuted (it declares `go 1.24.0`, the
+# language version, which a toolchain bump does not touch). See
+# ground_truth.json:_premise_correction.
 [[ground_truth.required_files]]
-path = "go.mod"
+path = "build/dependencies.yaml"
+repo = "kubernetes"
+confidence = 0.98
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = ".go-version"
+repo = "kubernetes"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "staging/publishing/rules.yaml"
 repo = "kubernetes"
 confidence = 0.95
 source = "deterministic"

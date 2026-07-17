@@ -1,0 +1,32 @@
+{
+  "task_id": "refactor-orch-006",
+  "checkpoints": {
+    "identify_repos": {
+      "expected_solution": "The propagation set for a Go toolchain bump is seven files, and build/dependencies.yaml declares it: each entry carries a `version` plus a `refPaths` list naming every file that must stay in sync with it. The five relevant entries are \"golang: upstream version\" (1.24.6 -> .go-version, build/build-image/cross/VERSION, staging/publishing/rules.yaml), \"golang: 1.<major>\" (1.24 -> build/build-image/cross/VERSION, hack/lib/golang.sh), \"registry.k8s.io/kube-cross: dependents\", \"registry.k8s.io/distroless-iptables: dependents\" (v0.7.8 -> build/common.sh, test/utils/image/manifest.go) and \"registry.k8s.io/go-runner: dependents\" (-> build/common.sh). The union of those refPaths plus the manifest itself is the whole set. The staging cascade instruction.md attributes to the release notes is false for this change and the plan must say so: no file under staging/src/ changes, the staging go.mod files declare `go 1.24.0` before and after (the language version, not the toolchain), and all 31 published staging repos take their Go version from one line, staging/publishing/rules.yaml:default-go-version. check_repo_set.sh gates on 'dependencies.yaml' (zero hits in instruction.md) and then pays half for refuting client-go and half for refuting apimachinery, each stated on one line with the repo name.",
+      "evaluation_criteria": [
+        "REFACTOR_PLAN.md must name build/dependencies.yaml as the manifest declaring which files a Go bump changes — this gates the checkpoint and no restatement of the prompt produces it",
+        "Plan must state on one line that k8s.io/client-go is not affected, and show what the checkout actually declares (go 1.24.0, untouched by a toolchain bump)",
+        "Plan must state on one line that k8s.io/apimachinery is not affected, so the client-go -> apimachinery module edge carries no ordering constraint here",
+        "Naming the staging repos pays nothing, and their module edges are REAL — an agent can verify client-go requires apimachinery in a go.mod and still be wrong, having never checked whether a toolchain bump traverses that edge"
+      ]
+    },
+    "topological_order": {
+      "expected_solution": "One root and six independent leaves. Step 1: build/dependencies.yaml — bump the version fields (\"golang: upstream version\" 1.24.6 -> 1.26.0, \"golang: 1.<major>\" 1.24 -> 1.26, kube-cross -> the go1.26.0 tag, go-runner -> v2.4.0-go1.26.0-bookworm.0, distroless-iptables v0.7.8 -> v0.9.0). Steps 2-7 (any order): .go-version (1.24.6 -> 1.26.0), build/build-image/cross/VERSION, staging/publishing/rules.yaml (default-go-version, line 2456), hack/lib/golang.sh (minimum_go_version=go1.24 -> go1.26, line 571), build/common.sh (__default_go_runner_version, __default_distroless_iptables_version) and test/utils/image/manifest.go (configs[DistrolessIptables] -> v0.9.0). dependency_graph encodes each refPath target as depending on the declaring manifest. check_topo_order.sh gates on 'dependencies.yaml' and then feeds the plan to the shared eb_verify topological_order plugin, which is unmodified.",
+      "evaluation_criteria": [
+        "REFACTOR_PLAN.md must contain a flat numbered list under an '## Order' heading with seven entries — the plugin extracts `N. <path>` lines",
+        "build/dependencies.yaml must come first; the six refPath targets follow in any order",
+        "Files must be named by repo-relative path. The old cascade (build-infra, four staging repos, distroless-images, e2e-infra) resolves to nothing against this graph and scores 0.0 — three of those seven nodes do not exist in the checkout",
+        "Corroboration: PR #137080 changed exactly these seven files and zero files under staging/src/"
+      ]
+    },
+    "parallelism": {
+      "expected_solution": "One wave of six. Every refPath target of build/dependencies.yaml is an independent leaf, so once the declaring manifest is bumped they can all land together — in practice a single atomic commit, which is what PR #137080 did. This replaces the old key's three ordered waves ([apimachinery, distroless-images], [api], [client-go, e2e-infra]), built over nodes that either do not exist or need no work. The plan must mark the group with a parallelization marker ('parallel', 'concurrent', 'independent', 'simultaneous', 'same time', 'together', 'at once'); check_parallelism.sh reads the marker section, gates on 'dependencies.yaml', rejects any wave containing a staging repo, and scores recall over the six targets named in the claim.",
+      "evaluation_criteria": [
+        "Plan must declare a parallelization claim; saying nothing about parallelism scores 0.0, and an empty or missing REFACTOR_PLAN.md scores 0.0 on every checkpoint",
+        "The parallel group must enumerate the six refPath targets by repo-relative path",
+        "Scheduling any staging repo (client-go, apimachinery, apiserver) into a wave scores 0.0 — a toolchain bump touches no file under staging/src/, so there is no staging work to place in any wave. Naming one to rule it out is fine",
+        "The group is only creditable behind the 'dependencies.yaml' gate: instruction.md supplies 'staging', 'distroless' and 'e2e', so a wave built from those words is prompt-derivable"
+      ]
+    }
+  }
+}

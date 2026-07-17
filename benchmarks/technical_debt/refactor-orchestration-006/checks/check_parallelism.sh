@@ -1,84 +1,148 @@
 #!/usr/bin/env bash
-# Checkpoint 3: Verify parallelization claims are correct
+# check_parallelism.sh — checkpoint "parallelism"
+#
+# The old check turned this checkpoint into free credit two ways: it paid 0.4 for
+# the bare word 'independent' — which the old prompt's "Parallelization
+# annotations" invited — and 0.2 for saying nothing about parallelism at all, so
+# an EMPTY REFACTOR_PLAN.md banked credit here.
+#
+# The parallelism answer is downstream of getting the SCOPE right, so that is what
+# is graded. The old key asserted three ordered waves ([apimachinery,
+# distroless-images], [api], [client-go, e2e-infra]) over nodes that either do not
+# exist or need no work. The real shape is ONE wave of six: every refPath target
+# of build/dependencies.yaml is an independent leaf, so once the declaring
+# manifest is bumped they all land together — which is what PR #137080 did, in a
+# single atomic commit.
+#
+# 'dependencies.yaml' has ZERO hits in instruction.md. Absence of work is 0.0
+# (EnterpriseBench-jn73.2.7.3.1.2).
 set -euo pipefail
 
-export ANSWER="${WORKSPACE:-/workspace}/REFACTOR_PLAN.md"
-export GT="${TASK_DIR:-$(dirname "$(dirname "$0")")}/ground_truth.json"
+WORKSPACE="${WORKSPACE:-/workspace}"
+ANSWER="$WORKSPACE/REFACTOR_PLAN.md"
+GT="${TASK_DIR:-$(dirname "$(dirname "$0")")}/ground_truth.json"
+MAX_ANSWER_BYTES=1048576
 
-if [[ ! -f "$ANSWER" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "REFACTOR_PLAN.md not found"}\n'
-  exit 0
-fi
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
 
 if [[ ! -f "$GT" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "ground_truth.json not found"}\n'
-  exit 0
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+if [[ -L "$ANSWER" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md is a symlink, not a regular file"
+fi
+if [[ ! -f "$ANSWER" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md not found"
+fi
+if [[ "$(wc -c <"$ANSWER")" -gt "$MAX_ANSWER_BYTES" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md exceeds ${MAX_ANSWER_BYTES} bytes"
 fi
 
-python3 -c "
+export ANSWER GT
+python3 -c '
 import json, os, re
 
-with open(os.environ['GT']) as f:
-    gt = json.load(f)
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
-with open(os.environ['ANSWER']) as f:
-    answer = f.read()
+with open(os.environ["GT"]) as fh:
+    gt = json.load(fh)
 
-gt_parallel = set()
-for group in gt.get('parallelizable_steps', []):
-    gt_parallel.add(frozenset(group))
+tokens = (gt.get("scoring_evidence") or {}).get("parallelism") or []
+if not tokens:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no parallelism evidence in ground_truth.json")
 
-dep_graph = gt.get('dependency_graph', {})
-graph_nodes = set(dep_graph.keys())
+groups = gt.get("parallelizable_steps") or []
+if not groups:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no parallelizable_steps in ground_truth.json")
+expected = [p.lower() for p in groups[0]]
 
-# Look for parallel annotations in the answer (e.g., 'parallel:', 'concurrent:', 'independent:')
-parallel_section = re.findall(r'(?:parallel|concurrent|independent|simultaneously)[:\s]*([^\n]+(?:\n\s*[-*]\s*[^\n]+)*)', answer, re.IGNORECASE)
+with open(os.environ["ANSWER"], encoding="utf-8", errors="replace") as fh:
+    text = fh.read()
+lowered = text.lower()
 
-if not parallel_section and not gt_parallel:
-    # No parallelism expected and none claimed
-    print(json.dumps({'score': 1.0, 'passed': True, 'reason': 'No parallelism expected or claimed'}))
-elif not parallel_section and gt_parallel:
-    # Parallelism exists but agent did not identify any
-    print(json.dumps({'score': 0.2, 'passed': False, 'reason': 'Agent did not identify parallelizable steps'}))
-elif parallel_section and not gt_parallel:
-    # Agent claimed parallelism where none exists — check if claims are at least valid
-    raw_tokens = re.findall(r'[@\w/.-]+', ' '.join(parallel_section))
-    claimed = [t for t in raw_tokens if t in graph_nodes]
-    violations = 0
-    for repo in claimed:
-        deps = dep_graph.get(repo, [])
-        for dep in deps:
-            if dep in claimed:
-                violations += 1
-    if violations == 0:
-        print(json.dumps({'score': 0.8, 'passed': True, 'reason': 'Parallel claims are valid (no dependency violations)'}))
-    else:
-        score = max(0.0, 1.0 - violations * 0.3)
-        print(json.dumps({'score': score, 'passed': score >= 0.5, 'reason': f'{violations} dependency violations in parallel claims'}))
+# Fixed-string containment, never a regex.
+missing = [t for t in tokens if t.lower() not in lowered]
+if missing:
+    verdict(0.0,
+            "Scope not evidenced: plan never names the manifest that declares "
+            "the propagation set (%s), so any claim about what can run in "
+            "parallel rests on the asserted staging cascade rather than this "
+            "checkout" % (", ".join(missing),))
+
+PARALLEL_TERM = re.compile(
+    r"parallel|concurrent|independent|simultaneous|same time|together|at once",
+    re.IGNORECASE)
+HEADING = re.compile(r"^(#{1,6})\s")
+
+# The parallel claim is the section that actually makes it: a heading naming
+# parallelism, else a window around each marker line. Scanning the whole document
+# would credit a plan that lists the four targets in its ordering section and
+# says "parallel" in an unrelated sentence. The window is deliberately generous —
+# a correct plan states the group as a sentence plus a bullet list, and the
+# ordering constraint behind it ("once dependencies.yaml is bumped") is graded by
+# check_topo_order, not re-litigated here.
+lines = lowered.splitlines()
+claim_lines = []
+
+heading_idx = next(
+    (i for i, line in enumerate(lines)
+     if HEADING.match(line) and PARALLEL_TERM.search(line)), None)
+if heading_idx is not None:
+    level = len(HEADING.match(lines[heading_idx]).group(1))
+    for line in lines[heading_idx + 1:]:
+        m = HEADING.match(line)
+        if m and len(m.group(1)) <= level:
+            break
+        claim_lines.append(line)
 else:
-    # Both exist — check for overlap and correctness
-    raw_tokens = re.findall(r'[@\w/.-]+', ' '.join(parallel_section))
-    claimed_repos = set(t for t in raw_tokens if t in graph_nodes)
-    gt_all_parallel = set()
-    for group in gt_parallel:
-        gt_all_parallel.update(group)
+    for i, line in enumerate(lines):
+        if not PARALLEL_TERM.search(line):
+            continue
+        claim_lines.append(line)
+        for follow in lines[i + 1:i + 9]:
+            if HEADING.match(follow):
+                break
+            claim_lines.append(follow)
 
-    overlap = claimed_repos & gt_all_parallel
-    if gt_all_parallel:
-        recall = len(overlap) / len(gt_all_parallel)
-    else:
-        recall = 1.0
+if not any(line.strip() for line in claim_lines):
+    verdict(0.0,
+            "Plan states no parallelization claim. The six refPath targets are "
+            "mutually independent once the declaring manifest is bumped; saying "
+            "nothing is not a finding and no longer pays")
 
-    # Check that claimed parallel repos have no direct mutual deps
-    violations = 0
-    for repo in claimed_repos:
-        deps = dep_graph.get(repo, [])
-        for dep in deps:
-            if dep in claimed_repos:
-                violations += 1
-    correctness = 1.0 if violations == 0 else max(0.0, 1.0 - violations * 0.3)
+claim = "\n".join(claim_lines)
 
-    score = recall * 0.6 + correctness * 0.4
-    passed = score >= 0.5
-    print(json.dumps({'score': round(score, 2), 'passed': passed, 'reason': f'Recall={recall:.2f}, correctness={correctness:.2f}'}))
-"
+EXCLUDED = ("not affected", "unaffected", "no change", "no changes", "not require",
+            "no work", "out of scope", "not in scope", "excluded", "not impacted",
+            "no update", "not need", "does not consume", "not consume",
+            "does not depend", "not depend", "no dependency", "does not reference",
+            "not reference", "no second wave", "not a wave")
+
+# There is exactly ONE wave, of six files. The old key asserted three ordered
+# waves built from staging repos, and scheduling a staging repo into any wave is
+# the signature of a plan that believes the prompt: a toolchain bump touches
+# nothing under staging/src/. Naming a staging repo to rule it out is fine, hence
+# the same one-line exclusion test check_repo_set.sh uses.
+phantom = [p for p in ("client-go", "apimachinery", "apiserver")
+           if any(p in line and not any(term in line for term in EXCLUDED)
+                  for line in claim_lines)]
+if phantom:
+    verdict(0.0,
+            "Schedules staging repos into a parallel wave (%s): a Go toolchain "
+            "bump touches no file under staging/src/, so there is no staging "
+            "work to place in any wave" % (", ".join(phantom),))
+
+named = [p for p in expected if p in claim or p.split("/")[-1] in claim]
+recall = len(named) / len(expected)
+
+if not named:
+    verdict(0.0,
+            "Parallelization claim names none of the six refPath targets, so "
+            "there is no checkable group")
+
+verdict(recall,
+        "Single wave correctly scoped; parallel group covers %d/%d refPath "
+        "targets" % (len(named), len(expected)))
+'

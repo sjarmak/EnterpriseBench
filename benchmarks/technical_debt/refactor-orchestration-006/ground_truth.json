@@ -1,63 +1,161 @@
 {
   "candidate_id": "refactor-orch-006",
-  "description": "Go 1.26 toolchain and distroless image update across Kubernetes staging repos",
-  "repos": [
-    "build-infra",
-    "k8s.io/apimachinery",
-    "k8s.io/api",
-    "k8s.io/client-go",
-    "k8s.io/apiserver",
-    "distroless-images",
-    "e2e-infra"
-  ],
-  "merge_order": [
+  "description": "Go 1.24.6 -> 1.26.0 toolchain bump in the Kubernetes monorepo at v1.34.0. The propagation set is seven files declared by build/dependencies.yaml refPaths. No staging repo is touched: all 31 published staging repos take their Go version from one central line, staging/publishing/rules.yaml:default-go-version. The staging dependency cascade this task previously asserted is irrelevant to a toolchain bump.",
+  "repos": ["kubernetes/kubernetes"],
+  "repo_revs": {
+    "kubernetes/kubernetes": "v1.34.0"
+  },
+  "_premise_correction": "The previous key asserted seven components — build-infra, k8s.io/apimachinery, k8s.io/api, k8s.io/client-go, k8s.io/apiserver, distroless-images, e2e-infra — chained as apimachinery -> api -> client-go -> apiserver, each depending on build-infra, and a merge_order that bumped 'go.mod in staging/src/k8s.io/<repo>' one staging repo at a time. The previous task.toml prompt stated the giveaway outright: 'The staging repos have inter-dependencies (e.g., client-go depends on apimachinery, api depends on apimachinery). The Go version bump must propagate in dependency order.' VERIFIED FALSE against the checkout at v1.34.0 and against the real merged PR, on three counts. (1) THREE OF THE SEVEN NODES ARE NOT REAL: build-infra, distroless-images and e2e-infra are invented component names. No such repos, modules or directories exist; they are narrative groupings of the instruction bullets. (2) NO STAGING REPO IS TOUCHED BY A TOOLCHAIN BUMP. kubernetes/kubernetes PR #137080 ('Bump dependencies, images and versions used to Go 1.26.0 and distroless iptables', merged 2026-03-05) changed exactly SEVEN files and not one lives under staging/src/. The go.mod files of apimachinery, api, client-go and apiserver all declare 'go 1.24.0' and are untouched: that directive is the language compatibility version, not the toolchain, and it is bumped by a separate change. So the apimachinery -> api -> client-go -> apiserver edges, while real as Go module facts, carry NO ordering constraint for this change — the whole cascade is irrelevant. (3) The 31 staging repos are handled CENTRALLY by a single line: staging/publishing/rules.yaml:default-go-version, which the publishing bot applies to every published repo. The old key turned one line into a four-step ordered cascade. The chain was authored from world knowledge about Go modules and Kubernetes staging rather than from this checkout.",
+  "dependency_graph": {
+    "build/dependencies.yaml": [],
+    ".go-version": ["build/dependencies.yaml"],
+    "build/build-image/cross/VERSION": ["build/dependencies.yaml"],
+    "staging/publishing/rules.yaml": ["build/dependencies.yaml"],
+    "hack/lib/golang.sh": ["build/dependencies.yaml"],
+    "build/common.sh": ["build/dependencies.yaml"],
+    "test/utils/image/manifest.go": ["build/dependencies.yaml"]
+  },
+  "_dependency_graph_note": "This is the GOVERNS graph the repo declares about itself, and it is what checks/check_topo_order.sh feeds to the shared eb_verify topological_order plugin, where a node's listed deps must land before it. build/dependencies.yaml is the source of truth: each of its entries carries a `version` plus a `refPaths` list naming every file that must be kept in sync with it, so the version bumps there and the six refPath targets follow. The shape is one root and six independent leaves — not a chain — which is exactly the finding: the fabricated graph was a four-deep staging cascade. The six leaves are mutually independent. The staging repos, build-infra, distroless-images and e2e-infra are deliberately NOT nodes: the first four need no work and the last three do not exist, and including them would make the plugin's missing-repo penalty punish a correct plan for omitting them. Recorded in not_affected below.",
+  "dependency_edges": [
     {
-      "repo": "build-infra",
-      "description": "Update go.mod toolchain directive, Makefile GO_VERSION"
+      "from": ".go-version",
+      "to": "build/dependencies.yaml",
+      "manifest": "kubernetes/build/dependencies.yaml",
+      "requirement": "entry name: \"golang: upstream version\", version: 1.24.6, refPaths: [.go-version, build/build-image/cross/VERSION, staging/publishing/rules.yaml]",
+      "note": "Real edge, and declared rather than inferred. .go-version holds the bare toolchain version (1.24.6 at v1.34.0) and is listed as a refPath of the golang upstream-version entry."
     },
     {
-      "repo": "k8s.io/apimachinery",
-      "description": "Update go.mod in staging/src/k8s.io/apimachinery"
+      "from": "staging/publishing/rules.yaml",
+      "to": "build/dependencies.yaml",
+      "manifest": "kubernetes/build/dependencies.yaml",
+      "requirement": "entry \"golang: upstream version\" refPath `staging/publishing/rules.yaml` with match 'default-go-version\\: \\d+.\\d+(alpha|beta|rc)?\\.?(\\d+)?'",
+      "note": "THE finding. This one line (default-go-version: 1.24.6 at rules.yaml:2456) is the entire staging-repo story: the publishing bot stamps it onto all 31 repos under staging/src/k8s.io/. There is no per-repo bump and therefore no dependency-ordered cascade to plan."
     },
     {
-      "repo": "k8s.io/api",
-      "description": "Update go.mod in staging/src/k8s.io/api"
+      "from": "build/build-image/cross/VERSION",
+      "to": "build/dependencies.yaml",
+      "manifest": "kubernetes/build/dependencies.yaml",
+      "requirement": "refPath of three entries: \"golang: upstream version\", \"golang: 1.<major>\", and \"registry.k8s.io/kube-cross: dependents\" (version v1.34.0-go1.24.6-bullseye.0)",
+      "note": "Holds the kube-cross build image tag, which embeds the Go version (v1.34.0-go1.24.6-bullseye.0)."
     },
     {
-      "repo": "k8s.io/client-go",
-      "description": "Update go.mod in staging/src/k8s.io/client-go"
+      "from": "hack/lib/golang.sh",
+      "to": "build/dependencies.yaml",
+      "manifest": "kubernetes/build/dependencies.yaml",
+      "requirement": "entry \"golang: 1.<major>\", version: 1.24, refPath `hack/lib/golang.sh` with match 'minimum_go_version=go([0-9]+\\.[0-9]+)'",
+      "note": "Guards the minimum Go version at build time (minimum_go_version=go1.24 at golang.sh:571). Tracked by the major-version entry, not the full-version one."
     },
     {
-      "repo": "k8s.io/apiserver",
-      "description": "Update go.mod in staging/src/k8s.io/apiserver"
+      "from": "build/common.sh",
+      "to": "build/dependencies.yaml",
+      "manifest": "kubernetes/build/dependencies.yaml",
+      "requirement": "refPath of \"registry.k8s.io/distroless-iptables: dependents\" (version v0.7.8, match __default_distroless_iptables_version=) and \"registry.k8s.io/go-runner: dependents\" (version v2.4.0-go1.24.6-bookworm.0, match __default_go_runner_version=)",
+      "note": "Two independent image entries land in the same file."
     },
     {
-      "repo": "distroless-images",
-      "description": "Rebuild distroless iptables images with Go 1.26"
-    },
-    {
-      "repo": "e2e-infra",
-      "description": "Update e2e test images and CI configuration"
+      "from": "test/utils/image/manifest.go",
+      "to": "build/dependencies.yaml",
+      "manifest": "kubernetes/build/dependencies.yaml",
+      "requirement": "refPath of \"registry.k8s.io/distroless-iptables: dependents\", match 'configs\\[DistrolessIptables\\] = Config{list\\.BuildImageRegistry, \"distroless-iptables\", \"v([0-9]+)\\.([0-9]+)\\.([0-9]+)\"}'",
+      "note": "The only E2E-side file in the set. The old key inflated this into an 'e2e-infra' component that depended on a 'distroless-images' component."
     }
   ],
-  "dependency_graph": {
-    "build-infra": [],
-    "k8s.io/apimachinery": ["build-infra"],
-    "k8s.io/api": ["build-infra", "k8s.io/apimachinery"],
-    "k8s.io/client-go": ["build-infra", "k8s.io/apimachinery", "k8s.io/api"],
-    "k8s.io/apiserver": ["build-infra", "k8s.io/apimachinery", "k8s.io/api", "k8s.io/client-go"],
-    "distroless-images": ["build-infra"],
-    "e2e-infra": ["build-infra", "distroless-images"]
-  },
-  "parallelizable_steps": [
-    ["k8s.io/apimachinery", "distroless-images"],
-    ["k8s.io/api"],
-    ["k8s.io/client-go", "e2e-infra"]
+  "phantom_edges": [
+    {
+      "from": "k8s.io/api / k8s.io/client-go / k8s.io/apiserver",
+      "to": "k8s.io/apimachinery",
+      "asserted_by": "the old answer key, the old task.toml prompt ('The staging repos have inter-dependencies (e.g., client-go depends on apimachinery ...). The Go version bump must propagate in dependency order'), and general knowledge of Kubernetes staging",
+      "reality": "The module edges are REAL — client-go does require apimachinery — but they are irrelevant to this change, which is the subtler failure. A Go toolchain bump touches no staging go.mod at all: PR #137080 changed seven files, none under staging/src/. Every staging go.mod still declares 'go 1.24.0' after the bump, because that directive is the language compatibility version, not the toolchain. The published repos take their Go version from staging/publishing/rules.yaml:default-go-version, one line, applied by the publishing bot.",
+      "evidence_tokens": ["dependencies.yaml"],
+      "note": "This is the hardest phantom in the family so far: the asserted edges exist, so an agent can 'verify' them in a go.mod and still be wrong, because it never checked whether a toolchain bump traverses them. Recall of the staging graph is not the finding; realising it carries no constraint here is."
+    },
+    {
+      "from": "e2e-infra",
+      "to": "distroless-images",
+      "asserted_by": "the old key's dependency_graph and parallelizable_steps",
+      "reality": "Neither node exists. There is no e2e-infra or distroless-images repo, module or directory in the checkout. The real distroless-iptables bump is two refPaths of one build/dependencies.yaml entry — build/common.sh and test/utils/image/manifest.go — which are independent files, not two components in a chain.",
+      "evidence_tokens": ["dependencies.yaml"],
+      "note": "Same for 'build-infra', which the old key made the root that all six other nodes depended on."
+    }
   ],
+  "not_affected": [
+    {
+      "repo": "k8s.io/apimachinery, k8s.io/api, k8s.io/client-go, k8s.io/apiserver (and the other 27 staging repos)",
+      "reason": "No staging/src/ file changes in a Go toolchain bump. PR #137080 touched none; their go.mod files declare 'go 1.24.0' before and after. The Go version for the published repos is set centrally at staging/publishing/rules.yaml:default-go-version.",
+      "note": "This is the precision half of the task. instruction.md states the release notes' staging-cascade claim outright, so restating it is anti-evidence, not a finding: a plan that schedules per-staging-repo go.mod bumps in dependency order is wrong, and the old checks paid it 1.0."
+    },
+    {
+      "repo": "build-infra / distroless-images / e2e-infra",
+      "reason": "Not real. Invented component names with no corresponding repo, module or directory.",
+      "note": "The old merge_order made build-infra step 1 and the root of the graph."
+    }
+  ],
+  "parallelizable_steps": [
+    [
+      ".go-version",
+      "build/build-image/cross/VERSION",
+      "staging/publishing/rules.yaml",
+      "hack/lib/golang.sh",
+      "build/common.sh",
+      "test/utils/image/manifest.go"
+    ]
+  ],
+  "_parallelism_note": "One wave of six, not the old key's three ordered waves ([apimachinery, distroless-images], [api], [client-go, e2e-infra]). Every refPath target is a leaf under build/dependencies.yaml and independent of the others, so once the declaring manifest is bumped they can all land together — in practice they land in a single atomic commit, which is what PR #137080 did. The old check turned parallelism into free credit two ways: it paid 0.4 for the bare word 'independent', which the old prompt's 'Parallelization annotations' invited, and 0.2 for saying nothing at all. Absence of work is now 0.0.",
+  "merge_order": [
+    {
+      "repo": "build/dependencies.yaml",
+      "description": "Bump the version fields of the entries that carry the Go version and the images built from it: \"golang: upstream version\" 1.24.6 -> 1.26.0, \"golang: 1.<major>\" 1.24 -> 1.26, \"registry.k8s.io/kube-cross: dependents\" -> v1.36.0-go1.26.0-bullseye.0, \"registry.k8s.io/go-runner: dependents\" -> v2.4.0-go1.26.0-bookworm.0, \"registry.k8s.io/distroless-iptables: dependents\" v0.7.8 -> v0.9.0. This is the source of truth; its refPaths enumerate everything else that must change."
+    },
+    {
+      "repo": ".go-version",
+      "description": "1.24.6 -> 1.26.0. refPath of \"golang: upstream version\"."
+    },
+    {
+      "repo": "build/build-image/cross/VERSION",
+      "description": "v1.34.0-go1.24.6-bullseye.0 -> the go1.26.0 kube-cross tag. refPath of three entries."
+    },
+    {
+      "repo": "staging/publishing/rules.yaml",
+      "description": "default-go-version: 1.24.6 -> 1.26.0 (line 2456). The single line governing all 31 staging repos — this is the whole staging story, not a per-repo cascade."
+    },
+    {
+      "repo": "hack/lib/golang.sh",
+      "description": "minimum_go_version=go1.24 -> go1.26 (line 571). refPath of \"golang: 1.<major>\"."
+    },
+    {
+      "repo": "build/common.sh",
+      "description": "__default_go_runner_version and __default_distroless_iptables_version (v0.7.8 -> v0.9.0) to the go1.26.0 image tags."
+    },
+    {
+      "repo": "test/utils/image/manifest.go",
+      "description": "configs[DistrolessIptables] version v0.7.8 -> v0.9.0. refPath of the distroless-iptables entry."
+    }
+  ],
+  "required_files": [
+    {"path": "build/dependencies.yaml", "repo": "kubernetes", "confidence": 0.98, "source": "deterministic"},
+    {"path": ".go-version", "repo": "kubernetes", "confidence": 0.95, "source": "deterministic"},
+    {"path": "staging/publishing/rules.yaml", "repo": "kubernetes", "confidence": 0.95, "source": "deterministic"},
+    {"path": "staging/src/k8s.io/client-go/go.mod", "repo": "kubernetes", "confidence": 0.90, "source": "deterministic"}
+  ],
+  "_required_files_note": "staging/src/k8s.io/client-go/go.mod is required reading precisely because it is NOT affected: it is where the release notes' staging-cascade claim is refuted (it declares 'go 1.24.0' and a toolchain bump does not touch it). build/dependencies.yaml is where the real propagation set is declared.",
+  "breaking_changes": [
+    "build/dependencies.yaml and its refPaths must move together: the version field and every refPath are checked for consistency, so a partial bump fails dependency verification rather than building against a stale toolchain.",
+    "build/build-image/cross/VERSION, build/common.sh: the referenced kube-cross, go-runner and distroless-iptables images must already be published to registry.k8s.io, or the build cannot pull them.",
+    "staging/publishing/rules.yaml: takes effect for all 31 staging repos at once, via the publishing bot.",
+    "staging repos: no change. Their go.mod 'go 1.24.0' directives are the language version and are untouched by a toolchain bump."
+  ],
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md, verified with `grep -coiF`: 'dependencies.yaml' 0 hits, 'refPaths' 0, '.go-version' 0, 'default-go-version' 0, 'rules.yaml' 0, 'common.sh' 0, '1.24.6' 0, 'apimachinery' 0, 'client-go' 0, 'apiserver' 0. The prompt DOES supply 'staging' (2 hits), 'distroless' (1), 'e2e' (1), 'base image' (1) and the whole cascade claim — none may be graded alone, which is exactly what the old checks did: check_repo_set.sh grepped 'distroless|base.image' among its five targets, so a `cp instruction.md REFACTOR_PLAN.md` copy scored 0.2 there and 0.4 on parallelism. Every checkpoint is now gated on 'dependencies.yaml', the manifest that declares the real propagation set and that no restatement of the prompt can produce.",
+    "_residual_risk": "Echo-resistant, NOT proven closed-book-resistant: build/dependencies.yaml and its refPaths mechanism are known to Kubernetes contributors, so a model may name the file without opening the checkout. 'dependencies.yaml' is what a reader of that file has; it is not proof of retrieval on its own. The harder tokens ('1.24.6', the exact refPath lists, 'minimum_go_version', line numbers) are NOT gated on, because a correct plan need not cite them and over-gating would fail correct answers — see EnterpriseBench-jn73.2.7.3.1.2 on padding scoring_evidence to clear a token minimum. Tracked separately from the prompt-echo work; do not read a pass here as a closed-book pass.",
+    "identify_repos": ["dependencies.yaml"],
+    "topological_order": ["dependencies.yaml"],
+    "parallelism": ["dependencies.yaml"]
+  },
   "difficulty": "hard",
-  "confidence": 0.90,
+  "confidence": 0.95,
   "verification": {
-    "method": "pr_chronology",
-    "verified": true
+    "method": "raw checkout read at pinned rev, corroborated by the real merged PR",
+    "verified": true,
+    "verified_at_sha": "kubernetes@v1.34.0: .go-version = 1.24.6; staging/publishing/rules.yaml:2456 default-go-version: 1.24.6; build/build-image/cross/VERSION = v1.34.0-go1.24.6-bullseye.0; build/common.sh:100-101 __default_distroless_iptables_version=v0.7.8, __default_go_runner_version=v2.4.0-go1.24.6-bookworm.0; hack/lib/golang.sh:571 minimum_go_version=go1.24. build/dependencies.yaml declares the propagation set: \"golang: upstream version\" 1.24.6 refPaths [.go-version, build/build-image/cross/VERSION, staging/publishing/rules.yaml]; \"golang: 1.<major>\" 1.24 refPaths [build/build-image/cross/VERSION, hack/lib/golang.sh]; \"registry.k8s.io/kube-cross: dependents\" refPaths [build/build-image/cross/VERSION]; \"registry.k8s.io/distroless-iptables: dependents\" v0.7.8 refPaths [build/common.sh, test/utils/image/manifest.go]; \"registry.k8s.io/go-runner: dependents\" refPaths [build/common.sh]. Union of those refPaths plus the manifest itself = the seven files. All 31 staging repos exist under staging/src/k8s.io/; apimachinery, api, client-go and apiserver go.mod all declare 'go 1.24.0'. Corroboration: PR #137080 (merged 2026-03-05) changed exactly these seven files — .go-version, build/build-image/cross/VERSION, build/common.sh, build/dependencies.yaml, hack/lib/golang.sh, staging/publishing/rules.yaml, test/utils/image/manifest.go — and ZERO files under staging/src/."
   }
 }
