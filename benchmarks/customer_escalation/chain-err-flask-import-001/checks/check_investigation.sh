@@ -46,16 +46,10 @@ if [ "$(wc -c <"$REPORT")" -gt "$MAX_BYTES" ]; then
 fi
 
 export REPORT GT CHECKPOINT
-# python3 -I: isolated mode, so this check does not depend on the caller's env for
-# its own integrity. Plain `-c` puts sys.path[0]='' — the cwd — ahead of the stdlib,
-# and both Python runners set cwd to the AGENT's workspace, so an agent that drops a
-# json.py beside its deliverables would shadow the stdlib and this script's own
-# json.dumps would mint whatever verdict the agent wrote (reproduced: a 0.0 came back
-# as {"score": 1.0, "detail": "FORGED BY THE AGENT"}). scorer_guard now sets
-# PYTHONSAFEPATH=1 for every verifier, which fixes it at the boundary for all callers;
-# -I closes it here regardless of who invokes this script. Bead 5cfxa's shadowing
-# class, EnterpriseBench-e4w15. -I also implies -E, which drops PYTHON* vars only —
-# GT/VERDICT/CHECKPOINT still arrive via os.environ.
+# See check_cycle.sh for why this is `python3 -I` and not `python3` (an agent's
+# json.py beside its deliverables would otherwise shadow the stdlib and mint this
+# script's verdict). -I implies -E, which drops PYTHON* vars only: the exports
+# above still arrive via os.environ.
 python3 -I -c '
 import json, os
 

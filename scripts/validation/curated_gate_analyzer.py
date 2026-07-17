@@ -47,6 +47,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 BENCH = REPO_ROOT / "benchmarks"
 POOL_TOOL = REPO_ROOT / "scripts" / "validation" / "curated_candidate_pool.py"
 
+EB_VERIFY_PARENT = REPO_ROOT / "lib"  # PYTHONPATH root: `import eb_verify`
+sys.path.insert(0, str(EB_VERIFY_PARENT))
+from eb_verify.scorer_guard import run_verifier_subprocess  # noqa: E402
+
 CHECK_TIMEOUT = 45
 
 # $WORKSPACE/foo  or  ${WORKSPACE:-/workspace}/foo  ->  captures "foo"
@@ -86,7 +90,7 @@ class GateResult:
     n_checks: int = 0
     # gate 2
     gate2_suspects: list[str] = field(default_factory=list)
-    # gate 3 (echo attack) — per-check score on cp instruction.md
+    # gate 3 (echo attack) — per-check score on cp <the agent's prompt>
     gate3_echo_scores: dict = field(default_factory=dict)
     gate3_pass: bool | None = None
     gate3_note: str = ""
@@ -227,21 +231,28 @@ def run_checks(task_dir: Path, workspace: Path) -> dict:
     env = os.environ.copy()
     env["WORKSPACE"] = str(workspace)
     env["TASK_DIR"] = str(task_dir)
-    for sh in sorted((task_dir / "checks").glob("*.sh")):
-        try:
-            p = subprocess.run(
-                ["bash", str(sh), str(workspace)], capture_output=True, text=True,
-                timeout=CHECK_TIMEOUT, env=env, cwd=str(workspace),
-            )
-            out = p.stdout.strip()
-            # isinstance before .get: a check emitting a top-level array or scalar
-            # would raise AttributeError here — not a ValueError, so not caught
-            # below — and take the whole pool scan down with it. One malformed
-            # check degrades to None, like every other no-verdict path.
-            parsed = json.loads(out) if out else None
-            scores[sh.name] = parsed.get("score") if isinstance(parsed, dict) else None
-        except (subprocess.TimeoutExpired, ValueError):
-            scores[sh.name] = None
+    checks_dir = task_dir / "checks"
+    for sh in sorted(checks_dir.glob("*.sh")):
+        # Through the real scorer's boundary, not a copy of it. This gate's whole
+        # job is predicting what the scorer does to an echo payload, so every way
+        # it invokes checks differently is a way for it to certify clean while the
+        # scorer credits the echo. run_verifier_subprocess owns the no-verdict
+        # ladder (timeout, crash, malformed output) and sets PYTHONSAFEPATH — which
+        # this tool needs too, running bash checks that shell out to python3 from
+        # cwd=workspace (see scorer_guard).
+        verdict = run_verifier_subprocess(
+            sh.name,
+            base_dir=checks_dir,
+            argv_prefix=("bash",),
+            argv_suffix=(str(workspace),),
+            cwd=workspace,
+            env=env,
+            timeout=CHECK_TIMEOUT,
+            checkpoint=sh.stem,
+        )
+        # An InfraError is not a dict: a check that never reached a score is None,
+        # like every other no-verdict path here.
+        scores[sh.name] = verdict["score"] if isinstance(verdict, dict) else None
     return scores
 
 
@@ -313,19 +324,21 @@ def analyze(task: dict) -> GateResult:
         r.gate3_pass = r.gate3_pass if r.gate3_pass is not None else None
         return r
 
-    instr = task_dir / "instruction.md"
     exp = task_dir / "expected_solution.json"
 
     # Gate 3 — echo attack. This tool runs the md-grep echo vector
-    # (cp instruction.md -> deliverable). For JSON/structured deliverables the
-    # non-JSON echo cannot be parsed by the check, so all checks error to None;
+    # (cp <the agent's prompt> -> deliverable). For JSON/structured deliverables
+    # the non-JSON echo cannot be parsed by the check, so all checks error to None;
     # that is INCONCLUSIVE here (needs a task-type echo vector), not a FAIL.
     json_deliv = any(d.endswith(".json") for d in r.deliverables)
-    if instr.exists() and r.gate3_pass is None:
-        with tempfile.TemporaryDirectory() as td:
-            ws = Path(td)
-            materialize(ws, r.deliverables, instr.read_text(errors="replace"))
-            r.gate3_echo_scores = run_checks(task_dir, ws)
+    if r.gate3_pass is None:
+        # echo_scores, not a second inline copy of the experiment: it echoes the
+        # text the agent is actually shown, which for a chain task is
+        # [[sessions]].prompt and NOT instruction.md (a stub). Inlining the
+        # instruction.md version here would grade a text no agent ever saw for
+        # every chain task the pool picks up — the exact defect agent_prompt_text
+        # exists to fix, surviving in the path a human reads.
+        r.gate3_echo_scores = echo_scores(task_dir)
         vals = [v for v in r.gate3_echo_scores.values() if v is not None]
         if not vals:
             r.gate3_pass = None

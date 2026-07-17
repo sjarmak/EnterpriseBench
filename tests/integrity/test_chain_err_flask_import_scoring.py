@@ -119,18 +119,21 @@ def _make_ws(tmp_path: Path, name: str) -> Path:
     return ws
 
 
-def _write(ws: Path, **files: str) -> Path:
-    """Write deliverables into `ws/flask/`, keyed by kwargs.
+def _write(
+    ws: Path, *, investigation: str, cycle_verdict: str, resolution: str
+) -> Path:
+    """Write this task's three deliverables into `ws/flask/`.
 
-    A kwarg name carries the deliverable filename with its ONE dot written as
-    `__`, because a dot is not legal in a Python identifier: INVESTIGATION__md ->
-    INVESTIGATION.md. Every deliverable this task grades has exactly one
-    extension, so the replace is bounded to that single separator — a name with
-    two would silently produce the wrong filename, hence count=1 and the assert.
+    Named for the deliverables rather than taking arbitrary filenames: the task
+    grades exactly these three, and every caller writes all three, so a missing
+    one is a typo the signature should catch rather than a workspace that quietly
+    scores 0.0 for the wrong reason.
     """
-    for fname, content in files.items():
-        name = fname.replace("__", ".", 1)
-        assert "__" not in name, f"{fname}: expected one '__' separator, got more"
+    for name, content in (
+        ("INVESTIGATION.md", investigation),
+        ("CYCLE_VERDICT.json", cycle_verdict),
+        ("RESOLUTION.json", resolution),
+    ):
         (ws / "flask" / name).write_text(content)
     return ws
 
@@ -188,9 +191,9 @@ def correct_ws(tmp_path: Path) -> Path:
     ws = _make_ws(tmp_path, "correct")
     return _write(
         ws,
-        INVESTIGATION__md=CORRECT_INVESTIGATION,
-        CYCLE_VERDICT__json=CORRECT_VERDICT,
-        RESOLUTION__json=CORRECT_RESOLUTION,
+        investigation=CORRECT_INVESTIGATION,
+        cycle_verdict=CORRECT_VERDICT,
+        resolution=CORRECT_RESOLUTION,
     )
 
 
@@ -215,12 +218,12 @@ def test_prompt_echo_scores_zero(tmp_path: Path) -> None:
     echo = _session_prompts()
     ws = _write(
         _make_ws(tmp_path, "echo"),
-        INVESTIGATION__md=echo,
-        CYCLE_VERDICT__json=echo,
-        RESOLUTION__json=echo,
+        investigation=echo,
+        cycle_verdict=echo,
+        resolution=echo,
     )
     got = score(ws, "runner", tmp_path)
-    assert got == 0.0, f"prompt echo scored {got} under {convention}"
+    assert got == 0.0, f"prompt echo scored {got}"
 
 
 def test_comment_only_patch_scores_zero(tmp_path: Path) -> None:
@@ -230,9 +233,9 @@ def test_comment_only_patch_scores_zero(tmp_path: Path) -> None:
     echo = _session_prompts()
     ws = _write(
         _make_ws(tmp_path, "comment"),
-        INVESTIGATION__md=echo,
-        CYCLE_VERDICT__json=echo,
-        RESOLUTION__json=echo,
+        investigation=echo,
+        cycle_verdict=echo,
+        resolution=echo,
     )
     repo = ws / "flask"
     (repo / "tests").mkdir()
@@ -250,7 +253,7 @@ def test_comment_only_patch_scores_zero(tmp_path: Path) -> None:
         subprocess.run(cmd, cwd=repo, check=True, capture_output=True)
 
     got = score(ws, "runner", tmp_path)
-    assert got == 0.0, f"comment-only patch scored {got} under {convention}"
+    assert got == 0.0, f"comment-only patch scored {got}"
 
 
 ALL_TRUE_VERDICT = json.dumps(
@@ -308,9 +311,9 @@ def test_fabricated_cycle_scores_zero(tmp_path: Path, variant: str) -> None:
     investigation, reason = FABRICATIONS[variant]
     ws = _write(
         _make_ws(tmp_path, f"fabricated_{variant}"),
-        INVESTIGATION__md=investigation,
-        CYCLE_VERDICT__json=ALL_TRUE_VERDICT,
-        RESOLUTION__json=json.dumps(
+        investigation=investigation,
+        cycle_verdict=ALL_TRUE_VERDICT,
+        resolution=json.dumps(
             {"code_change_required": True, "reason": reason}
         ),
     )
@@ -328,8 +331,8 @@ def test_blanket_edge_verdicts_score_zero(tmp_path: Path, blanket: bool) -> None
     everything' is exactly the strategy the framing invites. It must pay nothing."""
     ws = _write(
         _make_ws(tmp_path, f"blanket_{blanket}"),
-        INVESTIGATION__md="# Report\n\nNothing was checked.\n" * 5,
-        CYCLE_VERDICT__json=json.dumps(
+        investigation="# Report\n\nNothing was checked.\n" * 5,
+        cycle_verdict=json.dumps(
             {
                 "claimed_edges": [
                     {"from": f, "to": t, "imported_at_runtime": blanket}
@@ -342,28 +345,28 @@ def test_blanket_edge_verdicts_score_zero(tmp_path: Path, blanket: bool) -> None
                 ]
             }
         ),
-        RESOLUTION__json=json.dumps({"code_change_required": not blanket, "reason": "."}),
+        resolution=json.dumps({"code_change_required": not blanket, "reason": "."}),
     )
     got = score(ws, "runner", tmp_path)
-    assert got == 0.0, f"blanket-{blanket} scored {got} under {convention}"
+    assert got == 0.0, f"blanket-{blanket} scored {got}"
 
 
 
 
 def test_empty_workspace_scores_zero(tmp_path: Path) -> None:
     got = score(_make_ws(tmp_path, "empty"), "runner", tmp_path)
-    assert got == 0.0, f"empty workspace scored {got} under {convention}"
+    assert got == 0.0, f"empty workspace scored {got}"
 
 
 def test_empty_deliverables_score_zero(tmp_path: Path) -> None:
     ws = _write(
         _make_ws(tmp_path, "blank"),
-        INVESTIGATION__md="",
-        CYCLE_VERDICT__json="",
-        RESOLUTION__json="",
+        investigation="",
+        cycle_verdict="",
+        resolution="",
     )
     got = score(ws, "runner", tmp_path)
-    assert got == 0.0, f"empty deliverables scored {got} under {convention}"
+    assert got == 0.0, f"empty deliverables scored {got}"
 
 
 @pytest.mark.parametrize("convention", CONVENTIONS)
@@ -376,8 +379,8 @@ def test_correct_answer_tolerates_path_spellings_and_extra_edges(
     are graded; extras are ignored."""
     ws = _write(
         _make_ws(tmp_path, "spellings"),
-        INVESTIGATION__md=CORRECT_INVESTIGATION,
-        CYCLE_VERDICT__json=json.dumps(
+        investigation=CORRECT_INVESTIGATION,
+        cycle_verdict=json.dumps(
             {
                 "claimed_edges": [
                     {
@@ -408,7 +411,7 @@ def test_correct_answer_tolerates_path_spellings_and_extra_edges(
                 ]
             }
         ),
-        RESOLUTION__json=CORRECT_RESOLUTION,
+        resolution=CORRECT_RESOLUTION,
     )
     got = score(ws, convention, tmp_path)
     assert got >= 0.9, f"correct answer with alternate spellings scored {got}"
@@ -539,9 +542,9 @@ def test_planted_stdlib_module_cannot_forge_a_verdict(tmp_path: Path) -> None:
     """
     ws = _write(
         _make_ws(tmp_path, "planted"),
-        INVESTIGATION__md=CORRECT_INVESTIGATION,
+        investigation=CORRECT_INVESTIGATION,
         # blanket-true: 2 of 4 right, 2 wrong -> negative marking scores this 0.0
-        CYCLE_VERDICT__json=json.dumps(
+        cycle_verdict=json.dumps(
             {
                 "claimed_edges": [
                     {"from": f, "to": t, "imported_at_runtime": True}
@@ -554,7 +557,7 @@ def test_planted_stdlib_module_cannot_forge_a_verdict(tmp_path: Path) -> None:
                 ]
             }
         ),
-        RESOLUTION__json=CORRECT_RESOLUTION,
+        resolution=CORRECT_RESOLUTION,
     )
     (ws / "json.py").write_text(
         'def dumps(*a, **k):\n'
