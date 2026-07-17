@@ -53,18 +53,6 @@ def _active_scripts() -> list[Path]:
     return sorted(BENCHMARKS.glob("customer_escalation/*/checks/check_error_source.sh"))
 
 
-def _dynamic_scripts() -> list[Path]:
-    """Active scripts that inline their scoring, so the exploit payload can be
-    driven end-to-end with a simple ``{"path": ...}`` ground truth.
-
-    Scripts that ``exec python3 -m eb_verify.scorers.file_extraction`` instead are
-    not interpolation-vulnerable — module delegation reads the answer as data,
-    never as source — and are covered by ``tests/test_file_extraction.py``.
-    ``test_no_source_injection_pattern`` still scans them statically.
-    """
-    return [s for s in _active_scripts() if "python3 -m eb_verify" not in s.read_text()]
-
-
 def _all_scripts() -> list[Path]:
     """Active + archived copies — the full blast radius named in the bead."""
     return sorted(
@@ -75,6 +63,49 @@ def _all_scripts() -> list[Path]:
             ),
         ]
     )
+
+
+def _delegates_to_module(text: str) -> bool:
+    """True if the script actually ``exec``s the ``eb_verify`` scorer module.
+
+    Such scripts read the answer as data, never as source, so they are not
+    interpolation-vulnerable and are covered by ``tests/test_file_extraction.py``.
+
+    Comment content is stripped before the scan (everything after the first
+    ``#`` on each line): a whole-file substring match would misclassify a script
+    that merely *mentions* the delegation pattern in a header comment as a safe
+    delegator and silently drop it from the end-to-end forgery suite. Erring
+    toward inclusion — a trailing ``# ... python3 -m eb_verify`` comment on a
+    real code line drops that line's tail and the script stays in the suite — is
+    the safe direction for a security guard.
+    """
+    return any(
+        "python3 -m eb_verify" in line.split("#", 1)[0] for line in text.splitlines()
+    )
+
+
+def _dynamic_scripts() -> list[Path]:
+    """Inline-scoring scripts across the full blast radius (active + archived),
+    so the exploit payload — and the benign round-trip — can be driven
+    end-to-end with a simple ``{"path": ...}`` ground truth.
+
+    Scripts that delegate to ``eb_verify.scorers.file_extraction`` are excluded
+    (see ``_delegates_to_module``); ``test_no_source_injection_pattern`` still
+    scans every script, delegators included, statically.
+    """
+    return [s for s in _all_scripts() if not _delegates_to_module(s.read_text())]
+
+
+# A bash var interpolated into a Python string literal is the forgeable-verdict
+# vector (qvpzt). Match the extracted-content vars (``$AGENT_FILES`` /
+# ``$GT_FILES`` — the agent-controlled values pulled out of answer.json) wrapped
+# in ANY Python string opener: single, double, or triple quotes, optionally
+# braced (``${AGENT_FILES}``). Anchoring on the var name — rather than any
+# quote-then-``$`` — is deliberate: the safe template exports paths bash-side
+# (``export ANSWER_FILE="$WORKSPACE/..."``), so a bare ``"$`` pattern would
+# false-positive on every script. Only the plural extracted-content vars carry
+# untrusted answer bytes into the interpreter.
+INJECTION_RE = re.compile(r"""['"]{1,3}\s*\$\{?(?:AGENT_FILES|GT_FILES)\b""")
 
 
 def _run(
@@ -111,9 +142,15 @@ def _parse(proc: subprocess.CompletedProcess[str]) -> dict[str, object]:
     return result
 
 
+@pytest.mark.security
 def test_scripts_are_discovered() -> None:
     """Guard against a rename silently emptying the parametrized suites — a
-    zero-case parametrize is a false-green regression test."""
+    zero-case parametrize is a false-green regression test.
+
+    Marked ``security`` so ``pytest -m security`` — the selector a security
+    sweep runs — cannot deselect the vacuity guard that keeps the parametrized
+    security tests non-empty.
+    """
     assert _all_scripts(), "no check_error_source.sh scripts found under benchmarks/"
     assert _dynamic_scripts(), "no inline-scoring check_error_source.sh scripts found"
 
@@ -123,14 +160,18 @@ def test_scripts_are_discovered() -> None:
     "script", _all_scripts(), ids=lambda p: str(p.relative_to(BENCHMARKS))
 )
 def test_no_source_injection_pattern(script: Path) -> None:
-    """The ``'''$VAR'''`` shell-into-Python interpolation must be gone entirely.
+    """The shell-into-Python interpolation must be gone entirely, in every
+    quote spelling.
 
-    Matches ``'''`` followed by optional whitespace and a ``$`` so a reformatted
-    ``''' $VAR`` cannot slip past this regression guard.
+    ``INJECTION_RE`` matches ``$AGENT_FILES``/``$GT_FILES`` wrapped in single,
+    double, or triple quotes (optionally braced), so a reformatted
+    ``'$AGENT_FILES'`` — a single-quoted reintroduction equally injectable
+    inside a bash-double-quoted ``python3 -c`` block — cannot slip past this
+    guard the way it slipped past the original triple-quote-only regex.
     """
-    assert not re.search(r"'''\s*\$", script.read_text()), (
-        f"{script.relative_to(ROOT)} still interpolates a bash var into a Python "
-        "triple-quoted literal — the forgeable-verdict vector (qvpzt)."
+    assert not INJECTION_RE.search(script.read_text()), (
+        f"{script.relative_to(ROOT)} still interpolates an agent-controlled bash "
+        "var into a Python string literal — the forgeable-verdict vector (qvpzt)."
     )
 
 
@@ -162,16 +203,24 @@ def test_forged_verdict_not_produced(script: Path, tmp_path: Path) -> None:
 
 
 @pytest.mark.security
-def test_benign_answer_still_scores(tmp_path: Path) -> None:
-    """A legitimate answer naming the required file must still score 1.0.
+@pytest.mark.parametrize(
+    "script", _dynamic_scripts(), ids=lambda p: str(p.relative_to(BENCHMARKS))
+)
+def test_benign_answer_still_scores(script: Path, tmp_path: Path) -> None:
+    """A legitimate answer naming the required file must still score 1.0 — in
+    EVERY inline-scoring script, not just one hand-picked one.
 
-    Guards against the fix breaking real scoring — the os.environ round-trip
-    must preserve the file lists exactly.
+    This is the positive-path counterpart to ``test_forged_verdict_not_produced``,
+    and the two are load-bearing together. Every forgery assertion there is
+    negative (score 0.0 / passed False), which an all-zeros *bricked* grader
+    also satisfies: e.g. dropping the ``export GT_FILES`` that the os.environ
+    fix depends on degrades the env round-trip to ``detail='No GT files'``,
+    score 0.0, passed False — for a correct answer, silently, with exit 0.
+    Parametrizing the benign round-trip across the full blast radius means a
+    grader bricked to all-zeros in ANY of the inline scripts goes red here
+    rather than passing the negative-only forgery suite. It also guards the
+    os.environ round-trip preserving the file lists exactly.
     """
-    script = (
-        BENCHMARKS
-        / "customer_escalation/err-provenance-01/checks/check_error_source.sh"
-    )
     proc = _run(
         script,
         tmp_path,
@@ -179,5 +228,9 @@ def test_benign_answer_still_scores(tmp_path: Path) -> None:
         ground_truth=GROUND_TRUTH,
     )
     result = _parse(proc)
-    assert result["score"] == 1.0
+    assert result["score"] == 1.0, (
+        f"{script.relative_to(ROOT)} failed to score a correct benign answer — "
+        f"a grader bricked to all-zeros defeats the negative-only forgery suite: "
+        f"{result!r}"
+    )
     assert result["passed"] is True
