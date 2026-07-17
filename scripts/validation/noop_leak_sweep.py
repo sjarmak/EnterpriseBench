@@ -35,9 +35,28 @@ Usage:
     python3 scripts/validation/noop_leak_sweep.py --json
     python3 scripts/validation/noop_leak_sweep.py --allow ansible-galaxy-tar-regression-prove-001:root_cause
 
+The sweep scores each check with ``json.loads`` (via the shared scorer
+boundary), which is STRICTER than the ``parse_score`` awk state machine
+``scripts/sandbox/test_runner.sh`` runs in the production container — that one
+credits a real ``score`` key even when some other value in the payload is
+malformed JSON. The two therefore *could* diverge on a check that emits
+malformed-but-``parse_score``-credited output; a divergence there would be a
+false negative (a production leak this sweep misses). Empirically they do not:
+under the no-op condition every check emits strictly-valid JSON, so ``json.loads``
+parses all of them and the two parsers agree on every leak decision. The
+invariant that guarantees this is "no check goes unscored" — surfaced here as
+``errored`` and frozen by ``tests/integrity/test_noop_leak_sweep.py``: the moment
+a check's no-op output stops parsing, ``errored`` rises and the guard fails
+loudly instead of silently dropping that check to "not a leak". Aligning the
+sweep onto ``parse_score`` itself (so the oracles cannot diverge by construction)
+is tracked as follow-up.
+
 Exit codes:
-    0 = no leaks outside the --allow set
+    0 = every check scored, and no leaks outside the --allow set
     1 = at least one leaking checkpoint outside the --allow set
+    2 = the sweep could not trust its own result: the path swept no tasks, or a
+        check failed to produce a verdict (errored > 0) so its "not a leak"
+        is unproven
 """
 
 from __future__ import annotations
@@ -47,7 +66,8 @@ import json
 import os
 import sys
 import tempfile
-from dataclasses import dataclass
+from collections.abc import Iterator
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -69,7 +89,15 @@ class Leak:
     score: float
 
 
-def _iter_task_dirs(root: Path):
+@dataclass(frozen=True)
+class SweepResult:
+    leaks: list[Leak]
+    n_tasks: int
+    n_checks: int
+    n_errored: int  # checks that reached no verdict (InfraError -> unscored)
+
+
+def _iter_task_dirs(root: Path) -> Iterator[Path]:
     for toml in root.rglob("task.toml"):
         if SKIP_TREE_PARTS & set(toml.parts):
             continue
@@ -117,16 +145,27 @@ def _run_task(task_dir: Path) -> list[tuple[str, Path, float | None]]:
     return out
 
 
-def sweep(root: Path, benchmarks_root: Path) -> tuple[list[Leak], int, int]:
-    """Return (leaks, n_tasks, n_checks) for every task under ``root``."""
+def sweep(root: Path, benchmarks_root: Path) -> SweepResult:
+    """Sweep every task under ``root`` under the no-op condition.
+
+    ``n_errored`` counts checks that reached no verdict (a ``None`` score from the
+    scorer boundary — timeout, crash, unparseable output). Such a check is NOT a
+    proven "not a leak": the sweep simply never learned its no-op score, so a
+    caller that cares about a trustworthy audit must treat ``n_errored > 0`` as an
+    incomplete run, not a clean one.
+    """
     leaks: list[Leak] = []
     n_tasks = 0
     n_checks = 0
+    n_errored = 0
     for task_dir in sorted(_iter_task_dirs(root)):
         n_tasks += 1
         for checkpoint, check_file, score in _run_task(task_dir):
             n_checks += 1
-            if score is not None and score > SCORE_EPS:
+            if score is None:
+                n_errored += 1
+                continue
+            if score > SCORE_EPS:
                 try:
                     rel = task_dir.relative_to(benchmarks_root)
                 except ValueError:
@@ -140,7 +179,7 @@ def sweep(root: Path, benchmarks_root: Path) -> tuple[list[Leak], int, int]:
                         score=score,
                     )
                 )
-    return leaks, n_tasks, n_checks
+    return SweepResult(leaks, n_tasks, n_checks, n_errored)
 
 
 def _parse_allow(values: list[str]) -> set[str]:
@@ -171,30 +210,52 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = Path(args.path).resolve()
+    # A mistyped or moved path makes rglob yield nothing, which would otherwise
+    # read as tasks=0 leaks=0 exit 0 — a clean bill of health for an audit that
+    # never ran. Fail loudly instead.
+    if not root.is_dir():
+        print(f"error: sweep path is not a directory: {root}", file=sys.stderr)
+        return 2
     benchmarks_root = REPO_ROOT / "benchmarks"
     allow = _parse_allow(args.allow)
 
-    leaks, n_tasks, n_checks = sweep(root, benchmarks_root)
+    result = sweep(root, benchmarks_root)
+    leaks = result.leaks
     unexpected = [lk for lk in leaks if not _is_allowed(lk, allow)]
 
     if args.json:
         print(
             json.dumps(
                 {
-                    "tasks": n_tasks,
-                    "checks": n_checks,
-                    "leaks": [lk.__dict__ for lk in leaks],
-                    "unexpected": [lk.__dict__ for lk in unexpected],
+                    "tasks": result.n_tasks,
+                    "checks": result.n_checks,
+                    "errored": result.n_errored,
+                    "leaks": [asdict(lk) for lk in leaks],
+                    "unexpected": [asdict(lk) for lk in unexpected],
                 },
                 indent=2,
             )
         )
     else:
-        print(f"tasks={n_tasks} checks={n_checks} leaks={len(leaks)} unexpected={len(unexpected)}")
+        print(
+            f"tasks={result.n_tasks} checks={result.n_checks} "
+            f"errored={result.n_errored} leaks={len(leaks)} "
+            f"unexpected={len(unexpected)}"
+        )
         for lk in leaks:
             tag = "ALLOW " if _is_allowed(lk, allow) else "LEAK  "
             print(f"{tag}{lk.score:>5.2f}  {lk.task_path}  ::  {lk.check_file}")
 
+    # An unscored check (errored) or a path that swept nothing means the audit's
+    # "not a leak" verdict is unproven for part of the corpus — exit 2, distinct
+    # from the exit-1 "a real leak exists" signal, so CI can tell them apart.
+    if result.n_tasks == 0 or result.n_errored:
+        print(
+            f"error: sweep incomplete (tasks={result.n_tasks} "
+            f"errored={result.n_errored}); result is not a trustworthy audit",
+            file=sys.stderr,
+        )
+        return 2
     return 1 if unexpected else 0
 
 

@@ -24,22 +24,63 @@ answer key (`expected_solution.json`, `ground_truth.json`).
   and no repo source.
 - **TASK_DIR** = the real task directory (the answer key).
 
-Each check is run through the real scorer's own boundary
-(`eb_verify.scorer_guard.run_verifier_subprocess`), so "did this check reach a
-score" is defined once by the codebase rather than re-parsed here. A no-op
-leaves the cloned repos pristine and writes nothing, so any check that still
-scores >0 is crediting `instruction.md` or the answer key, never the agent —
-that is a leak.
+Each check is run through the shared scorer boundary
+(`eb_verify.scorer_guard.run_verifier_subprocess`), so the whole InfraError
+ladder (timeout, missing script, path escape, non-JSON output) is defined once by
+the codebase rather than re-derived here. A no-op leaves the cloned repos
+pristine and writes nothing, so any check that still scores >0 is crediting
+`instruction.md` or the answer key, never the agent — that is a leak.
 
 The sweep is CI-enforced by `tests/integrity/test_noop_leak_sweep.py`, which
-fails on any leaking checkpoint outside the known-open allowlist.
+fails on any leaking checkpoint outside the known-open allowlist, and (since the
+b5vk6 review) also on any check that reaches no verdict at all — see the parser
+boundary limitation below.
+
+## Faithfulness limitations (reviewed, bounded)
+
+The offline sweep is not a byte-identical replica of in-container scoring. Each
+known gap and why it does not move the result:
+
+- **Parser boundary — the one that could hide a leak.** The sweep parses each
+  verdict with `json.loads` (via `scorer_guard`), which is STRICTER than the
+  `parse_score` awk state machine `test_runner.sh` runs in the production
+  container: `parse_score` credits a well-positioned `score` key even when some
+  *other* value in the payload is malformed JSON (e.g.
+  `{"detail": "gap is 3" x 5" wide", "score": 0.3}` → 0.3, which `json.loads`
+  rejects). A check emitting such output under no-op would score >0 in production
+  but drop to `errored` (no verdict) here — a false negative. **Empirically this
+  does not occur:** all 391 checks emit strictly-valid JSON under the no-op
+  condition (`errored=0`), so `json.loads` parses every one and the two parsers
+  agree on every leak decision. `test_every_check_scored` freezes `errored == 0`,
+  so the moment any check starts emitting malformed no-op output the guard fails
+  loudly instead of silently dropping it. Aligning the sweep onto `parse_score`
+  itself, so the oracles cannot diverge by construction, is tracked as follow-up
+  (**EnterpriseBench-q85op**).
+- **Instruction rendering.** Production concatenates an MCP/CLI preamble +
+  `instruction_mcp.md` (5 tasks ship one) + the raw `instruction.md` into the
+  single `/workspace/instruction.md` the agent sees; the sweep plants only the
+  raw `instruction.md` (the baseline rendering). None of the 5 tasks with an
+  `instruction_mcp.md` have a check that globs workspace-level `*.md` the way the
+  hpcsv `check_root_cause.sh` does — they all gate on `agent_output/` or a named
+  report artifact — so the un-planted rendering hides no leak today.
+- **cwd and `TASK_DIR` richness.** The sweep runs checks with `cwd=$WORKSPACE`
+  and points `TASK_DIR` at the full task dir; production scores from a cwd
+  *outside* `$WORKSPACE` and copies only `ground_truth.json` into
+  `/workspace/.task`. Both deviations are strictly MORE permissive than
+  production, so they can only over-report (false positive), never hide a leak.
+  No check globs `$TASK_DIR` (all reads are fixed `ground_truth.json`), so
+  neither bites today.
 
 ## Result
 
 ```
-tasks=116  checks=391  parsed=391  leaks=1
+tasks=116  checks=391  errored=0  leaks=1  unexpected=0
 LEAK  1.00  incident_response/ansible-galaxy-tar-regression-prove-001 :: check_root_cause.sh
 ```
+
+`errored=0` is load-bearing: it means every check produced a parseable verdict,
+so no check was silently dropped to "not a leak" (see the parser boundary
+limitation above).
 
 | Task | Checkpoint | Leak mechanism |
 |------|-----------|----------------|

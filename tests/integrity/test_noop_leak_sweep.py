@@ -38,14 +38,38 @@ KNOWN_OPEN = frozenset(
 
 
 @functools.lru_cache(maxsize=1)
-def _leak_keys():
-    # The sweep shells out one subprocess per check (~400); both tests below
-    # consume the same immutable result, so compute it once.
+def _sweep_result():
+    # The sweep shells out one subprocess per check (~400); every test below
+    # consumes the same immutable result, so compute it once.
     benchmarks = REPO_ROOT / "benchmarks"
-    leaks, n_tasks, n_checks = sweep(benchmarks, benchmarks)
-    assert n_tasks > 0, "swept zero tasks — path or discovery is broken"
-    assert n_checks > 0, "swept zero checks — path or discovery is broken"
-    return {f"{lk.task_id}:{lk.checkpoint}" for lk in leaks}
+    result = sweep(benchmarks, benchmarks)
+    assert result.n_tasks > 0, "swept zero tasks — path or discovery is broken"
+    assert result.n_checks > 0, "swept zero checks — path or discovery is broken"
+    return result
+
+
+def _leak_keys():
+    return {f"{lk.task_id}:{lk.checkpoint}" for lk in _sweep_result().leaks}
+
+
+def test_every_check_scored():
+    """No check may go unscored — that is what keeps 'not a leak' honest.
+
+    The sweep parses verdicts with ``json.loads``; production's ``parse_score``
+    (test_runner.sh) is more tolerant of malformed JSON. They can only diverge on
+    a check whose no-op output is NOT valid JSON — and such a check surfaces here
+    as ``errored``. Holding ``errored == 0`` proves every check parsed cleanly, so
+    the two parsers agree on every leak decision and no leak is silently dropped
+    to "not a leak". If this ever fails, a check started emitting malformed no-op
+    output: re-anchor it or align the sweep onto parse_score (tracked follow-up),
+    do not relax this assertion.
+    """
+    result = _sweep_result()
+    assert result.n_errored == 0, (
+        f"{result.n_errored} of {result.n_checks} checks produced no verdict "
+        "under the no-op condition. An unscored check is not a proven "
+        "'not a leak' — the audit is blind for it."
+    )
 
 
 def test_no_new_noop_leaks():
