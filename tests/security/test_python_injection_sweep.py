@@ -73,7 +73,14 @@ stays well under a second; a ``"<<" not in`` fast-path skips the scan for
 heredoc-free scripts, and a hard body bound is tracked as follow-up EnterpriseBench-b5mmv.
 
 Superseded eventually by rmz1x (migrate these blobs onto
-``eb_verify.scorers.file_extraction``); until then this is the backstop.
+``eb_verify.scorers.file_extraction``); until then this is the backstop. When rmz1x
+lands: the quote-aware walkers below are a second copy of the ``lib/eb_metrics/shell_lex.py``
+tokenizer — reuse that (lifted to a shared home; ``eb_metrics`` must not be imported by
+``eb_verify``) rather than hand-rolling a third — and the ``open()`` allowlist/taint
+subsystem (``_var_writes``/``_harness_path_vars`` and friends) exists only for the six
+scripts that interpolate a harness path into ``open()``; once they route paths via
+``os.environ`` it should be deleted, collapsing the rule to "any unescaped ``$`` is a
+violation."
 """
 
 from __future__ import annotations
@@ -112,23 +119,22 @@ BENCHMARKS = ROOT / "benchmarks"
 # Either decoy truncated the scanned body early while bash read the full body past
 # it, hiding an injection after the decoy. Being stricter than bash here can only
 # over-scan (fail-closed), never miss a real terminator.
-_HEREDOC = re.compile(
-    r"""python[0-9.]*(?:[ \t]+[^\s<]+)*[ \t]*<<(?P<dash>-)?[ \t]*"""
-    r"""(?P<q>['"]?)(?P<delim>\w+)(?P=q)[^\n]*\r?\n"""
-    r"""(?P<body>.*?)\r?\n(?(dash)\t*|)(?P=delim)(?:\r?\n|\Z)""",
-    re.DOTALL,
+# The ``<<``-delimiter-through-terminator core, shared verbatim by the python-only
+# opener (``_HEREDOC``) and the any-command opener (``_ANY_HEREDOC``) so the two
+# cannot drift: the ``(?P<dash>)`` form record and the ``(?(dash)\t*|)`` terminator
+# column-rules described above live in exactly one string.
+_HEREDOC_TAIL = (
+    r"""<<(?P<dash>-)?[ \t]*(?P<q>['"]?)(?P<delim>\w+)(?P=q)[^\n]*\r?\n"""
+    r"""(?P<body>.*?)\r?\n(?(dash)\t*|)(?P=delim)(?:\r?\n|\Z)"""
 )
+_HEREDOC = re.compile(r"python[0-9.]*(?:[ \t]+[^\s<]+)*[ \t]*" + _HEREDOC_TAIL, re.DOTALL)
 
 # Any command's heredoc (not just python's), used only to blank heredoc *bodies*
 # before the ``-c`` scan below — a body is content the script author wrote, and a
 # ``python3 -c "…$x…"`` example line quoted inside a *safe* (quoted-delimiter)
-# heredoc body must not be mistaken for a live ``-c`` invocation. Same column-rules
-# conditional as ``_HEREDOC``.
-_ANY_HEREDOC = re.compile(
-    r"""<<(?P<dash>-)?[ \t]*(?P<q>['"]?)(?P<delim>\w+)(?P=q)[^\n]*\r?\n"""
-    r"""(?P<body>.*?)\r?\n(?(dash)\t*|)(?P=delim)(?:\r?\n|\Z)""",
-    re.DOTALL,
-)
+# heredoc body must not be mistaken for a live ``-c`` invocation. Same tail (and so
+# the same column-rules conditional) as ``_HEREDOC``, without the interpreter prefix.
+_ANY_HEREDOC = re.compile(_HEREDOC_TAIL, re.DOTALL)
 
 
 def _strip_heredoc_bodies(script_text: str) -> str:
@@ -664,6 +670,11 @@ def _injection_sites(script_text: str) -> list[str]:
 # per test). ``test_scripts_discovered`` guards against a broken glob silently
 # yielding zero scripts, which would make the sweep vacuously green.
 _SCRIPTS = sorted(BENCHMARKS.rglob("checks/*.sh"))
+# Read each script's text exactly once at import; every consumer below indexes this
+# instead of re-``read_text()``-ing the same ~500 files (which the corpus tests and the
+# heredoc-subset discovery otherwise do 2-3x over) and cannot silently diverge on how
+# the read is done.
+_SCRIPT_TEXTS = {s: s.read_text() for s in _SCRIPTS}
 
 
 @pytest.mark.security
@@ -680,7 +691,9 @@ def test_scripts_discovered() -> None:
 # precise argv-token run) so that if ``_HEREDOC`` is too strict this list still
 # finds them and the coverage test below fails.
 _PY_HEREDOC_SCRIPTS = [
-    s for s in _SCRIPTS if re.search(r"python[0-9.]*[^\n]*<<-?\s*['\"]?\w", s.read_text())
+    s
+    for s, text in _SCRIPT_TEXTS.items()
+    if re.search(r"python[0-9.]*[^\n]*<<-?\s*['\"]?\w", text)
 ]
 
 
@@ -699,7 +712,7 @@ def test_heredoc_arm_matches_corpus_heredocs() -> None:
     unmatched = [
         str(s.relative_to(ROOT))
         for s in _PY_HEREDOC_SCRIPTS
-        if not _HEREDOC.search(s.read_text())
+        if not _HEREDOC.search(_SCRIPT_TEXTS[s])
     ]
     assert not unmatched, (
         "the heredoc detector arm does not match these real python-heredoc scripts, "
@@ -717,8 +730,8 @@ def test_no_python_injection_repo_wide() -> None:
     """
     offenders = {
         str(script.relative_to(ROOT)): sites
-        for script in _SCRIPTS
-        if (sites := _injection_sites(script.read_text()))
+        for script, text in _SCRIPT_TEXTS.items()
+        if (sites := _injection_sites(text))
     }
     assert not offenders, (
         "check scripts expand a shell value into a Python body (shell-into-Python "
