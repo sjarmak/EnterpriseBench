@@ -15,11 +15,13 @@ real scorer's own boundary (``eb_verify.scorer_guard.run_verifier_subprocess``,
 the shared ladder behind the Python runners), so "did this check reach a score"
 is defined once, by the codebase, not re-derived here:
 
-  * WORKSPACE: a scratch dir holding ONLY ``instruction.md`` (planted where the
-    harness puts it, at ``$WORKSPACE/instruction.md``). No ``agent_output/`` and
-    no repo source — a no-op leaves the cloned repos pristine and writes nothing,
-    so any check that still scores >0 is crediting instruction.md or the answer
-    key, never the agent.
+  * WORKSPACE: a scratch dir holding ONLY ``instruction.md``, planted where the
+    harness puts it (``$WORKSPACE/instruction.md``) and rendered by production's
+    own ``run_task._build_instruction_text`` — raw instruction text plus the
+    output appendix, which carries the answer-schema keywords. No
+    ``agent_output/`` and no repo source — a no-op leaves the cloned repos
+    pristine and writes nothing, so any check that still scores >0 is crediting
+    instruction.md or the answer key, never the agent.
   * TASK_DIR: the real task directory (mirrors ``/workspace/.task``): the answer
     key — ``expected_solution.json``, ``ground_truth.json``.
 
@@ -29,11 +31,12 @@ plants no repo source, only instruction.md — and are covered by the manual aud
 recorded in docs/internal/NOOP_LEAK_AUDIT.md, which found every repo-path reader
 gates on an agent-written artifact.
 
-Usage:
+Usage (an --allow entry names the checkpoint as ``task.toml`` registers it —
+``root_cause_identified``, not the verifier's filename stem ``root_cause``):
     python3 scripts/validation/noop_leak_sweep.py                 # sweep benchmarks/
     python3 scripts/validation/noop_leak_sweep.py benchmarks/incident_response
     python3 scripts/validation/noop_leak_sweep.py --json
-    python3 scripts/validation/noop_leak_sweep.py --allow ansible-galaxy-tar-regression-prove-001:root_cause
+    python3 scripts/validation/noop_leak_sweep.py --allow ansible-galaxy-tar-regression-prove-001:root_cause_identified
 
 The sweep scores each check with ``json.loads`` (via the shared scorer
 boundary), which is STRICTER than the ``parse_score`` awk state machine
@@ -51,22 +54,23 @@ loudly instead of silently dropping that check to "not a leak". Aligning the
 sweep onto ``parse_score`` itself (so the oracles cannot diverge by construction)
 is tracked as follow-up.
 
-Exit codes:
+Exit codes (a leak outranks incompleteness — a finding beats an absence of proof;
+when both hold, exit is 1 and the incompleteness is still reported on stderr):
     0 = every check scored, and no leaks outside the --allow set
     1 = at least one leaking checkpoint outside the --allow set
-    2 = the sweep could not trust its own result: the path swept no tasks, or a
-        check failed to produce a verdict (errored > 0) so its "not a leak"
-        is unproven
+    2 = no such leak, but the sweep could not trust its own result: the path
+        swept no tasks, or a check failed to produce a verdict (errored > 0) so
+        its "not a leak" is unproven
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import sys
 import tempfile
-from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -74,9 +78,25 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_ROOT = REPO_ROOT / "benchmarks"  # corpus root; task paths are shown relative to it
 EB_VERIFY_PARENT = REPO_ROOT / "lib"  # PYTHONPATH root: `import eb_verify`
 sys.path.insert(0, str(EB_VERIFY_PARENT))
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "orchestration"))  # `import run_task`
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # `import enable_llm_curator`
 from eb_verify.scorer_guard import run_verifier_subprocess  # noqa: E402
+from eb_verify.task_parser import TaskDefinition, parse_task  # noqa: E402
+from enable_llm_curator import iter_task_dirs  # noqa: E402
 
-SKIP_TREE_PARTS = frozenset({"_archived", "mined"})
+# The production instruction renderer. Importing it couples this validation
+# script to the orchestrator on purpose: it is the single source of what the
+# agent actually sees, and re-deriving it here is precisely the drift that let a
+# planted-evidence leak read clean (see _plant_workspace).
+#
+# The cost, accepted knowingly: importing run_task runs its module-level
+# _load_env_local, which mutates this process's os.environ (SOURCEGRAPH_*/SG_*/
+# SRC_* keys) if a .env.local exists. Harmless for a sweep — it reads no
+# credentials and reaches no network — but it is why this import must never be
+# treated as free. Lifting _build_instruction_text into a side-effect-free
+# renderer module is EnterpriseBench-n97lo.
+from run_task import _build_instruction_text  # noqa: E402
+
 CHECK_TIMEOUT_SEC = 60
 SCORE_EPS = 1e-6
 
@@ -85,7 +105,7 @@ SCORE_EPS = 1e-6
 class Leak:
     task_id: str
     task_path: str  # relative to benchmarks/
-    checkpoint: str  # verifier basename with the check_ prefix stripped
+    checkpoint: str  # the name task.toml registers, i.e. what --allow matches
     check_file: str
     score: float
 
@@ -98,28 +118,109 @@ class SweepResult:
     n_errored: int  # checks that reached no verdict (InfraError -> unscored)
 
 
-def _iter_task_dirs(root: Path) -> Iterator[Path]:
-    for toml in root.rglob("task.toml"):
-        if SKIP_TREE_PARTS & set(toml.parts):
-            continue
-        yield toml.parent
+@functools.lru_cache(maxsize=None)
+def _task_definition(task_dir: Path) -> TaskDefinition | None:
+    """Parse ``task.toml`` once per task; ``None`` if it cannot be read.
+
+    Two callers need it — checkpoint naming and the citations flag — and the
+    sweep re-reads each task once per check, so the parse is cached. A task.toml
+    is immutable for a sweep's lifetime, which is what makes caching safe.
+    """
+    task_toml = task_dir / "task.toml"
+    try:
+        return parse_task(task_toml)
+    except (OSError, ValueError, KeyError) as exc:
+        # A broken task.toml costs naming and the citations flag, not the audit:
+        # the check still runs and can still be caught leaking. Degrade rather
+        # than drop the task — but never do it silently.
+        #
+        # KeyError is in the set because parse_task's error contract is uneven: a
+        # missing [task] block becomes a ValueError, but the checkpoint/repo/
+        # ground-truth entries subscript required keys directly, so an incomplete
+        # one raises a bare KeyError. Left uncaught it escapes sweep()'s per-task
+        # loop and aborts all 141 tasks over one bad file — and a traceback's exit
+        # code is neither 1 nor 2, so CI reads the crash as an infra flake rather
+        # than an integrity failure. Evening out that contract upstream is
+        # EnterpriseBench-20nhr; catching it here does not wait on that.
+        print(
+            f"warning: {task_toml}: {exc!r}; falling back to filenames for "
+            "checkpoint names and to no grounded-citations appendix",
+            file=sys.stderr,
+        )
+        return None
 
 
-def _checkpoint_name(check_file: Path) -> str:
+def _canonical_checkpoint_names(task_dir: Path) -> dict[str, str]:
+    """Map verifier filename -> the checkpoint name ``task.toml`` registers for it.
+
+    Naming ONLY — never discovery. Checks are found by globbing ``checks/*.sh``,
+    a superset of the task.toml manifest, so an unregistered check is still
+    audited (it falls back to its filename stem).
+    """
+    task = _task_definition(task_dir)
+    if task is None:
+        return {}
+    return {Path(cp.verifier).name: cp.name for cp in task.checkpoints}
+
+
+def _checkpoint_name(check_file: Path, task_dir: Path) -> str:
+    """The checkpoint name an operator would write in ``--allow``.
+
+    That is the name registered in task.toml (``root_cause_identified``), not the
+    filename stem (``root_cause``) — they differ for most checks in the corpus.
+    """
+    canonical = _canonical_checkpoint_names(task_dir).get(check_file.name)
+    if canonical:
+        return canonical
     stem = check_file.stem
     return stem[len("check_"):] if stem.startswith("check_") else stem
+
+
+def _plant_workspace(task_dir: Path, ws: Path) -> None:
+    """Plant exactly the ``instruction.md`` the harness puts before a no-op agent.
+
+    Production writes ``/workspace/instruction.md`` from
+    ``run_task._build_instruction_text``: the task's raw instruction.md PLUS an
+    output appendix carrying the answer-schema keywords (``source_files``,
+    ``error_chain``, ``trigger_conditions``, ...). Planting the raw file instead
+    would make this workspace a strict SUBSET of production's, so a check keyed on
+    an appendix keyword — the hpcsv shape, a workspace-level ``*.md`` glob — could
+    leak in production yet read clean here.
+
+    ``baseline`` is the smallest true render: mcp_only/hybrid/cli only prepend a
+    retrieval preamble on top of this exact text, so a check that stays clean
+    against the baseline plant stays clean in every mode.
+
+    Mode is not the only axis, though. The appendix ALSO varies on the task's
+    ``ground_truth.require_grounded_citations``, which production reads from
+    task.toml and passes in: when set, the appendix grows a ``citations`` block
+    naming ``evidence_span`` and demanding verbatim quoted spans. That flag is
+    read here for the same reason the render is not re-derived — defaulting it
+    would rebuild the strict-subset bug on a second axis. ``repos`` is not passed
+    because it only feeds the non-baseline preamble.
+    """
+    task = _task_definition(task_dir)
+    ground_truth = task.ground_truth if task else None
+    instruction_text = _build_instruction_text(
+        task_dir,
+        mode="baseline",
+        require_grounded_citations=bool(
+            ground_truth and ground_truth.require_grounded_citations
+        ),
+    )
+    if instruction_text is None:  # no instruction.md: production plants nothing
+        return
+    (ws / "instruction.md").write_text(instruction_text)
 
 
 def _run_task(task_dir: Path) -> list[tuple[str, Path, float | None]]:
     checks_dir = task_dir / "checks"
     if not checks_dir.is_dir():
         return []
-    instruction = task_dir / "instruction.md"
     out: list[tuple[str, Path, float | None]] = []
     with tempfile.TemporaryDirectory(prefix="noop_ws_") as ws_str:
         ws = Path(ws_str)
-        if instruction.exists():
-            (ws / "instruction.md").write_text(instruction.read_text(errors="ignore"))
+        _plant_workspace(task_dir, ws)
         env = dict(os.environ)
         env["WORKSPACE"] = str(ws)
         env["TASK_DIR"] = str(task_dir)  # mirrors /workspace/.task
@@ -127,7 +228,7 @@ def _run_task(task_dir: Path) -> list[tuple[str, Path, float | None]]:
             [str(EB_VERIFY_PARENT), env.get("PYTHONPATH", "")]
         ).rstrip(os.pathsep)
         for check in sorted(checks_dir.glob("*.sh")):
-            checkpoint = _checkpoint_name(check)
+            checkpoint = _checkpoint_name(check, task_dir)
             # run through the real scorer's boundary: a verdict dict carries a
             # validated score; an InfraError (timeout, crash, no verdict) is not
             # a dict, and a check that never reached a score can't be a leak.
@@ -154,12 +255,24 @@ def sweep(root: Path) -> SweepResult:
     proven "not a leak": the sweep simply never learned its no-op score, so a
     caller that cares about a trustworthy audit must treat ``n_errored > 0`` as an
     incomplete run, not a clean one.
+
+    Deliberately serial. The whole corpus (141 tasks / 470 checks) sweeps in a
+    couple of seconds despite one subprocess per check, because the no-op
+    condition is the very one that makes checks exit early: with no
+    ``agent_output/`` to read, a check bails in ~1ms. There is no runtime here
+    worth a process pool's complexity.
     """
+    # Each sweep re-reads task.toml from disk. _task_definition's cache is scoped
+    # to a single sweep — that is the whole basis on which caching a file's
+    # contents is safe here — so a second sweep in one process (a fix-then-
+    # re-sweep session, the integrity suite, a future watch loop) must observe
+    # edits made since the first, not the parse it happened to warm.
+    _task_definition.cache_clear()
     leaks: list[Leak] = []
     n_tasks = 0
     n_checks = 0
     n_errored = 0
-    for task_dir in sorted(_iter_task_dirs(root)):
+    for task_dir in sorted(iter_task_dirs(root)):
         n_tasks += 1
         for checkpoint, check_file, score in _run_task(task_dir):
             n_checks += 1
@@ -247,16 +360,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{tag}{lk.score:>5.2f}  {lk.task_path}  ::  {lk.check_file}")
 
     # An unscored check (errored) or a path that swept nothing means the audit's
-    # "not a leak" verdict is unproven for part of the corpus — exit 2, distinct
-    # from the exit-1 "a real leak exists" signal, so CI can tell them apart.
-    if result.n_tasks == 0 or result.n_errored:
+    # "not a leak" verdict is unproven for part of the corpus. Report it whether
+    # or not a leak was also found — both facts are true and an operator needs
+    # both.
+    incomplete = result.n_tasks == 0 or bool(result.n_errored)
+    if incomplete:
         print(
             f"error: sweep incomplete (tasks={result.n_tasks} "
             f"errored={result.n_errored}); result is not a trustworthy audit",
             file=sys.stderr,
         )
-        return 2
-    return 1 if unexpected else 0
+
+    # The exit code can only name one, so it names the worse one: a leak found is
+    # a definite finding, while incompleteness is an absence of proof. Reporting
+    # exit 2 for a run that positively found a leak would understate it.
+    if unexpected:
+        return 1
+    return 2 if incomplete else 0
 
 
 if __name__ == "__main__":

@@ -7,15 +7,28 @@ plugin) pays a NO-OP agent full marks — the answer key grading itself. That is
 benchmark-defensibility hole, not a per-task curation slip.
 
 ``scripts/validation/noop_leak_sweep.py`` reproduces the no-op condition offline
-(WORKSPACE = only instruction.md, no agent_output; TASK_DIR = the real answer
-key) and reports every checkpoint scoring >0. This test freezes
+(WORKSPACE = only instruction.md, rendered as production renders it; TASK_DIR =
+the real answer key) and reports every checkpoint scoring >0. This test freezes
 the audit result: the leak set must never grow beyond the known-open allowlist.
 
-KNOWN_OPEN is the single checkpoint whose fix lives on its own bead (hpcsv). It
-is a subset assertion, so this test stays green both while hpcsv is open (its
-check still leaks in a worktree without the fix) and after it lands (the set
-shrinks to empty). Any NEW leaking checkpoint fails the build — that is the
-regression this guard exists to catch.
+KNOWN_OPEN is empty — the corpus has no known no-op leak. hpcsv's was the last
+one, closed when ``check_root_cause.sh`` was re-anchored to ``agent_output/``
+(e3f1242), so ``test_no_new_noop_leaks`` now asserts the strongest form of the
+property: a no-op agent scores 0 on every checkpoint in the corpus.
+
+Entries are ``task_id:checkpoint`` using the checkpoint name as registered in
+``task.toml`` (e.g. ``root_cause_identified``), which is what the sweep reports
+and what ``--allow`` matches — not the verifier's filename stem.
+
+The two guards react to an allowlist entry differently, and only one of them
+tolerates a stale one:
+
+* ``test_no_new_noop_leaks`` asserts a SUBSET, so it stays green whether an
+  allowlisted leak is open or already fixed.
+* ``test_allowlist_stays_minimal`` asserts the converse and is the one that goes
+  RED when an entry outlives its leak. That is deliberate: a resolved entry is
+  debt, and a fix that lands elsewhere should force this list to shrink rather
+  than let the allowlist quietly keep granting an exemption nobody needs.
 """
 
 from __future__ import annotations
@@ -30,16 +43,14 @@ sys.path.insert(0, str(REPO_ROOT / "scripts" / "validation"))
 from noop_leak_sweep import sweep  # noqa: E402
 
 # task_id:checkpoint for every leak whose remediation is tracked elsewhere.
-KNOWN_OPEN = frozenset(
-    {
-        "ansible-galaxy-tar-regression-prove-001:root_cause",  # EnterpriseBench-hpcsv
-    }
-)
+# Empty: no checkpoint in the corpus pays a no-op agent. Adding an entry here
+# grants an exemption, so it belongs to a bead that will remove it again.
+KNOWN_OPEN: frozenset[str] = frozenset()
 
 
 @functools.lru_cache(maxsize=1)
 def _sweep_result():
-    # The sweep shells out one subprocess per check (~400); every test below
+    # The sweep shells out one subprocess per check (~470); every test below
     # consumes the same immutable result, so compute it once.
     benchmarks = REPO_ROOT / "benchmarks"
     result = sweep(benchmarks)
@@ -83,7 +94,13 @@ def test_no_new_noop_leaks():
 
 
 def test_allowlist_stays_minimal():
-    """The allowlist must not carry entries that no longer leak (stale debt)."""
+    """The allowlist must not carry entries that no longer leak (stale debt).
+
+    This is the guard that shrinks KNOWN_OPEN. It goes RED when a fix lands
+    elsewhere and resolves an allowlisted leak — remove the entry, that is the
+    fix. Vacuous while KNOWN_OPEN is empty; it arms itself the moment an
+    exemption is added.
+    """
     stale = sorted(KNOWN_OPEN - _leak_keys())
     assert not stale, (
         f"Allowlisted checkpoints no longer leak and should be removed: {stale}"
