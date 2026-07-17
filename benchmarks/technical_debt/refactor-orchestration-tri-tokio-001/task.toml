@@ -13,28 +13,36 @@ task_type = "refactor_orchestration"
 difficulty = "hard"
 estimated_duration_minutes = 35
 session_type = "single"
-description = "Plan refactoring async HTTP handler chain when tokio runtime trait changes propagate through hyper to axum"
+description = "Plan the rollout of a tokio Runtime builder change across three vendored repos whose real dependency graph must be derived from the manifests"
+# NEVER SHOWN TO THE AGENT. run_task.py feeds instruction.md
+# (`agent_command < /workspace/instruction.md`); this field is stale
+# CSB-migration metadata. Re-synced anyway: its previous text stated
+# "The dependency chain is: tokio -> hyper -> axum" and asserted that the change
+# breaks "axum's Server::bind which depends on hyper's server builder" — both the
+# giveaway this rebuild removed and false at the pinned revs (axum 0.6.19 wants
+# hyper ^0.14.24; the workspace vendors 1.0.0-rc.4). Left as it was, a future
+# regeneration of instruction.md from this field would restore the leak and the
+# false premise together.
 prompt = """
-As tech lead for a Rust microservices platform, you need to plan the rollout
-of a breaking change in the async HTTP stack. The tokio project is refactoring
-its runtime builder API to support configurable task schedulers, which affects
-how hyper spawns connection handlers and how axum bootstraps its server.
+As tech lead for a Rust microservices platform, you need to plan the rollout of
+a breaking change in the async HTTP stack. tokio is refactoring its runtime
+builder API to support configurable task schedulers: Runtime::new() is gaining a
+required scheduler configuration parameter. This breaks any crate that builds a
+tokio runtime or spawns onto one.
 
-The dependency chain is:
-
-  tokio -> hyper -> axum
-
-The change: tokio's Runtime::new() builder is adding a required scheduler
-configuration parameter. This breaks hyper's default server implementation
-that calls tokio::spawn internally, and axum's Server::bind which depends on
-hyper's server builder.
+We vendor three repos at /workspace/tokio/, /workspace/hyper/ and
+/workspace/axum/. Do not assume how they relate to each other. Derive every
+dependency edge from the manifests as they are checked out in this workspace,
+and cite the version requirement that establishes each one.
 
 Your task is to produce a topologically sorted execution plan:
 
 1. Identify all repos requiring changes and in what order.
-2. Map the dependency relationships between repos.
+2. Map the dependency relationships between repos, citing the manifest and
+   version requirement behind each edge. If a dependency you expected is not
+   present at these revisions, say so and show what the manifest requires.
 3. Produce a numbered, ordered list of repos to update.
-4. Identify any steps that can be done in parallel.
+4. Identify any steps that can be done in parallel, and why.
 5. Note which changes are breaking vs. compatible.
 
 Write your plan to /workspace/REFACTOR_PLAN.md with:
@@ -69,25 +77,31 @@ dependency_depth = 3
 frameworks = ["tokio", "hyper", "axum"]
 multi_repo_pattern = "orchestrate"
 
+# Weights unchanged; every checkpoint re-scoped onto manifest-derived evidence.
+# All three previously graded vocabulary instruction.md supplied, so a plan that
+# restated the prompt scored a perfect 1.0000 with zero repo access while a
+# correct manifest-derived plan scored 0.6500 and an empty file scored 0.15.
+# See each check's header and ground_truth.json:_premise_correction — the
+# tokio -> hyper -> axum chain the task asserted does not exist at these revs.
 [[checkpoints]]
 name = "identify_repos"
 weight = 0.25
 verifier = "checks/check_repo_set.sh"
-description = "Agent identifies all repos requiring changes"
+description = "Agent names the three repos AND cites the manifest requirement that puts axum in scope directly (tokio 1.25.0), not via hyper"
 timeout_seconds = 30
 
 [[checkpoints]]
 name = "topological_order"
 weight = 0.45
 verifier = "checks/check_topo_order.sh"
-description = "Agent produces valid topological ordering"
+description = "Agent produces a valid ordering of the real fan-out graph, gated on having derived it from the manifests rather than assumed the ecosystem's chain"
 timeout_seconds = 60
 
 [[checkpoints]]
 name = "parallelism"
 weight = 0.30
 verifier = "checks/check_parallelism.sh"
-description = "Agent correctly identifies parallelizable steps"
+description = "Agent identifies hyper and axum as independently updatable, evidenced by axum's real hyper requirement"
 timeout_seconds = 60
 
 [artifacts]

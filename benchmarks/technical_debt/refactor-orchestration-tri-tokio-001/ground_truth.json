@@ -1,56 +1,84 @@
 {
   "candidate_id": "refactor-orchestration-tri-tokio-001",
-  "description": "Async HTTP handler trait refactoring across tokio runtime, hyper server, and axum framework",
+  "description": "tokio Runtime builder refactor across the three vendored repos. The dependency graph at the pinned revisions is a FAN-OUT from tokio, not the tokio -> hyper -> axum chain this task previously asserted: axum 0.6.19 requires hyper ^0.14.24 while the workspace ships hyper 1.0.0-rc.4, so axum does not consume the workspace hyper at all.",
   "repos": ["tokio-rs/tokio", "hyperium/hyper", "tokio-rs/axum"],
-  "merge_order": [
-    {
-      "repo": "tokio-rs/tokio",
-      "description": "Refactor Runtime builder API to support configurable task schedulers, maintain backward-compatible default"
-    },
-    {
-      "repo": "hyperium/hyper",
-      "description": "Update hyper server to use new tokio Runtime builder API, adapt connection handler spawning"
-    },
-    {
-      "repo": "tokio-rs/axum",
-      "description": "Update axum Server::bind to work with refactored hyper server builder and new tokio runtime configuration"
-    }
-  ],
+  "repo_revs": {
+    "tokio-rs/tokio": "tokio-1.29.1",
+    "hyperium/hyper": "v1.0.0-rc.4",
+    "tokio-rs/axum": "axum-v0.6.19"
+  },
+  "_premise_correction": "The previous key asserted dependency_graph {hyper: [tokio], axum: [tokio, hyper]}, merge_order tokio -> hyper -> axum, and parallelizable_steps: []. VERIFIED FALSE against the manifests at the pinned revs. axum-v0.6.19 requires hyper ^0.14.24 in EVERY crate of its workspace (axum/Cargo.toml:41, axum-core/Cargo.toml:40, axum-extra/Cargo.toml:68); the vendored hyper is 1.0.0-rc.4, which is semver-incompatible with ^0.14.24. The axum -> hyper edge therefore does not exist in this workspace. Both hyper and axum depend on tokio DIRECTLY (hyper Cargo.toml:35 tokio = { version = \"1\", features = [\"sync\"] }; axum/Cargo.toml:63 tokio = { package = \"tokio\", version = \"1.25.0\", features = [\"time\"], optional = true }), so the real shape is a fan-out and hyper/axum are parallelizable — the exact inverse of the old parallelizable_steps: []. The chain was authored from world knowledge about the Rust async ecosystem rather than from these manifests.",
   "dependency_graph": {
     "tokio-rs/tokio": [],
     "hyperium/hyper": ["tokio-rs/tokio"],
-    "tokio-rs/axum": ["tokio-rs/tokio", "hyperium/hyper"]
+    "tokio-rs/axum": ["tokio-rs/tokio"]
   },
-  "required_files": [
+  "dependency_edges": [
     {
-      "path": "tokio/Cargo.toml",
-      "repo": "tokio",
-      "confidence": 0.95,
-      "source": "deterministic"
+      "from": "hyperium/hyper",
+      "to": "tokio-rs/tokio",
+      "manifest": "hyper/Cargo.toml",
+      "requirement": "tokio = { version = \"1\", features = [\"sync\"] }",
+      "note": "Real edge. tokio 1.29.1 satisfies ^1. Not separately graded: the requirement string is bare \"1\", too generic to be evidence of anything."
     },
     {
-      "path": "Cargo.toml",
-      "repo": "hyper",
-      "confidence": 0.95,
-      "source": "deterministic"
-    },
-    {
-      "path": "axum/Cargo.toml",
-      "repo": "axum",
-      "confidence": 0.95,
-      "source": "deterministic"
+      "from": "tokio-rs/axum",
+      "to": "tokio-rs/tokio",
+      "manifest": "axum/axum/Cargo.toml",
+      "requirement": "tokio = { package = \"tokio\", version = \"1.25.0\", features = [\"time\"], optional = true }",
+      "note": "Real edge, and DIRECT. tokio 1.29.1 satisfies ^1.25.0. World knowledge says axum reaches tokio via hyper; the manifest says axum declares tokio itself. '1.25.0' is the graded evidence for this edge."
     }
   ],
-  "parallelizable_steps": [],
+  "phantom_edges": [
+    {
+      "from": "tokio-rs/axum",
+      "to": "hyperium/hyper",
+      "asserted_by": "the old answer key, the old instruction.md, and general knowledge of the Rust async ecosystem",
+      "reality": "axum 0.6.19 requires hyper ^0.14.24; the vendored hyper is 1.0.0-rc.4. ^0.14.24 does not admit 1.0.0-rc.4 under Cargo semver, so axum does not build against the hyper in this workspace and a tokio change does NOT reach axum through it.",
+      "evidence_tokens": ["0.14"],
+      "note": "'0.14' is the discriminator: it appears nowhere in instruction.md and cannot be produced by restating the prompt. Citing it requires having opened axum/Cargo.toml."
+    }
+  ],
+  "parallelizable_steps": [
+    ["hyperium/hyper", "tokio-rs/axum"]
+  ],
+  "merge_order": [
+    {
+      "repo": "tokio-rs/tokio",
+      "description": "Refactor Runtime builder API to support configurable task schedulers; keep a backward-compatible default."
+    },
+    {
+      "repo": "hyperium/hyper",
+      "description": "Update to the new tokio Runtime builder API. Depends only on tokio; independent of axum."
+    },
+    {
+      "repo": "tokio-rs/axum",
+      "description": "Update to the new tokio Runtime builder API directly. Independent of hyper at this revision. Migrating axum from hyper 0.14 to hyper 1.x is SEPARATE work, not part of this cascade."
+    }
+  ],
+  "_order_note": "hyper and axum may appear in either order, or at the same step. Both [tokio, hyper, axum] and [tokio, axum, hyper] are valid topological orders of the real graph — which is exactly why the order ALONE is not creditable evidence here: [tokio, hyper, axum] is also what the discarded chain predicts, and what any model that knows the Rust ecosystem guesses without reading anything. check_topo_order.sh therefore gates the order on the plan having cited the manifest evidence that the graph was derived rather than assumed.",
+  "required_files": [
+    {"path": "tokio/Cargo.toml", "repo": "tokio", "confidence": 0.90, "source": "deterministic"},
+    {"path": "Cargo.toml", "repo": "hyper", "confidence": 0.95, "source": "deterministic"},
+    {"path": "axum/Cargo.toml", "repo": "axum", "confidence": 0.98, "source": "deterministic"}
+  ],
   "breaking_changes": [
     "tokio: Runtime builder API change requires all consumers to update builder calls",
-    "hyper: Server implementation changes may affect custom connection handlers",
-    "axum: Server::bind API may change, affecting all axum application bootstrap code"
+    "hyper: calls tokio directly (Cargo.toml:35), so the runtime builder change reaches it",
+    "axum: calls tokio directly (axum/Cargo.toml:63), NOT via hyper at this revision"
   ],
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md, verified with `grep -coF`: '0.14' 0 hits, '1.25.0' 0, '1.0.0-rc.4' 0, 'Cargo.toml' 0, 'parallelizable' 0. The prompt DOES supply 'tokio', 'hyper', 'axum', 'parallel' (in 'Parallelization annotations'), 'dependency', 'order' and 'runtime' — none may be graded alone, which is exactly what the old checks did: check_repo_set.sh grepped for the three repo names the prompt lists, check_topo_order.sh graded an order the prompt stated outright, and check_parallelism.sh paid 1.0 for the word 'sequential' that the prompt's 'strict dependency chain' invited. Measured before the rebuild: a plan that only restated the prompt scored 1.0000 with ZERO repo access, a correct manifest-derived plan scored 0.6500, and an EMPTY file scored 0.15.",
+    "_residual_risk": "This task is now echo-resistant but NOT proven closed-book-resistant: a model that knows the Rust ecosystem may recall that axum 0.6 sits on hyper 0.14 without opening the manifest. '0.14' is what a reader of axum/Cargo.toml has; it is not proof of retrieval on its own. Tracked separately from the prompt-echo work; do not read a pass here as a closed-book pass.",
+    "identify_repos": ["1.25.0"],
+    "topological_order": ["0.14"],
+    "parallelism": ["0.14"]
+  },
   "difficulty": "hard",
-  "confidence": 0.9,
+  "confidence": 0.95,
   "verification": {
-    "method": "dependency_analysis",
-    "verified": true
+    "method": "raw manifest parse at pinned revs",
+    "verified": true,
+    "verified_at_sha": "tokio@tokio-1.29.1 tokio/Cargo.toml: declares no hyper or axum dependency. hyper@v1.0.0-rc.4 Cargo.toml: version = \"1.0.0-rc.4\", dependencies.tokio = { version = \"1\", features = [\"sync\"] }. axum@axum-v0.6.19 axum/Cargo.toml: dependencies.hyper = { version = \"0.14.24\", features = [\"stream\"] }, dependencies.tokio = { version = \"1.25.0\", ... }; axum-core and axum-extra also pin hyper 0.14.x. Conclusion: hyper 1.0.0-rc.4 does not satisfy axum's ^0.14.24, so the axum -> hyper edge is absent in this workspace."
   }
 }
