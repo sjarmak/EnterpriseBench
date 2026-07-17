@@ -93,13 +93,17 @@ def test_guards_on_the_module_not_the_package_dir(script: Path) -> None:
 # --- Stale-sibling shadowing: the wild /tmp/lib bug, reproduced ---------------
 
 
-def _plant(script: Path, tmp_path: Path, stale_module: str | None) -> Path:
+def _plant(
+    script: Path, tmp_path: Path, stale_module: str | None, *, content: str | None = None
+) -> Path:
     """Copy *script* to a tree whose four-levels-up lib/ holds a stale eb_verify.
 
     Mirrors the real layout — benchmarks/<suite>/<task>/checks/ — so the script's
     own lib-dir fallback resolves to ``tmp_path/lib`` exactly as it resolves to
     the repo's lib/ in place. ``stale_module is None`` => package present but the
     topological_order module absent; a string => module present and booby-trapped.
+    ``content`` overrides the planted script body (used to plant the pre-fix
+    pattern); defaults to *script* verbatim.
     """
     checks = tmp_path / "benchmarks" / "suite" / "task" / "checks"
     checks.mkdir(parents=True)
@@ -110,7 +114,7 @@ def _plant(script: Path, tmp_path: Path, stale_module: str | None) -> Path:
     if stale_module is not None:
         (plugins / "topological_order.py").write_text(stale_module)
     planted = checks / script.name
-    planted.write_text(script.read_text())
+    planted.write_text(content if content is not None else script.read_text())
     return planted
 
 
@@ -143,6 +147,19 @@ def _run_planted(planted: Path, tmp_path: Path, task_dir: Path) -> subprocess.Co
     )
 
 
+def _shadow_reason(proc: subprocess.CompletedProcess) -> str | None:
+    """None if the check produced a healthy verdict; else why it did not.
+
+    A stale sibling defeats the harness in one of two ways: it crashes the check
+    (no stdout, so the answer buys a free re-run) or it imports and the verdict
+    carries VERIFIER_INFRA_ERROR. Either is a shadow; a clean verdict is None.
+    """
+    if not proc.stdout.strip():
+        return f"crashed (rc={proc.returncode} stderr={proc.stderr!r}), no verdict"
+    detail = json.loads(proc.stdout.strip().splitlines()[-1])["detail"]
+    return detail if "VERIFIER_INFRA_ERROR" in detail else None
+
+
 @pytest.mark.parametrize(
     "stale_module,label",
     [
@@ -157,14 +174,9 @@ def test_a_stale_sibling_lib_cannot_shadow_the_harness(
     script = CONVERTED[0]
     planted = _plant(script, tmp_path, stale_module)
     proc = _run_planted(planted, tmp_path, script.parent.parent)
-    assert proc.stdout.strip(), (
-        f"stale sibling ({label}) crashed the check (rc={proc.returncode} "
-        f"stderr={proc.stderr!r}) — no verdict, so the answer buys a free re-run."
-    )
-    result = json.loads(proc.stdout.strip().splitlines()[-1])
-    assert "VERIFIER_INFRA_ERROR" not in result["detail"], (
-        f"a stale eb_verify ({label}) four levels up shadowed the real harness: "
-        f"{result['detail']}"
+    reason = _shadow_reason(proc)
+    assert reason is None, (
+        f"a stale eb_verify ({label}) four levels up shadowed the real harness: {reason}"
     )
 
 
@@ -188,15 +200,12 @@ def test_the_prefix_pattern_would_shadow_non_vacuity(tmp_path: Path) -> None:
 
     # Same booby-trapped stale sibling as the parametrized twin above; only the
     # planted check differs (pre-fix pattern instead of the real script).
-    planted = _plant(script, tmp_path, "raise RuntimeError('stale lib won')")
-    planted.write_text(vulnerable)
+    planted = _plant(
+        script, tmp_path, "raise RuntimeError('stale lib won')", content=vulnerable
+    )
 
     proc = _run_planted(planted, tmp_path, script.parent.parent)
-    healthy = bool(proc.stdout.strip())
-    if healthy:
-        result = json.loads(proc.stdout.strip().splitlines()[-1])
-        healthy = "VERIFIER_INFRA_ERROR" not in result["detail"]
-    assert not healthy, (
+    assert _shadow_reason(proc) is not None, (
         "the pre-fix insert(0) pattern did NOT shadow the booby-trapped stale "
         "sibling — the stale-sibling assertions above are vacuous."
     )
