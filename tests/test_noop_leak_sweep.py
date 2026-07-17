@@ -72,20 +72,23 @@ def _make_task(
     return task_dir
 
 
-def _make_workspace(tmp_path: Path) -> Path:
+def _plant(tmp_path: Path, **kw) -> tuple[Path, Path]:
+    """Plant a fixture task's workspace exactly as the sweep does.
+
+    Returns ``(task_dir, ws)``; the planted text is ``ws / "instruction.md"``.
+    """
+    task_dir = _make_task(tmp_path, **kw)
     ws = tmp_path / "ws"
     ws.mkdir()
-    return ws
+    noop_leak_sweep._plant_workspace(task_dir, ws)
+    return task_dir, ws
 
 
 # --- what the sweep plants -------------------------------------------------
 
 
 def test_planted_workspace_carries_the_production_output_appendix(tmp_path):
-    task_dir = _make_task(tmp_path)
-    ws = _make_workspace(tmp_path)
-
-    noop_leak_sweep._plant_workspace(task_dir, ws)
+    _, ws = _plant(tmp_path)
 
     planted = (ws / "instruction.md").read_text()
     missing = [kw for kw in APPENDIX_KEYWORDS if kw not in planted]
@@ -98,10 +101,7 @@ def test_planted_workspace_carries_the_production_output_appendix(tmp_path):
 
 def test_planted_instruction_is_the_production_baseline_render(tmp_path):
     """The plant is production's own render, not a re-derivation of it."""
-    task_dir = _make_task(tmp_path)
-    ws = _make_workspace(tmp_path)
-
-    noop_leak_sweep._plant_workspace(task_dir, ws)
+    task_dir, ws = _plant(tmp_path)
 
     assert (ws / "instruction.md").read_text() == _build_instruction_text(
         task_dir, mode="baseline"
@@ -110,10 +110,7 @@ def test_planted_instruction_is_the_production_baseline_render(tmp_path):
 
 def test_planted_instruction_is_a_strict_superset_of_the_raw_file(tmp_path):
     """The bug being fixed: the raw file alone is less than the agent really sees."""
-    task_dir = _make_task(tmp_path)
-    ws = _make_workspace(tmp_path)
-
-    noop_leak_sweep._plant_workspace(task_dir, ws)
+    _, ws = _plant(tmp_path)
 
     planted = (ws / "instruction.md").read_text()
     assert RAW_INSTRUCTION in planted
@@ -130,10 +127,7 @@ def test_planted_workspace_honours_require_grounded_citations(tmp_path):
     this bead fixes — a workspace that is a strict subset of production's — just
     along the citations axis instead of the mode axis.
     """
-    task_dir = _make_task(tmp_path, grounded=True)
-    ws = _make_workspace(tmp_path)
-
-    noop_leak_sweep._plant_workspace(task_dir, ws)
+    task_dir, ws = _plant(tmp_path, grounded=True)
 
     planted = (ws / "instruction.md").read_text()
     assert planted == _build_instruction_text(
@@ -146,23 +140,19 @@ def test_planted_workspace_honours_require_grounded_citations(tmp_path):
 def test_planted_workspace_omits_citations_when_the_task_does_not_require_them(tmp_path):
     """The flag is read from the task, not hardcoded on: a plant that always
     carried the citations block would be a strict SUPERSET for most of the corpus
-    and could invent a leak that production cannot produce."""
-    task_dir = _make_task(tmp_path, grounded=False)
-    ws = _make_workspace(tmp_path)
+    and could invent a leak that production cannot produce.
 
-    noop_leak_sweep._plant_workspace(task_dir, ws)
+    The plant-is-production's-render half is pinned above; this pins only the
+    flag's off-direction, which that test cannot distinguish.
+    """
+    _, ws = _plant(tmp_path, grounded=False)
 
-    planted = (ws / "instruction.md").read_text()
-    assert planted == _build_instruction_text(task_dir, mode="baseline")
-    assert '"citations"' not in planted
+    assert '"citations"' not in (ws / "instruction.md").read_text()
 
 
 def test_plant_skips_a_task_with_no_instruction(tmp_path):
     """No instruction.md means production plants nothing — so neither do we."""
-    task_dir = _make_task(tmp_path, instruction=None)
-    ws = _make_workspace(tmp_path)
-
-    noop_leak_sweep._plant_workspace(task_dir, ws)
+    _, ws = _plant(tmp_path, instruction=None)
 
     assert list(ws.iterdir()) == []
 

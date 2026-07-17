@@ -10,10 +10,12 @@ on ANY checkpoint because the expected evidence already exists in the
 agent-visible tree (instruction.md, the ``$TASK_DIR`` answer key, or an
 eb_verify plugin that defaults to pass)?
 
-Method — reproduce the no-op condition offline. Each check is run through the
-real scorer's own boundary (``eb_verify.scorer_guard.run_verifier_subprocess``,
-the shared ladder behind the Python runners), so "did this check reach a score"
-is defined once, by the codebase, not re-derived here:
+Method — reproduce the no-op condition offline. Nothing about the condition is
+re-derived here; each piece comes from the definition production itself uses, so
+a copy cannot quietly drift from the real harness. Checks run through the real
+scorer's boundary (``eb_verify.scorer_guard.run_verifier_subprocess``, the shared
+ladder behind the Python runners), with the environment a checkpoint really gets
+(``eb_verify.runner.checkpoint_env``), over:
 
   * WORKSPACE: a scratch dir holding ONLY ``instruction.md``, planted where the
     harness puts it (``$WORKSPACE/instruction.md``) and rendered by production's
@@ -38,22 +40,6 @@ Usage (an --allow entry names the checkpoint as ``task.toml`` registers it —
     python3 scripts/validation/noop_leak_sweep.py --json
     python3 scripts/validation/noop_leak_sweep.py --allow ansible-galaxy-tar-regression-prove-001:root_cause_identified
 
-The sweep scores each check with ``json.loads`` (via the shared scorer
-boundary), which is STRICTER than the ``parse_score`` awk state machine
-``scripts/sandbox/test_runner.sh`` runs in the production container — that one
-credits a real ``score`` key even when some other value in the payload is
-malformed JSON. The two therefore *could* diverge on a check that emits
-malformed-but-``parse_score``-credited output; a divergence there would be a
-false negative (a production leak this sweep misses). Empirically they do not:
-under the no-op condition every check emits strictly-valid JSON, so ``json.loads``
-parses all of them and the two parsers agree on every leak decision. The
-invariant that guarantees this is "no check goes unscored" — surfaced here as
-``errored`` and frozen by ``tests/integrity/test_noop_leak_sweep.py``: the moment
-a check's no-op output stops parsing, ``errored`` rises and the guard fails
-loudly instead of silently dropping that check to "not a leak". Aligning the
-sweep onto ``parse_score`` itself (so the oracles cannot diverge by construction)
-is tracked as follow-up.
-
 Exit codes (a leak outranks incompleteness — a finding beats an absence of proof;
 when both hold, exit is 1 and the incompleteness is still reported on stderr):
     0 = every check scored, and no leaks outside the --allow set
@@ -68,7 +54,6 @@ from __future__ import annotations
 import argparse
 import functools
 import json
-import os
 import sys
 import tempfile
 from dataclasses import asdict, dataclass
@@ -76,18 +61,17 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCHMARKS_ROOT = REPO_ROOT / "benchmarks"  # corpus root; task paths are shown relative to it
-EB_VERIFY_PARENT = REPO_ROOT / "lib"  # PYTHONPATH root: `import eb_verify`
-sys.path.insert(0, str(EB_VERIFY_PARENT))
+sys.path.insert(0, str(REPO_ROOT / "lib"))  # `import eb_verify`
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "orchestration"))  # `import run_task`
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # `import enable_llm_curator`
+from eb_verify.runner import checkpoint_env  # noqa: E402
 from eb_verify.scorer_guard import run_verifier_subprocess  # noqa: E402
 from eb_verify.task_parser import TaskDefinition, parse_task  # noqa: E402
 from enable_llm_curator import iter_task_dirs  # noqa: E402
 
-# The production instruction renderer. Importing it couples this validation
-# script to the orchestrator on purpose: it is the single source of what the
-# agent actually sees, and re-deriving it here is precisely the drift that let a
-# planted-evidence leak read clean (see _plant_workspace).
+# Production's own instruction renderer and verifier-naming rule — the single
+# source of what the agent sees and what a checkpoint is called (why that
+# matters: _plant_workspace, _checkpoint_name).
 #
 # The cost, accepted knowingly: importing run_task runs its module-level
 # _load_env_local, which mutates this process's os.environ (SOURCEGRAPH_*/SG_*/
@@ -95,7 +79,7 @@ from enable_llm_curator import iter_task_dirs  # noqa: E402
 # credentials and reaches no network — but it is why this import must never be
 # treated as free. Lifting _build_instruction_text into a side-effect-free
 # renderer module is EnterpriseBench-n97lo.
-from run_task import _build_instruction_text  # noqa: E402
+from run_task import _build_instruction_text, _checkpoint_verifier_name  # noqa: E402
 
 CHECK_TIMEOUT_SEC = 60
 SCORE_EPS = 1e-6
@@ -150,30 +134,22 @@ def _task_definition(task_dir: Path) -> TaskDefinition | None:
         return None
 
 
-def _canonical_checkpoint_names(task_dir: Path) -> dict[str, str]:
-    """Map verifier filename -> the checkpoint name ``task.toml`` registers for it.
-
-    Naming ONLY — never discovery. Checks are found by globbing ``checks/*.sh``,
-    a superset of the task.toml manifest, so an unregistered check is still
-    audited (it falls back to its filename stem).
-    """
-    task = _task_definition(task_dir)
-    if task is None:
-        return {}
-    return {Path(cp.verifier).name: cp.name for cp in task.checkpoints}
-
-
 def _checkpoint_name(check_file: Path, task_dir: Path) -> str:
     """The checkpoint name an operator would write in ``--allow``.
 
     That is the name registered in task.toml (``root_cause_identified``), not the
     filename stem (``root_cause``) — they differ for most checks in the corpus.
+
+    Naming ONLY — never discovery. Checks are found by globbing ``checks/*.sh``,
+    a superset of the task.toml manifest, so an unregistered check is still
+    audited; it falls back to production's own stem rule, which is what decides
+    the ``.verifiers/<name>`` key inside the real container.
     """
-    canonical = _canonical_checkpoint_names(task_dir).get(check_file.name)
-    if canonical:
-        return canonical
-    stem = check_file.stem
-    return stem[len("check_"):] if stem.startswith("check_") else stem
+    task = _task_definition(task_dir)
+    for cp in task.checkpoints if task else ():
+        if Path(cp.verifier).name == check_file.name:
+            return cp.name
+    return _checkpoint_verifier_name(check_file)
 
 
 def _plant_workspace(task_dir: Path, ws: Path) -> None:
@@ -214,6 +190,23 @@ def _plant_workspace(task_dir: Path, ws: Path) -> None:
 
 
 def _run_task(task_dir: Path) -> list[tuple[str, Path, float | None]]:
+    """Score every check of one task under the no-op condition.
+
+    Scores come from the shared scorer boundary, which parses with ``json.loads``
+    — STRICTER than the ``parse_score`` awk state machine
+    ``scripts/sandbox/test_runner.sh`` runs in the production container, which
+    credits a real ``score`` key even when some other value in the payload is
+    malformed JSON. The two therefore *could* diverge on a check emitting
+    malformed-but-``parse_score``-credited output, and a divergence there is a
+    false negative: a production leak this sweep misses. Empirically they do not —
+    under the no-op condition every check emits strictly-valid JSON, so both
+    parsers agree on every leak decision. The invariant holding that together is
+    "no check goes unscored", surfaced as ``errored`` and frozen by
+    ``tests/integrity/test_noop_leak_sweep.py``: the moment a check's no-op output
+    stops parsing, ``errored`` rises and the guard fails loudly instead of quietly
+    recording "not a leak". Aligning the sweep onto ``parse_score`` itself (so the
+    two oracles cannot diverge by construction) is tracked as follow-up.
+    """
     checks_dir = task_dir / "checks"
     if not checks_dir.is_dir():
         return []
@@ -221,17 +214,17 @@ def _run_task(task_dir: Path) -> list[tuple[str, Path, float | None]]:
     with tempfile.TemporaryDirectory(prefix="noop_ws_") as ws_str:
         ws = Path(ws_str)
         _plant_workspace(task_dir, ws)
-        env = dict(os.environ)
-        env["WORKSPACE"] = str(ws)
-        env["TASK_DIR"] = str(task_dir)  # mirrors /workspace/.task
-        env["PYTHONPATH"] = os.pathsep.join(
-            [str(EB_VERIFY_PARENT), env.get("PYTHONPATH", "")]
-        ).rstrip(os.pathsep)
+        # The shared definition of what a checkpoint runs with (WORKSPACE,
+        # TASK_DIR=/workspace/.task, PYTHONPATH, PYTHONSAFEPATH) — "one
+        # definition, because tests that re-derive it are not a guard on it".
+        # Re-deriving it here silently dropped PYTHONSAFEPATH=1, the host half of
+        # the scorer-shadowing guard (bead 5cfxa) that production also exports.
+        env = checkpoint_env(ws, task_dir, task_dir.name)
         for check in sorted(checks_dir.glob("*.sh")):
             checkpoint = _checkpoint_name(check, task_dir)
-            # run through the real scorer's boundary: a verdict dict carries a
-            # validated score; an InfraError (timeout, crash, no verdict) is not
-            # a dict, and a check that never reached a score can't be a leak.
+            # A verdict dict carries a validated score; an InfraError (timeout,
+            # crash, no verdict) is not a dict, and a check that never reached a
+            # score can't be a leak.
             verdict = run_verifier_subprocess(
                 check.name,
                 base_dir=checks_dir,
@@ -262,11 +255,9 @@ def sweep(root: Path) -> SweepResult:
     ``agent_output/`` to read, a check bails in ~1ms. There is no runtime here
     worth a process pool's complexity.
     """
-    # Each sweep re-reads task.toml from disk. _task_definition's cache is scoped
-    # to a single sweep — that is the whole basis on which caching a file's
-    # contents is safe here — so a second sweep in one process (a fix-then-
-    # re-sweep session, the integrity suite, a future watch loop) must observe
-    # edits made since the first, not the parse it happened to warm.
+    # Scope the parse cache to this sweep: a second sweep in one process (fix a
+    # task, re-sweep to confirm; the integrity suite) must see task.toml edits
+    # made since the first, not the parse it happened to warm.
     _task_definition.cache_clear()
     leaks: list[Leak] = []
     n_tasks = 0
@@ -359,10 +350,8 @@ def main(argv: list[str] | None = None) -> int:
             tag = "ALLOW " if _is_allowed(lk, allow) else "LEAK  "
             print(f"{tag}{lk.score:>5.2f}  {lk.task_path}  ::  {lk.check_file}")
 
-    # An unscored check (errored) or a path that swept nothing means the audit's
-    # "not a leak" verdict is unproven for part of the corpus. Report it whether
-    # or not a leak was also found — both facts are true and an operator needs
-    # both.
+    # Both facts are reported; the exit code can only name one, so it names the
+    # definite finding over the absence of proof (see "Exit codes" above).
     incomplete = result.n_tasks == 0 or bool(result.n_errored)
     if incomplete:
         print(
@@ -371,9 +360,6 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    # The exit code can only name one, so it names the worse one: a leak found is
-    # a definite finding, while incompleteness is an absence of proof. Reporting
-    # exit 2 for a run that positively found a leak would understate it.
     if unexpected:
         return 1
     return 2 if incomplete else 0
