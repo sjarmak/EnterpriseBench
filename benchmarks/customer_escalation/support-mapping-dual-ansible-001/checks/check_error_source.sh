@@ -1,60 +1,97 @@
 #!/usr/bin/env bash
-# check_error_source.sh — verify agent identified the correct source file + function
+# check_error_source.sh — verify agent identified the correct source file(s)
+# Reads agent output from $WORKSPACE/agent_output/answer.json
+# Compares identified files against ground truth required_files.
+# Safe template (bead 0rv.23): agent-controlled answer.json flows only through
+# the environment/JSON file and is never interpolated into Python source.
 set -euo pipefail
 
 export ANSWER_FILE="${WORKSPACE:-/workspace}/agent_output/answer.json"
 export GT_FILE="$TASK_DIR/ground_truth.json"
 
+# Missing ground_truth.json is an infrastructure failure (non-zero exit).
+if [[ ! -f "$GT_FILE" ]]; then
+    echo '{"score": 0.0, "passed": false, "detail": "VERIFIER_INFRA_ERROR: no ground_truth.json"}'
+    exit 1
+fi
+
+# Missing answer.json is an agent failure (score 0, exit 0).
 if [[ ! -f "$ANSWER_FILE" ]]; then
     echo '{"score": 0.0, "passed": false, "detail": "No answer.json found"}'
-    exit 1
+    exit 0
 fi
 
-if [[ ! -f "$GT_FILE" ]]; then
-    echo '{"score": 0.0, "passed": false, "detail": "No ground_truth.json found"}'
-    exit 1
-fi
+python3 -c '
+import json, os, sys
 
-GT_FILES=$(python3 -c "
-import json, sys, os
-gt = json.load(open(os.environ['GT_FILE']))
-for f in gt.get('required_files', []):
-    print(f['path'])
-")
 
-AGENT_FILES=$(python3 -c "
-import json, sys, os
+def _load(path):
+    with open(path) as fh:
+        return json.load(fh)
+
+
+def _paths(items):
+    out = []
+    for f in items:
+        if isinstance(f, dict):
+            p = f.get("path", f.get("file", ""))
+        elif isinstance(f, str):
+            p = f
+        else:
+            p = ""
+        if isinstance(p, str) and p.strip():
+            out.append(p.strip())
+    return out
+
+
+# --- Ground truth (infra-owned) ---
 try:
-    answer = json.load(open(os.environ['ANSWER_FILE']))
-    files = answer.get('source_files', answer.get('files', answer.get('error_source', {}).get('files', [])))
-    if isinstance(files, list):
-        for f in files:
-            if isinstance(f, dict):
-                print(f.get('path', f.get('file', '')))
-            else:
-                print(f)
-    elif isinstance(files, str):
-        print(files)
-except Exception as e:
-    print(f'ERROR: {e}', file=sys.stderr)
+    gt = _load(os.environ["GT_FILE"])
+except (json.JSONDecodeError, OSError, ValueError) as e:
+    print(json.dumps({"score": 0.0, "passed": False,
+                      "detail": "VERIFIER_INFRA_ERROR: unreadable ground_truth.json (%s)" % e}))
     sys.exit(1)
-")
 
-# File lists go through the environment, never interpolated into Python source:
-# AGENT_FILES derives from agent-controlled answer.json and must never become code.
-export GT_FILES AGENT_FILES
-python3 -c "
-import json, os
-gt_files = os.environ.get('GT_FILES', '').strip().split('\n')
-agent_files = os.environ.get('AGENT_FILES', '').strip().split('\n')
-gt_files = [f.strip() for f in gt_files if f.strip()]
-agent_files = [f.strip() for f in agent_files if f.strip()]
+req = gt.get("required_files") if isinstance(gt, dict) else None
+if not isinstance(req, list):
+    print(json.dumps({"score": 0.0, "passed": False,
+                      "detail": "VERIFIER_INFRA_ERROR: required_files is not a list"}))
+    sys.exit(1)
+# Accepts list-of-dicts ({"path": ...}) OR a flat list of strings.
+gt_files = _paths(req)
+
+# --- Agent answer (agent-owned) ---
+try:
+    answer = _load(os.environ["ANSWER_FILE"])
+except (json.JSONDecodeError, OSError, ValueError):
+    print(json.dumps({"score": 0.0, "passed": False, "detail": "Malformed answer.json"}))
+    sys.exit(0)
+if not isinstance(answer, dict):
+    answer = {}
+
+files = answer.get("source_files")
+if files is None:
+    files = answer.get("files")
+if files is None:
+    es = answer.get("error_source")
+    files = es.get("files") if isinstance(es, dict) else None
+
+if isinstance(files, list):
+    agent_files = _paths(files)
+elif isinstance(files, str) and files.strip():
+    agent_files = [files.strip()]
+else:
+    agent_files = []
 
 if not gt_files:
-    print(json.dumps({'score': 0.0, 'passed': False, 'detail': 'No GT files'}))
-else:
-    found = sum(1 for gt in gt_files if any(gt in af or af.endswith(gt) for af in agent_files))
-    score = found / len(gt_files)
-    detail = f'Found {found}/{len(gt_files)} required source files'
-    print(json.dumps({'score': round(score, 2), 'passed': score >= 0.5, 'detail': detail}))
-"
+    print(json.dumps({"score": 0.0, "passed": False, "detail": "No GT files"}))
+    sys.exit(0)
+
+# Anchored match only: exact, or a suffix on a path boundary. An unanchored
+# substring ("gt is a substring of af") would let path-spam soft-cheat.
+found = sum(1 for gt_f in gt_files
+            if any(af == gt_f or af.endswith("/" + gt_f) for af in agent_files))
+score = found / len(gt_files)
+print(json.dumps({"score": round(score, 2), "passed": score >= 0.5,
+                  "detail": "Found %d/%d required source files" % (found, len(gt_files))}))
+'
