@@ -42,11 +42,20 @@ Usage (an --allow entry names the checkpoint as ``task.toml`` registers it —
 
 Exit codes (a leak outranks incompleteness — a finding beats an absence of proof;
 when both hold, exit is 1 and the incompleteness is still reported on stderr):
-    0 = every check scored, and no leaks outside the --allow set
+    0 = every check scored under a faithful plant, and no leaks outside --allow
     1 = at least one leaking checkpoint outside the --allow set
     2 = no such leak, but the sweep could not trust its own result: the path
-        swept no tasks, or a check failed to produce a verdict (errored > 0) so
-        its "not a leak" is unproven
+        swept no tasks, or some check's "not a leak" is unproven (errored > 0,
+        see sweep())
+
+The audit's unit is the CHECKPOINT, not the task: every signal above is counted
+per check. So a task dir contributing zero checks contributes no unproven-ness
+either, and exits 0 — including one whose task.toml will not parse, which is
+audible only as a stderr warning. That is a real gap at authoring time (task.toml
+written before checks/ exists), but it is the zero-check gap rather than the
+parse gap: a task with a perfectly VALID task.toml and no checks exits 0
+identically. Closing it needs a task-level tally, since n_errored counts checks
+and must stay <= n_checks. Tracked as EnterpriseBench-241kh.
 """
 
 from __future__ import annotations
@@ -99,12 +108,12 @@ class SweepResult:
     leaks: list[Leak]
     n_tasks: int
     n_checks: int
-    n_errored: int  # checks that reached no verdict (InfraError -> unscored)
+    n_errored: int  # checks whose "not a leak" is unproven; see sweep()
 
 
 @functools.lru_cache(maxsize=None)
 def _task_definition(task_dir: Path) -> TaskDefinition | None:
-    """Parse ``task.toml`` once per task; ``None`` if it cannot be read.
+    """Parse ``task.toml`` once per task; ``None`` if it will not parse.
 
     Two callers need it — checkpoint naming and the citations flag — and the
     sweep re-reads each task once per check, so the parse is cached. A task.toml
@@ -113,19 +122,23 @@ def _task_definition(task_dir: Path) -> TaskDefinition | None:
     task_toml = task_dir / "task.toml"
     try:
         return parse_task(task_toml)
-    except (OSError, ValueError, KeyError) as exc:
-        # A broken task.toml costs naming and the citations flag, not the audit:
-        # the check still runs and can still be caught leaking. Degrade rather
-        # than drop the task — but never do it silently.
+    except Exception as exc:
+        # Caught by CLASS, not by enumeration. parse_task's error contract is
+        # uneven: a missing [task] block is an explicit ValueError, but the
+        # repo/checkpoint/ground-truth entries subscript required keys straight
+        # off raw dicts, so each malformed shape surfaces whatever the failing
+        # operation happens to raise — KeyError, TypeError, AttributeError.
+        # Enumerating them has been tried and been wrong twice; the sweep cannot
+        # know the next shape. Evening out the contract upstream is
+        # EnterpriseBench-20nhr: this does not wait on it, and would not be made
+        # safe by it (an OSError degrades identically). Exception and never
+        # BaseException, so an operator's Ctrl-C stays uncaught instead of being
+        # recorded as a bad task.toml.
         #
-        # KeyError is in the set because parse_task's error contract is uneven: a
-        # missing [task] block becomes a ValueError, but the checkpoint/repo/
-        # ground-truth entries subscript required keys directly, so an incomplete
-        # one raises a bare KeyError. Left uncaught it escapes sweep()'s per-task
-        # loop and aborts all 141 tasks over one bad file — and a traceback's exit
-        # code is neither 1 nor 2, so CI reads the crash as an infra flake rather
-        # than an integrity failure. Evening out that contract upstream is
-        # EnterpriseBench-20nhr; catching it here does not wait on that.
+        # Uncaught, one bad file aborts the other 140 tasks, and the traceback
+        # exits 1 — the code reserved for "a real leak was found". Degrading is
+        # only honest because sweep() then counts this task's checks as unproven;
+        # the two halves are one decision.
         print(
             f"warning: {task_toml}: {exc!r}; falling back to filenames for "
             "checkpoint names and to no grounded-citations appendix",
@@ -243,11 +256,20 @@ def _run_task(task_dir: Path) -> list[tuple[str, Path, float | None]]:
 def sweep(root: Path) -> SweepResult:
     """Sweep every task under ``root`` under the no-op condition.
 
-    ``n_errored`` counts checks that reached no verdict (a ``None`` score from the
-    scorer boundary — timeout, crash, unparseable output). Such a check is NOT a
-    proven "not a leak": the sweep simply never learned its no-op score, so a
-    caller that cares about a trustworthy audit must treat ``n_errored > 0`` as an
-    incomplete run, not a clean one.
+    ``n_errored`` counts checks whose "not a leak" is UNPROVEN: the sweep never
+    learned what they really score under the no-op condition. Two ways in — the
+    scorer boundary reached no verdict (a ``None`` score: timeout, crash,
+    unparseable output), or the task's ``task.toml`` would not parse, so
+    ``require_grounded_citations`` fell back to False and the plant may be the
+    strict subset of production's render that ``_plant_workspace`` exists to
+    prevent (a 0.00 against less evidence than the agent really gets does not
+    mean 0.00 in production). Either way the check is not clean, so a caller that
+    cares about a trustworthy audit must treat ``n_errored > 0`` as an incomplete
+    run.
+
+    A leak found under a degraded plant is still a real leak — a superset render
+    can only add matches — so it counts as BOTH, and exit 1 outranks exit 2 (see
+    "Exit codes" above).
 
     Deliberately serial. The whole corpus (141 tasks / 470 checks) sweeps in a
     couple of seconds despite one subprocess per check, because the no-op
@@ -265,12 +287,14 @@ def sweep(root: Path) -> SweepResult:
     n_errored = 0
     for task_dir in sorted(iter_task_dirs(root)):
         n_tasks += 1
+        # iter_task_dirs only yields dirs that HAVE a task.toml, so None here
+        # means "exists but will not parse" — anomalous, not routine.
+        degraded_plant = _task_definition(task_dir) is None
         for checkpoint, check_file, score in _run_task(task_dir):
             n_checks += 1
-            if score is None:
+            if score is None or degraded_plant:
                 n_errored += 1
-                continue
-            if score > SCORE_EPS:
+            if score is not None and score > SCORE_EPS:
                 try:
                     rel = task_dir.relative_to(BENCHMARKS_ROOT)
                 except ValueError:

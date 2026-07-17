@@ -13,6 +13,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "validation"))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "orchestration"))
@@ -54,6 +56,37 @@ weight = 1.0
 verifier = "checks/check_root_cause.sh"
 """
 
+# The ``[task]`` block on its own, for fixtures that must break somewhere else.
+_TASK_BLOCK = """\
+[task]
+id = "fixture-task-001"
+suite = "incident_response"
+difficulty = "hard"
+session_type = "single"
+"""
+
+# Shapes that make ``parse_task`` raise, each a DIFFERENT class from a DIFFERENT
+# line. Parametrising over them is the point: the catch has been patched by
+# enumeration twice and been wrong twice, so the guard has to be against the
+# failure CLASS. A narrow "also catch TypeError" fix passes `repos_as_scalars`
+# and still fails `ground_truth_as_scalar`.
+UNPARSEABLE_TASK_TOMLS = {
+    # tomllib.TOMLDecodeError (a ValueError) — raised inside tomllib
+    "toml_syntax_error": "not = valid = toml",
+    # ValueError — parse_task's own explicit raise for a missing [task] block
+    "no_task_block": 'difficulty_stratum = "large_single"\n',
+    # KeyError — checkpoint entries subscript required keys directly
+    "checkpoint_missing_weight": _TASK_BLOCK
+    + '\n[[checkpoints]]\nname = "root_cause_identified"\nverifier = "checks/check_root_cause.sh"\n',
+    # TypeError — `url=r["url"]` where r is a str, not a table
+    "repos_as_scalars": 'repos = ["a", "b"]\n' + _TASK_BLOCK,
+    # AttributeError — _parse_ground_truth calls .get on a str
+    "ground_truth_as_scalar": 'ground_truth = "x"\n' + _TASK_BLOCK,
+}
+
+SCORING_CHECK = '#!/bin/bash\necho \'{"score": 0.0}\'\n'
+LEAKING_CHECK = '#!/bin/bash\necho \'{"score": 1.0}\'\n'
+
 
 def _make_task(
     tmp_path: Path,
@@ -69,6 +102,16 @@ def _make_task(
     )
     if instruction is not None:
         (task_dir / "instruction.md").write_text(instruction)
+    return task_dir
+
+
+def _make_unparseable_task(
+    tmp_path: Path, shape: str, check: str = SCORING_CHECK
+) -> Path:
+    """A fixture task whose task.toml raises out of ``parse_task``."""
+    task_dir = _make_task(tmp_path)
+    (task_dir / "task.toml").write_text(UNPARSEABLE_TASK_TOMLS[shape])
+    (task_dir / "checks" / "check_root_cause.sh").write_text(check)
     return task_dir
 
 
@@ -178,46 +221,77 @@ def test_checkpoint_name_falls_back_to_filename_when_unregistered(tmp_path):
     assert noop_leak_sweep._checkpoint_name(check, task_dir) == "unregistered"
 
 
-def test_unparseable_task_toml_falls_back_loudly(tmp_path, capsys):
-    """A broken task.toml costs naming, not the audit — and never does so silently."""
-    task_dir = _make_task(tmp_path)
-    (task_dir / "task.toml").write_text("not = valid = toml")
-    check = task_dir / "checks" / "check_root_cause.sh"
-    check.write_text("#!/bin/bash\n")
+@pytest.mark.parametrize("shape", sorted(UNPARSEABLE_TASK_TOMLS))
+def test_task_toml_that_will_not_parse_falls_back_loudly(tmp_path, shape, capsys):
+    """A broken task.toml costs naming, not the audit — and never does so silently.
 
-    assert noop_leak_sweep._checkpoint_name(check, task_dir) == "root_cause"
-    assert "task.toml" in capsys.readouterr().err
-
-
-def test_structurally_incomplete_task_toml_falls_back_loudly(tmp_path, capsys):
-    """A checkpoint missing a required key degrades naming; it must not abort the sweep.
-
-    ``parse_task`` converts a missing ``[task]`` block into a ValueError but
-    subscripts ``c["name"]``/``c["weight"]``/``c["verifier"]`` directly, so a
-    structurally-valid TOML with an incomplete checkpoint raises a bare KeyError —
-    a different class from the syntax errors above, and one no corpus task has
-    today. Catching only (OSError, ValueError) let it escape ``sweep``'s per-task
-    loop and abort all 141 tasks with a traceback, whose exit code CI reads as an
-    infra flake rather than an integrity failure. A guard that dies on one bad
-    task.toml is a guard that stops guarding the other 140.
+    Parametrized over every shape for the same reason the sweep-level guard is:
+    naming degrades identically whether the file fails in ``tomllib`` or deep
+    inside ``parse_task``, and pinning only the shapes someone thought of is what
+    made the catch wrong twice.
     """
-    task_dir = _make_task(tmp_path)
-    (task_dir / "task.toml").write_text(
-        '[task]\n'
-        'id = "fixture-task-001"\n'
-        'suite = "incident_response"\n'
-        'difficulty = "hard"\n'
-        'session_type = "single"\n'
-        '\n'
-        '[[checkpoints]]\n'
-        'name = "root_cause_identified"\n'
-        'verifier = "checks/check_root_cause.sh"\n'  # no `weight` -> KeyError
-    )
+    task_dir = _make_unparseable_task(tmp_path, shape)
     check = task_dir / "checks" / "check_root_cause.sh"
-    check.write_text("#!/bin/bash\n")
 
     assert noop_leak_sweep._checkpoint_name(check, task_dir) == "root_cause"
     assert "task.toml" in capsys.readouterr().err
+
+
+# --- what the sweep does when task.toml will not parse ---------------------
+
+
+@pytest.mark.parametrize("shape", sorted(UNPARSEABLE_TASK_TOMLS))
+def test_a_task_whose_toml_will_not_parse_is_unproven_not_clean(tmp_path, shape, capsys):
+    """An unparseable task.toml must complete the sweep AND be reported unproven.
+
+    Both adjacent answers are wrong. Uncaught, the raise aborts the whole corpus
+    audit over one bad file. Merely caught, the task gets a DEGRADED plant — the
+    citations flag falls back to False, so the workspace can be a strict subset of
+    what production renders — and its zero scores are then recorded as a clean
+    bill of health. The truthful answer is neither: the sweep never learned this
+    task's real no-op score, which is exactly the "unproven" state it already
+    models as ``n_errored`` -> exit 2.
+    """
+    _make_unparseable_task(tmp_path, shape)
+
+    result = noop_leak_sweep.sweep(tmp_path)  # must not raise
+
+    assert result.n_tasks == 1
+    assert result.n_checks == 1
+    assert result.n_errored == 1, (
+        "a task whose task.toml will not parse was planted from a defaulted "
+        "citations flag, so its 0.00 score is unproven, not a proven 'not a leak'"
+    )
+    assert not result.leaks
+    assert "task.toml" in capsys.readouterr().err
+
+
+def test_a_parseable_task_is_not_counted_unproven(tmp_path):
+    """The off-direction: `n_errored += 1` unconditionally would pass the test above."""
+    task_dir = _make_task(tmp_path)
+    (task_dir / "checks" / "check_root_cause.sh").write_text(SCORING_CHECK)
+
+    result = noop_leak_sweep.sweep(tmp_path)
+
+    assert (result.n_tasks, result.n_checks, result.n_errored) == (1, 1, 0)
+    assert not result.leaks
+
+
+def test_an_unparseable_task_that_leaks_is_still_a_leak(tmp_path):
+    """Unproven must not mask a finding.
+
+    A degraded plant is a SUBSET of production's render, and a superset can only
+    add matches — so a check scoring >0 against the smaller plant would score >0
+    in production too. The leak is real, and stays exit 1 rather than being
+    softened to "incomplete".
+    """
+    _make_unparseable_task(tmp_path, "repos_as_scalars", check=LEAKING_CHECK)
+
+    result = noop_leak_sweep.sweep(tmp_path)
+
+    assert len(result.leaks) == 1
+    assert result.n_errored == 1
+    assert noop_leak_sweep.main([str(tmp_path)]) == 1
 
 
 def test_a_fresh_sweep_rereads_an_edited_task_toml(tmp_path):

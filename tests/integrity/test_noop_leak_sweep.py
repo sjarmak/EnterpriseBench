@@ -64,22 +64,30 @@ def _leak_keys():
 
 
 def test_every_check_scored():
-    """No check may go unscored — that is what keeps 'not a leak' honest.
+    """Every check's "not a leak" must be proven — that is what keeps it honest.
 
-    The sweep parses verdicts with ``json.loads``; production's ``parse_score``
-    (test_runner.sh) is more tolerant of malformed JSON. They can only diverge on
-    a check whose no-op output is NOT valid JSON — and such a check surfaces here
-    as ``errored``. Holding ``errored == 0`` proves every check parsed cleanly, so
-    the two parsers agree on every leak decision and no leak is silently dropped
-    to "not a leak". If this ever fails, a check started emitting malformed no-op
-    output: re-anchor it or align the sweep onto parse_score (tracked follow-up),
-    do not relax this assertion.
+    ``errored`` counts checks the sweep never learned the real no-op score of, for
+    either of the two reasons ``sweep()`` documents, so a failure here has two
+    possible causes and the message must not presume one:
+
+    * No verdict. The sweep parses verdicts with ``json.loads``; production's
+      ``parse_score`` (test_runner.sh) is more tolerant of malformed JSON, so the
+      two can only diverge on a check whose no-op output is NOT valid JSON — and
+      such a check surfaces here as ``errored``. Holding this at 0 is what proves
+      the two parsers agree on every leak decision. Fix by re-anchoring the check,
+      or align the sweep onto parse_score (tracked follow-up).
+    * A degraded plant. A task.toml stopped parsing, so the 0.00 was scored
+      against a subset of production's render and does not transfer. Fix the
+      task.toml.
+
+    Either way, do not relax this assertion.
     """
     result = _sweep_result()
     assert result.n_errored == 0, (
-        f"{result.n_errored} of {result.n_checks} checks produced no verdict "
-        "under the no-op condition. An unscored check is not a proven "
-        "'not a leak' — the audit is blind for it."
+        f"{result.n_errored} of {result.n_checks} checks are unproven under the "
+        "no-op condition — either they reached no verdict, or their task.toml "
+        "would not parse so they were graded against a degraded plant. Neither is "
+        "a proven 'not a leak' — the audit is blind for them. See stderr for which."
     )
 
 
