@@ -55,7 +55,10 @@ def _discover() -> list[Path]:
 
 
 CONVERTED = _discover()
-_ids = lambda p: str(p.relative_to(BENCHMARKS))  # noqa: E731
+
+
+def _ids(p: Path) -> str:
+    return str(p.relative_to(BENCHMARKS))
 
 
 def test_rollout_covers_the_family() -> None:
@@ -183,14 +186,9 @@ def test_the_prefix_pattern_would_shadow_non_vacuity(tmp_path: Path) -> None:
     )
     assert vulnerable != content, "could not synthesise the pre-fix pattern"
 
-    checks = tmp_path / "benchmarks" / "suite" / "task" / "checks"
-    checks.mkdir(parents=True)
-    plugins = tmp_path / "lib" / "eb_verify" / "plugins"
-    plugins.mkdir(parents=True)
-    (tmp_path / "lib" / "eb_verify" / "__init__.py").write_text("")
-    (plugins / "__init__.py").write_text("")
-    (plugins / "topological_order.py").write_text("raise RuntimeError('stale lib won')")
-    planted = checks / script.name
+    # Same booby-trapped stale sibling as the parametrized twin above; only the
+    # planted check differs (pre-fix pattern instead of the real script).
+    planted = _plant(script, tmp_path, "raise RuntimeError('stale lib won')")
     planted.write_text(vulnerable)
 
     proc = _run_planted(planted, tmp_path, script.parent.parent)
