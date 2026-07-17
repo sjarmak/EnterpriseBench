@@ -14,12 +14,21 @@ without the vector ever exercising it — 81 of 180 report tasks are JSON-only
 (EnterpriseBench-jn73.2.7.3.1.4). Comparing tokens to the prompt needs no
 deliverable at all, so it reaches those tasks.
 
-Judged against instruction.md ONLY. That is the entire text the agent gets:
-run_task.py feeds it as `agent_command < /workspace/instruction.md` (plus an
-output appendix, plus the retrieval preamble and instruction_mcp.md in
+Judged against the text the agent is actually shown, via
+curated_gate_analyzer.agent_prompt_text(). For almost every task that is
+instruction.md: run_task.py feeds it as `agent_command < /workspace/instruction.md`
+(plus an output appendix, plus the retrieval preamble and instruction_mcp.md in
 mcp/cli modes). task.toml's [task].prompt is stale CSB-migration metadata that
 is never shown to the agent and diverges from instruction.md in ~155 tasks, so
 grading against it would both miss real leaks and invent phantom ones.
+
+The exception is session_type="chain", where instruction.md is a stub and the real
+prompts are task.toml [[sessions]].prompt, handed to the agent by session.py. This
+test judged the stub, so a chain task's tokens could sit verbatim in the prompt the
+agent reads and still pass here — the same blind spot that let
+chain-err-flask-import-001 score 1.00 for an echo while the echo gate called it
+clean (EnterpriseBench-e4w15). Sharing one helper with the echo gate is what keeps
+the two halves from disagreeing about what "the prompt" is.
 
 What this does NOT catch: evidence that is absent from the prompt but is not
 real evidence either — a check's own filename, a ground_truth key, any token no
@@ -31,12 +40,16 @@ test_report_prompt_echo.py.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 BENCH = REPO_ROOT / "benchmarks"
+
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "validation"))
+import curated_gate_analyzer as gate  # noqa: E402
 
 
 def _independently_scored_tokens(gt: dict) -> list[tuple[str, str]]:
@@ -116,7 +129,7 @@ TASK_IDS = [str(d.relative_to(BENCH)) for d in TASK_DIRS]
 def test_independently_scored_evidence_absent_from_prompt(task_dir: Path) -> None:
     """Every token that scores on its own must be absent from the prompt."""
     gt = json.loads((task_dir / "ground_truth.json").read_text())
-    prompt = (task_dir / "instruction.md").read_text(errors="replace").lower()
+    prompt = gate.agent_prompt_text(task_dir).lower()
 
     # Fixed-string containment, never a regex: "." in a token like
     # "ansible.galaxy.collection" would match "ansible-galaxy collection" in the
@@ -138,7 +151,7 @@ def test_independently_scored_evidence_absent_from_prompt(task_dir: Path) -> Non
 def test_conjunctions_need_at_least_one_nonprompt_token(task_dir: Path) -> None:
     """An ANDed token set must not be satisfiable from the prompt alone."""
     gt = json.loads((task_dir / "ground_truth.json").read_text())
-    prompt = (task_dir / "instruction.md").read_text(errors="replace").lower()
+    prompt = gate.agent_prompt_text(task_dir).lower()
 
     all_prompt = [
         (label, tokens)

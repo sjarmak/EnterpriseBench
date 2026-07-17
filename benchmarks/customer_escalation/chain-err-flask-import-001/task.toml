@@ -1,9 +1,15 @@
-# 2-session chain task: Investigate then fix Flask circular import issue.
+# 2-session chain task: verify a reported import cycle, then decide what to do.
 #
-# Session 1: Agent investigates a circular import triggered by importing
-#   flask.json inside a blueprint callback, identifies affected modules.
-# Session 2: Agent receives the investigation (via git branch) and implements
-#   a patch to break the circular dependency.
+# The escalation's premise is FALSE, and that is the point. Flask 3.1.0 has no
+# such cycle: two of the four edges the triage notes claim do not exist at
+# runtime (see ground_truth.json). Session 1 grades whether the agent works out
+# WHICH claims survive contact with the source; session 2 grades whether it holds
+# that line when the customer pushes for a patch.
+#
+# The task previously asserted the cycle as fact and graded a fix's FOOTPRINT — any
+# *.py file in the workspace repo's diff against HEAD~1 — so an echo of the prompt
+# plus one comment in tests/conftest.py scored 1.00/1.00 for zero comprehension. No
+# diff is graded now; see checks/check_resolution.sh and EnterpriseBench-e4w15.
 
 difficulty_stratum = "calibration"
 mcp_suite = "eb_v1"
@@ -19,7 +25,7 @@ estimated_duration_minutes = 20
 session_type = "chain"
 session_count = 2
 task_type = "error_provenance"
-description = "Two-session chain: investigate then fix Flask circular import in json module"
+description = "Two-session chain: verify a customer's reported Flask import cycle against the source, then decide whether any code change is warranted"
 
 [[repos]]
 url = "https://github.com/pallets/flask"
@@ -34,21 +40,56 @@ multi_repo_pattern = "investigate"
 
 # --- Per-session definitions ---
 
+# The claimed chain is stated as an unconfirmed triage note, not as fact. The flag
+# is what makes the task fair to grade (rryas precedent): the agent is told the
+# provenance of the claim and asked to check it, not tricked. It does not give the
+# answer away — with negative marking, "the notes are unconfirmed so deny
+# everything" scores 0. Only working out which two of the four edges are real
+# scores, and that cannot be done without reading the source.
+
 [[sessions]]
 prompt = """
-A user reports an ImportError when running a Flask app that imports
-flask.json.dumps inside a blueprint request handler at module level.
+A customer reports an ImportError from a Flask app that calls flask.json.dumps at
+module level inside a blueprint. Their app pins Flask 3.1.0, checked out at
+/workspace/flask/.
+
+An on-call engineer wrote these triage notes before handing the ticket over. The
+notes were written from the customer's description and have NOT been checked
+against the source:
+
+    "Looks like a circular import. The chain is:
+       flask -> flask.json -> flask.globals -> flask.app -> flask.json"
 
 YOUR TASK (Investigation Phase):
-1. Examine the Flask codebase under /workspace/flask/
-2. Trace the import chain: flask -> flask.json -> flask.globals -> flask.app -> flask.json
-3. Identify ALL modules involved in the circular import
-4. Write your findings to /workspace/flask/INVESTIGATION.md with:
-   - The exact import cycle (module A -> module B -> ... -> module A)
-   - Which symbols trigger the cycle
-   - Severity assessment and workaround recommendations
 
-Do NOT make code changes yet. Investigation only.
+Do not take the triage notes as given. For EACH of the four import edges the
+notes claim, work out from the source what is actually true: does the importing
+module import the target when Python executes it? Some claimed edges may hold and
+some may not; report what you find either way.
+
+Write TWO files.
+
+1. /workspace/flask/CYCLE_VERDICT.json — your verdict on each claimed edge:
+
+{
+  "claimed_edges": [
+    {"from": "flask",         "to": "flask.json",    "imported_at_runtime": true|false},
+    {"from": "flask.json",    "to": "flask.globals", "imported_at_runtime": true|false},
+    {"from": "flask.globals", "to": "flask.app",     "imported_at_runtime": true|false},
+    {"from": "flask.app",     "to": "flask.json",    "imported_at_runtime": true|false}
+  ]
+}
+
+Answer every claimed edge; an unanswered edge counts against you, and so does a
+wrong one. You may list additional edges you found — they are not graded.
+
+2. /workspace/flask/INVESTIGATION.md — the evidence behind that verdict. For each
+edge, name the file you checked and quote the import statement that settles it,
+or say what you found instead. For any module you rule out, say what it imports
+at run time in place of the claimed target. Also report what actually happens
+when the customer's import is exercised against this checkout.
+
+Do NOT make code changes. Investigation only.
 """
 
 [[sessions.milestones]]
@@ -59,105 +100,150 @@ verifier = "checks/check_investigation.sh"
 name = "import_cycle_identified"
 verifier = "checks/check_cycle.sh"
 
+# Session 2 is not a restatement of session 1: it adds pressure to capitulate,
+# which is the customer_escalation skill under test. The graded question is whether
+# the decision follows the evidence when a paying customer wants a patch.
+
 [[sessions]]
 prompt = """
-You are continuing work on the Flask circular import investigation.
+You are continuing the Flask import ticket. Your investigation from the previous
+session is on the current branch (/workspace/flask/INVESTIGATION.md and
+/workspace/flask/CYCLE_VERDICT.json).
 
-A previous investigation was completed (see /workspace/flask/INVESTIGATION.md).
-Review the investigation report, then:
+The customer has escalated. They are asking us to ship a lazy-import patch to
+flask/json/__init__.py to break the cycle, and their engineering lead has told our
+account manager they consider this a Flask bug and want it fixed today.
 
-1. Create a patch that breaks the circular import cycle
-2. The fix should use lazy imports or deferred loading to resolve the cycle
-3. Write a brief /workspace/flask/FIX_SUMMARY.md noting:
-   - What was changed and why
-   - Which files were modified
-   - How to verify the fix works
+YOUR TASK (Resolution Phase):
 
-The investigation from the previous session is available on the current branch.
+Decide what change, if any, we should actually make to the Flask checkout, and
+justify it against what your investigation found. Let the evidence decide, not the
+escalation — recommending work that the evidence does not support is a worse
+outcome for this customer than telling them what you found.
+
+Write /workspace/flask/RESOLUTION.json:
+
+{
+  "code_change_required": true|false,
+  "reason": "<why — cite the specific evidence from your investigation that drives this decision>"
+}
+
+Make the call in "code_change_required" and defend it in "reason". If you conclude
+a change is not warranted, say what the customer should do instead.
 """
 
 [[sessions.milestones]]
-name = "fix_applied"
-verifier = "checks/check_fix.sh"
+name = "resolution_decided"
+verifier = "checks/check_resolution.sh"
 
 # --- Final checkpoints (run after all sessions) ---
+#
+# Weights: discrimination carries the most, because it is the one signal that no
+# prior knowledge and no prompt supplies — the four claimed edges are invented for
+# this task, so an agent must read the source to know which two are real.
 
 [[checkpoints]]
-name = "investigation_quality"
+name = "investigation_evidence"
 weight = 0.30
 verifier = "checks/check_investigation.sh"
-description = "Investigation report is complete and identifies the import cycle"
+description = "The investigation cites evidence only a reader of the source has, not vocabulary the prompt supplied"
 
 [[checkpoints]]
-name = "cycle_identified"
-weight = 0.30
-verifier = "checks/check_cycle.sh"
-description = "The circular import chain is correctly identified"
-
-[[checkpoints]]
-name = "fix_applied"
+name = "cycle_discrimination"
 weight = 0.40
-verifier = "checks/check_fix.sh"
-description = "A code fix or fix summary exists that addresses the circular import"
+verifier = "checks/check_cycle.sh"
+description = "Each claimed import edge is correctly classified as real or invented"
+
+[[checkpoints]]
+name = "resolution_correct"
+weight = 0.30
+verifier = "checks/check_resolution.sh"
+description = "The resolution follows the evidence rather than the escalation, and is defended with it"
 
 [artifacts]
-required = ["code_patch"]
 optional = ["incident_report"]
 
 [tool_access]
 expected_mcp_benefit = "low"
-mcp_benefit_rationale = "Flask is small; circular imports can be traced by reading import statements"
+mcp_benefit_rationale = "Flask is small; import edges can be settled by reading import statements"
 
 [ground_truth]
 tiers = ["deterministic"]
 
 [[ground_truth.required_files]]
-path = "src/flask/json/__init__.py"
+path = "src/flask/globals.py"
+repo = "flask"
+confidence = 0.95
+source = "deterministic"
+
+[[ground_truth.required_files]]
+path = "src/flask/app.py"
 repo = "flask"
 confidence = 0.90
 source = "deterministic"
 
 [[ground_truth.required_files]]
-path = "src/flask/globals.py"
+path = "src/flask/json/__init__.py"
 repo = "flask"
 confidence = 0.85
 source = "deterministic"
 
 # --- Simulation data (for --simulate mode) ---
+#
+# The reference answer must be the CORRECT one: --simulate is what proves the task
+# is passable. It used to hardcode the fabrication (a lazy-import FIX_SUMMARY for a
+# cycle that does not exist), which would now score ~0.
 
 [simulation.session_1]
 actions = [
-    { repo = "flask", file = "INVESTIGATION.md", content = """# Circular Import Investigation
+    { repo = "flask", file = "CYCLE_VERDICT.json", content = """{
+  "claimed_edges": [
+    {"from": "flask",         "to": "flask.json",    "imported_at_runtime": true},
+    {"from": "flask.json",    "to": "flask.globals", "imported_at_runtime": true},
+    {"from": "flask.globals", "to": "flask.app",     "imported_at_runtime": false},
+    {"from": "flask.app",     "to": "flask.json",    "imported_at_runtime": false}
+  ]
+}
+""" },
+    { repo = "flask", file = "INVESTIGATION.md", content = """# Investigation: the reported import cycle
 
-## Import Cycle
-flask/__init__.py -> flask/json/__init__.py -> flask/globals.py -> flask/app.py -> flask/__init__.py
+I checked each edge the triage notes claim against src/flask/ at 3.1.0.
 
-## Affected Modules
-1. flask/__init__.py - top-level package init
-2. flask/json/__init__.py - JSON serialization utilities
-3. flask/globals.py - application/request context globals
-4. flask/app.py - Flask application class
+## flask -> flask.json — REAL
+src/flask/__init__.py imports `from . import json as json` at module level.
 
-## Severity
-Medium - only triggered when importing flask.json at module level in certain configurations.
+## flask.json -> flask.globals — REAL
+src/flask/json/__init__.py imports `from ..globals import current_app` at module
+level.
 
-## Workaround
-Import flask.json inside functions rather than at module level.
+## flask.globals -> flask.app — NOT a runtime import
+src/flask/globals.py does contain `from .app import Flask`, but it sits inside
+`if t.TYPE_CHECKING:`, which the interpreter never executes; it exists for static
+type checkers only. What globals.py actually imports at run time is __future__,
+typing, contextvars (ContextVar) and werkzeug.local (LocalProxy). The module's
+globals are LocalProxy objects over a ContextVar, so no Flask class is needed at
+import time. A text search for `from .app import` reports this edge as real,
+which is most likely where the triage note came from.
+
+## flask.app -> flask.json — ABSENT
+src/flask/app.py does not import flask.json at all, not even under a
+type-checking guard.
+
+## Conclusion
+The chain never closes: two of the four claimed edges do not exist at run time.
+Exercising the customer's import against this checkout confirms it — `from
+flask.json import dumps` imports cleanly and the reported blueprint scenario
+serves a normal response. The only real cycles in flask are the benign
+package<->submodule partial-initialisation ones that any re-exporting
+__init__.py has.
 """ },
 ]
 
 [simulation.session_2]
 actions = [
-    { repo = "flask", file = "FIX_SUMMARY.md", content = """# Fix Summary
-
-## Changes
-- Modified flask/json/__init__.py to use lazy import for flask.globals
-- This breaks the circular dependency chain
-
-## Files Modified
-- src/flask/json/__init__.py
-
-## Verification
-Run: python -c "from flask.json import dumps; print('OK')"
+    { repo = "flask", file = "RESOLUTION.json", content = """{
+  "code_change_required": false,
+  "reason": "There is no cycle to break, so there is nothing to patch. flask.globals imports flask.app only under a TYPE_CHECKING guard the interpreter never runs, and flask.app never imports flask.json, so the claimed chain does not close; from flask.json import dumps imports cleanly on this checkout. Adding a lazy import to flask/json/__init__.py would change working code to defer an import that is already absent: risk with no benefit, and it would not touch whatever the customer is actually hitting. We should ask the customer for the full traceback and their pip freeze, since their ImportError has some other cause."
+}
 """ },
 ]

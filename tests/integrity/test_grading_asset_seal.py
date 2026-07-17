@@ -31,6 +31,7 @@ is reported as an ``integrity_violation`` — score 0.0, never routed to the
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -504,21 +505,45 @@ class TestScoringDoesNotBreakTheChecks:
     def test_cwd_dependent_checks_still_resolve_off_the_scoring_cwd(
         self, tmp_path: Path
     ) -> None:
-        """Drive a real cwd-dependent check from the new root-owned cwd."""
+        """Drive a real cwd-dependent check from the new root-owned cwd.
+
+        No skip guard. This is the only test that drives a real check from the
+        post-seal cwd, and it used to `pytest.skip("task not present")` when the
+        path was missing — so renaming the check it names deleted the coverage
+        silently instead of failing (EnterpriseBench-e4w15). A missing check now
+        fails: if this task is ever retired, repoint the test at another
+        cwd-dependent check rather than letting it evaporate.
+        """
         check = (
             REPO_ROOT
             / "benchmarks/customer_escalation/chain-err-flask-import-001"
-            / "checks/check_fix.sh"
+            / "checks/check_resolution.sh"
         )
-        if not check.exists():
-            pytest.skip("task not present")
+        assert check.exists(), (
+            f"{check} is gone — this test's whole job is driving a real "
+            "cwd-dependent check. Repoint it, do not skip it."
+        )
 
         workspace = tmp_path / "workspace"
         (workspace / "flask").mkdir(parents=True)
-        # must clear the check's own >50-byte threshold to count as a summary
-        (workspace / "flask" / "FIX_SUMMARY.md").write_text(
-            "# Fix\n\nRoot cause: a circular import between flask/cli.py and "
-            "flask/app.py. Broke the cycle by deferring the import.\n"
+        # A CORRECT answer: the payload must score, and the fixture used to assert
+        # a FABRICATED root cause ("a circular import between flask/cli.py and
+        # flask/app.py") scored non-zero. That cycle never existed either, so after
+        # the e4w15 re-scope it must score 0.0 — leaving it would have tempted the
+        # next reader to weaken check_resolution.sh until the fabrication passed
+        # again, reintroducing the defect. The property under test is only that the
+        # workspace arg is honoured off the scoring cwd.
+        (workspace / "flask" / "RESOLUTION.json").write_text(
+            json.dumps(
+                {
+                    "code_change_required": False,
+                    "reason": (
+                        "The claimed cycle does not close: flask.globals imports "
+                        "flask.app only under a TYPE_CHECKING guard, and flask.app "
+                        "never imports flask.json. No change is warranted."
+                    ),
+                }
+            )
         )
         elsewhere = tmp_path / "eb_scoring"  # stands in for SCORING_WORKDIR
         elsewhere.mkdir()

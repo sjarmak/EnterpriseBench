@@ -39,6 +39,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -126,21 +127,51 @@ def discover_report_tasks(root: Path = BENCH) -> list[Path]:
     return out
 
 
+def agent_prompt_text(task_dir: Path) -> str:
+    """The text this task's agent is actually shown — the thing echo is echoing.
+
+    instruction.md for the ordinary case: run_task.py feeds it as
+    `agent_command < /workspace/instruction.md`.
+
+    EXCEPT for session_type="chain", where it is not the prompt at all. The chain
+    runner passes each session's own text straight to the agent
+    (session.py: `agent_callable(ws, session_config.prompt)`), and the task's
+    instruction.md is a stub pointing at task.toml. Judging those tasks against the
+    stub is why chain-err-flask-import-001 read CLEAN while an echo of its real
+    session prompts scored 1.00: the gate was grading a text no agent ever saw
+    (EnterpriseBench-e4w15). Chain tasks were structurally invisible to this gate.
+
+    task.toml [task].prompt is deliberately NOT consulted. It is stale
+    CSB-migration metadata that is never shown to an agent and diverges from
+    instruction.md in ~155 tasks, so treating it as the prompt would manufacture
+    phantom leaks. Only [[sessions]].prompt is real, and only for chains.
+    """
+    sessions = _task_data(task_dir).get("sessions") or []
+    prompts = [
+        s["prompt"]
+        for s in sessions
+        if isinstance(s, dict) and isinstance(s.get("prompt"), str)
+    ]
+    if prompts:
+        return "\n".join(prompts)
+    instr = task_dir / "instruction.md"
+    return instr.read_text(errors="replace") if instr.exists() else ""
+
+
 def echo_scores(task_dir: Path) -> dict:
-    """Run every check against `cp instruction.md -> deliverable(s)`.
+    """Run every check against `cp <the agent's real prompt> -> deliverable(s)`.
 
     Returns {check_name: score|None}. None means the check produced no scored
     verdict for this deliverable (e.g. a JSON check fed non-JSON echo text) —
     the md-grep echo vector does not exercise it.
     """
     deliverables = deliverable_paths(task_dir)
-    instr = task_dir / "instruction.md"
-    if not deliverables or not instr.exists():
+    payload = agent_prompt_text(task_dir)
+    if not deliverables or not payload:
         return {}
-    import tempfile as _tf
-    with _tf.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory() as td:
         ws = Path(td)
-        materialize(ws, deliverables, instr.read_text(errors="replace"))
+        materialize(ws, deliverables, payload)
         return run_checks(task_dir, ws)
 
 
@@ -178,6 +209,20 @@ def deliverable_paths(task_dir: Path) -> list[str]:
 
 
 def run_checks(task_dir: Path, workspace: Path) -> dict:
+    """Score every check of `task_dir` against a materialized `workspace`.
+
+    The workspace is passed BOTH as argv[1] and as $WORKSPACE, from cwd=workspace.
+    All three are load-bearing, because the three real runners disagree and a check
+    written for any one of them must score here:
+      lib/eb_verify/runner.py       no argv[1], env + cwd=workspace
+      scripts/orchestration/milestone.py  argv[1], no env at all
+      scripts/sandbox/test_runner.sh      argv[1] + env, cwd outside the workspace
+    Passing only $WORKSPACE (as this did) silently zeroed every check that resolves
+    `WORKSPACE="${1:-.}"` — the shell assignment shadows the exported variable, so
+    the check read cwd, found the repo root, and scored 0.0 for ANY payload. That
+    made this gate vacuous: it certified tasks clean because nothing could ever
+    score, not because an echo earned nothing (EnterpriseBench-e4w15).
+    """
     scores: dict[str, float | None] = {}
     env = os.environ.copy()
     env["WORKSPACE"] = str(workspace)
@@ -185,12 +230,17 @@ def run_checks(task_dir: Path, workspace: Path) -> dict:
     for sh in sorted((task_dir / "checks").glob("*.sh")):
         try:
             p = subprocess.run(
-                ["bash", str(sh)], capture_output=True, text=True,
-                timeout=CHECK_TIMEOUT, env=env,
+                ["bash", str(sh), str(workspace)], capture_output=True, text=True,
+                timeout=CHECK_TIMEOUT, env=env, cwd=str(workspace),
             )
             out = p.stdout.strip()
-            scores[sh.name] = json.loads(out).get("score") if out else None
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, ValueError):
+            # isinstance before .get: a check emitting a top-level array or scalar
+            # would raise AttributeError here — not a ValueError, so not caught
+            # below — and take the whole pool scan down with it. One malformed
+            # check degrades to None, like every other no-verdict path.
+            parsed = json.loads(out) if out else None
+            scores[sh.name] = parsed.get("score") if isinstance(parsed, dict) else None
+        except (subprocess.TimeoutExpired, ValueError):
             scores[sh.name] = None
     return scores
 
@@ -202,12 +252,28 @@ def materialize(workspace: Path, deliverables: list[str], content: str) -> None:
         f.write_text(content)
 
 
-def gate2_suspects(task_dir: Path) -> list[str]:
+def _task_data(task_dir: Path) -> dict:
+    """Parsed task.toml, or {} when absent/malformed (schema tests own those).
+
+    ValueError, not TOMLDecodeError: tomllib raises a bare UnicodeDecodeError on a
+    task.toml that is not valid UTF-8, and that is a ValueError, not a
+    TOMLDecodeError or an OSError. Catching the narrow pair would let one malformed
+    file crash a whole-pool scan — the one thing this tool exists to do unattended.
+    """
     toml = task_dir / "task.toml"
     if not toml.exists():
+        return {}
+    try:
+        with open(toml, "rb") as fh:
+            return tomllib.load(fh)
+    except (ValueError, OSError):
+        return {}
+
+
+def gate2_suspects(task_dir: Path) -> list[str]:
+    data = _task_data(task_dir)
+    if not data:
         return []
-    import tomllib
-    data = tomllib.load(open(toml, "rb"))
     gt = data.get("ground_truth", {}) or {}
     suspects: list[str] = []
     for key in ("required_files", "sufficient_files"):

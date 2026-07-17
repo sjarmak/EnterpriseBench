@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -518,6 +519,24 @@ def run_verifier_subprocess(
             verifier=str(resolved),
         )
 
+    # PYTHONSAFEPATH=1 on EVERY verifier, at the one boundary both Python runners
+    # share, because `cwd` is the agent's workspace for both of them. A verifier is
+    # bash, but a bash verifier that shells out to `python3 -c` gets sys.path[0]=''
+    # — the cwd — so an agent that drops a `json.py` beside its deliverables
+    # shadows the stdlib and the check's own `json.dumps` mints whatever verdict
+    # the agent wrote. That is bead 5cfxa's shadowing bug through a different door.
+    #
+    # runner.py already sets this in checkpoint_env (so this is a no-op there), but
+    # milestone.py passes env=None and inherits, which left the milestone runner
+    # uncovered. It was unreachable only because no milestone verifier had ever
+    # invoked python; chain-err-flask-import-001's re-anchored checks are the first
+    # that do (EnterpriseBench-e4w15), which is what made it live. Setting it here
+    # rather than in milestone.py means the next caller cannot forget it.
+    #
+    # env=None means "inherit", so build from os.environ to keep that contract.
+    exec_env = dict(os.environ if env is None else env)
+    exec_env["PYTHONSAFEPATH"] = "1"
+
     try:
         proc = subprocess.run(
             [*argv_prefix, str(resolved), *argv_suffix],
@@ -525,7 +544,7 @@ def run_verifier_subprocess(
             text=True,
             timeout=timeout,
             cwd=str(cwd),
-            env=env,
+            env=exec_env,
         )
     except subprocess.TimeoutExpired:
         # No verdict, and not attributable to the agent: the one verifier that
