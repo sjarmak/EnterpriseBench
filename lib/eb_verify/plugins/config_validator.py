@@ -80,20 +80,11 @@ class ConfigValidator:
                 except ImportError:
                     pass  # yaml not available, skip
             elif suffix in (".toml",):
-                # Bind the parse to the successful import, not to the absence of
-                # an exception. An `else:` on the outer try runs ONLY when
-                # `import tomllib` itself raised nothing, so on Python 3.10 —
-                # where stdlib tomllib is absent and the tomli backport is
-                # imported instead — the parse was skipped and malformed TOML
-                # silently passed. Use the tomllib=None sentinel (as in
-                # schema_validator.py) and parse whenever either backend loaded.
-                # A genuinely missing parser stays a skip, NOT a valid=False:
-                # no parser installed is a harness fault, and failing here would
-                # false-fail the agent's config as INVALID via the outer except.
-                # Catch ImportError (not just ModuleNotFoundError) for the same
-                # reason — a broken/partial install must also skip, never fall
-                # through to the outer except; this matches the yaml branch above
-                # and schema_validator.py.
+                # tomllib (3.11+) or the tomli backport; None if neither is
+                # installed. The None sentinel keeps the parse bound to a
+                # successful import — an `else:` on the outer try would skip it
+                # on the tomli path, silently passing malformed TOML. A missing
+                # parser is a harness fault, so it skips rather than false-fails.
                 try:
                     import tomllib
                 except ImportError:
