@@ -1,21 +1,49 @@
 #!/usr/bin/env bash
-# Checkpoint 2: Verify topological ordering of proposed refactor plan
+# check_topo_order.sh — checkpoint "topological_order"
+#
+# Validates the proposed order against ground_truth.json:dependency_graph via
+# the shared eb_verify topological_order plugin (plugin unchanged; three sibling
+# tasks use it). What changed is the graph, and a gate in front of it.
+#
+# The graph asserted webpack -> babel and next.js -> [babel, webpack]. Both
+# babel edges are false: webpack v5.88.2 parses with acorn ^8.7.1 and declares no
+# babel package in dependencies, so a Babel parser AST change never reaches it.
+# The graph is now the change-propagation graph over the repos the change does
+# reach: babel -> next.js. See ground_truth.json:_premise_correction.
+#
+# Fixing the graph alone would leave free credit here, and this is the subtle
+# part: resolve_tokens_to_graph drops tokens that are not graph nodes, so a plan
+# ordering [babel, webpack, next.js] — the old prompt's chain verbatim, and what
+# any model that knows the JS toolchain guesses — resolves to [babel, next.js]
+# and validates as a correct order. The sequence alone cannot separate a derived
+# plan from a recited one.
+#
+# The order is therefore gated on evidence it was DERIVED: the plan must name
+# what webpack actually parses with ('acorn', ZERO hits in instruction.md). That
+# is the fact that dissolves the chain, and it is readable only in
+# webpack/package.json (EnterpriseBench-jn73.2.7.3.1.2).
 set -euo pipefail
 
-ANSWER="${WORKSPACE:-/workspace}/REFACTOR_PLAN.md"
+WORKSPACE="${WORKSPACE:-/workspace}"
+ANSWER="$WORKSPACE/REFACTOR_PLAN.md"
 GT="${TASK_DIR:-$(dirname "$(dirname "$0")")}/ground_truth.json"
+MAX_ANSWER_BYTES=1048576
 
-if [[ ! -f "$ANSWER" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "REFACTOR_PLAN.md not found"}\n'
-  exit 0
-fi
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
 
 if [[ ! -f "$GT" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "ground_truth.json not found"}\n'
-  exit 0
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+if [[ -L "$ANSWER" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md is a symlink, not a regular file"
+fi
+if [[ ! -f "$ANSWER" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md not found"
+fi
+if [[ "$(wc -c <"$ANSWER")" -gt "$MAX_ANSWER_BYTES" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md exceeds ${MAX_ANSWER_BYTES} bytes"
 fi
 
-# Determine lib path (4 levels up from checks/ dir)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$(cd "$SCRIPT_DIR/../../../../lib" 2>/dev/null && pwd || echo "")"
 
@@ -23,24 +51,41 @@ export GT_FILE="$GT"
 export ANSWER_FILE="$ANSWER"
 
 python3 - "$LIB_DIR" <<'PYEOF'
-import json, sys, os
+import json, os, sys
+
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
 lib_dir = sys.argv[1]
 if lib_dir:
     sys.path.insert(0, lib_dir)
 
-with open(os.environ['GT_FILE']) as f:
-    gt = json.load(f)
+with open(os.environ["GT_FILE"]) as fh:
+    gt = json.load(fh)
 
-with open(os.environ['ANSWER_FILE']) as f:
-    plan_text = f.read()
+with open(os.environ["ANSWER_FILE"], encoding="utf-8", errors="replace") as fh:
+    plan_text = fh.read()
 
-dep_graph = gt.get('dependency_graph', {})
+dep_graph = gt.get("dependency_graph") or {}
+if not dep_graph:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no dependency_graph in ground_truth.json")
+
+tokens = (gt.get("scoring_evidence") or {}).get("topological_order") or []
+if not tokens:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no topological_order evidence in ground_truth.json")
+
+# Fixed-string containment, never a regex.
+lowered = plan_text.lower()
+missing = [t for t in tokens if t.lower() not in lowered]
+if missing:
+    verdict(0.0,
+            "Order not derived: plan never names what webpack actually parses "
+            "with (%s), so its ordering is an assumption about the JS toolchain "
+            "rather than a reading of these manifests" % (", ".join(missing),))
 
 from eb_verify.plugins.topological_order import validate_refactor_plan_markdown
 
 result = validate_refactor_plan_markdown(plan_text, dep_graph)
-score = result['score']
-passed = score >= 0.5
-print(json.dumps({'score': score, 'passed': passed, 'reason': result['detail']}))
+verdict(result["score"], str(result["detail"]).replace('"', "'"))
 PYEOF

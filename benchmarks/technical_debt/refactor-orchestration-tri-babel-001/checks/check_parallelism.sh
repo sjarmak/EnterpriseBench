@@ -1,54 +1,88 @@
 #!/usr/bin/env bash
-# Checkpoint 3: Verify agent correctly identifies parallelizable steps
+# check_parallelism.sh — checkpoint "parallelism"
+#
+# ground_truth.parallelizable_steps is [] and stays [], but the old check turned
+# that into free credit two ways: it paid 1.0 for the words 'sequential' /
+# 'serial' / 'depends on' — which the old prompt's "strict dependency chain"
+# handed the agent outright — and 0.5 for saying nothing about parallelism at
+# all, so an EMPTY REFACTOR_PLAN.md banked half of this checkpoint's 0.30.
+#
+# The [] was also right for the wrong reason: it followed from the fabricated
+# babel -> webpack -> next.js chain. There is nothing to parallelize because
+# webpack needs no work at all (it parses with acorn ^8.7.1, not Babel), leaving
+# two repos in a strict order. The parallelism answer is downstream of getting
+# the SCOPE right, so that is what is graded: the plan must exclude webpack
+# explicitly and cite what it actually parses with.
+#
+# 'acorn' has ZERO hits in instruction.md. Absence of work is 0.0
+# (EnterpriseBench-jn73.2.7.3.1.2).
 set -euo pipefail
 
-ANSWER="${WORKSPACE:-/workspace}/REFACTOR_PLAN.md"
+WORKSPACE="${WORKSPACE:-/workspace}"
+ANSWER="$WORKSPACE/REFACTOR_PLAN.md"
 GT="${TASK_DIR:-$(dirname "$(dirname "$0")")}/ground_truth.json"
+MAX_ANSWER_BYTES=1048576
 
-if [[ ! -f "$ANSWER" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "REFACTOR_PLAN.md not found"}\n'
-  exit 0
-fi
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
 
 if [[ ! -f "$GT" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "ground_truth.json not found"}\n'
-  exit 0
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+if [[ -L "$ANSWER" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md is a symlink, not a regular file"
+fi
+if [[ ! -f "$ANSWER" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md not found"
+fi
+if [[ "$(wc -c <"$ANSWER")" -gt "$MAX_ANSWER_BYTES" ]]; then
+  verdict 0.0 false "REFACTOR_PLAN.md exceeds ${MAX_ANSWER_BYTES} bytes"
 fi
 
-export ANSWER_FILE="$ANSWER"
-export GT_FILE="$GT"
-
-python3 -c "
+export ANSWER GT
+python3 -c '
 import json, os
 
-with open(os.environ['GT_FILE']) as f:
-    gt = json.load(f)
-with open(os.environ['ANSWER_FILE']) as f:
-    answer_text = f.read().lower()
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
-parallel_steps = gt.get('parallelizable_steps', [])
+with open(os.environ["GT"]) as fh:
+    gt = json.load(fh)
 
-mentions_parallel = any(term in answer_text for term in ['parallel', 'concurrent', 'simultaneous', 'independent'])
+tokens = (gt.get("scoring_evidence") or {}).get("parallelism") or []
+if not tokens:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no parallelism evidence in ground_truth.json")
 
-if not parallel_steps:
-    if any(term in answer_text for term in ['sequential', 'serial', 'no parallel', 'cannot.*parallel', 'depends on']):
-        score = 1.0
-        detail = 'Correctly identified no parallelizable steps (sequential chain)'
-    elif mentions_parallel:
-        score = 0.3
-        detail = 'Mentions parallelism but chain is fully sequential'
-    else:
-        score = 0.5
-        detail = 'Did not explicitly address parallelism'
-    passed = score >= 0.5
-else:
-    if mentions_parallel:
-        score = 0.8
-        detail = 'Agent addresses parallelism opportunities'
-    else:
-        score = 0.2
-        detail = 'Agent did not identify parallelism opportunities'
-    passed = score >= 0.5
+with open(os.environ["ANSWER"], encoding="utf-8", errors="replace") as fh:
+    text = fh.read()
+lowered = text.lower()
 
-print(json.dumps({'score': round(score, 2), 'passed': passed, 'reason': detail}))
-"
+# Fixed-string containment, never a regex.
+missing = [t for t in tokens if t.lower() not in lowered]
+if missing:
+    verdict(0.0,
+            "Scope not evidenced: plan never names what webpack actually parses "
+            "with (%s), so any claim about what can run in parallel rests on the "
+            "assumed chain rather than these manifests" % (", ".join(missing),))
+
+EXCLUDED = ("not affected", "unaffected", "no change", "no changes", "not require",
+            "no work", "out of scope", "not in scope", "excluded", "not impacted",
+            "no update", "not need", "does not consume", "not consume",
+            "does not parse", "not parse")
+
+# The finding must be stated about webpack ON ONE LINE. Scanning the whole
+# document would credit a plan that says "webpack" here and "not affected" in an
+# unrelated sentence about something else.
+excluded_webpack = any(
+    "webpack" in line and any(term in line for term in EXCLUDED)
+    for line in lowered.splitlines()
+)
+if not excluded_webpack:
+    verdict(0.0,
+            "Plan cites acorn but never states webpack is out of scope for this "
+            "change, so it has not drawn the conclusion the evidence forces")
+
+verdict(1.0,
+        "Correctly scopes webpack out (evidenced by acorn), leaving babel -> "
+        "next.js strictly ordered with no parallelizable steps")
+'

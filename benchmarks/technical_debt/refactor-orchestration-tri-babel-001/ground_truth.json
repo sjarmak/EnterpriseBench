@@ -1,56 +1,78 @@
 {
   "candidate_id": "refactor-orchestration-tri-babel-001",
-  "description": "JS compilation pipeline refactoring across Babel parser, webpack bundler, and Next.js framework",
+  "description": "Babel parser DecoratorMetadata AST change across the three vendored repos. It reaches babel and next.js. It does NOT reach webpack, which parses JavaScript with acorn and declares no Babel runtime dependency at all — so the babel -> webpack -> next.js chain this task previously asserted is false at both edges.",
   "repos": ["babel/babel", "webpack/webpack", "vercel/next.js"],
-  "merge_order": [
-    {
-      "repo": "babel/babel",
-      "description": "Add DecoratorMetadata AST node to @babel/parser, update @babel/types and @babel/traverse for new node type"
-    },
-    {
-      "repo": "webpack/webpack",
-      "description": "Update babel-loader parser options passthrough, update tree-shaking to handle decorator side effects with new AST node"
-    },
-    {
-      "repo": "vercel/next.js",
-      "description": "Update Next.js Babel/SWC configuration to support new decorator syntax, update next/font and next/image AST parsing"
-    }
-  ],
+  "repo_revs": {
+    "babel/babel": "v7.22.9",
+    "webpack/webpack": "v5.88.2",
+    "vercel/next.js": "v13.4.12"
+  },
+  "_premise_correction": "The previous key asserted dependency_graph {webpack: [babel], next.js: [babel, webpack]} and merge_order babel -> webpack -> next.js, and the previous instruction.md claimed webpack 'uses Babel via babel-loader for JS compilation and needs to understand decorator side effects for tree-shaking'. VERIFIED FALSE against package.json at the pinned revs. webpack v5.88.2's runtime dependencies contain NO babel package of any kind; it parses JavaScript with acorn ^8.7.1 (+ acorn-import-assertions ^1.9.0) and tree-shakes over its own acorn AST. @babel/core ^7.21.4 and babel-loader ^8.1.0 appear only in webpack's devDependencies, i.e. tooling for webpack's own examples and tests — they are not what webpack parses user code with, and a Babel parser AST change does not propagate through them to webpack's behaviour. babel-loader, the actual bridge between the two, is a separate repository that is NOT vendored in this workspace. The chain was authored from world knowledge about the JS toolchain rather than from these manifests.",
   "dependency_graph": {
     "babel/babel": [],
-    "webpack/webpack": ["babel/babel"],
-    "vercel/next.js": ["babel/babel", "webpack/webpack"]
+    "vercel/next.js": ["babel/babel"]
   },
-  "required_files": [
+  "_dependency_graph_note": "This is the CHANGE-PROPAGATION graph over the repos the Babel parser change actually reaches — it is what checks/check_topo_order.sh feeds to the shared eb_verify topological_order plugin as the update order. webpack is deliberately NOT a node: it requires no work for this change, and including it would make the plugin's missing-repo penalty punish a correct plan for omitting a repo that correctly has nothing to do. webpack's real (dev-only) relationships are recorded in not_affected below. Note vercel/next.js also devDepends on webpack, but that edge is irrelevant to a Babel parser change and would not reorder anything.",
+  "dependency_edges": [
     {
-      "path": "packages/babel-parser/package.json",
-      "repo": "babel",
-      "confidence": 0.95,
-      "source": "deterministic"
-    },
+      "from": "vercel/next.js",
+      "to": "babel/babel",
+      "manifest": "nextjs/packages/next/package.json",
+      "requirement": "27 @babel/* devDependencies, incl. @babel/core 7.18.0, @babel/code-frame 7.12.11, @babel/generator 7.18.0",
+      "note": "Real edge. next.js vendors Babel into its published bundle (ncc), so it walks Babel ASTs and the new node type reaches it. They are devDependencies because next bundles rather than resolves them at install time — an agent that only greps `dependencies` will wrongly conclude next.js is unaffected too."
+    }
+  ],
+  "phantom_edges": [
     {
-      "path": "package.json",
-      "repo": "webpack",
-      "confidence": 0.95,
-      "source": "deterministic"
-    },
+      "from": "webpack/webpack",
+      "to": "babel/babel",
+      "asserted_by": "the old answer key, the old instruction.md ('webpack uses Babel via babel-loader ... for tree-shaking'), and general knowledge of the JS toolchain",
+      "reality": "webpack v5.88.2 declares acorn ^8.7.1 and acorn-import-assertions ^1.9.0 in dependencies and no babel package anywhere in dependencies. It parses and tree-shakes over an acorn AST. @babel/core and babel-loader are devDependencies only. A Babel parser AST change does not reach webpack.",
+      "evidence_tokens": ["acorn"],
+      "note": "'acorn' is the discriminator: ZERO hits in instruction.md, and no restatement of the prompt can produce it. Naming it requires having opened webpack/package.json."
+    }
+  ],
+  "not_affected": [
     {
-      "path": "packages/next/package.json",
-      "repo": "nextjs",
-      "confidence": 0.95,
-      "source": "deterministic"
+      "repo": "webpack/webpack",
+      "reason": "Parses with acorn ^8.7.1, not Babel. Babel appears only in devDependencies (@babel/core ^7.21.4, babel-loader ^8.1.0) as build/test tooling for webpack itself.",
+      "note": "This is the precision half of the task: recall alone (naming all three repos, which the prompt lists) is not a finding. A plan that schedules webpack work is wrong, and the old checks paid it 1.0."
     }
   ],
   "parallelizable_steps": [],
-  "breaking_changes": [
-    "babel: New AST node type may break plugins that exhaustively match on node types",
-    "webpack: babel-loader configuration changes may require updates to webpack.config.js in consumer projects",
-    "next.js: next.config.js babel configuration changes, SWC fallback behavior may change"
+  "_parallelism_note": "Genuinely empty, but NOT for the reason the old key gave. The old [] followed from the fabricated three-repo chain ('strict', so nothing overlaps). It is empty here because only two repos need work and next.js depends on babel, so they are strictly ordered. The old check turned [] into free credit: it paid 1.0 for the word 'sequential' — which the old prompt's 'strict dependency chain' handed over — and 0.5 for saying nothing about parallelism at all, so an EMPTY file banked 0.5 of a 0.30 checkpoint. Absence of work is now 0.0, and the claim must be evidenced.",
+  "merge_order": [
+    {
+      "repo": "babel/babel",
+      "description": "Add the DecoratorMetadata AST node to @babel/parser; update @babel/types and @babel/traverse for the new node type."
+    },
+    {
+      "repo": "vercel/next.js",
+      "description": "Update the vendored Babel toolchain and any AST walkers over it. Depends on babel landing first."
+    }
   ],
+  "required_files": [
+    {"path": "packages/babel-parser/package.json", "repo": "babel", "confidence": 0.95, "source": "deterministic"},
+    {"path": "package.json", "repo": "webpack", "confidence": 0.98, "source": "deterministic"},
+    {"path": "packages/next/package.json", "repo": "nextjs", "confidence": 0.95, "source": "deterministic"}
+  ],
+  "breaking_changes": [
+    "babel: a new AST node type may break plugins that exhaustively match on node types",
+    "next.js: the vendored Babel toolchain and next's own AST walkers must handle the new node",
+    "webpack: no change. It does not parse with Babel (acorn ^8.7.1)."
+  ],
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md, verified with `grep -coF`: 'acorn' 0 hits, '8.7.1' 0, 'devDependencies' 0, 'parallel' 0, 'sequential' 0. The prompt DOES supply 'babel', 'webpack', 'next.js', 'DecoratorMetadata' and 'chain' — none may be graded alone, which is exactly what the old checks did: check_repo_set.sh grepped for the three repo names the prompt lists, check_topo_order.sh graded an order the prompt stated outright ('babel -> webpack -> next.js'), and check_parallelism.sh paid for the word 'sequential' the prompt invited. Every checkpoint is now gated on 'acorn', the fact that dissolves the asserted chain.",
+    "_residual_risk": "Echo-resistant, NOT proven closed-book-resistant: that webpack parses with acorn is reasonably well-known, so a model may produce it without opening webpack/package.json. 'acorn' is what a reader of that manifest has; it is not proof of retrieval on its own. Tracked separately from the prompt-echo work; do not read a pass here as a closed-book pass.",
+    "identify_repos": ["acorn"],
+    "topological_order": ["acorn"],
+    "parallelism": ["acorn"]
+  },
   "difficulty": "hard",
-  "confidence": 0.9,
+  "confidence": 0.95,
   "verification": {
-    "method": "dependency_analysis",
-    "verified": true
+    "method": "raw manifest parse at pinned revs",
+    "verified": true,
+    "verified_at_sha": "webpack@v5.88.2 package.json: dependencies = [@types/eslint-scope, @types/estree, @webassemblyjs/*, acorn ^8.7.1, acorn-import-assertions ^1.9.0, browserslist, chrome-trace-event, enhanced-resolve, es-module-lexer, eslint-scope, events, glob-to-regexp, graceful-fs, json-parse-even-better-errors, loader-runner, mime-types, neo-async, schema-utils, tapable, terser-webpack-plugin, watchpack, webpack-sources] — no babel package; @babel/core ^7.21.4 and babel-loader ^8.1.0 are devDependencies only. next.js@v13.4.12 packages/next/package.json: no babel and no webpack in dependencies; webpack and 27 @babel/* entries are devDependencies (bundled via ncc). babel@v7.22.9 is the root of the change."
   }
 }

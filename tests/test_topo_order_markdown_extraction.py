@@ -97,6 +97,15 @@ GRAPH_005 = {
     ],
     "@babel/preset-env": ["@babel/core", "@babel/plugin-transform-property-mutators"],
 }
+# NOT the task's ground truth, and deliberately not synced to it. This is a
+# fixture for the markdown-extraction regression tests below, which replay a real
+# recorded baseline REFACTOR_PLAN.md that names all three repos; the graph has to
+# keep all three keys for that replay to mean anything. The task's real graph is
+# a single edge, babel -> next.js: webpack v5.88.2 parses with acorn ^8.7.1 and
+# declares no babel dependency, so the webpack edges below are the fabricated
+# chain the task was rebuilt away from. Do not copy this graph back into
+# benchmarks/technical_debt/refactor-orchestration-tri-babel-001/ground_truth.json
+# — see its _premise_correction (EnterpriseBench-jn73.2.7.3.1.2).
 GRAPH_TRI_BABEL_001 = {
     "babel/babel": [],
     "webpack/webpack": ["babel/babel"],
