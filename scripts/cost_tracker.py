@@ -250,7 +250,11 @@ def parse_trace(trace_path: Path) -> Usage:
                 continue
             try:
                 entry = json.loads(line)
-            except json.JSONDecodeError:
+            except (ValueError, RecursionError):
+                # JSONDecodeError is a ValueError subclass. A 4300-digit int
+                # literal raises a bare ValueError (CPython int-str guard) and a
+                # deeply-nested line raises RecursionError; both are malformed
+                # input to skip, not a reason to abort the batch.
                 logger.warning("Skipping malformed line in %s", trace_path)
                 continue
 

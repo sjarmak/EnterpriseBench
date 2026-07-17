@@ -234,7 +234,10 @@ def retrieved_files_from_trace(trace_path: Path) -> list[str]:
             continue
         try:
             entry = json.loads(line)
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError):
+            # JSONDecodeError is a ValueError subclass. A 4300-digit int literal
+            # raises a bare ValueError (CPython int-str guard) and a deeply-
+            # nested line raises RecursionError; skip both as malformed input.
             continue
         if not isinstance(entry, dict):
             continue

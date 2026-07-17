@@ -201,6 +201,36 @@ class TestParseTrace:
         assert usage.input_tokens == 42
         assert usage.num_requests == 1
 
+    def test_big_int_literal_line_skipped(self, tmp_path: Path) -> None:
+        # A 4300+-digit integer literal makes json.loads raise a BARE ValueError
+        # (CPython's int-str conversion guard, CVE-2020-10735), not the
+        # JSONDecodeError subclass. It must be treated as a malformed line, not
+        # abort the whole trace.
+        path = tmp_path / "agent_trace.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as fh:
+            fh.write('{"input_tokens": ' + "9" * 5000 + "}\n")
+            fh.write(
+                json.dumps(_assistant_entry(input_tokens=42, output_tokens=7)) + "\n"
+            )
+        usage = parse_trace(path)
+        assert usage.input_tokens == 42
+        assert usage.num_requests == 1
+
+    def test_deeply_nested_line_skipped(self, tmp_path: Path) -> None:
+        # A ~10k-deep-nested line makes json.loads raise RecursionError (a
+        # RuntimeError, NOT a ValueError subclass). It must be skipped too.
+        path = tmp_path / "agent_trace.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as fh:
+            fh.write("[" * 10_000 + "]" * 10_000 + "\n")
+            fh.write(
+                json.dumps(_assistant_entry(input_tokens=42, output_tokens=7)) + "\n"
+            )
+        usage = parse_trace(path)
+        assert usage.input_tokens == 42
+        assert usage.num_requests == 1
+
     def test_non_assistant_entries_ignored(self, tmp_path: Path) -> None:
         trace = _write_trace(
             tmp_path / "agent_trace.jsonl",

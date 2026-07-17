@@ -109,6 +109,29 @@ def test_retrieved_files_missing_trace_returns_empty(tmp_path: Path) -> None:
     assert retrieved_files_from_trace(tmp_path / "nope.jsonl") == []
 
 
+def test_retrieved_files_big_int_literal_line_skipped(tmp_path: Path) -> None:
+    # A 4300+-digit integer literal makes json.loads raise a BARE ValueError
+    # (CPython's int-str guard, CVE-2020-10735), not the JSONDecodeError
+    # subclass. The malformed line must be skipped, not abort extraction.
+    trace = tmp_path / "agent_trace.jsonl"
+    trace.write_text(
+        '{"input_tokens": ' + "9" * 5000 + "}\n"
+        + _assistant_tool_use("t1", "Read", {"file_path": WORKER}) + "\n"
+    )
+    assert retrieved_files_from_trace(trace) == [WORKER]
+
+
+def test_retrieved_files_deeply_nested_line_skipped(tmp_path: Path) -> None:
+    # A ~10k-deep-nested line makes json.loads raise RecursionError (a
+    # RuntimeError, NOT a ValueError subclass). It must be skipped too.
+    trace = tmp_path / "agent_trace.jsonl"
+    trace.write_text(
+        "[" * 10_000 + "]" * 10_000 + "\n"
+        + _assistant_tool_use("t1", "Read", {"file_path": WORKER}) + "\n"
+    )
+    assert retrieved_files_from_trace(trace) == [WORKER]
+
+
 def test_retrieved_files_parses_bash_read_commands(tmp_path: Path) -> None:
     trace = _write_trace(
         tmp_path / "agent_trace.jsonl",
