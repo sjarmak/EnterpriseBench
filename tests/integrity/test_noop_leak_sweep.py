@@ -42,7 +42,7 @@ def _sweep_result():
     # The sweep shells out one subprocess per check (~400); every test below
     # consumes the same immutable result, so compute it once.
     benchmarks = REPO_ROOT / "benchmarks"
-    result = sweep(benchmarks, benchmarks)
+    result = sweep(benchmarks)
     assert result.n_tasks > 0, "swept zero tasks — path or discovery is broken"
     assert result.n_checks > 0, "swept zero checks — path or discovery is broken"
     return result

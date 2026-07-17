@@ -71,6 +71,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+BENCHMARKS_ROOT = REPO_ROOT / "benchmarks"  # corpus root; task paths are shown relative to it
 EB_VERIFY_PARENT = REPO_ROOT / "lib"  # PYTHONPATH root: `import eb_verify`
 sys.path.insert(0, str(EB_VERIFY_PARENT))
 from eb_verify.scorer_guard import run_verifier_subprocess  # noqa: E402
@@ -145,7 +146,7 @@ def _run_task(task_dir: Path) -> list[tuple[str, Path, float | None]]:
     return out
 
 
-def sweep(root: Path, benchmarks_root: Path) -> SweepResult:
+def sweep(root: Path) -> SweepResult:
     """Sweep every task under ``root`` under the no-op condition.
 
     ``n_errored`` counts checks that reached no verdict (a ``None`` score from the
@@ -167,7 +168,7 @@ def sweep(root: Path, benchmarks_root: Path) -> SweepResult:
                 continue
             if score > SCORE_EPS:
                 try:
-                    rel = task_dir.relative_to(benchmarks_root)
+                    rel = task_dir.relative_to(BENCHMARKS_ROOT)
                 except ValueError:
                     rel = task_dir
                 leaks.append(
@@ -216,10 +217,9 @@ def main(argv: list[str] | None = None) -> int:
     if not root.is_dir():
         print(f"error: sweep path is not a directory: {root}", file=sys.stderr)
         return 2
-    benchmarks_root = REPO_ROOT / "benchmarks"
     allow = _parse_allow(args.allow)
 
-    result = sweep(root, benchmarks_root)
+    result = sweep(root)
     leaks = result.leaks
     unexpected = [lk for lk in leaks if not _is_allowed(lk, allow)]
 
