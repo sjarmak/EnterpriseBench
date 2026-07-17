@@ -60,7 +60,7 @@ slip the sweep; fold recognition in then. The corpus greps are
 ``$VAR -c`` = 0 hits and ``| python`` = 0 hits.
 
 Superseded eventually by rmz1x (migrate these blobs onto
-``eb_verify.plugins.file_extraction``); until then this is the backstop.
+``eb_verify.scorers.file_extraction``); until then this is the backstop.
 """
 
 from __future__ import annotations
@@ -84,10 +84,13 @@ BENCHMARKS = ROOT / "benchmarks"
 # (``(?!-c\b)-\w+(?:\s+[^\s"]+)?`` — a flag token, optionally with its own arg such
 # as ``-W ignore``), as is any whitespace run (multiple spaces / tabs / newlines),
 # so ``python3 -W ignore -c`` and double-space spellings are still scanned rather
-# than silently skipped. A *single*-quoted ``-c '...'`` body performs no expansion
-# and is intentionally not matched.
+# than silently skipped. ``-c\s*"`` (``\s*`` not ``\s+``) also catches the adjacent
+# spelling ``python3 -c"..."``: bash and CPython accept ``-c"body"`` as one token,
+# so a mandatory space here left a live bare-code vector (``-c"result = $AGENT"``)
+# entirely unscanned. A *single*-quoted ``-c '...'`` body performs no expansion and
+# is intentionally not matched.
 _PY_BODY = re.compile(
-    r'python[0-9.]*\s+(?:(?!-c\b)-\w+(?:\s+[^\s"]+)?\s+)*-c\s+"((?:[^"\\]|\\.)*)"',
+    r'python[0-9.]*\s+(?:(?!-c\b)-\w+(?:\s+[^\s"]+)?\s+)*-c\s*"((?:[^"\\]|\\.)*)"',
     re.DOTALL,
 )
 
@@ -100,31 +103,26 @@ _HEREDOC = re.compile(
     re.DOTALL,
 )
 
-# A ``$`` or backtick candidate — every one is a *potential* live expansion; parity
-# of the preceding backslash run decides whether bash actually expands it (see
-# ``_live_expansions``). Backticks are command substitution and count alongside ``$``.
-_EXPANSION_CHAR = re.compile(r"[$`]")
-
-
 def _live_expansions(body: str) -> Iterator[tuple[int, str]]:
-    """Yield ``(position, char)`` for each *live* bash expansion in ``body``.
+    """Yield ``(position, char)`` for each *live* bash expansion (``$`` or backtick).
 
     A ``$`` or backtick is live iff preceded by an **even** number of backslashes
     (zero counts): ``\\$`` is escaped (odd), ``\\\\$`` expands (even, the ``\\\\``
     is one literal backslash and the ``$`` is live). A single-char ``(?<!\\)``
     lookbehind gets the even-run case wrong and silently under-scans; counting the
-    run in Python is the correct, readable fix. Backticks follow the same rule and
-    are always violations (command substitution has no allowlisted open() shape).
+    run in Python is the correct, readable fix. Backticks are command substitution
+    and follow the same rule — always violations (no allowlisted open() shape).
     """
-    for match in _EXPANSION_CHAR.finditer(body):
-        pos = match.start()
+    for pos, char in enumerate(body):
+        if char not in "$`":
+            continue
         backslashes = 0
         cursor = pos - 1
         while cursor >= 0 and body[cursor] == "\\":
             backslashes += 1
             cursor -= 1
         if backslashes % 2 == 0:
-            yield pos, body[pos]
+            yield pos, char
 
 
 # The (optional) simple var name immediately after a ``$`` — used only to test the
@@ -137,12 +135,29 @@ _VARNAME = re.compile(r"\{?(\w+)")
 # quote may sit between). Anchored at end-of-prefix, so distance does not matter.
 _OPEN_ARG = re.compile(r"""open\(\s*['"]?$""")
 
-# A bash assignment at ANY indentation. Column-0-only (``^`` without ``[ \t]*``)
-# missed a reassignment nested in an ``if``/``for``/function block — the exact
-# ``  WORKSPACE=$(id)`` smuggle the allowlist must taint. Python-body lines survive
-# unscathed: Python spells assignment with spaces (``x = ...``), which ``\w+=`` does
-# not match, so only real shell ``name=value`` assignments are considered.
-_ASSIGN = re.compile(r"^[ \t]*(?:export\s+)?(\w+)=(.*)$", re.MULTILINE)
+# A shell *write* to a variable, one simple-command fragment at a time (fragments
+# are produced by ``_SEP`` splitting below, so ``^\s*`` anchors the fragment start,
+# not a physical line). Covers the ``name=`` / ``export name=`` / ``declare -x
+# name=`` / ``name+=`` family — a decl keyword with optional flags may precede the
+# name. Python-body lines survive unscathed: Python spells assignment with spaces
+# (``x = ...``), which ``\w+=`` (no space) does not match, so only real shell
+# ``name=value`` writes are considered.
+_DECL = r"(?:(?:export|declare|typeset|local|readonly)\s+(?:-\w+\s+)*)?"
+_ASSIGN = re.compile(rf"^\s*{_DECL}(\w+)(\+?=)(.*)$", re.DOTALL)
+
+# The other builtins that WRITE a variable without a ``name=`` shape. ``read`` and
+# ``mapfile``/``readarray`` take stdin/agent-controllable data into their target
+# names; ``printf -v NAME`` writes into ``NAME``. Each is inherently non-harness, so
+# any harness var written this way is tainted (never a clean assignment).
+_READ = re.compile(r"^\s*(?:read|mapfile|readarray)\b(.*)$", re.DOTALL)
+_PRINTF_V = re.compile(r"\bprintf\b(?:\s+-\w+)*\s+-v\s*(\w+)")
+
+# Command separators. Splitting on them turns a ``;``/``&&``/``||``/pipe-joined
+# reassignment into its own fragment instead of letting a greedy earlier ``.*``
+# swallow it (the ``TMP=x; WORKSPACE=$(id)`` smuggle). Over-splitting (a ``|`` inside
+# a value) can only over-*taint*, which is safe — it never hides a write, and the
+# ``$`` that makes a value dangerous still lands in some fragment and fails closed.
+_SEP = re.compile(r"[\n;&|]+")
 
 # A *fully* harness-rooted assignment RHS: the ``$WORKSPACE``/``$TASK_DIR`` root
 # (braced or bare, not ``$WORKSPACEFOO``) followed to end-of-string by ONLY literal
@@ -158,19 +173,54 @@ _HARNESS_RHS = re.compile(
 )
 
 
+def _var_writes(script_text: str) -> dict[str, list[bool]]:
+    """Map each written var name to a list of ``is_clean`` flags, one per write.
+
+    A write is *clean* iff it is a plain ``name=<harness-rooted-literal-path>``
+    assignment. Append (``+=``), ``read``/``mapfile``/``printf -v``, and any RHS the
+    ``_HARNESS_RHS`` anchor cannot fully vet are non-clean. Enumerating every bash
+    write spelling is a losing game, so the rule is fail-closed: the caller trusts a
+    var only when *every* recorded write is clean, and the writes are found on
+    fragments split by ``_SEP`` — so ``;``/``&&`` chains, ``read``, ``declare``,
+    ``+=``, and backslash line-continuations (joined below) all surface as writes.
+    """
+    writes: dict[str, list[bool]] = defaultdict(list)
+    # bash removes a backslash-newline before tokenizing, so a continued
+    # ``VAR=<root>\<newline><agent-tail>`` is really one assignment; join first, else
+    # only the clean-looking first physical line is seen and the var is trusted.
+    joined = script_text.replace("\\\n", "")
+    for frag in _SEP.split(joined):
+        assign = _ASSIGN.match(frag)
+        if assign:
+            name, op, rhs = assign.group(1), assign.group(2), assign.group(3).strip()
+            writes[name].append(op == "=" and bool(_HARNESS_RHS.match(rhs)))
+            continue
+        read = _READ.match(frag)
+        if read:
+            for token in read.group(1).split():
+                if not token.startswith("-") and token.isidentifier():
+                    writes[token].append(False)
+            continue
+        printf_v = _PRINTF_V.search(frag)
+        if printf_v:
+            writes[printf_v.group(1)].append(False)
+    return writes
+
+
 def _harness_path_vars(script_text: str) -> set[str]:
-    """Vars safe to interpolate into ``open(...)`` — every assignment is harness-rooted.
+    """Vars safe to interpolate into ``open(...)`` — every write is harness-rooted.
 
     ``WORKSPACE``/``TASK_DIR`` seed the set (they arrive from the harness env), but a
-    non-harness assignment to *any* name — including those two — removes it, so an
+    non-harness write to *any* name — including those two — removes it, so an
     agent-influenced value routed through a harness-named var is not allowlisted.
+    Fail-closed: a var is trusted only if it has writes and *all* of them are clean,
+    or it is an unwritten seed. A ``declare -n`` nameref aliasing a harness var is a
+    known out-of-scope gap (the indirect write names the alias, not the target) —
+    absent from the corpus, disclosed here rather than fixed.
     """
     safe = {"WORKSPACE", "TASK_DIR"}
-    assignments: dict[str, list[str]] = defaultdict(list)
-    for match in _ASSIGN.finditer(script_text):
-        assignments[match.group(1)].append(match.group(2).strip())
-    for var, rhs_values in assignments.items():
-        if all(_HARNESS_RHS.match(rhs) for rhs in rhs_values):
+    for var, cleans in _var_writes(script_text).items():
+        if all(cleans):  # every write clean (a var with no writes never appears here)
             safe.add(var)
         else:
             safe.discard(var)
@@ -201,9 +251,9 @@ def _injection_sites(script_text: str) -> list[str]:
         for pos, char in _live_expansions(body):
             var = None
             if char == "$":
-                name_match = _VARNAME.match(body[pos + 1 :])
+                name_match = _VARNAME.match(body, pos + 1)
                 var = name_match.group(1) if name_match else None
-                if var in harness and _OPEN_ARG.search(body[:pos]):
+                if var in harness and _OPEN_ARG.search(body, 0, pos):
                     continue
             line_start = body.rfind("\n", 0, pos) + 1
             line_end = body.find("\n", pos)
@@ -213,16 +263,17 @@ def _injection_sites(script_text: str) -> list[str]:
     return sites
 
 
-def _check_scripts() -> list[Path]:
-    return sorted(BENCHMARKS.rglob("checks/*.sh"))
+# The full check-script corpus, discovered once (the tree is walked at import, not
+# per test). ``test_scripts_discovered`` guards against a broken glob silently
+# yielding zero scripts, which would make the sweep vacuously green.
+_SCRIPTS = sorted(BENCHMARKS.rglob("checks/*.sh"))
 
 
 @pytest.mark.security
 def test_scripts_discovered() -> None:
     """A broken glob returning zero scripts would make the sweep vacuously green."""
-    scripts = _check_scripts()
-    assert len(scripts) > 400, (
-        f"expected the full benchmarks check-script corpus, found {len(scripts)} — "
+    assert len(_SCRIPTS) > 400, (
+        f"expected the full benchmarks check-script corpus, found {len(_SCRIPTS)} — "
         "the glob is broken or the tree moved; the sweep would false-pass."
     )
 
@@ -237,7 +288,7 @@ def test_no_python_injection_repo_wide() -> None:
     """
     offenders = {
         str(script.relative_to(ROOT)): sites
-        for script in _check_scripts()
+        for script in _SCRIPTS
         if (sites := _injection_sites(script.read_text()))
     }
     assert not offenders, (
@@ -291,6 +342,47 @@ _VULNERABLE = {
         'fi\n'
         "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
     ),
+    # No space between ``-c`` and the opening quote. ``-c\s+"`` (mandatory space)
+    # skipped the whole body unscanned; ``-c\s*"`` catches it.
+    "no-space -c\"...\" bare code": (
+        'AGENT_SCORE="x"\npython3 -c"\nresult = $AGENT_SCORE\n"'
+    ),
+    # A sibling reassignment joined by ``;``/``&&`` onto another command. Greedy
+    # single-line ``(.*)$`` swallowed it; ``_SEP`` fragment-splitting surfaces it.
+    "allowlist bypass: ;-joined WORKSPACE reassignment": (
+        'TMP=x; WORKSPACE="$(id)"\n'
+        "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
+    ),
+    "allowlist bypass: &&-joined WORKSPACE reassignment": (
+        'true && WORKSPACE="$(id)"\n'
+        "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
+    ),
+    # Non-``name=`` write spellings. A ``name=``-only scanner never un-trusted the
+    # seed; ``_var_writes`` models read / declare / += / printf -v as writes.
+    "allowlist bypass: read into WORKSPACE": (
+        'read WORKSPACE < answer.json\n'
+        "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
+    ),
+    "allowlist bypass: declare-reassigned WORKSPACE": (
+        'declare WORKSPACE="$(id)"\n'
+        "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
+    ),
+    "allowlist bypass: += appended WORKSPACE": (
+        'WORKSPACE+="$(id)"\n'
+        "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
+    ),
+    "allowlist bypass: printf -v into WORKSPACE": (
+        'printf -v WORKSPACE "%s" "$(id)"\n'
+        "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
+    ),
+    # Backslash line-continuation: the real RHS is both physical lines concatenated.
+    # Scanning only line 1 saw a clean-looking prefix; joining continuations first
+    # taints the whole assignment.
+    "allowlist bypass: continuation-split RHS": (
+        'WORKSPACE="${WORKSPACE}"\\\n'
+        '"$(id)"\n'
+        "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
+    ),
 }
 
 # Bodies the detector MUST NOT flag.
@@ -313,6 +405,18 @@ _SAFE = {
     ),
     # escaped \$ is passed through literally by bash — not expanded.
     "escaped-dollar literal": 'python3 -c "\nx = \'\\$AGENT_FILES\'\n"',
+    # ``export`` prefix on the real shape (platform_engineering uses this) — the
+    # fail-closed rewrite must not over-taint a legitimately clean assignment.
+    "export-prefixed harness path into open()": (
+        'export REPORT="${WORKSPACE}/agent_output/answer.json"\n'
+        "python3 -c \"\nwith open('${REPORT}') as f:\n    pass\n\""
+    ),
+    # A clean assignment sharing its line with an unrelated command via ``;``. Frag-
+    # splitting must still see REPORT's assignment as clean, not swallow or taint it.
+    "separator-joined clean assignment": (
+        'cd /tmp; REPORT="${WORKSPACE}/agent_output/answer.json"\n'
+        "python3 -c \"\nwith open('${REPORT}') as f:\n    pass\n\""
+    ),
 }
 
 
