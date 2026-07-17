@@ -1,0 +1,32 @@
+{
+  "task_id": "monorepo-boundary-babel-metadata-003",
+  "checkpoints": {
+    "identify_affected_packages": {
+      "expected_solution": "Three packages are affected, and no package is hit by both changes. Change (1), decorator metadata (PR #15895, 26 files): @babel/plugin-proposal-decorators (24 files) and @babel/helpers (2 files). Change (2), TS tuple labels (PR #15896, 5 files): @babel/parser only. The release-notes claim instruction.md states — that the decorator core lands in @babel/helper-create-class-features-plugin and cascades through a helper -> plugin -> preset chain — is false and the report must say so: neither PR contains a single file from that package, and no preset is touched. check_affected_packages.sh gates on 'applyDecs2305' (zero hits in instruction.md) and then pays half for refuting the attribution on one line and half for naming babel-helpers and plugin-proposal-decorators, the two packages the prompt never mentions.",
+      "evaluation_criteria": [
+        "IMPACT_REPORT.md must name applyDecs2305 — this gates the checkpoint and no restatement of the prompt produces it",
+        "Report must state on one line that @babel/helper-create-class-features-plugin is not affected",
+        "Report must name @babel/helpers and @babel/plugin-proposal-decorators. Naming @babel/parser pays nothing: instruction.md supplies it",
+        "The answer to 'are any hit by both?' is none — the two PRs share no file and no package"
+      ]
+    },
+    "classify_change_impact": {
+      "expected_solution": "All three affected packages take a minor bump: both changes are additive (Symbol.metadata support added to the decorator transformer; the TS tuple grammar relaxed to accept more input, so previously-valid input still parses). @babel/helper-create-class-features-plugin is none. The classification itself was never wrong — what was wrong is that the old check scored 1.0 for the bare word 'minor' appearing anywhere, and the old prompt said 'I'd expect minor bumps' and 'the same minor release', so a prompt copy took this whole 0.45 checkpoint. The bump is now graded per package, on a line naming that package, and gated on 'applyDecs2305'.",
+      "evaluation_criteria": [
+        "Each of babel-helpers, babel-plugin-proposal-decorators and babel-parser must carry 'minor' on a line naming that package — a table row or a bullet both work",
+        "The bare word 'minor' pays nothing. instruction.md still contains it inside the 'none/patch/minor/major' label list, which is an output contract, not an answer",
+        "The report must say what each classification rests on (additive feature, no signature removed, grammar relaxed rather than restricted)",
+        "Gated on applyDecs2305: a bump stated without evidence the packages were identified by reading scores 0.0"
+      ]
+    },
+    "identify_boundary_violations": {
+      "expected_solution": "Three files carry these features across package boundaries: packages/babel-helpers/src/helpers/applyDecs2305.js (the decorator runtime helper, also regenerated into helpers-generated.ts), packages/babel-plugin-proposal-decorators/src/transformer-2023-05.ts (the transformer that emits it, crossing from the plugin into @babel/helpers), and packages/babel-parser/src/plugins/typescript/index.ts (the TS tuple grammar). check_boundary_violations.sh scores found/3 with fixed-string matching.",
+      "evaluation_criteria": [
+        "Report must name applyDecs2305, transformer-2023-05 and typescript/index — all three now have zero hits in instruction.md",
+        "This checkpoint carries no separate evidence gate in ground_truth.json because its scored tokens ARE the evidence; gating it on a token it already scores would be circular",
+        "Matching is fixed-string, never a regex: the old check's unanchored patterns let '.' match hyphens and slashes",
+        "The old prompt handed over applyDecs2305 outright, so this checkpoint paid 0.33 to a prompt copy; the helper name has been removed from instruction.md"
+      ]
+    }
+  }
+}

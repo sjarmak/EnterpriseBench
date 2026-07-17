@@ -1,16 +1,22 @@
 {
   "candidate_id": 4,
   "repo": "babel/babel",
+  "repo_revs": {
+    "babel/babel": "v7.22.20"
+  },
   "pr_refs": ["#15895", "#15896"],
   "release": "v7.23.0",
-  "description": "Decorator metadata support + TS tuple label changes cascade across parser, generator, helpers, and plugin-decorators",
+  "description": "Decorator metadata (PR #15895) + TS tuple label relaxation (PR #15896) landing in v7.23.0. Three packages are affected: @babel/helpers and @babel/plugin-proposal-decorators by the decorator change, @babel/parser by the tuple change. No package is hit by both. @babel/helper-create-class-features-plugin, which the release notes call the core of the decorator work, is not touched by either PR.",
+  "_premise_correction": "The affected_dependents set below is REAL and was verified against the merged PRs — this task's premise is sound, unlike its refactor-orchestration siblings, and was NOT re-scoped. Two things were wrong. (1) FALSE ATTRIBUTION: changed_package named @babel/helper-create-class-features-plugin as where the decorator core change lives, and the old instruction.md repeated it ('The core change is in @babel/helper-create-class-features-plugin, with a new helper (applyDecs2305) and updated decorator transformer'). VERIFIED FALSE: neither PR #15895 nor #15896 touches that package. PR #15895 (26 files) touches only babel-plugin-proposal-decorators (24) and babel-helpers (2); PR #15896 (5 files) touches only babel-parser. The old changed_package.changed_files list did not contain a single file from the package it named — the attribution contradicted the key's own data. The 'helper -> plugin -> preset chain' the old prompt asked the agent to trace is likewise phantom: no preset is touched by either PR. (2) The old instruction.md handed over the answers to two of three checkpoints: 'applyDecs2305' (a check_boundary_violations target) and 'I'd expect minor bumps' plus 'the same minor release' (check_impact_classification scored 1.0 for the bare word 'minor' anywhere in the report, on a 0.45-weight checkpoint). A `cp instruction.md IMPACT_REPORT.md` copy scored 0.63 overall.",
   "changed_package": {
-    "name": "@babel/helper-create-class-features-plugin",
-    "path": "packages/babel-helper-create-class-features-plugin",
-    "change_summary": "Decorator metadata support added; also @babel/types updated for mixed labeled/unlabeled TS tuple elements",
+    "name": "@babel/plugin-proposal-decorators",
+    "path": "packages/babel-plugin-proposal-decorators",
+    "change_summary": "Decorator metadata proposal implemented (PR #15895). The decorator transformer gained Symbol.metadata support; the runtime helper it emits was updated in @babel/helpers. Separately, PR #15896 relaxed TS tuple label grammar in @babel/parser.",
     "changed_files": [
+      "packages/babel-plugin-proposal-decorators/src/transformer-2023-05.ts",
       "packages/babel-helpers/src/helpers/applyDecs2305.js",
-      "packages/babel-plugin-proposal-decorators/src/transformer-2023-05.ts"
+      "packages/babel-helpers/src/helpers-generated.ts",
+      "packages/babel-parser/src/plugins/typescript/index.ts"
     ]
   },
   "affected_dependents": [
@@ -18,50 +24,78 @@
       "name": "@babel/helpers",
       "path": "packages/babel-helpers",
       "semver_bump": "minor",
-      "impact": "New applyDecs2305 helper for decorator metadata",
+      "impact": "applyDecs2305 runtime helper updated for decorator metadata; helpers-generated.ts regenerated from it",
       "affected_files": [
         "packages/babel-helpers/src/helpers-generated.ts",
         "packages/babel-helpers/src/helpers/applyDecs2305.js"
       ],
+      "change": 1,
       "confidence": 0.96
     },
     {
       "name": "@babel/plugin-proposal-decorators",
       "path": "packages/babel-plugin-proposal-decorators",
       "semver_bump": "minor",
-      "impact": "Decorator transformer updated for metadata, new test fixtures added",
+      "impact": "Decorator transformer updated for metadata (transformer-2023-05.ts), plus 23 new/updated test fixtures",
       "affected_files": [
         "packages/babel-plugin-proposal-decorators/src/transformer-2023-05.ts",
         "packages/babel-plugin-proposal-decorators/test/fixtures/metadata/class/exec.js",
         "packages/babel-plugin-proposal-decorators/test/fixtures/metadata/element/exec.js",
         "packages/babel-plugin-proposal-decorators/test/fixtures/metadata/options.json"
       ],
+      "change": 1,
       "confidence": 0.95
     },
     {
       "name": "@babel/parser",
       "path": "packages/babel-parser",
       "semver_bump": "minor",
-      "impact": "Parser updated to allow mixed labeled/unlabeled TS tuple elements (PR #15896)",
+      "impact": "TypeScript plugin grammar relaxed to allow mixed labeled/unlabeled tuple elements (PR #15896)",
       "affected_files": [
         "packages/babel-parser/src/plugins/typescript/index.ts",
         "packages/babel-parser/test/fixtures/typescript/types/tuple-labeled-after-unlabeled/output.json"
       ],
+      "change": 2,
       "confidence": 0.95
     }
   ],
+  "not_affected": [
+    {
+      "package": "@babel/helper-create-class-features-plugin",
+      "reason": "Untouched by both PRs. PR #15895 changed 26 files, all under babel-plugin-proposal-decorators (24) and babel-helpers (2); PR #15896 changed 5, all under babel-parser. The decorator transformer that actually changed is packages/babel-plugin-proposal-decorators/src/transformer-2023-05.ts.",
+      "note": "This is the precision half of the task. instruction.md states the release notes' claim outright, so restating it is anti-evidence, not a finding. The package is a plausible distractor because plugin-proposal-decorators genuinely does depend on it for class-feature lowering generally — it just took no part in the metadata change."
+    },
+    {
+      "package": "any preset (@babel/preset-env, @babel/preset-typescript, ...)",
+      "reason": "No preset is touched by either PR. The old prompt asked the agent to trace a 'helper -> plugin -> preset chain'; the chain terminates at the plugin.",
+      "note": "Recorded so the next author does not rediscover it."
+    }
+  ],
+  "overlap": {
+    "packages_hit_by_both_changes": [],
+    "note": "The prompt asks whether any package is hit by both. The answer is NONE, and it is checkable: change (1) touches babel-helpers and babel-plugin-proposal-decorators, change (2) touches babel-parser only. The two PRs share no file and no package."
+  },
   "overall_semver": "minor",
   "changelog_entries": [
     "@babel/plugin-proposal-decorators: Support decorator metadata (v7.23.0)",
     "@babel/parser: Allow TS tuples with both labeled and unlabeled elements (v7.23.0)"
   ],
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md, verified with `grep -coiF`: 'applyDecs2305' 0 hits, 'transformer-2023-05' 0, 'typescript/index' 0, 'helpers-generated' 0, 'babel-helpers' 0, 'plugin-proposal-decorators' 0. The prompt DOES supply '@babel/parser' (1 hit), 'helper-create-class-features-plugin' (1) and the word 'minor' (1, inside the 'none/patch/minor/major' label list, which is an output contract) — none may be graded alone, which is exactly what the old checks did: check_impact_classification.sh scored 1.0 for the bare string 'minor' appearing anywhere in the report, and the old prompt said 'I'd expect minor bumps' and 'the same minor release', so a `cp instruction.md IMPACT_REPORT.md` copy took the whole 0.45 checkpoint. The classification is now graded per package, on a line naming that package, so the label list cannot pay. Every checkpoint is gated on 'applyDecs2305', which the old prompt also handed over and which is now removed from it.",
+    "_residual_risk": "Echo-resistant, NOT proven closed-book-resistant: applyDecs2305 is a real published Babel helper name and the decorator-metadata proposal is well documented, so a model may produce it without opening the checkout. It is what a reader of packages/babel-helpers/src/helpers/ has; it is not proof of retrieval on its own. Tracked separately from the prompt-echo work; do not read a pass here as a closed-book pass.",
+    "identify_affected_packages": ["applyDecs2305"],
+    "classify_change_impact": ["applyDecs2305"],
+    "identify_boundary_violations": []
+  },
+  "_boundary_evidence_note": "identify_boundary_violations carries no gate list because its three scored tokens ARE the evidence: applyDecs2305, transformer-2023-05 and typescript/index all have zero hits in instruction.md now that the helper name has been removed from it. Gating a checkpoint on the token it already scores would be circular.",
   "verification": {
-    "method": "gh_api_pr_files",
+    "method": "gh_api_pr_files at the merged PRs, plus manifest read at the pinned rev",
+    "verified": true,
     "pr_file_count_15895": 26,
     "pr_file_count_15896": 5,
     "packages_touched": ["babel-helpers", "babel-plugin-proposal-decorators", "babel-parser"],
-    "verified": true
+    "verified_at_sha": "babel/babel PR #15895 'Implement the \"decorator metadata\" proposal' (merged 2023-09-25, 26 files): non-test sources are packages/babel-helpers/src/helpers-generated.ts, packages/babel-helpers/src/helpers/applyDecs2305.js and packages/babel-plugin-proposal-decorators/src/transformer-2023-05.ts; the remaining 23 are test fixtures under babel-plugin-proposal-decorators. PR #15896 'Allow TS tuples to have both labeled and unlabeled elements' (merged 2023-09-24, 5 files): non-test source is packages/babel-parser/src/plugins/typescript/index.ts; the other 4 are parser test fixtures. Neither PR contains any file under packages/babel-helper-create-class-features-plugin/, and neither touches a preset. Package split confirms no overlap: {babel-helpers, babel-plugin-proposal-decorators} for change 1, {babel-parser} for change 2."
   },
   "difficulty": "hard",
-  "confidence": 0.93
+  "confidence": 0.95
 }

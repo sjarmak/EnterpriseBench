@@ -4,19 +4,32 @@
 
 We have two features converging in the v7.23.0 release:
 
-1. **Decorator metadata** — adds `Symbol.metadata` support to the decorator implementation. The core change is in `@babel/helper-create-class-features-plugin`, with a new helper (`applyDecs2305`) and updated decorator transformer.
+1. **Decorator metadata** — adds `Symbol.metadata` support to the decorator
+   implementation.
 
-2. **TS tuple label relaxation** — TypeScript now allows tuples with a mix of labeled and unlabeled elements (previously all-or-nothing). The grammar change is in `@babel/parser`'s TypeScript plugin.
+2. **TS tuple label relaxation** — TypeScript now allows tuples with a mix of
+   labeled and unlabeled elements (previously all-or-nothing). The grammar change
+   is in `@babel/parser`'s TypeScript plugin.
 
-These are independent features, but they're both landing in the same minor release. I need a combined impact analysis.
+These are independent features, but they're both landing in the same v7.23.0
+release. I need a combined impact analysis.
+
+Our release notes say the decorator work lands in
+`@babel/helper-create-class-features-plugin` and cascades out through a
+helper → plugin → preset chain. Do not take that as given: work out from the
+checkout which packages each change actually touches, and cite the file that
+establishes it. If a package the notes call affected turns out not to be, say so.
 
 ## What I Need
 
-1. **Affected packages**: Which packages are affected by change (1), which by change (2), and are any hit by both?
+1. **Affected packages**: Which packages are affected by change (1), which by
+   change (2), and are any hit by both?
 
-2. **Impact classification**: Per package — none/patch/minor/major. Both changes are additive features, so I'd expect minor bumps, but verify.
+2. **Impact classification**: Per package — none/patch/minor/major. State the
+   bump for each affected package and say what the classification rests on.
 
-3. **Boundary violations**: The specific files where these features cross package boundaries. For decorator metadata: trace the helper → plugin → preset chain. For tuple labels: trace the parser → types chain.
+3. **Boundary violations**: The specific files where these features cross
+   package boundaries.
 
 ## Output
 

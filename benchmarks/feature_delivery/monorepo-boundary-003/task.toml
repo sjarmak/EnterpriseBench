@@ -14,17 +14,34 @@ difficulty = "hard"
 estimated_duration_minutes = 35
 session_type = "single"
 description = "Trace combined impact of decorator metadata support and TS tuple label relaxation across babel packages"
+# NEVER SHOWN TO THE AGENT. run_task.py feeds instruction.md
+# (`agent_command < /workspace/instruction.md`); this field is stale
+# CSB-migration metadata. Re-synced anyway: its previous text located the
+# decorator work in `@babel/helper-create-class-features-plugin` and the tuple
+# work in `@babel/types`. BOTH are false -- PR #15895 touches only
+# babel-plugin-proposal-decorators and babel-helpers, PR #15896 only
+# babel-parser, and neither PR contains a single file from
+# helper-create-class-features-plugin or @babel/types. Left as it was, a future
+# regeneration of instruction.md from this field would restore a false premise
+# the rebuild removed.
 prompt = """
 Two features are landing in the babel v7.23.0 release:
 
-1. Decorator metadata support in `@babel/helper-create-class-features-plugin`
-   (affects helpers and the decorators plugin)
-2. TypeScript tuple label relaxation in `@babel/types` — allowing mixed
-   labeled and unlabeled tuple elements (affects the parser)
+1. Decorator metadata support — adds `Symbol.metadata` to the decorator
+   implementation.
+2. TypeScript tuple label relaxation — allowing mixed labeled and unlabeled
+   tuple elements. The grammar change is in `@babel/parser`.
+
+Our release notes say the decorator work lands in
+`@babel/helper-create-class-features-plugin` and cascades out through a
+helper -> plugin -> preset chain. Do not take that as given: work out from the
+checkout which packages each change actually touches, and cite the file that
+establishes it. If a package the notes call affected turns out not to be, say so.
 
 Your task:
 1. Identify all sibling packages affected by either or both changes.
-2. Classify the impact per package as none/patch/minor/major.
+2. Classify the impact per package as none/patch/minor/major, and say what each
+   classification rests on.
 3. Identify specific boundary violations — files where these changes cross
    package boundaries.
 
