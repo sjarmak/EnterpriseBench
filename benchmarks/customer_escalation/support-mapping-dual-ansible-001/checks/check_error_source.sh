@@ -81,12 +81,11 @@ if files is None:
     es = answer.get("error_source")
     files = es.get("files") if isinstance(es, dict) else None
 
-if isinstance(files, list):
-    agent_files = _paths(files)
-elif isinstance(files, str) and files.strip():
-    agent_files = [files.strip()]
-else:
-    agent_files = []
+# A bare-string source_files is normalized to a one-element list so _paths
+# stays the single source of the strip/drop-empty rule for both shapes.
+if isinstance(files, str):
+    files = [files]
+agent_files = _paths(files) if isinstance(files, list) else []
 
 if not gt_files:
     print(json.dumps({"score": 0.0, "passed": False, "detail": "No GT files"}))
