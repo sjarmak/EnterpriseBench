@@ -52,6 +52,10 @@ export ANSWER_FILE GT_FILE
 # (EnterpriseBench-6py4v) instead of the recall-only substring pattern.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$(cd "$SCRIPT_DIR/../../../../lib" 2>/dev/null && pwd || echo "")"
+# Trust the fallback only if it carries the module we import: a stale
+# eb_verify four levels up (a -d check would wave through) must not shadow
+# the PYTHONPATH the harness exports. See EnterpriseBench-4du6t.
+[[ -f "$LIB_DIR/eb_verify/plugins/path_match.py" ]] || LIB_DIR=""
 
 python3 - "$LIB_DIR" <<'PYEOF'
 import json, os, sys
@@ -62,7 +66,7 @@ def verdict(score, detail):
 
 lib_dir = sys.argv[1]
 if lib_dir:
-    sys.path.insert(0, lib_dir)
+    sys.path.append(lib_dir)
 
 try:
     from eb_verify.plugins.path_match import extract_claimed_paths, path_match_score

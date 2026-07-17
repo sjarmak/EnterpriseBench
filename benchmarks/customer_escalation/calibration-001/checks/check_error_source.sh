@@ -44,11 +44,13 @@ if [[ "$(wc -c <"$ANSWER_FILE")" -gt "$MAX_ANSWER_BYTES" ]]; then
     verdict 0.0 false "answer.json exceeds ${MAX_ANSWER_BYTES} bytes"
 fi
 
-# Locate the repo lib/ (4 levels up from this checks/ dir): sys.path.insert
-# precedent from the topological_order checks. PYTHONPATH is set independently
-# by the harness in both deployments, so the import below is guarded regardless.
+# Locate the repo lib/ (4 levels up from this checks/ dir).
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$(cd "$SCRIPT_DIR/../../../../lib" 2>/dev/null && pwd || echo "")"
+# Trust the fallback only if it carries the module we import: a stale
+# eb_verify four levels up (a -d check would wave through) must not shadow
+# the PYTHONPATH the harness exports. See EnterpriseBench-4du6t.
+[[ -f "$LIB_DIR/eb_verify/plugins/path_match.py" ]] || LIB_DIR=""
 
 export ANSWER_FILE GT_FILE
 
@@ -61,7 +63,7 @@ def verdict(score, passed, detail):
 
 lib_dir = sys.argv[1]
 if lib_dir:
-    sys.path.insert(0, lib_dir)
+    sys.path.append(lib_dir)
 
 try:
     from eb_verify.plugins.path_match import extract_claimed_paths, path_match_score
