@@ -82,8 +82,11 @@ refuted = any(claim in line and any(term in line for term in EXCLUDED)
               for line in lowered.splitlines())
 
 # The prompt names @babel/parser outright, so it pays nothing. These two it never
-# names.
-found = [p for p in ("babel-helpers", "plugin-proposal-decorators") if p in lowered]
+# names. Accept either the npm name (@babel/helpers) or the package directory
+# (babel-helpers) — reports use both, and neither is more correct.
+found = [names[0] for names in (("babel-helpers", "babel/helpers"),
+                                ("plugin-proposal-decorators",))
+         if any(n in lowered for n in names)]
 
 score = 0.5 * (1.0 if refuted else 0.0) + 0.5 * (len(found) / 2.0)
 

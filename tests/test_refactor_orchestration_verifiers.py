@@ -206,156 +206,221 @@ No parallelizable steps.
 Protobuf v1 to v2 import migration.
 """,
     ),
+    # Re-scoped 2026-07-16: the old spec carried the fabricated diamond
+    # (@babel/core -> four plugins -> two presets). Three of those plugin names
+    # DO NOT EXIST at babel@v7.25.0 -- they are PR #17620 title shorthand for the
+    # real -react-jsx-* packages -- and neither preset depends on any removal
+    # target. @babel/standalone is the sole workspace consumer, so its
+    # reference-drop must land before the deletions. Synced to
+    # benchmarks/technical_debt/refactor-orchestration-005/ground_truth.json;
+    # see its _premise_correction (EnterpriseBench-jn73.2.7.3.1.2).
     RefactorTaskSpec(
         task_num="005",
         gt_order=[
-            "@babel/core",
-            "@babel/plugin-transform-react-compat",
-            "@babel/plugin-transform-react-source",
-            "@babel/plugin-transform-react-self",
+            "@babel/standalone",
+            "@babel/plugin-transform-react-jsx-compat",
+            "@babel/plugin-transform-react-jsx-self",
+            "@babel/plugin-transform-react-jsx-source",
             "@babel/plugin-transform-property-mutators",
-            "@babel/preset-react",
-            "@babel/preset-env",
         ],
         dep_graph={
-            "@babel/core": [],
-            "@babel/plugin-transform-react-compat": ["@babel/core"],
-            "@babel/plugin-transform-react-source": ["@babel/core"],
-            "@babel/plugin-transform-react-self": ["@babel/core"],
-            "@babel/plugin-transform-property-mutators": ["@babel/core"],
-            "@babel/preset-react": [
-                "@babel/core",
-                "@babel/plugin-transform-react-compat",
-                "@babel/plugin-transform-react-source",
-                "@babel/plugin-transform-react-self",
-            ],
-            "@babel/preset-env": ["@babel/core", "@babel/plugin-transform-property-mutators"],
+            "@babel/standalone": [],
+            "@babel/plugin-transform-react-jsx-compat": ["@babel/standalone"],
+            "@babel/plugin-transform-react-jsx-self": ["@babel/standalone"],
+            "@babel/plugin-transform-react-jsx-source": ["@babel/standalone"],
+            "@babel/plugin-transform-property-mutators": ["@babel/standalone"],
         },
-        repo_keywords=["preset-env", "preset-react", "plugin-transform-react", "plugin-transform-property-mutators", "@babel/core"],
+        repo_keywords=["standalone", "plugin-transform-react-jsx", "plugin-transform-property-mutators"],
         alt_order=[
-            "@babel/core",
+            "@babel/standalone",
             "@babel/plugin-transform-property-mutators",
-            "@babel/plugin-transform-react-compat",
-            "@babel/plugin-transform-react-source",
-            "@babel/plugin-transform-react-self",
-            "@babel/preset-env",
-            "@babel/preset-react",
+            "@babel/plugin-transform-react-jsx-source",
+            "@babel/plugin-transform-react-jsx-compat",
+            "@babel/plugin-transform-react-jsx-self",
         ],
         gt_answer="""\
-# Refactor Plan
+# Babel 8 Plugin Removal Cascade — Refactor Plan
 
-## Dependency Graph
-- All plugins depend on @babel/core
-- @babel/preset-react depends on plugin-transform-react-{compat,source,self}
-- @babel/preset-env depends on plugin-transform-property-mutators
+## Order
 
-## Ordering
-1. @babel/core
-2. @babel/plugin-transform-react-compat
-3. @babel/plugin-transform-react-source
-4. @babel/plugin-transform-react-self
-5. @babel/plugin-transform-property-mutators
-6. @babel/preset-react
-7. @babel/preset-env
+1. `@babel/standalone` — drop the four plugins from devDependencies, remove their
+   imports and registry entries from `src/generated/plugins.ts`, delete their
+   entries from `scripts/pluginConfig.json`, drop the four project references
+   from `tsconfig.json`
+2. `@babel/plugin-transform-react-jsx-compat` — delete package
+3. `@babel/plugin-transform-react-jsx-self` — delete package
+4. `@babel/plugin-transform-react-jsx-source` — delete package
+5. `@babel/plugin-transform-property-mutators` — delete package
+
+## Internal Dependency Graph
+
+Exactly one workspace package references the removal targets:
+
+- `@babel/standalone` declares all four under devDependencies in
+  `packages/babel-standalone/package.json` as `"workspace:^"`, imports them in
+  `src/generated/plugins.ts`, and registers them in `scripts/pluginConfig.json`.
+
+The tracking notes are wrong about the diamond:
+
+- `@babel/preset-env` is not affected — its dependencies do not include `plugin-transform-property-mutators`.
+- `@babel/preset-react` is not affected — it depends on `plugin-transform-react-jsx`, `plugin-transform-react-jsx-development`, `plugin-transform-react-display-name` and `plugin-transform-react-pure-annotations`, none of which are removal targets.
+- `@babel/core` requires no change — it is a `peerDependency` of the plugins, not a dependent.
 
 ## Parallelization
-Parallel: @babel/plugin-transform-react-compat, @babel/plugin-transform-react-source, @babel/plugin-transform-react-self, @babel/plugin-transform-property-mutators (all only depend on @babel/core).
-Parallel: @babel/preset-react, @babel/preset-env (independent presets).
 
-## Risk Assessment
-- @babel/core: Breaking change foundation, must be updated first
-- Plugins: Removal, low risk individually
-- Presets: Must remove references to deleted plugins
+Once `@babel/standalone` has landed, the four deletions are mutually independent
+and can proceed in parallel:
+- `@babel/plugin-transform-react-jsx-compat`
+- `@babel/plugin-transform-react-jsx-self`
+- `@babel/plugin-transform-react-jsx-source`
+- `@babel/plugin-transform-property-mutators`
+
+## Breaking Change Impact
+`@babel/standalone` drops four names from its public plugin registry.
 """,
+        # Correct scope and evidence, wrong ordering: the deletions are scheduled
+        # before the standalone reference-drop they depend on, which breaks the
+        # build mid-cascade. identify_repos and parallelism still pay.
         partial_answer="""\
-# Refactor Plan
+# Babel 8 Plugin Removal Cascade — Refactor Plan
 
-## Ordering
-1. @babel/core
-2. @babel/preset-react
-3. @babel/preset-env
-4. @babel/plugin-transform-react-compat
+## Order
 
-## Notes
-Babel 8 plugin removal. Some plugins need removing.
+1. `@babel/plugin-transform-react-jsx-compat` — delete package
+2. `@babel/plugin-transform-react-jsx-self` — delete package
+3. `@babel/plugin-transform-react-jsx-source` — delete package
+4. `@babel/plugin-transform-property-mutators` — delete package
+5. `@babel/standalone` — drop the four plugins from devDependencies afterwards
+
+## Internal Dependency Graph
+
+- `@babel/standalone` declares all four under devDependencies in
+  `packages/babel-standalone/package.json`.
+- `@babel/preset-env` is not affected — no dependency on property-mutators.
+- `@babel/preset-react` is not affected — it depends on jsx-development, not the removal targets.
+
+## Parallelization
+
+The four deletions are independent and can proceed in parallel:
+- `@babel/plugin-transform-react-jsx-compat`
+- `@babel/plugin-transform-react-jsx-self`
+- `@babel/plugin-transform-react-jsx-source`
+- `@babel/plugin-transform-property-mutators`
 """,
     ),
+    # Re-scoped 2026-07-16: the old spec carried a four-deep staging cascade
+    # rooted at "build-infra", with "distroless-images" and "e2e-infra". Three of
+    # those seven nodes DO NOT EXIST in the checkout, and a Go toolchain bump
+    # touches no staging repo at all (PR #137080 changed seven files, none under
+    # staging/src/). The real graph is the one the repo declares about itself:
+    # build/dependencies.yaml carries a version plus a refPaths list per entry.
+    # Synced to benchmarks/technical_debt/refactor-orchestration-006/ground_truth.json;
+    # see its _premise_correction (EnterpriseBench-jn73.2.7.3.1.2).
     RefactorTaskSpec(
         task_num="006",
         gt_order=[
-            "build-infra",
-            "k8s.io/apimachinery",
-            "k8s.io/api",
-            "k8s.io/client-go",
-            "k8s.io/apiserver",
-            "distroless-images",
-            "e2e-infra",
+            "build/dependencies.yaml",
+            ".go-version",
+            "build/build-image/cross/VERSION",
+            "staging/publishing/rules.yaml",
+            "hack/lib/golang.sh",
+            "build/common.sh",
+            "test/utils/image/manifest.go",
         ],
         dep_graph={
-            "build-infra": [],
-            "k8s.io/apimachinery": ["build-infra"],
-            "k8s.io/api": ["build-infra", "k8s.io/apimachinery"],
-            "k8s.io/client-go": ["build-infra", "k8s.io/apimachinery", "k8s.io/api"],
-            "k8s.io/apiserver": [
-                "build-infra",
-                "k8s.io/apimachinery",
-                "k8s.io/api",
-                "k8s.io/client-go",
-            ],
-            "distroless-images": ["build-infra"],
-            "e2e-infra": ["build-infra", "distroless-images"],
+            "build/dependencies.yaml": [],
+            ".go-version": ["build/dependencies.yaml"],
+            "build/build-image/cross/VERSION": ["build/dependencies.yaml"],
+            "staging/publishing/rules.yaml": ["build/dependencies.yaml"],
+            "hack/lib/golang.sh": ["build/dependencies.yaml"],
+            "build/common.sh": ["build/dependencies.yaml"],
+            "test/utils/image/manifest.go": ["build/dependencies.yaml"],
         },
-        repo_keywords=["apimachinery", "client-go", "apiserver", "distroless", "api"],
+        repo_keywords=["dependencies.yaml", "go-version", "rules.yaml", "golang.sh", "common.sh"],
         alt_order=[
-            "build-infra",
-            "distroless-images",
-            "k8s.io/apimachinery",
-            "e2e-infra",
-            "k8s.io/api",
-            "k8s.io/client-go",
-            "k8s.io/apiserver",
+            "build/dependencies.yaml",
+            "build/common.sh",
+            "test/utils/image/manifest.go",
+            "hack/lib/golang.sh",
+            "staging/publishing/rules.yaml",
+            "build/build-image/cross/VERSION",
+            ".go-version",
         ],
         gt_answer="""\
-# Refactor Plan
+# Go 1.26.0 Toolchain Update — Refactor Plan
+
+## Order
+
+1. `build/dependencies.yaml` — bump the version fields: "golang: upstream version" 1.24.6 -> 1.26.0, "golang: 1.<major>" 1.24 -> 1.26, kube-cross, go-runner and distroless-iptables (v0.7.8 -> v0.9.0)
+2. `.go-version` — 1.24.6 -> 1.26.0
+3. `build/build-image/cross/VERSION` — v1.34.0-go1.24.6-bullseye.0 -> the go1.26.0 kube-cross tag
+4. `staging/publishing/rules.yaml` — default-go-version: 1.24.6 -> 1.26.0
+5. `hack/lib/golang.sh` — minimum_go_version=go1.24 -> go1.26
+6. `build/common.sh` — __default_go_runner_version and __default_distroless_iptables_version
+7. `test/utils/image/manifest.go` — configs[DistrolessIptables] v0.7.8 -> v0.9.0
 
 ## Dependency Graph
-- k8s.io/apimachinery depends on build-infra
-- k8s.io/api depends on build-infra, k8s.io/apimachinery
-- k8s.io/client-go depends on build-infra, k8s.io/apimachinery, k8s.io/api
-- k8s.io/apiserver depends on all above
-- distroless-images depends on build-infra
-- e2e-infra depends on build-infra, distroless-images
 
-## Ordering
-1. build-infra
-2. k8s.io/apimachinery
-3. k8s.io/api
-4. k8s.io/client-go
-5. k8s.io/apiserver
-6. distroless-images
-7. e2e-infra
+`build/dependencies.yaml` is the source of truth. Each entry carries a `version`
+plus a `refPaths` list naming every file that must be kept in sync with it:
+
+- "golang: upstream version" (1.24.6) refPaths: `.go-version`, `build/build-image/cross/VERSION`, `staging/publishing/rules.yaml`
+- "golang: 1.<major>" (1.24) refPaths: `build/build-image/cross/VERSION`, `hack/lib/golang.sh`
+- "registry.k8s.io/kube-cross: dependents" refPaths: `build/build-image/cross/VERSION`
+- "registry.k8s.io/distroless-iptables: dependents" (v0.7.8) refPaths: `build/common.sh`, `test/utils/image/manifest.go`
+- "registry.k8s.io/go-runner: dependents" refPaths: `build/common.sh`
+
+The union of those refPaths plus the manifest itself is the whole set: seven files.
+
+The release notes are wrong about the staging cascade:
+
+- `k8s.io/client-go` is not affected — a toolchain bump touches no file under staging/src/; its go.mod declares `go 1.24.0` before and after, which is the language version, not the toolchain.
+- `k8s.io/apimachinery` is likewise untouched, so the client-go -> apimachinery module edge carries no ordering constraint here.
+- All 31 staging repos are handled centrally by one line, `staging/publishing/rules.yaml:default-go-version`.
+- `build-infra`, `distroless-images` and `e2e-infra` do not exist in this checkout.
 
 ## Parallelization
-These steps can run concurrently: k8s.io/apimachinery, distroless-images
-These steps can run concurrently: k8s.io/client-go, e2e-infra
+
+Once `build/dependencies.yaml` is bumped, its six refPath targets are mutually
+independent leaves and can all land together:
+- `.go-version`
+- `build/build-image/cross/VERSION`
+- `staging/publishing/rules.yaml`
+- `hack/lib/golang.sh`
+- `build/common.sh`
+- `test/utils/image/manifest.go`
 
 ## Risk Assessment
-- build-infra: Foundation — must succeed first
-- k8s.io/apimachinery: Core types, high blast radius
-- distroless-images: Independent rebuild, low risk
+The referenced images must already be published to registry.k8s.io.
 """,
+        # Correct scope and evidence, wrong ordering: the refPath targets are
+        # scheduled before the declaring manifest they follow from.
         partial_answer="""\
-# Refactor Plan
+# Go 1.26.0 Toolchain Update — Refactor Plan
 
-## Ordering
-1. build-infra
-2. k8s.io/client-go
-3. k8s.io/apimachinery
-4. k8s.io/api
-5. k8s.io/apiserver
+## Order
 
-## Notes
-Go 1.26 update for Kubernetes staging repos.
+1. `.go-version` — 1.24.6 -> 1.26.0
+2. `staging/publishing/rules.yaml` — default-go-version
+3. `build/common.sh` — image defaults
+4. `build/dependencies.yaml` — bump the version fields afterwards
+
+## Dependency Graph
+
+`build/dependencies.yaml` declares the propagation set via refPaths.
+
+- `k8s.io/client-go` is not affected — no staging/src/ file changes in a toolchain bump.
+- `k8s.io/apimachinery` is untouched for the same reason.
+
+## Parallelization
+
+These are independent and can land together:
+- `.go-version`
+- `build/build-image/cross/VERSION`
+- `staging/publishing/rules.yaml`
+- `hack/lib/golang.sh`
+- `build/common.sh`
+- `test/utils/image/manifest.go`
 """,
     ),
     RefactorTaskSpec(

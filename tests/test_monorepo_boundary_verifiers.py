@@ -94,6 +94,11 @@ TASKS: list[TaskVerifierSpec] = [
     TaskVerifierSpec(
         task_num="003",
         repo_dir="babel",
+        # Refuting the release-notes attribution is now part of a correct answer:
+        # instruction.md states the claim that the decorator core lands in
+        # @babel/helper-create-class-features-plugin and asks the agent to test
+        # it. Neither PR #15895 nor #15896 touches that package
+        # (EnterpriseBench-jn73.2.7.3.1.2).
         gt_answer="""\
 # Impact Report
 
@@ -109,6 +114,10 @@ TASKS: list[TaskVerifierSpec] = [
 ## @babel/parser
 - **Impact**: minor
 - `packages/babel-parser/src/plugins/typescript/index.ts` — tuple label relaxation
+
+## Not affected
+- `@babel/helper-create-class-features-plugin` is not affected — neither PR
+  contains a file from it, so it is not the core of the decorator change.
 """,
         partial_answer="""\
 # Impact Report

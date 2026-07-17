@@ -74,18 +74,29 @@ if missing:
 
 lines = lowered.splitlines()
 
-# The bump must be attached to the package ON ONE LINE. The bare word pays
-# nothing: instruction.md contains it as part of the label list.
-def classified(pkg_key, bump):
-    return any(pkg_key in line and bump in line for line in lines)
+# The bump must be attached to a SPECIFIC package: the bare word pays nothing,
+# because instruction.md carries it in the "none/patch/minor/major" label list.
+# "Attached" means within the package mention line or the few lines under it —
+# a table row states both on one line, a per-package section states the name in a
+# heading and the bump in a bullet below it, and both are correct. A window,
+# rather than a whole-document search, keeps "minor" from being credited to a
+# package named paragraphs away.
+WINDOW = 5
+
+def classified(keys, bump):
+    for i, line in enumerate(lines):
+        if any(k in line for k in keys):
+            if bump in "\n".join(lines[i:i + WINDOW]):
+                return True
+    return False
 
 results = []
 for dep in deps:
-    # Match on the package directory name (babel-helpers, babel-parser,
-    # babel-plugin-proposal-decorators), which the report will use in some form.
-    key = dep["path"].split("/")[-1]
+    # Accept either the npm name (@babel/helpers) or the package directory
+    # (babel-helpers). Reports use both, and neither is more correct.
+    keys = {dep["name"].lower(), dep["path"].split("/")[-1].lower()}
     bump = dep["semver_bump"].lower()
-    results.append((key, classified(key, bump)))
+    results.append((dep["path"].split("/")[-1], classified(keys, bump)))
 
 got = [k for k, ok in results if ok]
 score = len(got) / len(results)
