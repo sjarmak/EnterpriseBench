@@ -10,19 +10,19 @@
       ]
     },
     "apiserver_authorization": {
-      "expected_solution": "In each per-policy storage file under apiserver/pkg/registry/projectcalico/ (e.g. apiserver/pkg/registry/projectcalico/globalpolicy/storage.go and apiserver/pkg/registry/projectcalico/networkpolicy/storage.go), the Update() method authorizes the request against the OLD object's tier only. It does not call objInfo.UpdatedObject() to materialize the incoming new object, so the destination tier is never resolved or checked. A user with permission on the old/source tier — but no permission on the destination tier — passes the apiserver's authorization check on UPDATE, because only the existing/current tier is consulted.",
+      "expected_solution": "In each per-policy storage file under apiserver/pkg/registry/projectcalico/ (e.g. apiserver/pkg/registry/projectcalico/globalpolicy/storage.go and apiserver/pkg/registry/projectcalico/networkpolicy/storage.go), the Update() method resolves the tier from the OLD object only: it calls r.Store.Get() to fetch the existing stored object, derives the tier via names.TierOrDefault(obj.Spec.Tier), and authorizes it with r.authorizer.AuthorizeTierOperation(). It then passes objInfo straight through to r.Store.Update() without ever calling objInfo.UpdatedObject() to materialize the incoming new object, so the destination tier is never resolved or checked. A user with permission on the old/source tier — but no permission on the destination tier — passes the apiserver's authorization check on UPDATE, because only the existing/current tier is consulted.",
       "evaluation_criteria": [
         "Must reference the apiserver storage layer (e.g. apiserver/pkg/registry/projectcalico/globalpolicy/storage.go) and the Update() method",
-        "Must state that the apiserver checks the OLD/existing/source/current tier only (not the new tier)",
+        "Must state that the apiserver checks the OLD/existing/source/current tier only (not the new tier), resolved from the stored object (r.Store.Get + names.TierOrDefault + AuthorizeTierOperation)",
         "Must explain that objInfo.UpdatedObject() is not called, so the destination tier is never resolved"
       ]
     },
     "webhook_authorization": {
-      "expected_solution": "In webhooks/pkg/rbac/rbac.go, the authorize() function on UPDATE operations only inspects request.Object (the NEW object) to determine the tier to authorize against. It does NOT parse request.OldObject, so the source/old tier is never checked. A user with permission on the destination tier — but no permission on the source tier — passes the webhook's authorization check on UPDATE, because only the new/updated tier is consulted.",
+      "expected_solution": "In webhooks/pkg/rbac/rbac.go, the authorize() function extracts one object to authorize with `raw := ar.Request.Object.Raw`, falling back to `ar.Request.OldObject.Raw` only when Object.Raw is empty (e.g. DELETE, where there is no new object). It then parses that single object via parsePolicy() to derive one tier and authorizes it via authz.AuthorizeTierOperation(). On UPDATE the admission request always carries the new object, so Object.Raw is populated and the OldObject fallback is never reached — only the NEW object's tier is parsed and authorized. request.OldObject is referenced in the code, but that branch is unreachable on UPDATE, so the source/old tier is never checked. A user with permission on the destination tier — but no permission on the source tier — passes the webhook's authorization check on UPDATE, because only the new/updated tier is consulted.",
       "evaluation_criteria": [
         "Must reference webhooks/pkg/rbac/rbac.go and the authorize() function",
         "Must state that the webhook checks the NEW/destination/target/updated tier only (not the old tier)",
-        "Must explain that request.OldObject is not parsed, so the source tier is never checked"
+        "Must explain that the request.OldObject fallback exists but is unreachable on UPDATE (request.Object.Raw is populated), so only the new tier is parsed and the source tier is never checked"
       ]
     },
     "bypass_and_remediation": {
