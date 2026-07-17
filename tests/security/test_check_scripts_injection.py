@@ -538,6 +538,40 @@ def test_all_scripts_survive_type_confusion(script: Path, tmp_path: Path) -> Non
     assert result["score"] == 0.0
 
 
+@pytest.mark.security
+@pytest.mark.parametrize(
+    "script", TARGET_FILES, ids=lambda p: str(p.relative_to(BENCHMARKS))
+)
+def test_all_scripts_survive_deeply_nested_answer(
+    script: Path, tmp_path: Path
+) -> None:
+    """A deeply-nested answer.json must still produce a verdict, not crash.
+
+    json.load recurses per nesting level; a payload deep enough to blow the
+    interpreter's recursion limit raises RecursionError — a RuntimeError, NOT
+    a subclass of ValueError/OSError/JSONDecodeError. A narrow except on the
+    agent parse would leak it and re-crash the check to empty stdout, the exact
+    no-verdict failure this template exists to prevent. answer.json is
+    agent-controlled, so the payload (~40KB) is cheap for an agent to emit.
+    """
+    depth = 20000  # well past the default recursion limit of 1000
+    proc = _run_check(
+        script,
+        tmp_path,
+        answer=None,
+        write_malformed="[" * depth + "]" * depth,
+        ground_truth=_GT_THREE,
+    )
+    assert proc.stdout.strip(), (
+        f"{script.relative_to(ROOT)} produced empty stdout on a deeply-nested "
+        f"answer.json — likely an uncaught RecursionError. stderr={proc.stderr!r}"
+    )
+    result = _parse_score(proc)
+    assert result["score"] == 0.0
+    # Malformed agent input is an agent failure, not infra — must exit 0.
+    assert proc.returncode == 0
+
+
 # ---------------------------------------------------------------------------
 # Invariant 5: new answer and GT shapes covered explicitly
 # ---------------------------------------------------------------------------

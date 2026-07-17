@@ -63,7 +63,12 @@ gt_files = _paths(req)
 # --- Agent answer (agent-owned) ---
 try:
     answer = _load(os.environ["ANSWER_FILE"])
-except (json.JSONDecodeError, OSError, ValueError):
+except Exception:
+    # answer.json is agent-controlled and untrusted. Catch-all (not the
+    # narrow GT tuple above) is deliberate: a pathological payload raises
+    # RecursionError/MemoryError (a RuntimeError, NOT a ValueError) which a
+    # narrow except would leak, re-crashing this check to empty stdout --
+    # the exact no-verdict failure this template exists to prevent.
     print(json.dumps({"score": 0.0, "passed": False, "detail": "Malformed answer.json"}))
     sys.exit(0)
 if not isinstance(answer, dict):
