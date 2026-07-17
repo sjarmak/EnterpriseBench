@@ -40,10 +40,14 @@ except Exception as e:
     sys.exit(1)
 ")
 
+# Pass file lists via the environment (NOT interpolated into Python source):
+# these strings derive from agent-controlled answer.json and must never be
+# re-embedded as code. Same os.environ pattern the two blocks above use.
+export GT_FILES AGENT_FILES
 python3 -c "
-import json
-gt_files = '''$GT_FILES'''.strip().split('\n')
-agent_files = '''$AGENT_FILES'''.strip().split('\n')
+import json, os
+gt_files = os.environ.get('GT_FILES', '').strip().split('\n')
+agent_files = os.environ.get('AGENT_FILES', '').strip().split('\n')
 gt_files = [f.strip() for f in gt_files if f.strip()]
 agent_files = [f.strip() for f in agent_files if f.strip()]
 

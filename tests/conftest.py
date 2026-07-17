@@ -25,6 +25,7 @@ if _LIB not in sys.path:
 def pytest_configure(config):
     config.addinivalue_line("markers", "network: requires network access (git ls-remote)")
     config.addinivalue_line("markers", "docker: requires Docker daemon")
+    config.addinivalue_line("markers", "security: exercises a scoring/verifier trust boundary")
 
 
 def docker_available() -> bool:
