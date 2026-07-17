@@ -89,7 +89,9 @@ _DOLLAR = re.compile(r"(?<!\\)\$")
 
 # The (optional) simple var name immediately after a ``$`` — used only to test the
 # open() carve-out. ``$(...)`` / ``${!V}`` yield no name and are always violations.
-_VARNAME = re.compile(r"\{?(\w+)\}?")
+# The leading ``\{?`` lets ``${VAR}`` match past the brace; only ``group(1)`` is read,
+# so no trailing ``\}?`` is needed to consume the closing brace.
+_VARNAME = re.compile(r"\{?(\w+)")
 
 # The interpolation site is the argument of ``open(`` (any whitespace / opening
 # quote may sit between). Anchored at end-of-prefix, so distance does not matter.
@@ -154,7 +156,7 @@ def _injection_sites(script_text: str) -> list[str]:
             line_start = body.rfind("\n", 0, dollar.start()) + 1
             line_end = body.find("\n", dollar.start())
             line = body[line_start : line_end if line_end != -1 else None].strip()
-            sites.append(f"${var if var else '(…)'}: {line[:60]!r}")
+            sites.append(f"${var or '(…)'}: {line[:60]!r}")
     return sites
 
 
