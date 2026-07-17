@@ -45,19 +45,19 @@ var interpolated anywhere *other* than an ``open()`` argument (e.g. into a
 ``print`` string) is still flagged. Refactor such a script to pass the value via
 ``os.environ`` — the same safe pattern the qvpzt fix template uses — rather than
 widening this carve-out. The carve-out is structural only: it matches the *shape*
-``open('${HARNESS_VAR}')`` and cannot see what the body does with the bytes, so an
-``exec(open('${REPORT}').read())`` would pass the shape check — Python-level
-code-exec of file contents is a different class, out of this shell-into-Python
-guard's scope (and absent from the corpus: no ``exec``/``eval`` in any check script).
+``open('${HARNESS_VAR}')`` and cannot see what the body does with the bytes.
 
-Two *invocation-recognition* gaps are known fail-open, deliberately out of scope
-until a real script needs them (both verified absent from the corpus today, so
-this stays a documentation note rather than a live hole): an interpreter reached
-through a shell var (``PY=python3`` then ``$PY -c "…"``) is not recognised as a
-Python call, and a body piped into the interpreter (``cat … | python3``) is
-neither a ``-c`` string nor a heredoc. A new script using either spelling would
-slip the sweep; fold recognition in then. The corpus greps are
-``$VAR -c`` = 0 hits and ``| python`` = 0 hits.
+Three classes are deliberately out of scope, each verified absent from the corpus
+today — so this is a documentation note, not a live hole; fold each in when a real
+script needs it:
+
+* Python-level code-exec of file contents (``exec(open('${REPORT}').read())``)
+  passes the structural shape check above — a different class, and no ``exec`` /
+  ``eval`` appears in any check script.
+* an interpreter reached through a shell var (``PY=python3`` then ``$PY -c "…"``)
+  is not recognised as a Python call — ``$VAR -c`` = 0 hits.
+* a body piped into the interpreter (``cat … | python3``) is neither a ``-c``
+  string nor a heredoc — ``| python`` = 0 hits.
 
 Superseded eventually by rmz1x (migrate these blobs onto
 ``eb_verify.scorers.file_extraction``); until then this is the backstop.
