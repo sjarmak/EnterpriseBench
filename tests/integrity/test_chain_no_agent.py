@@ -392,3 +392,74 @@ class TestSimulateCannotReachABenchmarkRun:
             ["benchmarks", "--agent", "claude", "--mode", "hybrid", "--timeout", "60"]
         )
         assert "--simulate" not in collect_passthrough_args(args)
+
+
+class TestTheChainScoreReachesTheResultsTable:
+    """A scored chain's total_score used to be dropped from run_benchmark's results
+    table: chain_runner wrote only chain_result.json, which no non-test reader ever
+    read, so every chain — healthy or not — landed score=None. The runner now also
+    writes results.json in the one shape run_benchmark reads."""
+
+    def test_run_cli_writes_results_json_in_the_shape_run_benchmark_reads(
+        self, tmp_path
+    ):
+        """C1: the score lands in results.json under scores.task_score, the exact
+        key run_benchmark's reader looks up first."""
+        task_toml = chain_task_toml(tmp_path)
+
+        proc = run_cli(task_toml, "--simulate", "--workspace", str(tmp_path / "ws"))
+
+        assert proc.returncode == 0
+        results = json.loads((tmp_path / "results.json").read_text())
+        assert results["scores"]["task_score"] == pytest.approx(1.0)
+        # The rich artifact and the reader-shaped file agree on the number.
+        rich = json.loads((tmp_path / "chain_result.json").read_text())
+        assert results["scores"]["task_score"] == pytest.approx(rich["total_score"])
+
+    def test_run_benchmark_reader_picks_up_the_earned_chain_score(self, tmp_path):
+        """C2: the whole point. run_task forwards its args to the runner, the runner
+        writes results.json, and run_task reads the earned score into result.score
+        with status=completed instead of dropping it as None."""
+        from run_benchmark import TaskInfo, run_task
+
+        task_toml = chain_task_toml(tmp_path)
+        task = TaskInfo(
+            task_id="chain-no-agent",
+            suite="customer_escalation",
+            difficulty="medium",
+            session_type="chain",
+            task_type="error_provenance",
+            toml_path=task_toml,
+        )
+
+        result = run_task(
+            task,
+            passthrough_args=[
+                "--mode",
+                "baseline",
+                "--simulate",
+                "--workspace",
+                str(tmp_path / "ws"),
+            ],
+            mode="baseline",
+        )
+
+        assert result.status == "completed"
+        assert result.score == pytest.approx(
+            1.0
+        ), "the earned chain score must reach the results table, not land as None"
+
+    def test_a_stale_results_json_is_removed_before_the_run(self, tmp_path):
+        """The same fail-closed contract chain_result.json already has: an earlier
+        run's score must not survive a raise on the way through this one."""
+        stale = tmp_path / "results.json"
+        stale.write_text(json.dumps({"scores": {"task_score": 1.0}}))
+        task_toml = chain_task_toml(tmp_path)
+
+        # No agent and no --simulate is an invalid run that raises out before a
+        # score exists: the stale file must be gone, not left as this run's answer.
+        proc = run_cli(task_toml, "--workspace", str(tmp_path / "ws"))
+
+        assert proc.returncode != 0
+        results = json.loads(stale.read_text())
+        assert results["scores"]["task_score"] is None, "the stale 1.0 must not survive"

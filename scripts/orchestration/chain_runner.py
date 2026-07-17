@@ -505,8 +505,13 @@ def main():
 
     # Unlink before the run, not after: writing only on the way out leaves the
     # previous run's score on disk as this run's answer whenever this one raises.
+    # results.json is the file run_benchmark actually reads (task_dir/results.json
+    # is one of its three read locations); chain_result.json is the supplementary
+    # rich artifact. Both are unlinked here so a raise cannot leave either stale.
     result_path = Path(task_dir) / "chain_result.json"
     result_path.unlink(missing_ok=True)
+    score_path = Path(task_dir) / "results.json"
+    score_path.unlink(missing_ok=True)
 
     task_def = parse_chain_task(args.task_toml)
 
@@ -540,6 +545,14 @@ def main():
     with open(result_path, "w") as f:
         json.dump(payload, f, indent=2)
     print(f"\nResult written to: {result_path}")
+
+    # The score in the one shape every runner's reader (run_benchmark) expects:
+    # {"scores": {"task_score": ...}}. total_score is null for an invalid run,
+    # but an invalid run also exits nonzero below, so run_benchmark returns at its
+    # error channel and never reads this — the null is only ever read for a valid
+    # chain that legitimately produced no score.
+    with open(score_path, "w") as f:
+        json.dump({"scores": {"task_score": result.total_score}}, f, indent=2)
 
     if result.is_invalid:
         # Nonzero exit routes the run to run_benchmark's error channel, so an
