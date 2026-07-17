@@ -1,30 +1,72 @@
 {
   "candidate_id": 4,
   "repo": "argoproj/argo-cd",
+  "repo_rev": "v2.14.0-rc3",
+  "upstream_repo": "dandydeveloper/charts",
+  "upstream_rev": "redis-ha-4.26.6",
   "pr_refs": ["#22035"],
   "issues_refs": ["#22034"],
-  "description": "Null securityContext overrides in ArgoCD redis-ha values.yaml cause drift under Helm 3.17.1 strict validation",
+  "description": "ArgoCD's bundled redis-ha values.yaml overrides two containerSecurityContext keys to null; upstream defaults both to tables, so Helm 3.17.1 refuses the table->non-table overwrite and the re-rendered chart/upstream.yaml diverges from the committed copy",
   "drift_points": [
     {
       "file": "manifests/ha/base/redis-ha/chart/values.yaml",
-      "key": "securityContext",
-      "expected": "Remove null override to let upstream redis-ha chart defaults apply",
-      "actual": "securityContext: null (explicit null override of upstream defaults)",
-      "override_chain": [
-        "upstream redis-ha chart: securityContext has default non-null values",
-        "manifests/ha/base/redis-ha/chart/values.yaml: securityContext: null (overrides to null)",
-        "Helm 3.17.1: stricter validation rejects null securityContext, producing different rendered output"
-      ],
-      "severity": "breaking",
-      "impact": "CI failure due to manifest diff between rendered output and checked-in upstream.yaml"
+      "key": "redis-ha.haproxy.containerSecurityContext",
+      "actual": "null",
+      "expected": {
+        "runAsNonRoot": true,
+        "allowPrivilegeEscalation": false,
+        "seccompProfile": {"type": "RuntimeDefault"},
+        "capabilities": {"drop": ["ALL"]}
+      },
+      "override_chain": "dandydeveloper-charts charts/redis-ha/values.yaml:haproxy.containerSecurityContext (table) -> argo-cd manifests/ha/base/redis-ha/chart/values.yaml:redis-ha.haproxy.containerSecurityContext (null) -> manifests/ha/base/redis-ha/chart/upstream.yaml",
+      "evidence_tokens": {
+        "identifies": ["haproxy", "containersecuritycontext"],
+        "actual": ["null"],
+        "expected": ["runtimedefault", "allowprivilegeescalation"]
+      }
+    },
+    {
+      "file": "manifests/ha/base/redis-ha/chart/values.yaml",
+      "key": "redis-ha.containerSecurityContext",
+      "actual": "null",
+      "expected": {
+        "runAsUser": 1000,
+        "runAsNonRoot": true,
+        "allowPrivilegeEscalation": false,
+        "seccompProfile": {"type": "RuntimeDefault"},
+        "capabilities": {"drop": ["ALL"]}
+      },
+      "override_chain": "dandydeveloper-charts charts/redis-ha/values.yaml:containerSecurityContext (table) -> argo-cd manifests/ha/base/redis-ha/chart/values.yaml:redis-ha.containerSecurityContext (null) -> manifests/ha/base/redis-ha/chart/upstream.yaml",
+      "evidence_tokens": {
+        "identifies": ["containersecuritycontext"],
+        "actual": ["null"],
+        "expected": ["runasuser", "1000"]
+      }
     }
   ],
-  "helm_version_notes": "Helm 3.17.1 tightened validation of null values in YAML. Previously, securityContext: null was silently treated as 'omit this field'. In 3.17.1, it produces different rendered output (explicit null vs omitted field), causing a diff in the generated manifests.",
+  "not_drifted": [
+    {
+      "key": "securityContext (pod-level, at both the haproxy and the top level)",
+      "upstream_default": "haproxy.securityContext {runAsUser: 99, fsGroup: 99, runAsNonRoot: true}; top-level securityContext {runAsUser: 1000, fsGroup: 1000, runAsNonRoot: true}",
+      "note": "NOT drifted, and never gradeable: ArgoCD's values.yaml does not override securityContext at either level. Verified by parsing both files at the pinned SHAs — the ONLY null-valued keys in the entire ArgoCD override file are the two containerSecurityContext entries above. This is the trap that made the task worse than un-passable: the old instruction told the agent to 'focus especially on securityContext fields' and the old answer key named `securityContext` as the drifted key, so the prompt pointed at a key that is not drifted. Upstream ships BOTH securityContext (pod-level) and containerSecurityContext (container-level) at each level; only the latter is overridden. An agent reporting `securityContext` has not read the values file — it has read the prompt.",
+      "distinguishes": "haproxy.containerSecurityContext has NO runAsUser; the top-level containerSecurityContext has runAsUser: 1000. That asymmetry separates the two drift points and is readable only in the upstream chart."
+    }
+  ],
+  "scoring_evidence": {
+    "_comment": "Tokens absent from instruction.md, so a report fabricated from the prompt cannot carry them. VERIFIED with `grep -coF` against the rewritten instruction.md: 'containerSecurityContext' 0 hits, 'haproxy' 0, 'RuntimeDefault' 0, 'allowPrivilegeEscalation' 0, 'runAsUser' 0, '1000' 0, 'null' 0. The prompt DOES supply 'manifests/ha/base/redis-ha/chart/values.yaml', 'upstream.yaml', 'generate.sh', 'dandydeveloper', 'Helm' and '3.17.1' — none of those may be graded alone. Every word the OLD checks graded ('securitycontext', 'null', 'remove', '3.17') was prompt vocabulary, which is why a report fabricated with ZERO repo access scored 0.8125 while a correct one scored 0.4625: the task paid more for echoing the prompt than for reading the repos.",
+    "_trap": "instruction.md is the ONLY text the agent sees: run_task.py feeds it as `agent_command < /workspace/instruction.md` (+ an output appendix, + the retrieval preamble in mcp/cli modes). task.toml's [task].prompt is stale CSB-migration metadata that is NEVER shown. This task's copy has been re-synced to the rewritten instruction so that a future regeneration from it cannot resurrect the 'focus on securityContext and any null/empty values' giveaway and void this evidence set.",
+    "identify_drift_points": ["containersecuritycontext", "haproxy"],
+    "determine_expected_values": ["runtimedefault", "allowprivilegeescalation", "runasuser"]
+  },
+  "helm_version_notes": "Helm's coalesce refuses to overwrite a table with a non-table: `helm template` emits `coalesce.go:286: warning: cannot overwrite table with non table for redis-ha.redis-ha.haproxy.containerSecurityContext`. Before 3.17.1 the null override was silently dropped and the upstream table survived into the render; 3.17.1 changed that handling, so re-rendering chart/upstream.yaml via generate.sh yields output that no longer matches the committed copy and the codegen 'check changes to generated code' step fails. NOT graded: this is Helm's behaviour, not a fact retrievable from either repo, and EnterpriseBench measures retrieval.",
+  "fix": "PR #22035 deletes the two `containerSecurityContext: null` lines (+0/-2 in manifests/ha/base/redis-ha/chart/values.yaml), letting the upstream defaults flow through.",
   "verification": {
-    "method": "gh_api_pr_files",
+    "method": "gh_api_pr_files + raw source parse at pinned SHAs",
     "pr_url": "https://github.com/argoproj/argo-cd/pull/22035",
-    "verified": true
+    "issue_url": "https://github.com/argoproj/argo-cd/issues/22034",
+    "verified": true,
+    "verified_at_sha": "argo-cd@v2.14.0-rc3: parsed manifests/ha/base/redis-ha/chart/values.yaml — exactly two null-valued keys, redis-ha.haproxy.containerSecurityContext and redis-ha.containerSecurityContext; securityContext absent at both levels. dandydeveloper-charts@redis-ha-4.26.6: parsed charts/redis-ha/values.yaml — haproxy.containerSecurityContext and the top-level containerSecurityContext are both tables, matching `expected` above verbatim. chart/requirements.yaml pins redis-ha 4.26.6 from https://dandydeveloper.github.io/charts, which is what ties the two pinned repos together. PR #22035 removes exactly those two lines."
   },
   "difficulty": "medium",
-  "confidence": 0.93
+  "confidence": 0.97
 }

@@ -1,0 +1,25 @@
+{
+  "task_id": "config-drift-argocd-redis-ha-004",
+  "_note": "Rewritten against raw source at the pinned SHAs. The previous version asserted a `securityContext: null` override that does not exist in ArgoCD's values.yaml at any level, and claimed CI compares against a rendered manifests/ha/install.yaml — generate.sh shows the rendered artifact is manifests/ha/base/redis-ha/chart/upstream.yaml. Both claims were written to fit the old greps rather than read off the repo. Scoring this file is not evidence the task is solvable: score a plausible CORRECT answer instead (see the note in checks/check_drift_points.sh).",
+  "checkpoints": {
+    "identify_drift_points": {
+      "expected_solution": "ArgoCD's manifests/ha/base/redis-ha/chart/values.yaml overrides exactly two keys to null, and both are containerSecurityContext — not securityContext:\n\n1. redis-ha.haproxy.containerSecurityContext: null\n2. redis-ha.containerSecurityContext: null\n\nThose are the only null-valued keys in the entire file. The upstream redis-ha chart (dandydeveloper/charts at redis-ha-4.26.6, charts/redis-ha/values.yaml — pinned by the bundled chart's requirements.yaml as redis-ha 4.26.6) defaults both to tables. Upstream also ships a pod-level securityContext beside each containerSecurityContext (haproxy.securityContext {runAsUser: 99, fsGroup: 99, runAsNonRoot: true}; top-level securityContext {runAsUser: 1000, fsGroup: 1000, runAsNonRoot: true}) — ArgoCD overrides neither, so reporting securityContext as the drift is wrong.\n\nHelm's coalesce will not overwrite a table with a non-table, and warns: `coalesce.go:286: warning: cannot overwrite table with non table for redis-ha.redis-ha.haproxy.containerSecurityContext`. Under Helm 3.17.1 this changes what generate.sh renders into manifests/ha/base/redis-ha/chart/upstream.yaml, so the committed copy no longer matches and the codegen 'check changes to generated code' step fails.",
+      "evaluation_criteria": [
+        "Must name manifests/ha/base/redis-ha/chart/values.yaml as the file holding the overrides",
+        "Must identify the key as containerSecurityContext, not securityContext",
+        "Must find BOTH occurrences and locate them by full key path: redis-ha.haproxy.containerSecurityContext and redis-ha.containerSecurityContext",
+        "Must state that each is overridden to null",
+        "Must identify charts/redis-ha/values.yaml in dandydeveloper/charts as the source of the defaults being overridden"
+      ]
+    },
+    "determine_expected_values": {
+      "expected_solution": "The upstream default each null override displaces, quoted from dandydeveloper/charts charts/redis-ha/values.yaml at redis-ha-4.26.6:\n\n- haproxy.containerSecurityContext: {runAsNonRoot: true, allowPrivilegeEscalation: false, seccompProfile: {type: RuntimeDefault}, capabilities: {drop: [ALL]}}\n- containerSecurityContext (top level): {runAsUser: 1000, runAsNonRoot: true, allowPrivilegeEscalation: false, seccompProfile: {type: RuntimeDefault}, capabilities: {drop: [ALL]}}\n\nThe two tables are NOT identical: the haproxy one has no runAsUser, the top-level one sets runAsUser: 1000. An answer reporting one table for both keys has not read the upstream chart.\n\nOverride chain per drift point: dandydeveloper-charts charts/redis-ha/values.yaml (table default) -> argo-cd manifests/ha/base/redis-ha/chart/values.yaml (null override) -> manifests/ha/base/redis-ha/chart/upstream.yaml (rendered by generate.sh).\n\nThe fix, matching upstream PR #22035, is to delete both `containerSecurityContext: null` lines (+0/-2) so the upstream tables flow through unchanged.",
+      "evaluation_criteria": [
+        "Must give the concrete upstream default table for each drift point, not a description of it and not merely an instruction to remove the override",
+        "Must distinguish the two defaults: haproxy's table has no runAsUser; the top-level table sets runAsUser: 1000",
+        "Must trace the override chain upstream values.yaml -> ArgoCD values.yaml -> chart/upstream.yaml",
+        "May note the fix is deleting the two null lines (PR #22035), but the graded content is the upstream default value itself"
+      ]
+    }
+  }
+}

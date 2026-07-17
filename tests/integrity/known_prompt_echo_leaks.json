@@ -1,6 +1,5 @@
 [
   "feature_delivery/monorepo-boundary-003",
-  "platform_engineering/config-drift-004",
   "technical_debt/refactor-orchestration-005",
   "technical_debt/refactor-orchestration-006",
   "technical_debt/refactor-orchestration-tri-babel-001",

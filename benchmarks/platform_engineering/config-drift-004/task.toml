@@ -13,33 +13,38 @@ task_type = "config_drift"
 difficulty = "medium"
 estimated_duration_minutes = 20
 session_type = "single"
-description = "Identify securityContext null override drift in ArgoCD's nested redis-ha Helm chart values by comparing against upstream chart defaults"
+description = "Identify the containerSecurityContext null-override drift in ArgoCD's bundled redis-ha Helm chart values by comparing against upstream chart defaults"
+# NEVER SHOWN TO THE AGENT. run_task.py feeds instruction.md
+# (`agent_command < /workspace/instruction.md`); this field is stale CSB-migration
+# metadata that diverges from instruction.md in ~155 tasks. It is re-synced here
+# anyway: its previous text said "Focus on securityContext and any null/empty
+# values", which is both the giveaway the rebuild removed and the wrong key
+# (ArgoCD overrides containerSecurityContext, never securityContext). Left as it
+# was, a future regeneration of instruction.md from this field would silently
+# void the whole evidence set — see ground_truth.json:scoring_evidence._trap.
 prompt = """
 ArgoCD's HA deployment mode bundles a redis-ha Helm chart as a dependency. After
-upgrading Helm to version 3.17.1, the CI pipeline started failing because the
-rendered manifests (upstream.yaml) now differ from what was previously generated.
+upgrading Helm to version 3.17.1, the codegen CI started failing: re-rendering the
+bundled chart produces a chart/upstream.yaml that no longer matches the copy
+committed to the repo.
 
-The issue is in ArgoCD's value overrides for the redis-ha subchart. Something in
-the override chain between the upstream redis-ha defaults and ArgoCD's customizations
-is producing invalid or unexpected rendered output under the stricter Helm 3.17.1
-validation.
+Nothing in ArgoCD's values file changed. The same overrides now merge differently
+against the upstream redis-ha chart's defaults under 3.17.1.
 
 The upstream redis-ha chart from dandydeveloper/charts is available at
-/workspace/dandydeveloper-charts/ for reference. Its default values are in
-/workspace/dandydeveloper-charts/charts/redis-ha/values.yaml.
+/workspace/dandydeveloper-charts/ for reference.
 
 Your task:
-1. Examine the ArgoCD HA manifest configuration hierarchy:
-   - The redis-ha subchart definition and Chart.yaml in /workspace/argo-cd/
-   - ArgoCD's value overrides for the redis-ha subchart
-   - The upstream redis-ha chart's own default values in /workspace/dandydeveloper-charts/charts/redis-ha/values.yaml
-2. Compare ArgoCD's value overrides against the upstream chart defaults to
-   identify all configuration drift points where ArgoCD's overrides conflict
-   with or incorrectly override the upstream defaults.
-3. Focus on securityContext and any null/empty values that may behave
-   differently under strict Helm validation.
-4. For each drift point, specify the file, key, expected value, actual value,
-   and the override chain through the Helm value precedence layers.
+1. Establish which upstream redis-ha chart version the bundled chart depends on,
+   and how ArgoCD's overrides layer onto that chart's defaults.
+2. Compare ArgoCD's value overrides against the upstream chart defaults and
+   identify every override that conflicts with the upstream default it lands on.
+   Give the full key path through the value hierarchy for each.
+3. For each drift point, give the concrete value the upstream chart defaults that
+   key to — the real default as it appears in the upstream chart, not a
+   description of it — and what ArgoCD's override sets it to instead.
+4. Explain what Helm 3.17.1 does with these overrides that earlier versions did
+   not, and why that changes the rendered output.
 
 Write your analysis to /workspace/argo-cd/DRIFT_REPORT.json with the following
 structure:
@@ -75,30 +80,37 @@ dependency_depth = 2
 frameworks = ["helm", "kubernetes", "argocd"]
 multi_repo_pattern = "enforce"
 
+# validate_corrected_config (weight 0.25, checks/check_config_valid.sh) was
+# removed, not repaired. instruction.md never asks for a corrected config — the
+# only artifact it requests is DRIFT_REPORT.json — so the checkpoint graded an
+# artifact a compliant agent has no reason to produce. Both of its branches were
+# wrong. In the echo harness the repo is absent, so VALUES_FILE was missing and
+# the "optional checkpoint — skipped" branch paid a free 1.0 to a bare
+# `cp instruction.md DRIFT_REPORT.json`; that lone free credit is the entire
+# reason this task was quarantined, and it masked the real leak underneath. In a
+# real run the repo IS present, values.yaml still holds its two null overrides,
+# and the regex fired — so an agent that followed the instruction to the letter
+# was docked to 0.25 for not mutating a file it was never asked to touch, while
+# an agent that silently edited the repo was paid for it. Rewriting the chart is
+# code generation anyway; EnterpriseBench measures retrieval. The checkpoint
+# tests nothing that survives either branch, so it is gone and its weight is
+# redistributed in the original 0.40:0.35 ratio (EnterpriseBench-jn73.2.7.3.1).
 [[checkpoints]]
 name = "identify_drift_points"
-weight = 0.40
+weight = 0.55
 verifier = "checks/check_drift_points.sh"
-description = "Agent identifies null securityContext overrides in redis-ha values as drift points"
+description = "Agent identifies both containerSecurityContext keys ArgoCD overrides to null, with the overridden value"
 timeout_seconds = 60
 
 [[checkpoints]]
 name = "determine_expected_values"
-weight = 0.35
+weight = 0.45
 verifier = "checks/check_expected_values.sh"
-description = "Agent correctly determines that null overrides should be removed to let upstream defaults apply"
+description = "Agent names the concrete upstream default table each null override displaces"
 timeout_seconds = 60
-
-[[checkpoints]]
-name = "validate_corrected_config"
-weight = 0.25
-verifier = "checks/check_config_valid.sh"
-description = "If corrected config provided, validate it renders without null securityContext issues"
-timeout_seconds = 120
 
 [artifacts]
 required = ["answer"]
-optional = ["config"]
 
 [tool_access]
 sourcegraph_mirror_config = "configs/sg_mirrors/config-drift-argocd-redis-ha-004.json"
@@ -114,8 +126,16 @@ repo = "argo-cd"
 confidence = 0.98
 source = "deterministic"
 
+# Was manifests/ha/base/redis-ha/chart/Chart.yaml at confidence 0.85. That file is
+# 28 bytes — `name: redis-ha` and `version: 2.0` — and says nothing about the
+# drift or about upstream; it is the wrapper chart's own identity, not the
+# dependency. requirements.yaml is the file that actually carries the link the
+# task turns on: it pins redis-ha 4.26.6 from https://dandydeveloper.github.io/charts,
+# which is what makes the pinned dandydeveloper-charts rev the right upstream to
+# diff against (checked at v2.14.0-rc3: the chart is apiVersion v1, so Helm reads
+# dependencies from requirements.yaml, not Chart.yaml).
 [[ground_truth.required_files]]
-path = "manifests/ha/base/redis-ha/chart/Chart.yaml"
+path = "manifests/ha/base/redis-ha/chart/requirements.yaml"
 repo = "argo-cd"
 confidence = 0.85
 source = "deterministic"

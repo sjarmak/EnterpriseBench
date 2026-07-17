@@ -1,41 +1,102 @@
 #!/usr/bin/env bash
-# Checkpoint 2: Verify agent correctly determined that null overrides should be removed
+# check_expected_values.sh — checkpoint "determine_expected_values"
+#
+# Grades DRIFT_REPORT.json against ground_truth.json:drift_points (sealed
+# root-only), curated from argo-cd PR #22035 / issue #22034 and verified by
+# parsing both values.yaml files at the pinned SHAs.
+#
+# The old check scored two greps over the whole report: one for
+# "remove"/"delete"/"omit"/"upstream default", one for "3.17"/"strict"/
+# "validation"/"tighten". instruction.md supplied every one of those words — it
+# asked "Should the override exist at all, or should it be removed to let the
+# upstream default apply?" and named Helm 3.17.1 four times — so the checkpoint
+# was satisfiable by restating the question, with no repo access.
+#
+# It also inverted the grade. A correct answer states the upstream default as a
+# fact ("the upstream chart defaults this key to {runAsUser: 1000, ...}"), which
+# contains none of those words, so it scored 0.0 here while a prompt echo scored
+# 1.0. That is why a correct report totalled 0.4625 and a fabricated one 0.8125.
+#
+# The expected value must now be the concrete upstream default the null override
+# displaces, quoted from the upstream chart. instruction.md asks for exactly that
+# ("the real default as it appears in the upstream chart, not a description of
+# it"), and "runtimedefault", "allowprivilegeescalation", "runasuser" and "1000"
+# each appear ZERO times in it — reading dandydeveloper-charts is the only way to
+# obtain them.
+#
+# "runasuser"/"1000" is also what separates the two drift points: the upstream
+# haproxy.containerSecurityContext table has NO runAsUser, while the top-level
+# containerSecurityContext sets runAsUser: 1000. So a report that finds one
+# drift point cannot collect the other's credit by naming the same key twice.
 set -euo pipefail
 
-export REPORT="${WORKSPACE:-/workspace}/argo-cd/DRIFT_REPORT.json"
+WORKSPACE="${WORKSPACE:-/workspace}"
+REPORT="$WORKSPACE/argo-cd/DRIFT_REPORT.json"
+GT="${TASK_DIR:-}/ground_truth.json"
+MAX_REPORT_BYTES=1048576
+
+verdict() { printf '{"score": %s, "passed": %s, "detail": "%s"}\n' "$1" "$2" "$3"; exit 0; }
+
+if [[ ! -f "$GT" ]]; then
+  verdict 0.0 false "VERIFIER_INFRA_ERROR: ground_truth.json not found at $GT"
+fi
+if [[ -L "$REPORT" ]]; then
+  verdict 0.0 false "DRIFT_REPORT.json is a symlink, not a regular file"
+fi
 if [[ ! -f "$REPORT" ]]; then
-  printf '{"score": 0.0, "passed": false, "reason": "DRIFT_REPORT.json not found"}\n'
-  exit 0
+  verdict 0.0 false "DRIFT_REPORT.json not found"
+fi
+if [[ "$(wc -c <"$REPORT")" -gt "$MAX_REPORT_BYTES" ]]; then
+  verdict 0.0 false "DRIFT_REPORT.json exceeds ${MAX_REPORT_BYTES} bytes"
 fi
 
-export FOUND=0
-export TOTAL=2
+export REPORT GT
+python3 -c '
+import json, os, re
 
-# Check 1: Agent recommends removing the null override or letting upstream defaults apply
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-text = json.dumps(report).lower()
-if 'remove' in text or 'delete' in text or 'omit' in text or 'upstream default' in text or 'let.*default' in text:
-    exit(0)
-exit(1)
-" 2>/dev/null; then
-  FOUND=$((FOUND + 1))
-fi
+def verdict(score, detail):
+    print(json.dumps({"score": round(score, 2), "passed": score >= 0.5, "detail": detail}))
+    raise SystemExit(0)
 
-# Check 2: Agent identified Helm 3.17.1 version sensitivity
-if python3 -c "
-import json, os
-report = json.load(open(os.environ['REPORT']))
-text = json.dumps(report).lower()
-if '3.17' in text or 'helm version' in text or 'strict' in text or 'validation' in text or 'tighten' in text:
-    exit(0)
-exit(1)
-" 2>/dev/null; then
-  FOUND=$((FOUND + 1))
-fi
+with open(os.environ["GT"]) as fh:
+    expected = json.load(fh).get("drift_points") or []
+if not expected:
+    verdict(0.0, "VERIFIER_INFRA_ERROR: no drift_points in ground_truth.json")
 
-SCORE=$(awk "BEGIN {printf \"%.2f\", $FOUND/$TOTAL}")
-if [ "$FOUND" -ge 1 ]; then PASSED=true; else PASSED=false; fi
+try:
+    with open(os.environ["REPORT"], encoding="utf-8", errors="replace") as fh:
+        report = json.load(fh)
+except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+    verdict(0.0, f"DRIFT_REPORT.json is not valid JSON: {exc}")
+if not isinstance(report, dict):
+    verdict(0.0, "DRIFT_REPORT.json is not a JSON object")
 
-printf '{"score": %s, "passed": %s, "reason": "Expected value correctness: %d/%d checks passed"}\n' "$SCORE" "$PASSED" "$FOUND" "$TOTAL"
+claimed = report.get("drift_points")
+if not isinstance(claimed, list) or not claimed:
+    verdict(0.0, "DRIFT_REPORT.json has no drift_points array")
+
+def norm(value):
+    return re.sub(r"\s+", "", json.dumps(value) if not isinstance(value, str) else value).lower()
+
+found, detail = 0, []
+for want in expected:
+    tokens = want.get("evidence_tokens") or {}
+    ident = [t.lower() for t in tokens.get("identifies", [])]
+    expected_tokens = [t.lower() for t in tokens.get("expected", [])]
+    hit = False
+    for point in claimed:
+        if not isinstance(point, dict):
+            continue
+        where = norm(point.get("key", "")) + norm(point.get("file", ""))
+        if not all(t in where for t in ident):
+            continue
+        if all(t in norm(point.get("expected", "")) for t in expected_tokens):
+            hit = True
+            break
+    found += hit
+    detail.append(str(want.get("key")) + ("=hit" if hit else "=miss"))
+
+verdict(found / len(expected),
+        "Named the upstream default the override displaces for %d/%d drift points: %s"
+        % (found, len(expected), ", ".join(detail)))
+'

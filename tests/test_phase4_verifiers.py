@@ -557,41 +557,73 @@ CONFIG_DRIFT_TASKS: list[TaskSpec] = [
             ),
         }, indent=2),
     ),
-    # 004: ArgoCD redis-ha securityContext null override
+    # 004: ArgoCD redis-ha containerSecurityContext null override.
+    #
+    # check_config_valid.sh (0.25) is gone and the weights are rebalanced to
+    # 0.55/0.45; see the note in the task's task.toml. The old fixture here is
+    # itself worth reading as the artifact of the fabricated key it was built to
+    # fit: its gt_answer named `securityContext`, which ArgoCD does not override
+    # at any level, and passed only because the old checks grepped the report for
+    # the prompt's own words. It now scores 0.0 — as it should.
     TaskSpec(
         task_dir=_CD_DIR / "config-drift-004",
         report_path="argo-cd/DRIFT_REPORT.json",
         checks=[
-            CheckSpec("check_drift_points.sh", 0.40),
-            CheckSpec("check_expected_values.sh", 0.35),
-            CheckSpec("check_config_valid.sh", 0.25),
+            CheckSpec("check_drift_points.sh", 0.55),
+            CheckSpec("check_expected_values.sh", 0.45),
         ],
         gt_answer=json.dumps({
             "drift_points": [
                 {
                     "file": "manifests/ha/base/redis-ha/chart/values.yaml",
-                    "key": "securityContext null override",
-                    "expected": "remove the null override to let upstream defaults apply; omit the key entirely",
-                    "actual": "securityContext: null — explicitly overrides upstream defaults to null/empty",
-                    "override_chain": ["upstream redis-ha defaults -> argocd values.yaml null override"]
+                    "key": "redis-ha.haproxy.containerSecurityContext",
+                    "expected": {
+                        "runAsNonRoot": True,
+                        "allowPrivilegeEscalation": False,
+                        "seccompProfile": {"type": "RuntimeDefault"},
+                        "capabilities": {"drop": ["ALL"]},
+                    },
+                    "actual": None,
+                    "override_chain": [
+                        "dandydeveloper-charts charts/redis-ha/values.yaml:haproxy.containerSecurityContext (table)",
+                        "argo-cd manifests/ha/base/redis-ha/chart/values.yaml:redis-ha.haproxy.containerSecurityContext (null)",
+                        "manifests/ha/base/redis-ha/chart/upstream.yaml",
+                    ],
                 },
                 {
                     "file": "manifests/ha/base/redis-ha/chart/values.yaml",
-                    "key": "haproxy.securityContext null override",
-                    "expected": "delete the null override so upstream defaults apply",
-                    "actual": "securityContext: null — blocks upstream securityContext; tightened validation in Helm 3.17 rejects this",
-                    "override_chain": ["upstream haproxy defaults -> argocd values.yaml null override"]
-                }
+                    "key": "redis-ha.containerSecurityContext",
+                    "expected": {
+                        "runAsUser": 1000,
+                        "runAsNonRoot": True,
+                        "allowPrivilegeEscalation": False,
+                        "seccompProfile": {"type": "RuntimeDefault"},
+                        "capabilities": {"drop": ["ALL"]},
+                    },
+                    "actual": None,
+                    "override_chain": [
+                        "dandydeveloper-charts charts/redis-ha/values.yaml:containerSecurityContext (table)",
+                        "argo-cd manifests/ha/base/redis-ha/chart/values.yaml:redis-ha.containerSecurityContext (null)",
+                        "manifests/ha/base/redis-ha/chart/upstream.yaml",
+                    ],
+                },
             ]
         }, indent=2),
+        # Finds the haproxy override and its upstream default, misses the
+        # top-level one entirely: 0.5 on both checkpoints.
         partial_answer=json.dumps({
             "drift_points": [
                 {
                     "file": "manifests/ha/base/redis-ha/chart/values.yaml",
-                    "key": "securityContext override",
-                    "expected": "remove null override",
-                    "actual": "securityContext: null",
-                    "override_chain": ["upstream -> argocd values"]
+                    "key": "redis-ha.haproxy.containerSecurityContext",
+                    "expected": {
+                        "runAsNonRoot": True,
+                        "allowPrivilegeEscalation": False,
+                        "seccompProfile": {"type": "RuntimeDefault"},
+                        "capabilities": {"drop": ["ALL"]},
+                    },
+                    "actual": None,
+                    "override_chain": ["upstream redis-ha values.yaml -> argocd values.yaml"],
                 }
             ]
         }, indent=2),

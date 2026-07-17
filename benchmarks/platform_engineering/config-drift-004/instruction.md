@@ -1,27 +1,22 @@
-# Configuration Drift: ArgoCD Redis-HA SecurityContext Null Override
+# Configuration Drift: ArgoCD Redis-HA Chart Values vs Upstream Defaults
 
 ## Context
 
-We recently upgraded our Helm version to 3.17.1, and now the ArgoCD HA deployment CI is failing. The `make manifests` step produces a different `upstream.yaml` than what is checked into the repo, causing a diff check to fail.
+We recently upgraded Helm to 3.17.1, and ArgoCD's codegen CI is now failing at the "check changes to generated code" step. Regenerating the bundled redis-ha chart (`manifests/ha/base/redis-ha/generate.sh`, which runs `helm dependency update ./chart` and re-renders it with `helm template`) now produces a different `chart/upstream.yaml` than the copy committed to the repo, so the diff check fails.
 
-The ArgoCD HA deployment uses a bundled redis-ha Helm chart located at `manifests/ha/base/redis-ha/chart/`. This chart has its own `values.yaml` that overrides the upstream redis-ha chart defaults.
+The ArgoCD HA deployment bundles the redis-ha Helm chart under `manifests/ha/base/redis-ha/chart/` in `/workspace/argo-cd/`. That chart's `values.yaml` overrides the defaults of the upstream redis-ha chart it depends on. The upstream chart source from dandydeveloper/charts is available at `/workspace/dandydeveloper-charts/`.
 
-The upstream redis-ha chart source from dandydeveloper/charts is available at `/workspace/dandydeveloper-charts/`. The upstream default values are in `/workspace/dandydeveloper-charts/charts/redis-ha/values.yaml`.
-
-The error seems related to how Helm 3.17.1 handles null values differently from previous versions — specifically around securityContext fields in the values overrides.
+Nothing in our values file changed. The same overrides that rendered cleanly before now merge differently against the upstream defaults under 3.17.1.
 
 ## What I Need
 
-1. **Override hierarchy trace**: Examine the Helm value precedence chain:
-   - Upstream redis-ha chart defaults at `/workspace/dandydeveloper-charts/charts/redis-ha/values.yaml`
-   - ArgoCD's `manifests/ha/base/redis-ha/chart/values.yaml` overrides in `/workspace/argo-cd/`
-   - Rendered manifest output (upstream.yaml)
+1. **Override hierarchy trace**: Establish which upstream redis-ha chart version our bundled chart actually depends on, and how our overrides layer onto that chart's defaults.
 
-2. **Drift points**: Compare ArgoCD's value overrides against the upstream chart defaults. Identify all places where ArgoCD's value overrides contain `null` values that override upstream defaults. Focus especially on `securityContext` fields, as these are the most likely cause of the Helm 3.17.1 incompatibility.
+2. **Drift points**: Compare our overrides against the upstream chart's defaults and identify every override that conflicts with the upstream default it lands on. For each one, give the full key path through the value hierarchy, exactly as it is nested in our values file.
 
-3. **Expected vs actual**: For each drift point, what does the upstream chart default to (in `/workspace/dandydeveloper-charts/charts/redis-ha/values.yaml`), and what does ArgoCD's override set it to? Should the override exist at all, or should it be removed to let the upstream default apply?
+3. **Expected vs actual**: For each drift point, give the concrete value the upstream chart defaults that key to — the real default as it appears in the upstream chart, not a description of it — and what our override sets it to instead.
 
-4. **Helm version sensitivity**: Explain why this worked under older Helm versions but breaks under 3.17.1.
+4. **Helm version sensitivity**: Explain what Helm 3.17.1 does with these overrides that earlier versions did not, and why that changes the rendered output.
 
 ## Output
 
