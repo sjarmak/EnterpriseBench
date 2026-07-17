@@ -1,31 +1,19 @@
 """The path_match checks keep the harness PYTHONPATH authoritative.
 
-Bead EnterpriseBench-u7d3f, the last two path_match-family sites of the shadow
-defect EnterpriseBench-4du6t swept out of the topological_order family (itself
-the twin of EnterpriseBench-njqo4). Each ``check_error_source.sh`` /
+The last two path_match sites of the shadow defect EnterpriseBench-4du6t swept
+out of the topological_order family. Each ``check_error_source.sh`` /
 ``check_root_cause.sh`` locates the repo lib/ by walking four levels up from its
 ``checks/`` dir and adding it to ``sys.path``. That walk is a GUESS: run the
-check from anywhere but the repo tree and it resolves to whatever ``eb_verify``
-happens to sit there, and ``sys.path.insert(0, ...)`` puts that ahead of the
-PYTHONPATH the harness exports authoritatively (``eb_verify.runner.checkpoint_env``
-on the host, ``/workspace/.eb_verify`` in the sandbox).
-
-Found in the wild on ds-5090: a leftover ``/tmp/lib/eb_verify`` (a stale
-pre-6py4v copy). A check copied under ``/tmp`` resolved its fallback to it and
-at ``sys.path[0]`` that stale copy beat the real harness — the import failed or
-imported a stale module, the check emitted VERIFIER_INFRA_ERROR, and the
-scorer_guard routed every answer those tasks grade to a free re-run instead of a
-score. That fails OPEN (silent over-credit), the s58f/hktt class.
+check outside the repo tree and it resolves to whatever ``eb_verify`` sits
+there, and ``sys.path.insert(0, ...)`` puts that ahead of the PYTHONPATH the
+harness exports authoritatively. A stale copy winning that race makes the check
+emit VERIFIER_INFRA_ERROR, and scorer_guard then routes the answer to a free
+re-run instead of a score — a fail-OPEN over-credit.
 
 The fix mirrors 4du6t: append the guessed dir (never insert(0)) so PYTHONPATH
-stays authoritative, and guard on the MODULE actually imported, not just the
-package dir — a ``-d "$LIB_DIR/eb_verify"`` check is what let a stale sibling
-lacking the module through.
-
-This suite is the path_match twin of ``test_topo_order_rollout.py``: both stale
-variants (module absent / module booby-trapped), plus a non-vacuity twin proving
-the harness genuinely detects shadowing by demonstrating the pre-fix pattern DOES
-shadow.
+stays authoritative, and guard on the MODULE imported, not just the package dir.
+This suite is the path_match twin of ``test_topo_order_rollout.py``, including
+the non-vacuity twin proving the pre-fix pattern DOES shadow.
 """
 
 from __future__ import annotations
