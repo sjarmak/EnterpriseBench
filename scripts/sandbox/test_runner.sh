@@ -28,6 +28,19 @@ now_ms() {
     date +%s%3N 2>/dev/null || date +%s000
 }
 
+# Did the verifier die importing the eb_verify harness? runpy names our harness
+# two ways: the `-m` CLI form "No module named eb_verify.plugins.X" (a submodule
+# is missing) carries NO apostrophe, while the traceback form
+# "No module named 'eb_verify'" (the package is absent) does. The
+# optional-apostrophe pattern matches both at once, so this is one rule over the
+# whole eb_verify namespace, not signature whack-a-mole against an open set. It
+# names OUR harness only — subject code (httpx/flask/requests error-provenance
+# tasks) never emits this string — so a match cannot false-positive a task whose
+# own code raises ModuleNotFoundError.
+is_harness_import_failure() {
+    printf '%s' "$1" | grep -qE "No module named '?eb_verify"
+}
+
 # The score a checkpoint actually earned, or the empty string if it earned none:
 # a string, null, NaN, a missing key, an out-of-range or malformed number, a
 # nested-only key, an unclosed root, or a second top-level value all mean "no
@@ -304,7 +317,19 @@ run_verifier() {
         local stderr_content
         stderr_content=$(cat "$raw_stderr" 2>/dev/null || true)
 
-        if [ -n "$AGENT_OUTPUT_INVALID" ] && [ "$VERIFIER_EXIT" -ne 0 ]; then
+        if is_harness_import_failure "$stderr_content
+$raw_stdout"; then
+            # The eb_verify harness itself failed to import, so the verifier
+            # could not run whatever the shape of the agent's answer. Attribution
+            # is decided only AFTER the harness is cleared — checked ahead of
+            # AGENT_OUTPUT_INVALID so a malformed answer.json can never launder a
+            # harness death into a scored agent 0.0 (bead w37sj). Falls through to
+            # VERIFIER_RAN=false below (no early return). The INFRA_SENTINEL
+            # prefix is what single-checkpoint mode's Python guard keys on (via
+            # _INFRA_DETAIL_SIGNATURES) — it does NOT depend on the shell and
+            # Python "No module named" matchers agreeing, which are independent.
+            infra_detail="$INFRA_SENTINEL: verifier could not import the eb_verify harness (exit $VERIFIER_EXIT): ${stderr_content:-no output}"
+        elif [ -n "$AGENT_OUTPUT_INVALID" ] && [ "$VERIFIER_EXIT" -ne 0 ]; then
             # The verifier RAN; the agent's own malformed artifact killed it
             # mid-flight (see AGENT_OUTPUT_INVALID). A bad answer is the agent's
             # failure, so it is scored 0.0 — routing it to the infra re-run
@@ -314,11 +339,11 @@ run_verifier() {
             VERIFIER_JSON="{\"score\": 0.0, \"passed\": false, \"detail\": \"$(json_escape "$AGENT_OUTPUT_INVALID (exit $VERIFIER_EXIT): ${stderr_content:-no output}")\"}"
             rm -f "$raw_stderr"
             return
+        else
+            # No JSON, and nothing about the agent's answer explains it: the
+            # verifier died before reaching its verdict.
+            infra_detail="$INFRA_SENTINEL: verifier produced no JSON verdict (exit $VERIFIER_EXIT): ${stderr_content:-no output}"
         fi
-
-        # No JSON, and nothing about the agent's answer explains it: the verifier
-        # died before reaching its verdict.
-        infra_detail="$INFRA_SENTINEL: verifier produced no JSON verdict (exit $VERIFIER_EXIT): ${stderr_content:-no output}"
     elif [ -z "$verdict_score" ]; then
         if [ -n "$AGENT_OUTPUT_INVALID" ] && [ "$VERIFIER_EXIT" -ne 0 ]; then
             # Same attribution as the no-JSON branch above: the agent's own

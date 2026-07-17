@@ -15,10 +15,17 @@ from pathlib import Path
 
 import pytest
 
+# conftest.py prepends this repo's lib/ to sys.path before any test module here
+# is collected, so a plain import resolves — no local sys.path shim needed.
+from eb_verify.scorer_guard import INFRA_SENTINEL
+
 
 REPO_ROOT = Path(__file__).parent.parent
 CROSS_REPO_RUNNER = REPO_ROOT / "tests" / "test_cross_repo_runner.sh"
 TEST_RUNNER = REPO_ROOT / "scripts" / "sandbox" / "test_runner.sh"
+# Independently needed to build PYTHONPATH for the child verifier process, which
+# does NOT inherit the pytest process's sys.path.
+REPO_LIB = REPO_ROOT / "lib"
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +81,19 @@ def _build_workspace(
     repos: list[str] | None = None,
     verifiers: dict[str, str] | None = None,
     meta: dict[str, str] | None = None,
+    answer_json: str | None = None,
 ) -> None:
-    """Build a mock workspace with fake repos and verifier scripts."""
+    """Build a mock workspace with fake repos and verifier scripts.
+
+    ``answer_json``, if given, is written verbatim to
+    ``agent_output/answer.json`` — the artifact test_runner.sh inspects to set
+    AGENT_OUTPUT_INVALID.
+    """
+    if answer_json is not None:
+        agent_output = workspace / "agent_output"
+        agent_output.mkdir(exist_ok=True)
+        (agent_output / "answer.json").write_text(answer_json)
+
     if repos:
         for repo in repos:
             git_dir = workspace / repo / ".git"
@@ -305,3 +323,135 @@ exit 0
         )
         assert result.returncode != 0
         assert "Invalid checkpoint name" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# 4. Harness-death attribution (bead EnterpriseBench-w37sj)
+# ---------------------------------------------------------------------------
+
+# A check script reproducing the LIVE production harness-import death: the
+# eb_verify package imports (PYTHONPATH points at the repo's lib/) but the
+# `file_extraction` plugin submodule does not exist, so runpy emits the
+# apostrophe-FREE "No module named eb_verify.plugins.file_extraction" on stderr,
+# exits nonzero, and prints no JSON verdict. This is the exact signature the two
+# active err-provenance tasks hit — the harness died, not the agent.
+HARNESS_IMPORT_DEATH_VERIFIER = f"""\
+#!/usr/bin/env bash
+set -e
+export PYTHONPATH="{REPO_LIB}"
+python3 -m eb_verify.plugins.file_extraction "$1/agent_output/answer.json"
+echo '{{"score": 1.0, "passed": true, "detail": "unreachable"}}'
+"""
+
+# A check script that dies on the agent's own malformed answer.json AFTER the
+# harness imported cleanly — a genuine agent-artifact failure. Its stderr is a
+# Python TypeError, never the eb_verify harness signature. This is the behaviour
+# the fix must PRESERVE: scored 0.0 as agent performance, not routed to infra.
+AGENT_ARTIFACT_DEATH_VERIFIER = """\
+#!/usr/bin/env bash
+set -e
+python3 -c "import json, sys
+with open(sys.argv[1]) as fh:
+    print(json.load(fh)['expected_key'])" "$1/agent_output/answer.json"
+echo '{"score": 1.0, "passed": true, "detail": "unreachable"}'
+"""
+
+# Not a JSON object, so test_runner.sh sets AGENT_OUTPUT_INVALID — the precondition
+# that, before the fix, laundered the harness death into a scored 0.0.
+MALFORMED_ANSWER = '["not", "an", "object"]'
+
+
+class TestHarnessDeathAttribution:
+    """A harness-import death must never be scored as agent performance, even
+    when the agent's answer.json is ALSO malformed (bead w37sj)."""
+
+    def test_harness_death_with_malformed_answer_routes_to_infra(
+        self, tmp_path: Path
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        _build_workspace(
+            workspace,
+            repos=["repo-a"],
+            verifiers={"01-harness": HARNESS_IMPORT_DEATH_VERIFIER},
+            answer_json=MALFORMED_ANSWER,
+        )
+        runner = _make_patched_runner(tmp_path, workspace)
+
+        result = subprocess.run(
+            ["bash", str(runner)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        data = json.loads(result.stdout)
+        assert len(data["checkpoints"]) == 1
+        cp = data["checkpoints"][0]
+        # The harness died before it could judge anything — attribution is
+        # infra, never the agent. Pre-fix this asserted verifier_ran=true + 0.0.
+        assert cp["verifier_ran"] is False, (
+            f"harness import death was laundered into agent performance: {cp}"
+        )
+        assert INFRA_SENTINEL in cp["detail"]
+
+    def test_harness_death_single_checkpoint_mode_routes_to_infra(
+        self, tmp_path: Path
+    ) -> None:
+        # Single-checkpoint mode emits the raw per-checkpoint verdict, whose only
+        # downstream infra hook is the INFRA_SENTINEL detail signature — so the
+        # new infra_detail must carry that prefix for this path too.
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        _build_workspace(
+            workspace,
+            repos=["repo-a"],
+            verifiers={"01-harness": HARNESS_IMPORT_DEATH_VERIFIER},
+            answer_json=MALFORMED_ANSWER,
+        )
+        runner = _make_patched_runner(tmp_path, workspace)
+
+        result = subprocess.run(
+            ["bash", str(runner), "01-harness"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        data = json.loads(result.stdout)
+        assert data.get("verifier_ran") is False, (
+            f"single-checkpoint harness death scored as agent performance: {data}"
+        )
+        assert INFRA_SENTINEL in data.get("detail", "")
+
+    def test_genuine_agent_artifact_death_still_scored_zero(
+        self, tmp_path: Path
+    ) -> None:
+        # The fix must be surgical: an answer.json that kills a check which
+        # imported the harness cleanly is still the agent's 0.0, not infra.
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        _build_workspace(
+            workspace,
+            repos=["repo-a"],
+            verifiers={"01-agent": AGENT_ARTIFACT_DEATH_VERIFIER},
+            answer_json=MALFORMED_ANSWER,
+        )
+        runner = _make_patched_runner(tmp_path, workspace)
+
+        result = subprocess.run(
+            ["bash", str(runner)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        data = json.loads(result.stdout)
+        cp = data["checkpoints"][0]
+        assert cp["verifier_ran"] is True, (
+            f"genuine agent-artifact failure misrouted to infra: {cp}"
+        )
+        assert cp["score"] == 0.0
+        # Explicit: this path must NOT be routed to infra, so it must carry no
+        # infra signature. Fails loudly if a future change couples the fields.
+        assert INFRA_SENTINEL not in cp["detail"]
