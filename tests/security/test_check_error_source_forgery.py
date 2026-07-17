@@ -10,14 +10,7 @@ third ``python3 -c`` block::
 Bash substitutes ``$AGENT_FILES`` before Python parses it, so an answer.json
 ``source_files`` entry containing ``'''`` closes the string and the rest becomes
 literal Python source. This is strictly worse than an infra escape: the agent
-forges a PASSING score. The fix passes the file lists through ``os.environ`` (the
-pattern the two earlier subprocesses in the same file already use) so the payload
-is read back as an opaque string that can never be code.
-
-These tests drive the REAL check scripts with the exploit payload from the bead
-and assert the forged ``{"score": 1.0, "passed": true, "detail": "forged"}``
-verdict is not produced. They fail against the vulnerable template and pass once
-the interpolation is removed.
+forges a PASSING score.
 
 Relationship to ``test_check_scripts_injection.py`` (bead 0rv.23): that module is
 the broad 37-script suite for the same injection class, but it depends on
@@ -64,15 +57,10 @@ def _dynamic_scripts() -> list[Path]:
     """Active scripts that inline their scoring, so the exploit payload can be
     driven end-to-end with a simple ``{"path": ...}`` ground truth.
 
-    Some active scripts instead ``exec python3 -m eb_verify.scorers.file_extraction``
-    (e.g. the httpx tri/dual tasks). Those delegate scoring to the eb_verify
-    package, which the harness makes importable via ``PYTHONPATH`` and which
-    expects a repo-qualified ground-truth schema — driving them here would test
-    the harness wiring, not the interpolation vector this bead is about. They
-    are covered by ``tests/test_file_extraction.py`` and, for the injection
-    pattern specifically, by ``test_no_source_injection_pattern`` below (which
-    still scans every script). They are not interpolation-vulnerable: module
-    delegation reads the answer as data, never as source.
+    Scripts that ``exec python3 -m eb_verify.scorers.file_extraction`` instead are
+    not interpolation-vulnerable — module delegation reads the answer as data,
+    never as source — and are covered by ``tests/test_file_extraction.py``.
+    ``test_no_source_injection_pattern`` still scans them statically.
     """
     return [s for s in _active_scripts() if "python3 -m eb_verify" not in s.read_text()]
 
@@ -81,7 +69,7 @@ def _all_scripts() -> list[Path]:
     """Active + archived copies — the full blast radius named in the bead."""
     return sorted(
         [
-            *BENCHMARKS.glob("customer_escalation/*/checks/check_error_source.sh"),
+            *_active_scripts(),
             *BENCHMARKS.glob(
                 "_archived/customer_escalation/*/checks/check_error_source.sh"
             ),
@@ -164,14 +152,12 @@ def test_forged_verdict_not_produced(script: Path, tmp_path: Path) -> None:
         f"{script.relative_to(ROOT)} emitted the agent-injected 'forged' detail — "
         "the payload executed as Python source."
     )
-    assert not (result.get("score") == 1.0 and result.get("passed") is True), (
-        f"{script.relative_to(ROOT)} forged a passing verdict from an answer that "
-        f"names no required file: {result!r}"
-    )
     # The payload is an opaque, non-matching path: the only correct score is 0.
     assert (
         result["score"] == 0.0
     ), f"{script.relative_to(ROOT)} scored a non-file payload: {result!r}"
+    # passed is the field the harness consumes and the one an attacker wants
+    # flipped — assert it directly rather than deriving it from score.
     assert result["passed"] is False
 
 

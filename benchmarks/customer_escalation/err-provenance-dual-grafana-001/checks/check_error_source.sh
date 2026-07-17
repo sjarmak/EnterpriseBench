@@ -45,9 +45,8 @@ except Exception as e:
 ")
 
 # Score: fraction of GT required files found in agent output
-# Pass file lists via the environment (NOT interpolated into Python source):
-# these strings derive from agent-controlled answer.json and must never be
-# re-embedded as code. Same os.environ pattern the two blocks above use.
+# File lists go through the environment, never interpolated into Python source:
+# AGENT_FILES derives from agent-controlled answer.json and must never become code.
 export GT_FILES AGENT_FILES
 python3 -c "
 import json, os
