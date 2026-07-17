@@ -5,11 +5,12 @@ spec-compliant answer books a harness bug as an agent failure. Each vector
 asserts the correct 1.0 against an answer that a buggy verifier scored 0.0.
 Run as an un-skippable gate (CI), separately from the marker-filtered suite.
 
-Every vector drives the *shipped* check scripts — discovered by content, then
-executed through the runner's own ``checkpoint_env`` — rather than restating their
-arguments here. An earlier draft restated the scripts' ``--keys`` as a local
-constant, so it exercised the module's parsing (never broken) instead of the key
-list (the actual bug), and stayed green when the shipped list lost
+Every vector drives the *shipped* check scripts — discovered by running them and
+watching for the scorer, then executed through the runner's own ``checkpoint_env``
+— rather than restating their arguments here. An earlier draft restated the
+scripts' ``--keys`` as a local constant, so it exercised the module's parsing
+(never broken) instead of the key list (the actual bug), and stayed green when the
+shipped list lost
 ``code_paths``/``citations``. So the key list appears nowhere below: drop a key from
 a check script and these go red.
 """
@@ -21,6 +22,7 @@ import os
 import shlex
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -38,14 +40,9 @@ from eb_verify.scorers.file_extraction import HarnessError, build_parser
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Discovered by content, never by name. A task rename, or the 26 further check
-# scripts bead rmz1x wants pointed at this scorer, are covered automatically; a
-# hardcoded task list would leave every future adopter unguarded.
-FILE_EXTRACTION_CHECKS = sorted(
-    path
-    for path in REPO_ROOT.glob("benchmarks/*/*/checks/*.sh")
-    if "eb_verify.scorers.file_extraction" in path.read_text(encoding="utf-8")
-)
+# One spelling of the module name, shared by the prefilter and the shim below. Two
+# copies that drift is the same class of bug this corpus exists to catch.
+SCORER_MODULE = "eb_verify.scorers.file_extraction"
 
 # (repo, path) pairs, as required_files entries really are: repo-prefixed paths, as
 # both live ground truths spell them, because the scorer indexes a multi-repo
@@ -57,6 +54,196 @@ GT = [("httpx", "httpx/httpx/_config.py"), ("httpcore", "httpcore/httpcore/_clie
 ABSOLUTE = [f"/workspace/{path}" for _, path in GT]
 
 
+def _stage_workspace(workdir: Path, answer: dict) -> tuple[Path, Path]:
+    """Stage the workspace and task dir a shipped check script expects to find.
+
+    ONE fixture for both the probe and the vectors, because most shipped check scripts
+    open with a hardening preamble that refuses a missing ground_truth.json or
+    answer.json and exits before scoring. A probe that staged less than the vectors do
+    would read that early exit as "this script never calls the scorer" and silently drop
+    a real caller from the corpus — the same false verdict this corpus exists to catch,
+    aimed at itself.
+
+    Insurance for the auto-adoption path, not for today: none of the three current
+    callers guards its inputs, and all three are discovered with a bare workspace too
+    (measured). It is the scripts bead rmz1x will point here that carry the preamble, and
+    they would drop out silently on arrival. Staging now costs one fixture; finding out
+    later costs a gate that shrank while green.
+    """
+    task_dir = workdir / "task"
+    task_dir.mkdir(exist_ok=True)
+    (task_dir / "ground_truth.json").write_text(
+        json.dumps({"required_files": [{"path": path, "repo": repo} for repo, path in GT]})
+    )
+
+    workspace = workdir / "ws"
+    (workspace / "agent_output").mkdir(parents=True, exist_ok=True)
+    (workspace / "agent_output" / "answer.json").write_text(json.dumps(answer))
+    return workspace, task_dir
+
+
+# The probe answers in every shape at once. It only has to clear the bash-level guards
+# and reach the scorer — the shim short-circuits before any real scoring — so breadth
+# here buys immunity to a script that inspects the answer before invoking the scorer.
+PROBE_ANSWER = {
+    "source_files": ABSOLUTE,
+    "files": ABSOLUTE,
+    "code_paths": [{"path": path} for path in ABSOLUTE],
+    "error_source": {"files": ABSOLUTE},
+    "citations": [
+        {"repo": repo, "file": path, "evidence_span": "x" * 20} for repo, path in GT
+    ],
+}
+
+
+def _scorer_argv(script: Path, workdir: Path) -> list[str] | None:
+    """The arguments ``script`` really hands the scorer, or None if it never runs it.
+
+    Captured from the REAL post-shell-expansion argv via a PATH shim standing in for
+    ``python3``, never parsed from the script text. That is what makes it robust to the
+    spellings a text scan trips on — ``--keys=a,b``, a ``$KEYS`` variable, a
+    line-continuation reformat — because the shim reads argv after the shell is done
+    with it. (An earlier plan to regex the script text was rejected for exactly that
+    fragility.)
+
+    Robust to those spellings of a ``-m`` invocation, and no further: the shim matches the
+    module as a standalone argument, so an import through ``python3 -c`` slips past it,
+    and a name built at runtime (``-m eb_verify.scorers.$NAME``) never even clears the
+    prefilter. Both would drop a real caller quietly. Neither is reachable today — every
+    shipped caller execs ``-m`` with a literal name — and EnterpriseBench-51boy holds the
+    evidence and a fix sketch for when that stops being true.
+
+    Running it is also what separates a script that USES the scorer from one that
+    merely names it; ``_discover_file_extraction_checks`` explains why that matters.
+    """
+    bindir = workdir / "shimbin"
+    bindir.mkdir(exist_ok=True)
+    dump = workdir / "argv.txt"
+    # A bash shim (never `#!/usr/bin/env python3`, which would re-invoke itself and
+    # recurse). It records argv ONLY for the scorer invocation and delegates every
+    # other python3 call to the real interpreter, so a future adopter that runs python3
+    # for setup before the scorer is not silently swallowed — the corpus auto-adopts
+    # check scripts by content-glob, so this test must survive scripts it has not seen.
+    shim = bindir / "python3"
+    shim.write_text(
+        "#!/usr/bin/env bash\n"
+        'for a in "$@"; do\n'
+        f'  if [ "$a" = {shlex.quote(SCORER_MODULE)} ]; then\n'
+        f'    printf "%s\\n" "$@" > {shlex.quote(str(dump))}\n'
+        "    exit 0\n"
+        "  fi\n"
+        "done\n"
+        f'exec {shlex.quote(sys.executable)} "$@"\n'
+    )
+    shim.chmod(0o755)
+
+    workspace, task_dir = _stage_workspace(workdir, PROBE_ANSWER)
+    env = checkpoint_env(workspace, task_dir, "scorer-argv-probe")
+    env["PATH"] = str(bindir) + os.pathsep + env["PATH"]
+
+    # No check=True: the shim short-circuits the scorer (exit 0, no verdict printed), so
+    # a script that post-processes the scorer's output can legitimately fail afterwards.
+    # The dump's existence is the signal that the scorer was reached, not the exit status.
+    subprocess.run(
+        ["bash", str(script)],
+        capture_output=True, text=True, cwd=str(workspace),
+        env=env, timeout=30,  # a hung script must fail this gate, not stall CI forever
+    )
+    if not dump.exists():
+        return None
+    # The shim dumps only when the module token is in argv, so index() cannot raise.
+    argv = dump.read_text().splitlines()
+    return argv[argv.index(SCORER_MODULE) + 1:]
+
+
+def _discover_file_extraction_checks(root: Path = REPO_ROOT) -> tuple[list[Path], list[str]]:
+    """The check scripts under ``root`` that really exec the scorer, and the ones that
+    could not be probed at all.
+
+    Discovered by content, never by name. A task rename, or the 26 further check
+    scripts bead rmz1x wants pointed at this scorer, are covered automatically; a
+    hardcoded task list would leave every future adopter unguarded.
+
+    Two stages, because naming the module and running it are different things. The
+    substring is a PREFILTER only — a necessary condition, cheap enough to read across
+    all 478 check scripts, where executing all of them would not be. Execution is the
+    confirmation, and it is the ground truth: calibration-001 names the module in a prose
+    comment and scores via ``eb_verify.plugins.path_match`` instead, so a substring test
+    adopted it and then failed it for "passing no --keys to the scorer" — a check that
+    was never its to pass.
+
+    A script neither stage can get an answer out of — unreadable, not UTF-8, hangs, will
+    not start — is REPORTED, never counted as "not a caller". That quiet reading would
+    drop a real caller the moment its script broke, shrinking this gate while it stayed
+    green. Nor may the error escape: BOTH stages run at import, to feed ``parametrize``,
+    and an escaping error there aborts collection for the whole SESSION — every test in
+    tests/integrity/, not just this file's, behind one message. Reporting keeps the blame
+    on the one script at fault. Both stages funnel into the same list for that reason;
+    the prefilter earns it too, since a file it cannot read may well be a caller.
+
+    ``root`` is a parameter so the reduction can be tested against a synthetic tree; the
+    corpus itself always takes the default.
+    """
+    unprobeable: list[str] = []
+    candidates: list[Path] = []
+    for path in sorted(root.glob("benchmarks/*/*/checks/*.sh")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            unprobeable.append(f"{path.relative_to(root)}: {exc!r}")
+            continue
+        if SCORER_MODULE in text:
+            candidates.append(path)
+
+    confirmed: list[Path] = []
+    for script in candidates:
+        with tempfile.TemporaryDirectory() as probe_dir:
+            try:
+                argv = _scorer_argv(script, Path(probe_dir))
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                unprobeable.append(f"{script.relative_to(root)}: {exc!r}")
+                continue
+        if argv is not None:
+            confirmed.append(script)
+    return confirmed, unprobeable
+
+
+FILE_EXTRACTION_CHECKS, UNPROBEABLE_CHECKS = _discover_file_extraction_checks()
+
+
+def test_a_script_the_prefilter_cannot_even_read_is_reported_not_skipped(tmp_path):
+    """The prefilter has to fail the same way the probe does.
+
+    It reads before it filters, so a stray non-UTF-8 byte raises where no ``--keys`` ever
+    would — and ``UnicodeDecodeError`` is not an ``OSError``, so the probe's own guard
+    would not have caught it. Unread is not the same as uninteresting: the file might have
+    named the scorer. Skipping it would shrink the gate in silence; letting it escape
+    would abort collection for every test in tests/integrity/ at once.
+    """
+    checks = tmp_path / "benchmarks" / "suite" / "task" / "checks"
+    checks.mkdir(parents=True)
+    (checks / "check.sh").write_bytes(b"#!/usr/bin/env bash\n# \xff\xfe not utf-8\n")
+
+    confirmed, unprobeable = _discover_file_extraction_checks(tmp_path)
+
+    assert confirmed == []
+    assert len(unprobeable) == 1
+    assert "check.sh" in unprobeable[0]
+
+
+def test_every_candidate_script_could_actually_be_probed():
+    """Second non-vacuity guard, for the scripts discovery could not run.
+
+    The corpus shrinking is the failure this file exists to catch, so a candidate that
+    hangs or will not start has to say so out loud, naming itself, instead of leaving
+    through the same door as a script that simply scores by other means.
+    """
+    assert not UNPROBEABLE_CHECKS, (
+        "candidate check scripts could not be probed, so discovery may have dropped a "
+        f"real scorer caller instead of confirming it: {UNPROBEABLE_CHECKS}"
+    )
+
+
 def test_the_corpus_actually_found_the_scorers_call_sites():
     """Non-vacuity guard. Without it a rename empties the glob, every vector below
     passes by iterating nothing, and the gate goes green guarding nothing."""
@@ -64,6 +251,79 @@ def test_the_corpus_actually_found_the_scorers_call_sites():
         "no shipped check script execs eb_verify.scorers.file_extraction, so the "
         "vectors below would all pass vacuously"
     )
+
+
+def test_naming_the_scorer_in_a_comment_is_not_using_it(tmp_path):
+    """A script that only mentions the module scores by other means and is not ours.
+
+    The half of the predicate that keeps calibration-001 — which names the module in a
+    comment and scores via ``path_match`` — out of a corpus whose every vector assumes
+    the scorer runs.
+    """
+    script = tmp_path / "comment_only.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        f"# scores via path_match, which reuses the canonical {SCORER_MODULE} matcher\n"
+        'echo \'{"score": 1.0, "passed": true, "detail": "scored elsewhere"}\'\n'
+    )
+    assert _scorer_argv(script, tmp_path) is None
+
+
+def test_an_exec_of_the_scorer_is_discovered_with_its_real_argv(tmp_path):
+    """The other half: a predicate that discovered NOTHING would also turn this gate
+    green, so pair every exclusion above with a positive case."""
+    script = tmp_path / "real_call.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        f"exec python3 -m {SCORER_MODULE} \\\n"
+        "    --keys source_files,files\n"
+    )
+    assert _scorer_argv(script, tmp_path) == ["--keys", "source_files,files"]
+
+
+def test_a_script_that_guards_its_inputs_before_scoring_is_still_discovered(tmp_path):
+    """The probe must stage what a check script's opening guards demand.
+
+    Pins ``_stage_workspace``: probed in a bare workspace, a hardened script exits at
+    its guard and looks exactly like one that does not use the scorer, so a real caller
+    would drop out of the corpus silently and this gate would shrink while staying green.
+    """
+    script = tmp_path / "hardened.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'if [[ ! -f "${TASK_DIR:-}/ground_truth.json" ]]; then\n'
+        '  echo \'{"score": 0.0, "passed": false, "detail": "VERIFIER_INFRA_ERROR"}\'; exit 0\n'
+        "fi\n"
+        'if [[ ! -f "$WORKSPACE/agent_output/answer.json" ]]; then\n'
+        '  echo \'{"score": 0.0, "passed": false, "detail": "No answer.json found"}\'; exit 0\n'
+        "fi\n"
+        f"exec python3 -m {SCORER_MODULE} --keys citations\n"
+    )
+    assert _scorer_argv(script, tmp_path) == ["--keys", "citations"]
+
+
+def test_discovery_keeps_the_real_caller_and_drops_the_comment_only_one(tmp_path):
+    """The two-stage reduction end to end, on a synthetic tree.
+
+    The predicate tests above pin ``_scorer_argv``; this pins the wiring that consumes
+    it. Reverting discovery to the bare substring test keeps every test above green —
+    only this one goes red — so the fix stays nailed down at the level it was made.
+    """
+    checks = tmp_path / "benchmarks" / "suite"
+    real = checks / "real-task" / "checks"
+    comment_only = checks / "prose-task" / "checks"
+    real.mkdir(parents=True)
+    comment_only.mkdir(parents=True)
+    (real / "check.sh").write_text(
+        f"#!/usr/bin/env bash\nexec python3 -m {SCORER_MODULE} --keys files\n"
+    )
+    (comment_only / "check.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        f"# scores via path_match, which reuses the canonical {SCORER_MODULE} matcher\n"
+        'echo \'{"score": 1.0, "passed": true, "detail": "scored elsewhere"}\'\n'
+    )
+    assert _discover_file_extraction_checks(tmp_path) == ([real / "check.sh"], [])
 
 
 def run_shipped_check(script: Path, answer, tmp_path) -> dict:
@@ -74,17 +334,7 @@ def run_shipped_check(script: Path, answer, tmp_path) -> dict:
     scorer untouched — a key dropped from the shipped artifact surfaces here as the
     false zero it would be in a real run.
     """
-    task_dir = tmp_path / "task"
-    task_dir.mkdir(exist_ok=True)
-    (task_dir / "ground_truth.json").write_text(
-        json.dumps({"required_files": [
-            {"path": path, "repo": repo} for repo, path in GT
-        ]})
-    )
-
-    workspace = tmp_path / "ws"
-    (workspace / "agent_output").mkdir(parents=True, exist_ok=True)
-    (workspace / "agent_output" / "answer.json").write_text(json.dumps(answer))
+    workspace, task_dir = _stage_workspace(tmp_path, answer)
 
     proc = subprocess.run(
         ["bash", str(script)],
@@ -102,55 +352,16 @@ def run_shipped_check(script: Path, answer, tmp_path) -> dict:
 def shipped_keys(script: Path, tmp_path) -> set[str]:
     """The ``--keys`` a shipped check script actually passes to the scorer.
 
-    Captured from the REAL post-shell-expansion argv via a PATH shim standing in for
-    ``python3``, never parsed from the script text. That is what makes it robust to
-    every shell form a text scan trips on — ``--keys=a,b``, a ``$KEYS`` variable, a
-    line-continuation reformat — because the shim reads argv after the shell is done
-    with it. (An earlier plan to regex the script text was rejected for exactly that
-    fragility.)
+    Reads the real argv through the same probe that discovered ``script`` in the first
+    place, so key-capture and discovery cannot disagree about whether the scorer ran —
+    their disagreement was the defect this shared helper closes.
+
+    The argv goes to the scorer's own parser, so ``--keys a,b`` and ``--keys=a,b`` both
+    normalize the one way the scorer itself normalizes them.
     """
-    module = "eb_verify.scorers.file_extraction"
-    bindir = tmp_path / "shimbin"
-    bindir.mkdir(exist_ok=True)
-    dump = tmp_path / "argv.txt"
-    # A bash shim (never `#!/usr/bin/env python3`, which would re-invoke itself and
-    # recurse). It records argv ONLY for the scorer invocation and delegates every
-    # other python3 call to the real interpreter, so a future adopter that runs python3
-    # for setup before the scorer is not silently swallowed — the corpus auto-adopts
-    # check scripts by content-glob, so this test must survive scripts it has not seen.
-    shim = bindir / "python3"
-    shim.write_text(
-        "#!/usr/bin/env bash\n"
-        'for a in "$@"; do\n'
-        f'  if [ "$a" = {shlex.quote(module)} ]; then\n'
-        f'    printf "%s\\n" "$@" > {shlex.quote(str(dump))}\n'
-        "    exit 0\n"
-        "  fi\n"
-        "done\n"
-        f'exec {shlex.quote(sys.executable)} "$@"\n'
-    )
-    shim.chmod(0o755)
-
-    workspace = tmp_path / "ws"
-    (workspace / "agent_output").mkdir(parents=True, exist_ok=True)
-    task_dir = tmp_path / "task"
-    task_dir.mkdir(exist_ok=True)
-    env = checkpoint_env(workspace, task_dir, "shipped-keys-probe")
-    env["PATH"] = str(bindir) + os.pathsep + env["PATH"]
-
-    subprocess.run(
-        ["bash", str(script)],
-        capture_output=True, text=True, cwd=str(workspace),
-        env=env, timeout=30, check=True,
-    )
-    if not dump.exists():
+    scorer_argv = _scorer_argv(script, tmp_path)
+    if scorer_argv is None:
         return set()  # the script never invoked the scorer; the caller asserts non-vacuity
-    argv = dump.read_text().splitlines()
-    # Slice to the scorer's own arguments (everything after the module token) and hand
-    # them to the scorer's real parser, so `--keys a,b` and `--keys=a,b` both normalize
-    # the one way the scorer itself normalizes them. The captured argv is already
-    # post-shell-expansion, so a `$KEYS` variable or a line-continuation is long gone.
-    scorer_argv = argv[argv.index(module) + 1:] if module in argv else argv
     try:
         raw = build_parser().parse_known_args(scorer_argv)[0].keys or ""
     except HarnessError:
