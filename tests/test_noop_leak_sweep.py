@@ -17,24 +17,10 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "validation"))
-sys.path.insert(0, str(REPO_ROOT / "scripts" / "orchestration"))
 
 import noop_leak_sweep  # noqa: E402
 from noop_leak_sweep import Leak, SweepResult  # noqa: E402
 from run_task import _build_instruction_text  # noqa: E402
-
-# Answer-schema keywords production's output appendix carries into EVERY
-# workspace, in every mode. A check globbing workspace-level *.md for any of them
-# — the hpcsv shape — leaks in production; a sweep that plants only the raw
-# instruction.md would score it clean.
-APPENDIX_KEYWORDS = (
-    "source_files",
-    "error_chain",
-    "trigger_conditions",
-    "code_paths",
-    "severity",
-    "related_issues",
-)
 
 RAW_INSTRUCTION = "Find the root cause of the regression.\n"
 
@@ -84,6 +70,10 @@ UNPARSEABLE_TASK_TOMLS = {
     "ground_truth_as_scalar": 'ground_truth = "x"\n' + _TASK_BLOCK,
 }
 
+# One representative shape for tests about the CONSEQUENCES of a bad task.toml,
+# which are identical whatever raised: the parse returned None.
+A_BAD_TASK_TOML = "repos_as_scalars"
+
 SCORING_CHECK = '#!/bin/bash\necho \'{"score": 0.0}\'\n'
 LEAKING_CHECK = '#!/bin/bash\necho \'{"score": 1.0}\'\n'
 
@@ -123,74 +113,48 @@ def _plant(tmp_path: Path, **kw) -> tuple[Path, Path]:
     task_dir = _make_task(tmp_path, **kw)
     ws = tmp_path / "ws"
     ws.mkdir()
-    noop_leak_sweep._plant_workspace(task_dir, ws)
+    noop_leak_sweep._plant_workspace(
+        task_dir, noop_leak_sweep._task_definition(task_dir), ws
+    )
     return task_dir, ws
 
 
 # --- what the sweep plants -------------------------------------------------
 
 
-def test_planted_workspace_carries_the_production_output_appendix(tmp_path):
-    _, ws = _plant(tmp_path)
+@pytest.mark.parametrize("grounded", [True, False])
+def test_plant_is_productions_render_at_the_tasks_citations_flag(tmp_path, grounded):
+    """The plant is production's own render, read at the task's real flag.
+
+    The appendix varies on ``ground_truth.require_grounded_citations`` as well as
+    on the mode, and production reads that flag from task.toml. Hardcoding it
+    either way replants the subset/superset bug one axis over: defaulted to False
+    the plant under-renders a grounded task; pinned to True it invents a citations
+    block production would never emit.
+    """
+    task_dir, ws = _plant(tmp_path, grounded=grounded)
 
     planted = (ws / "instruction.md").read_text()
-    missing = [kw for kw in APPENDIX_KEYWORDS if kw not in planted]
-    assert not missing, (
-        f"planted workspace is missing output-appendix keywords {missing}, which "
-        "production puts in /workspace/instruction.md in every mode. A check "
-        "keyed on them would leak in production and read clean here."
+    assert planted == _build_instruction_text(
+        task_dir, mode="baseline", require_grounded_citations=grounded
     )
-
-
-def test_planted_instruction_is_the_production_baseline_render(tmp_path):
-    """The plant is production's own render, not a re-derivation of it."""
-    task_dir, ws = _plant(tmp_path)
-
-    assert (ws / "instruction.md").read_text() == _build_instruction_text(
-        task_dir, mode="baseline"
-    )
+    assert ('"citations"' in planted) is grounded
 
 
 def test_planted_instruction_is_a_strict_superset_of_the_raw_file(tmp_path):
-    """The bug being fixed: the raw file alone is less than the agent really sees."""
+    """The bug being fixed: the raw file alone is less than the agent really sees.
+
+    Deliberately keyed on the raw text rather than on the appendix's field names.
+    Naming them here would mirror a literal owned by ``run_task``, so a legitimate
+    rename there would fail this suite for a defect that is not in the sweep —
+    while this assertion still catches production dropping the appendix outright,
+    which is the drift that would make the equality test above vacuous.
+    """
     _, ws = _plant(tmp_path)
 
     planted = (ws / "instruction.md").read_text()
     assert RAW_INSTRUCTION in planted
     assert planted != RAW_INSTRUCTION
-
-
-def test_planted_workspace_honours_require_grounded_citations(tmp_path):
-    """The appendix varies on the task's citations flag, not only on the mode.
-
-    Production reads ``ground_truth.require_grounded_citations`` from task.toml
-    and passes it in (run_task.py ``_setup_container``); when it is set, the
-    appendix grows a ``citations`` block naming ``evidence_span`` and a verbatim
-    quoting requirement. Defaulting the flag to False would replant the very bug
-    this bead fixes — a workspace that is a strict subset of production's — just
-    along the citations axis instead of the mode axis.
-    """
-    task_dir, ws = _plant(tmp_path, grounded=True)
-
-    planted = (ws / "instruction.md").read_text()
-    assert planted == _build_instruction_text(
-        task_dir, mode="baseline", require_grounded_citations=True
-    )
-    assert '"citations"' in planted
-    assert "evidence_span" in planted
-
-
-def test_planted_workspace_omits_citations_when_the_task_does_not_require_them(tmp_path):
-    """The flag is read from the task, not hardcoded on: a plant that always
-    carried the citations block would be a strict SUPERSET for most of the corpus
-    and could invent a leak that production cannot produce.
-
-    The plant-is-production's-render half is pinned above; this pins only the
-    flag's off-direction, which that test cannot distinguish.
-    """
-    _, ws = _plant(tmp_path, grounded=False)
-
-    assert '"citations"' not in (ws / "instruction.md").read_text()
 
 
 def test_plant_skips_a_task_with_no_instruction(tmp_path):
@@ -209,7 +173,8 @@ def test_checkpoint_name_is_the_name_registered_in_task_toml(tmp_path):
     check = task_dir / "checks" / "check_root_cause.sh"
     check.write_text("#!/bin/bash\n")
 
-    assert noop_leak_sweep._checkpoint_name(check, task_dir) == "root_cause_identified"
+    task = noop_leak_sweep._task_definition(task_dir)
+    assert noop_leak_sweep._checkpoint_name(check, task) == "root_cause_identified"
 
 
 def test_checkpoint_name_falls_back_to_filename_when_unregistered(tmp_path):
@@ -218,30 +183,37 @@ def test_checkpoint_name_falls_back_to_filename_when_unregistered(tmp_path):
     check = task_dir / "checks" / "check_unregistered.sh"
     check.write_text("#!/bin/bash\n")
 
-    assert noop_leak_sweep._checkpoint_name(check, task_dir) == "unregistered"
+    task = noop_leak_sweep._task_definition(task_dir)
+    assert noop_leak_sweep._checkpoint_name(check, task) == "unregistered"
 
 
-@pytest.mark.parametrize("shape", sorted(UNPARSEABLE_TASK_TOMLS))
-def test_task_toml_that_will_not_parse_falls_back_loudly(tmp_path, shape, capsys):
-    """A broken task.toml costs naming, not the audit — and never does so silently.
-
-    Parametrized over every shape for the same reason the sweep-level guard is:
-    naming degrades identically whether the file fails in ``tomllib`` or deep
-    inside ``parse_task``, and pinning only the shapes someone thought of is what
-    made the catch wrong twice.
-    """
-    task_dir = _make_unparseable_task(tmp_path, shape)
+def test_checkpoint_name_falls_back_to_filename_when_the_toml_will_not_parse(tmp_path):
+    """A broken task.toml costs naming, not the audit."""
+    task_dir = _make_unparseable_task(tmp_path, A_BAD_TASK_TOML)
     check = task_dir / "checks" / "check_root_cause.sh"
 
-    assert noop_leak_sweep._checkpoint_name(check, task_dir) == "root_cause"
-    assert "task.toml" in capsys.readouterr().err
+    assert noop_leak_sweep._checkpoint_name(check, None) == "root_cause"
 
 
 # --- what the sweep does when task.toml will not parse ---------------------
 
 
 @pytest.mark.parametrize("shape", sorted(UNPARSEABLE_TASK_TOMLS))
-def test_a_task_whose_toml_will_not_parse_is_unproven_not_clean(tmp_path, shape, capsys):
+def test_every_unparseable_shape_degrades_to_none_and_warns(tmp_path, shape, capsys):
+    """The catch is by CLASS: every shape degrades, and never silently.
+
+    This is the one site the shape discriminates at — once the parse returns None,
+    naming and the unproven tally behave identically whatever raised. Enumerating
+    the shapes someone thought of is what made the catch wrong twice, so the guard
+    is against the failure class.
+    """
+    task_dir = _make_unparseable_task(tmp_path, shape)
+
+    assert noop_leak_sweep._task_definition(task_dir) is None
+    assert "task.toml" in capsys.readouterr().err
+
+
+def test_a_task_whose_toml_will_not_parse_is_unproven_not_clean(tmp_path, capsys):
     """An unparseable task.toml must complete the sweep AND be reported unproven.
 
     Both adjacent answers are wrong. Uncaught, the raise aborts the whole corpus
@@ -250,15 +222,15 @@ def test_a_task_whose_toml_will_not_parse_is_unproven_not_clean(tmp_path, shape,
     what production renders — and its zero scores are then recorded as a clean
     bill of health. The truthful answer is neither: the sweep never learned this
     task's real no-op score, which is exactly the "unproven" state it already
-    models as ``n_errored`` -> exit 2.
+    models as ``n_unproven`` -> exit 2.
     """
-    _make_unparseable_task(tmp_path, shape)
+    _make_unparseable_task(tmp_path, A_BAD_TASK_TOML)
 
     result = noop_leak_sweep.sweep(tmp_path)  # must not raise
 
     assert result.n_tasks == 1
     assert result.n_checks == 1
-    assert result.n_errored == 1, (
+    assert result.n_unproven == 1, (
         "a task whose task.toml will not parse was planted from a defaulted "
         "citations flag, so its 0.00 score is unproven, not a proven 'not a leak'"
     )
@@ -267,13 +239,13 @@ def test_a_task_whose_toml_will_not_parse_is_unproven_not_clean(tmp_path, shape,
 
 
 def test_a_parseable_task_is_not_counted_unproven(tmp_path):
-    """The off-direction: `n_errored += 1` unconditionally would pass the test above."""
+    """The off-direction: `n_unproven += 1` unconditionally would pass the test above."""
     task_dir = _make_task(tmp_path)
     (task_dir / "checks" / "check_root_cause.sh").write_text(SCORING_CHECK)
 
     result = noop_leak_sweep.sweep(tmp_path)
 
-    assert (result.n_tasks, result.n_checks, result.n_errored) == (1, 1, 0)
+    assert (result.n_tasks, result.n_checks, result.n_unproven) == (1, 1, 0)
     assert not result.leaks
 
 
@@ -285,37 +257,13 @@ def test_an_unparseable_task_that_leaks_is_still_a_leak(tmp_path):
     in production too. The leak is real, and stays exit 1 rather than being
     softened to "incomplete".
     """
-    _make_unparseable_task(tmp_path, "repos_as_scalars", check=LEAKING_CHECK)
+    _make_unparseable_task(tmp_path, A_BAD_TASK_TOML, check=LEAKING_CHECK)
 
     result = noop_leak_sweep.sweep(tmp_path)
 
     assert len(result.leaks) == 1
-    assert result.n_errored == 1
+    assert result.n_unproven == 1
     assert noop_leak_sweep.main([str(tmp_path)]) == 1
-
-
-def test_a_fresh_sweep_rereads_an_edited_task_toml(tmp_path):
-    """The parse cache is scoped to one sweep, so a re-sweep must see disk edits.
-
-    Caching a file's contents is only defensible because task.toml cannot change
-    *during* a sweep. Across sweeps it plainly can — fix a task, re-sweep to
-    confirm — and an unbounded process-global cache would answer the second sweep
-    with the first sweep's parse.
-    """
-    task_dir = _make_task(tmp_path)
-    check = task_dir / "checks" / "check_root_cause.sh"
-    check.write_text('#!/bin/bash\necho \'{"score": 0.0}\'\n')
-
-    assert noop_leak_sweep._checkpoint_name(check, task_dir) == "root_cause_identified"
-
-    (task_dir / "task.toml").write_text(
-        TASK_TOML.format(grounded="false").replace(
-            "root_cause_identified", "renamed_checkpoint"
-        )
-    )
-    noop_leak_sweep.sweep(tmp_path)
-
-    assert noop_leak_sweep._checkpoint_name(check, task_dir) == "renamed_checkpoint"
 
 
 # --- what the sweep reports to CI ------------------------------------------
@@ -328,48 +276,44 @@ _LEAK = Leak(
     score=1.0,
 )
 
+_ALLOW_LEAK = "fixture-task-001:root_cause_identified"
+
 
 def _stub_sweep(monkeypatch, result: SweepResult) -> None:
     monkeypatch.setattr(noop_leak_sweep, "sweep", lambda root: result)
 
 
-def test_clean_sweep_exits_0(monkeypatch, tmp_path):
-    _stub_sweep(monkeypatch, SweepResult([], n_tasks=1, n_checks=2, n_errored=0))
-    assert noop_leak_sweep.main([str(tmp_path)]) == 0
+@pytest.mark.parametrize(
+    "leaks,n_tasks,n_unproven,allow,expected",
+    [
+        ([], 1, 0, [], 0),  # clean
+        ([], 1, 1, [], 2),  # a check went unproven
+        ([], 0, 0, [], 2),  # swept nothing: not a clean bill of health
+        ([_LEAK], 1, 1, [], 1),  # a real leak outranks incompleteness
+        ([_LEAK], 1, 1, [_ALLOW_LEAK], 2),  # allowed leak leaves the incompleteness
+        ([_LEAK], 1, 0, [_ALLOW_LEAK], 0),  # allowed leak, nothing else to report
+    ],
+)
+def test_exit_code(monkeypatch, tmp_path, leaks, n_tasks, n_unproven, allow, expected):
+    """The exit-code policy, as a table.
 
-
-def test_incomplete_sweep_without_a_leak_exits_2(monkeypatch, tmp_path):
-    _stub_sweep(monkeypatch, SweepResult([], n_tasks=1, n_checks=2, n_errored=1))
-    assert noop_leak_sweep.main([str(tmp_path)]) == 2
-
-
-def test_a_real_leak_outranks_incompleteness_in_the_exit_code(monkeypatch, tmp_path, capsys):
-    """A leak plus an errored check is a leak: exit 1, not 2.
-
-    Both facts stay true, so both are reported — but the exit code names the
-    worse one. Exit 2 ("could not trust the result") understates a run that
-    positively found a real leak.
+    Note the last two rows: ``--allow`` takes an entry named as task.toml
+    registers the checkpoint (``root_cause_identified``), not the verifier's
+    filename stem.
     """
-    _stub_sweep(monkeypatch, SweepResult([_LEAK], n_tasks=1, n_checks=2, n_errored=1))
+    _stub_sweep(
+        monkeypatch, SweepResult(leaks, n_tasks=n_tasks, n_checks=2, n_unproven=n_unproven)
+    )
+    argv = [str(tmp_path), *(a for entry in allow for a in ("--allow", entry))]
+
+    assert noop_leak_sweep.main(argv) == expected
+
+
+def test_incompleteness_is_reported_even_when_a_leak_sets_the_exit_code(
+    monkeypatch, tmp_path, capsys
+):
+    """The exit code names one fact; both are still reported."""
+    _stub_sweep(monkeypatch, SweepResult([_LEAK], n_tasks=1, n_checks=2, n_unproven=1))
 
     assert noop_leak_sweep.main([str(tmp_path)]) == 1
     assert "incomplete" in capsys.readouterr().err
-
-
-def test_an_allowed_leak_does_not_mask_incompleteness(monkeypatch, tmp_path):
-    """--allow silences the leak, so the unproven check is what's left to report."""
-    _stub_sweep(monkeypatch, SweepResult([_LEAK], n_tasks=1, n_checks=2, n_errored=1))
-    argv = [str(tmp_path), "--allow", "fixture-task-001:root_cause_identified"]
-    assert noop_leak_sweep.main(argv) == 2
-
-
-def test_allow_matches_the_checkpoint_name_registered_in_task_toml(monkeypatch, tmp_path):
-    """An operator allowlists the name they read in task.toml, not a filename stem."""
-    _stub_sweep(monkeypatch, SweepResult([_LEAK], n_tasks=1, n_checks=1, n_errored=0))
-    argv = [str(tmp_path), "--allow", "fixture-task-001:root_cause_identified"]
-    assert noop_leak_sweep.main(argv) == 0
-
-
-def test_sweeping_zero_tasks_is_not_a_clean_bill_of_health(monkeypatch, tmp_path):
-    _stub_sweep(monkeypatch, SweepResult([], n_tasks=0, n_checks=0, n_errored=0))
-    assert noop_leak_sweep.main([str(tmp_path)]) == 2

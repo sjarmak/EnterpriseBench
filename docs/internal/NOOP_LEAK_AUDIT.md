@@ -51,10 +51,10 @@ known gap and why it does not move the result:
   *other* value in the payload is malformed JSON (e.g.
   `{"detail": "gap is 3" x 5" wide", "score": 0.3}` → 0.3, which `json.loads`
   rejects). A check emitting such output under no-op would score >0 in production
-  but drop to `errored` (no verdict) here — a false negative. **Empirically this
+  but drop to `unproven` (no verdict) here — a false negative. **Empirically this
   does not occur:** all 470 checks emit strictly-valid JSON under the no-op
-  condition (`errored=0`), so `json.loads` parses every one and the two parsers
-  agree on every leak decision. `test_every_check_scored` freezes `errored == 0`,
+  condition (`unproven=0`), so `json.loads` parses every one and the two parsers
+  agree on every leak decision. `test_every_check_scored` freezes `unproven == 0`,
   so the moment any check starts emitting malformed no-op output the guard fails
   loudly instead of silently dropping it. Aligning the sweep onto `parse_score`
   itself, so the oracles cannot diverge by construction, is tracked as follow-up
@@ -96,18 +96,27 @@ known gap and why it does not move the result:
   production, so they can only over-report (false positive), never hide a leak.
   No check globs `$TASK_DIR` (all reads are fixed `ground_truth.json`), so
   neither bites today.
+- **The audit's unit is the checkpoint, not the task.** Every signal the sweep
+  reports is counted per check, so a task dir contributing zero checks
+  contributes no unproven-ness either and exits 0 — including one whose
+  `task.toml` will not parse, which is then audible only as a stderr warning.
+  This is a real gap at authoring time (a `task.toml` written before `checks/`
+  exists), but it is the *zero-check* gap rather than the parse gap: a task with
+  a perfectly valid `task.toml` and no checks exits 0 identically. Closing it
+  needs a task-level tally, since `n_unproven` counts checks and must stay
+  `<= n_checks`. Tracked as **EnterpriseBench-241kh**.
 
 ## Result
 
 ```
-tasks=141  checks=470  errored=0  leaks=0  unexpected=0
+tasks=141  checks=470  unproven=0  leaks=0  unexpected=0
 ```
 
-`errored=0` is load-bearing: it means every check produced a parseable verdict,
-so no check was silently dropped to "not a leak" (see the parser boundary
-limitation above). All 470 checks return a parseable score (the `eb_verify`-plugin
-checks import correctly under `PYTHONPATH=lib` and none default to pass on a
-missing answer file).
+`unproven=0` is load-bearing: it means every check produced a parseable verdict
+under a faithful plant, so no check was silently dropped to "not a leak" (see the
+parser boundary limitation above). All 470 checks return a parseable score (the
+`eb_verify`-plugin checks import correctly under `PYTHONPATH=lib` and none default
+to pass on a missing answer file).
 
 The one leak b5vk6 originally found, now closed:
 
