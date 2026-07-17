@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import builtins
+import contextlib
 import json
 import os
 import stat
@@ -40,6 +42,33 @@ from eb_verify.plugins.incident_report import (
 from eb_verify.plugins.reproduction_script import ReproductionScriptValidator
 from eb_verify.plugins.runbook import RunbookValidator
 from eb_verify.plugins.security_assessment import SecurityAssessmentValidator
+
+
+@contextlib.contextmanager
+def _toml_import_env(*, block=(), alias=None):
+    """Patch builtins.__import__ to simulate interpreter/parser availability.
+
+    ``block`` names raise ModuleNotFoundError on import; ``alias`` names resolve
+    to another (installed) module. Lets us exercise the Python 3.10 path — stdlib
+    ``tomllib`` absent, ``tomli`` backport present — without installing tomli, by
+    blocking ``tomllib`` and routing ``tomli`` to the real stdlib ``tomllib``.
+    """
+    block = set(block)
+    alias = alias or {}
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name in block:
+            raise ModuleNotFoundError(f"No module named '{name}'")
+        if name in alias:
+            return real_import(alias[name], *args, **kwargs)
+        return real_import(name, *args, **kwargs)
+
+    builtins.__import__ = fake_import
+    try:
+        yield
+    finally:
+        builtins.__import__ = real_import
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +214,37 @@ class TestConfigValidator:
         # If toml parser available, should fail; otherwise passes (skip)
         # Either outcome is valid — we just assert no exception is raised
         assert isinstance(result.valid, bool)
+
+    def test_validate_file_invalid_toml_via_tomli_fallback(self, tmp_path):
+        # Python 3.10 path: stdlib tomllib absent, tomli backport present.
+        # Malformed TOML must be reported invalid, not silently passed (the
+        # else-clause-misbinding bug returned valid=True here).
+        f = tmp_path / "bad.toml"
+        f.write_bytes(b"[section\nbad toml [[[")
+        validator = ConfigValidator()
+        with _toml_import_env(block={"tomllib"}, alias={"tomli": "tomllib"}):
+            result = validator._validate_file(f, tmp_path)
+        assert result.valid is False
+
+    def test_validate_file_valid_toml_via_tomli_fallback(self, tmp_path):
+        # Same py3.10 path: well-formed TOML must still validate (no over-reject).
+        f = tmp_path / "good.toml"
+        f.write_text('[section]\nkey = "value"\n')
+        validator = ConfigValidator()
+        with _toml_import_env(block={"tomllib"}, alias={"tomli": "tomllib"}):
+            result = validator._validate_file(f, tmp_path)
+        assert result.valid is True
+
+    def test_validate_file_toml_no_parser_skips(self, tmp_path):
+        # Neither tomllib nor tomli importable: a missing parser is a harness
+        # fault, not an agent failure. Skip (valid=True) — never false-fail the
+        # agent's config as INVALID (the defective raise-on-missing behaviour).
+        f = tmp_path / "bad.toml"
+        f.write_bytes(b"[section\nbad toml [[[")
+        validator = ConfigValidator()
+        with _toml_import_env(block={"tomllib", "tomli"}):
+            result = validator._validate_file(f, tmp_path)
+        assert result.valid is True
 
 
 # ---------------------------------------------------------------------------
