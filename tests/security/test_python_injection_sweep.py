@@ -50,6 +50,15 @@ widening this carve-out. The carve-out is structural only: it matches the *shape
 code-exec of file contents is a different class, out of this shell-into-Python
 guard's scope (and absent from the corpus: no ``exec``/``eval`` in any check script).
 
+Two *invocation-recognition* gaps are known fail-open, deliberately out of scope
+until a real script needs them (both verified absent from the corpus today, so
+this stays a documentation note rather than a live hole): an interpreter reached
+through a shell var (``PY=python3`` then ``$PY -c "…"``) is not recognised as a
+Python call, and a body piped into the interpreter (``cat … | python3``) is
+neither a ``-c`` string nor a heredoc. A new script using either spelling would
+slip the sweep; fold recognition in then. The corpus greps are
+``$VAR -c`` = 0 hits and ``| python`` = 0 hits.
+
 Superseded eventually by rmz1x (migrate these blobs onto
 ``eb_verify.plugins.file_extraction``); until then this is the backstop.
 """
@@ -58,6 +67,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -70,9 +80,16 @@ BENCHMARKS = ROOT / "benchmarks"
 # genuinely-unescaped ``"`` regardless of backslash-run parity — a single
 # ``(?<!\\)"`` lookbehind would drop the whole body (scan nothing, silently) when
 # an even backslash run precedes the real closing quote. ``python[0-9.]*`` tolerates
-# ``python3.11`` etc. A *single*-quoted ``-c '...'`` body performs no expansion and
-# is intentionally not matched.
-_PY_BODY = re.compile(r'python[0-9.]* -c "((?:[^"\\]|\\.)*)"', re.DOTALL)
+# ``python3.11`` etc. Interpreter flags before ``-c`` are tolerated
+# (``(?!-c\b)-\w+(?:\s+[^\s"]+)?`` — a flag token, optionally with its own arg such
+# as ``-W ignore``), as is any whitespace run (multiple spaces / tabs / newlines),
+# so ``python3 -W ignore -c`` and double-space spellings are still scanned rather
+# than silently skipped. A *single*-quoted ``-c '...'`` body performs no expansion
+# and is intentionally not matched.
+_PY_BODY = re.compile(
+    r'python[0-9.]*\s+(?:(?!-c\b)-\w+(?:\s+[^\s"]+)?\s+)*-c\s+"((?:[^"\\]|\\.)*)"',
+    re.DOTALL,
+)
 
 # A heredoc-fed Python invocation: ``python3 [-] <<[-]DELIM ... DELIM``. Only an
 # *unquoted* delimiter triggers bash expansion inside the body; ``<<'DELIM'`` /
@@ -83,9 +100,32 @@ _HEREDOC = re.compile(
     re.DOTALL,
 )
 
-# An unescaped ``$`` — i.e. a live bash expansion inside an expanded body. A
-# literal dollar in the Python source would be written ``\$`` in these contexts.
-_DOLLAR = re.compile(r"(?<!\\)\$")
+# A ``$`` or backtick candidate — every one is a *potential* live expansion; parity
+# of the preceding backslash run decides whether bash actually expands it (see
+# ``_live_expansions``). Backticks are command substitution and count alongside ``$``.
+_EXPANSION_CHAR = re.compile(r"[$`]")
+
+
+def _live_expansions(body: str) -> Iterator[tuple[int, str]]:
+    """Yield ``(position, char)`` for each *live* bash expansion in ``body``.
+
+    A ``$`` or backtick is live iff preceded by an **even** number of backslashes
+    (zero counts): ``\\$`` is escaped (odd), ``\\\\$`` expands (even, the ``\\\\``
+    is one literal backslash and the ``$`` is live). A single-char ``(?<!\\)``
+    lookbehind gets the even-run case wrong and silently under-scans; counting the
+    run in Python is the correct, readable fix. Backticks follow the same rule and
+    are always violations (command substitution has no allowlisted open() shape).
+    """
+    for match in _EXPANSION_CHAR.finditer(body):
+        pos = match.start()
+        backslashes = 0
+        cursor = pos - 1
+        while cursor >= 0 and body[cursor] == "\\":
+            backslashes += 1
+            cursor -= 1
+        if backslashes % 2 == 0:
+            yield pos, body[pos]
+
 
 # The (optional) simple var name immediately after a ``$`` — used only to test the
 # open() carve-out. ``$(...)`` / ``${!V}`` yield no name and are always violations.
@@ -97,14 +137,24 @@ _VARNAME = re.compile(r"\{?(\w+)")
 # quote may sit between). Anchored at end-of-prefix, so distance does not matter.
 _OPEN_ARG = re.compile(r"""open\(\s*['"]?$""")
 
-# A column-0 bash assignment. Indented lines (Python body) and comments do not
-# match, so only real shell assignments are considered.
-_ASSIGN = re.compile(r"^(?:export\s+)?(\w+)=(.*)$", re.MULTILINE)
+# A bash assignment at ANY indentation. Column-0-only (``^`` without ``[ \t]*``)
+# missed a reassignment nested in an ``if``/``for``/function block — the exact
+# ``  WORKSPACE=$(id)`` smuggle the allowlist must taint. Python-body lines survive
+# unscathed: Python spells assignment with spaces (``x = ...``), which ``\w+=`` does
+# not match, so only real shell ``name=value`` assignments are considered.
+_ASSIGN = re.compile(r"^[ \t]*(?:export\s+)?(\w+)=(.*)$", re.MULTILINE)
 
-# An assignment RHS rooted at a harness-controlled directory (``$WORKSPACE`` /
-# ``$TASK_DIR``, braced or bare, but not ``$WORKSPACEFOO`` or ``$(...)``).
+# A *fully* harness-rooted assignment RHS: the ``$WORKSPACE``/``$TASK_DIR`` root
+# (braced or bare, not ``$WORKSPACEFOO``) followed to end-of-string by ONLY literal
+# path characters — no further ``$`` expansion, ``$(...)``/backtick command
+# substitution, or concatenation onto agent-influenced content. Anchoring the END
+# (``[^$`]*$``) is load-bearing: ``.match`` alone anchored only the prefix, so
+# ``"${WORKSPACE}/$(jq .p answer.json)"`` was judged harness-safe and its
+# agent-controlled tail flowed into ``open()``. Anything the pattern cannot fully
+# account for fails closed (the var is not allowlisted).
 _HARNESS_RHS = re.compile(
     r"""^"?\$(?:\{(?:WORKSPACE|TASK_DIR)\}|(?:WORKSPACE|TASK_DIR)(?![A-Za-z0-9_]))"""
+    r"""[^$`]*$"""
 )
 
 
@@ -148,15 +198,18 @@ def _injection_sites(script_text: str) -> list[str]:
     harness = _harness_path_vars(script_text)
     sites: list[str] = []
     for body in _expanded_bodies(script_text):
-        for dollar in _DOLLAR.finditer(body):
-            name_match = _VARNAME.match(body[dollar.end() :])
-            var = name_match.group(1) if name_match else None
-            if var in harness and _OPEN_ARG.search(body[: dollar.start()]):
-                continue
-            line_start = body.rfind("\n", 0, dollar.start()) + 1
-            line_end = body.find("\n", dollar.start())
+        for pos, char in _live_expansions(body):
+            var = None
+            if char == "$":
+                name_match = _VARNAME.match(body[pos + 1 :])
+                var = name_match.group(1) if name_match else None
+                if var in harness and _OPEN_ARG.search(body[:pos]):
+                    continue
+            line_start = body.rfind("\n", 0, pos) + 1
+            line_end = body.find("\n", pos)
             line = body[line_start : line_end if line_end != -1 else None].strip()
-            sites.append(f"${var or '(…)'}: {line[:60]!r}")
+            token = f"${var}" if var else ("`…`" if char == "`" else "$(…)")
+            sites.append(f"{token}: {line[:60]!r}")
     return sites
 
 
@@ -205,14 +258,37 @@ _VULNERABLE = {
     "command substitution": (
         'python3 -c "\nx = \'\'\'$(cat \\"$WORKSPACE/answer.json\\")\'\'\'\n"'
     ),
+    "backtick command substitution": (
+        "python3 -c \"\nx = '''`cat answer.json`'''\n\""
+    ),
+    "flag before -c (python3 -W ignore -c)": (
+        'python3 -W ignore -c "\nx = \'$AGENT_FILES\'\n"'
+    ),
+    "even backslash run keeps $ live": (
+        'python3 -c "\nx = \'\\\\$AGENT_FILES\'\n"'
+    ),
     "unquoted heredoc body": "python3 <<PYEOF\nx = '''$AGENT_FILES'''\nPYEOF",
     "allowlist bypass: reassigned harness var": (
         'REPORT="${WORKSPACE}/answer.json"\n'
         'REPORT="$(jq -r .path "$REPORT")"\n'
         "python3 -c \"\nwith open('${REPORT}') as f:\n    pass\n\""
     ),
+    # BLOCKING-1: harness root then a command-substitution TAIL on the SAME
+    # assignment. Prefix-only anchoring judged this safe; full-RHS anchoring taints it.
+    "allowlist bypass: harness root + command-subst tail": (
+        'REPORT="${WORKSPACE}/$(jq -r .path answer.json)"\n'
+        "python3 -c \"\nwith open('${REPORT}') as f:\n    pass\n\""
+    ),
     "allowlist bypass: reassigned WORKSPACE": (
         'WORKSPACE="$(id)"\n'
+        "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
+    ),
+    # BLOCKING-2: reassignment INDENTED inside a control block. Column-0-only
+    # scanning left the harness var in the safe set; ``^[ \t]*`` taints it.
+    "allowlist bypass: indented WORKSPACE reassignment": (
+        'if true; then\n'
+        '    WORKSPACE="$(id)"\n'
+        'fi\n'
         "python3 -c \"\nwith open('${WORKSPACE}') as f:\n    pass\n\""
     ),
 }
