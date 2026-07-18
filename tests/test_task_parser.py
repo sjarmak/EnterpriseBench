@@ -22,10 +22,10 @@ from eb_verify.task_parser import (
     parse_task,
 )
 
-
 # ---------------------------------------------------------------------------
 # Parse EXAMPLE_TASK.toml — comprehensive field access
 # ---------------------------------------------------------------------------
+
 
 class TestExampleTask:
     def test_parse_succeeds(self, example_task_path):
@@ -91,7 +91,9 @@ class TestExampleTask:
     def test_csb_lineage(self, example_task_path):
         task = parse_task(example_task_path)
         assert task.csb_lineage is not None
-        assert task.csb_lineage.parent_csb_id == "csb_org_dependency_grpc_proto_bump_042"
+        assert (
+            task.csb_lineage.parent_csb_id == "csb_org_dependency_grpc_proto_bump_042"
+        )
         assert task.csb_lineage.migration_status == "verified"
         assert "csb-bug-007" in task.csb_lineage.bugs_fixed
 
@@ -115,6 +117,7 @@ class TestExampleTask:
 # ---------------------------------------------------------------------------
 # Parse minimal valid task
 # ---------------------------------------------------------------------------
+
 
 class TestValidTask:
     def test_parse_minimal(self, valid_task_path):
@@ -153,6 +156,7 @@ class TestValidTask:
 # Chain session task
 # ---------------------------------------------------------------------------
 
+
 class TestChainTask:
     def test_session_type_chain(self, chain_task_path):
         task = parse_task(chain_task_path)
@@ -167,6 +171,7 @@ class TestChainTask:
 # ---------------------------------------------------------------------------
 # Frozen dataclass immutability
 # ---------------------------------------------------------------------------
+
 
 class TestImmutability:
     def test_task_definition_frozen(self, valid_task_path):
@@ -196,6 +201,7 @@ class TestImmutability:
 # Error handling
 # ---------------------------------------------------------------------------
 
+
 class TestParseErrors:
     def test_nonexistent_file(self, tmp_path):
         with pytest.raises((FileNotFoundError, OSError)):
@@ -207,22 +213,9 @@ class TestParseErrors:
         with pytest.raises(Exception):
             parse_task(bad)
 
-    def test_missing_required_field(self, tmp_path):
-        # Missing task.suite
-        minimal = tmp_path / "missing_field.toml"
-        minimal.write_bytes(b"""
-[task]
-id = "x"
-difficulty = "medium"
-session_type = "single"
-""")
-        with pytest.raises(ValueError) as exc:
-            parse_task(minimal)
-        assert "suite" in str(exc.value)
-        assert "missing_field.toml" in str(exc.value)
-
-    def _valid_task_header(self) -> str:
-        return """
+    # A syntactically valid [task] header; a malformed fragment is concatenated
+    # before or after it so each case breaks exactly one section.
+    _HEADER = """
 [task]
 id = "x"
 suite = "s"
@@ -230,79 +223,68 @@ difficulty = "medium"
 session_type = "single"
 """
 
-    def test_missing_checkpoint_field_raises_value_error(self, tmp_path):
-        # [[checkpoints]] entry missing 'weight' — was a bare KeyError.
-        bad = tmp_path / "bad_checkpoint.toml"
-        bad.write_text(self._valid_task_header() + """
-[[checkpoints]]
-name = "c1"
-verifier = "checks/c1.sh"
-""")
+    @pytest.mark.parametrize(
+        "filename, body, needle",
+        [
+            # missing [task].suite — already a ValueError before this change
+            (
+                "missing_field.toml",
+                '[task]\nid = "x"\ndifficulty = "medium"\nsession_type = "single"\n',
+                "suite",
+            ),
+            # [[checkpoints]] missing 'weight' — was a bare KeyError
+            (
+                "bad_checkpoint.toml",
+                _HEADER + '[[checkpoints]]\nname = "c1"\nverifier = "checks/c1.sh"\n',
+                "weight",
+            ),
+            # [[repos]] missing 'rev' — was a bare KeyError
+            (
+                "bad_repo.toml",
+                _HEADER + '[[repos]]\nurl = "http://x"\npath = "x"\n',
+                "rev",
+            ),
+            # ground_truth.required_files missing 'repo' — was a bare KeyError
+            (
+                "bad_gt.toml",
+                _HEADER
+                + '[ground_truth]\n[[ground_truth.required_files]]\npath = "a.py"\n',
+                "repo",
+            ),
+            # tool_access.sourcegraph_mirrors missing 'mirror_id' — bare KeyError
+            (
+                "bad_ta.toml",
+                _HEADER
+                + '[tool_access]\n[[tool_access.sourcegraph_mirrors]]\nrepo = "myrepo"\n',
+                "mirror_id",
+            ),
+            # repos as scalars — subscripting a str raised TypeError; the
+            # failure-class guard converts it to ValueError like every shape.
+            # The message names the file, not a field, so the needle is the file.
+            (
+                "scalar_repos.toml",
+                'repos = ["a", "b"]\n' + _HEADER,
+                "scalar_repos.toml",
+            ),
+            # ground_truth as scalar — .get on a str raised AttributeError
+            ("scalar_gt.toml", 'ground_truth = "x"\n' + _HEADER, "scalar_gt.toml"),
+        ],
+    )
+    def test_malformed_toml_raises_value_error(self, tmp_path, filename, body, needle):
+        # Every malformed shape reaches the caller as a ValueError naming the
+        # file and (where known) the offending field (EnterpriseBench-20nhr).
+        bad = tmp_path / filename
+        bad.write_text(body)
         with pytest.raises(ValueError) as exc:
             parse_task(bad)
-        assert "weight" in str(exc.value)
-        assert "bad_checkpoint.toml" in str(exc.value)
-
-    def test_missing_repo_field_raises_value_error(self, tmp_path):
-        # [[repos]] entry missing 'rev' — was a bare KeyError.
-        bad = tmp_path / "bad_repo.toml"
-        bad.write_text(self._valid_task_header() + """
-[[repos]]
-url = "http://x"
-path = "x"
-""")
-        with pytest.raises(ValueError) as exc:
-            parse_task(bad)
-        assert "rev" in str(exc.value)
-        assert "bad_repo.toml" in str(exc.value)
-
-    def test_missing_ground_truth_file_field_raises_value_error(self, tmp_path):
-        # ground_truth.required_files entry missing 'repo' — was a bare KeyError.
-        bad = tmp_path / "bad_gt.toml"
-        bad.write_text(self._valid_task_header() + """
-[ground_truth]
-[[ground_truth.required_files]]
-path = "a.py"
-""")
-        with pytest.raises(ValueError) as exc:
-            parse_task(bad)
-        assert "repo" in str(exc.value)
-        assert "bad_gt.toml" in str(exc.value)
-
-    def test_missing_tool_access_mirror_field_raises_value_error(self, tmp_path):
-        # tool_access.sourcegraph_mirrors entry missing 'mirror_id' — bare KeyError.
-        bad = tmp_path / "bad_ta.toml"
-        bad.write_text(self._valid_task_header() + """
-[tool_access]
-[[tool_access.sourcegraph_mirrors]]
-repo = "myrepo"
-""")
-        with pytest.raises(ValueError) as exc:
-            parse_task(bad)
-        assert "mirror_id" in str(exc.value)
-        assert "bad_ta.toml" in str(exc.value)
-
-    def test_repos_as_scalars_raises_value_error(self, tmp_path):
-        # `repos = ["a", "b"]` — subscripting a str would raise TypeError; the
-        # failure-class guard converts it to ValueError like every other shape.
-        bad = tmp_path / "scalar_repos.toml"
-        bad.write_text('repos = ["a", "b"]\n' + self._valid_task_header())
-        with pytest.raises(ValueError) as exc:
-            parse_task(bad)
-        assert "scalar_repos.toml" in str(exc.value)
-
-    def test_ground_truth_as_scalar_raises_value_error(self, tmp_path):
-        # `ground_truth = "x"` — calling .get on a str would raise AttributeError.
-        bad = tmp_path / "scalar_gt.toml"
-        bad.write_text('ground_truth = "x"\n' + self._valid_task_header())
-        with pytest.raises(ValueError) as exc:
-            parse_task(bad)
-        assert "scalar_gt.toml" in str(exc.value)
+        assert needle in str(exc.value)
+        assert filename in str(exc.value)
 
 
 # ---------------------------------------------------------------------------
 # Dataclass construction helpers
 # ---------------------------------------------------------------------------
+
 
 class TestDataclassConstruction:
     def test_repo_spec_defaults(self):

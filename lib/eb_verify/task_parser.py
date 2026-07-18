@@ -243,11 +243,11 @@ def parse_task(path: str | Path) -> TaskDefinition:
 
     try:
         return _task_from_raw(raw, path=path)
-    except ValueError:
-        # Precise messages from _require (and any TOML-layer ValueError) pass
-        # through unchanged — re-wrapping would only bury the named field.
-        raise
     except (KeyError, TypeError, AttributeError) as e:
+        # A ValueError from _require (or the TOML layer) already names the file
+        # and field, so it propagates unchanged with no handler here; only these
+        # residual shape errors (scalar where a table/array was expected) get
+        # wrapped.
         raise ValueError(f"{path}: malformed task.toml: {e!r}") from e
 
 
