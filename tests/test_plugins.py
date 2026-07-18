@@ -325,13 +325,68 @@ class TestAnswerValidator:
 
     def test_pinned_answer_wins_over_root_decoy(self, tmp_path):
         # The graded file lives at agent_output/answer.json; a workspace-root
-        # decoy must NOT shadow it (pathlib globs the anchor dir first).
+        # decoy must NOT shadow it (pathlib globs the anchor dir first). Grade
+        # against ground_truth so the assertion actually distinguishes which
+        # file was read: only the pinned answer carries the expected keyword,
+        # so valid=True PROVES the pinned file was graded. A structure-only
+        # check (no ground_truth) passes regardless of which file is read and
+        # therefore does not gate the pinned-preference behavior (uexq2).
         pinned_dir = tmp_path / "agent_output"
         pinned_dir.mkdir()
-        (pinned_dir / "answer.json").write_text('{"answer": "real"}')
-        (tmp_path / "answer.json").write_text('{"answer": "decoy"}')
+        (pinned_dir / "answer.json").write_text(
+            json.dumps({"answer": "the culprit is handleRequest"})
+        )
+        (tmp_path / "answer.json").write_text(
+            json.dumps({"answer": "unrelated decoy content"})
+        )
         validator = AnswerValidator()
-        result = validator.validate(tmp_path)
+        result = validator.validate(
+            tmp_path,
+            ground_truth={"keywords": ["handleRequest"]},
+            thresholds={"keyword_weight": 1.0, "min_score": 0.5},
+        )
+        # Pinned answer carries the keyword; the decoy does not. valid=True
+        # proves the pinned file was graded, not the root decoy.
+        assert result.valid is True
+
+    def test_pinned_answer_txt_wins_over_root_json_decoy(self, tmp_path):
+        # Cross-type: the pinned artifact is agent_output/answer.txt, but a
+        # decoy answer.json sits at the workspace root. Pinned must win across
+        # types — a decoy of the OTHER type must not shadow it (uexq2). Only the
+        # pinned txt carries the keyword, so valid=True proves it was graded.
+        pinned_dir = tmp_path / "agent_output"
+        pinned_dir.mkdir()
+        (pinned_dir / "answer.txt").write_text("the culprit is handleRequest")
+        (tmp_path / "answer.json").write_text(
+            json.dumps({"answer": "unrelated decoy content"})
+        )
+        validator = AnswerValidator()
+        result = validator.validate(
+            tmp_path,
+            ground_truth={"keywords": ["handleRequest"]},
+            thresholds={"keyword_weight": 1.0, "min_score": 0.5},
+        )
+        assert result.valid is True
+
+    def test_pinned_answer_txt_wins_over_ambiguous_json(self, tmp_path):
+        # Cross-type ambiguity: the pinned artifact is agent_output/answer.txt,
+        # and there are >1 decoy answer.json in the workspace. An answer.json
+        # glob would return the ambiguity error and block ever reaching the
+        # valid pinned answer.txt — pinned must be consulted for BOTH types
+        # before any glob, so the ambiguity is never triggered (uexq2).
+        pinned_dir = tmp_path / "agent_output"
+        pinned_dir.mkdir()
+        (pinned_dir / "answer.txt").write_text("the culprit is handleRequest")
+        (tmp_path / "answer.json").write_text('{"answer": "decoy a"}')
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "answer.json").write_text('{"answer": "decoy b"}')
+        validator = AnswerValidator()
+        result = validator.validate(
+            tmp_path,
+            ground_truth={"keywords": ["handleRequest"]},
+            thresholds={"keyword_weight": 1.0, "min_score": 0.5},
+        )
         assert result.valid is True
 
     def test_grounded_root_decoy_ignored_when_pinned_present(self, tmp_path):

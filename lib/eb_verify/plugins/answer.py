@@ -32,21 +32,22 @@ from eb_verify.plugins.path_match import extract_claimed_paths, path_match_score
 PINNED_ANSWER_SUBDIR = "agent_output"
 
 
-def _select_answer_file(workspace: Path, name: str) -> tuple[Optional[Path], Optional[str]]:
-    """Choose the answer file to grade for *name* (``answer.json`` / ``answer.txt``).
+# Artifact types in grading-preference order: structured JSON first, plain text
+# second. Pinned resolution walks this order across BOTH types before any glob.
+# Named so validate()'s per-kind branch shares one source of truth with the
+# resolver (a bare "answer.json" literal there would silently desync if renamed).
+_ANSWER_JSON = "answer.json"
+_ANSWER_TXT = "answer.txt"
+_ANSWER_NAMES = (_ANSWER_JSON, _ANSWER_TXT)
 
-    Prefers the pinned ``agent_output/<name>`` so a decoy elsewhere in the
-    workspace cannot shadow the file every check actually grades. Falls back to
-    a workspace-wide glob only when the pinned file is absent, and in that
-    fallback rejects ambiguity (>1 candidate) instead of silently grading the
-    first glob hit.
 
-    Returns ``(path, error)``: at most one is non-None. Both are None when no
-    candidate exists (so the caller can try the other artifact type).
+def _glob_answer_file(workspace: Path, name: str) -> tuple[Optional[Path], Optional[str]]:
+    """Workspace-wide fallback lookup for *name*, used only when nothing is pinned.
+
+    Rejects ambiguity (>1 candidate) instead of silently grading the first glob
+    hit. Returns ``(path, error)``: at most one is non-None; both are None when
+    no candidate exists (so the caller can try the other artifact type).
     """
-    pinned = workspace / PINNED_ANSWER_SUBDIR / name
-    if pinned.is_file():
-        return pinned, None
     candidates = list(workspace.glob(f"**/{name}"))
     if not candidates:
         return None, None
@@ -57,6 +58,41 @@ def _select_answer_file(workspace: Path, name: str) -> tuple[Optional[Path], Opt
             f"write the graded answer to {PINNED_ANSWER_SUBDIR}/{name}"
         )
     return candidates[0], None
+
+
+def _resolve_answer_file(
+    workspace: Path,
+) -> tuple[Optional[str], Optional[Path], Optional[str]]:
+    """Pick the single answer file to grade, pinned-first across BOTH types.
+
+    Precedence, highest first:
+        1. ``agent_output/answer.json``  (pinned, structured)
+        2. ``agent_output/answer.txt``   (pinned, plain)
+        3. workspace-wide ``answer.json`` glob  (ambiguity-checked)
+        4. workspace-wide ``answer.txt``  glob  (ambiguity-checked)
+
+    The pinned directory is consulted for BOTH types before any glob, so a decoy
+    or ambiguous ``answer.json`` elsewhere in the workspace can neither shadow
+    nor block a pinned ``agent_output/answer.txt`` (EnterpriseBench-uexq2).
+    Resolving per-name with ``answer.json`` glob-first was the defect: it
+    committed to the JSON glob (or its ambiguity error) before the pinned
+    ``answer.txt`` was ever considered.
+
+    Returns ``(kind, path, error)`` where *kind* is one of :data:`_ANSWER_NAMES`.
+    At most one of *path* / *error* is non-None; *kind* is None only when both
+    are None (no candidate of either type anywhere).
+    """
+    for name in _ANSWER_NAMES:
+        pinned = workspace / PINNED_ANSWER_SUBDIR / name
+        if pinned.is_file():
+            return name, pinned, None
+    for name in _ANSWER_NAMES:
+        path, err = _glob_answer_file(workspace, name)
+        if err is not None:
+            return name, None, err
+        if path is not None:
+            return name, path, None
+    return None, None, None
 
 
 def _normalize(text: str) -> str:
@@ -213,29 +249,30 @@ class AnswerValidator:
         gate runs before oracle matching, and missing/malformed citations or
         any ungrounded span fail validation with per-citation reasons.
         """
-        json_path, json_err = _select_answer_file(workspace, "answer.json")
-        if json_err:
-            return ValidationResult(valid=False, detail=json_err)
+        kind, answer_path, select_err = _resolve_answer_file(workspace)
+        if select_err is not None:
+            return ValidationResult(valid=False, detail=select_err)
+        # kind and answer_path are set together by _resolve_answer_file; assert both
+        # so a future edit that breaks that invariant degrades to a clean invalid
+        # result here rather than an unguarded error inside safe_read (and so the
+        # type-checker can narrow answer_path to Path below).
+        if kind is None or answer_path is None:
+            return ValidationResult(valid=False, detail="No answer file found")
 
         answer_text: Optional[str] = None
         data: Optional[dict[str, Any]] = None
 
-        if json_path is not None:
+        if kind == _ANSWER_JSON:
             try:
-                data = json.loads(safe_read(json_path, workspace))
+                data = json.loads(safe_read(answer_path, workspace))
                 if not isinstance(data, dict):
                     return ValidationResult(valid=False, detail="answer.json should be a JSON object")
                 answer_text = _extract_text(data)
             except (json.JSONDecodeError, ValueError) as e:
                 return ValidationResult(valid=False, detail=f"answer.json invalid: {e}")
         else:
-            txt_path, txt_err = _select_answer_file(workspace, "answer.txt")
-            if txt_err:
-                return ValidationResult(valid=False, detail=txt_err)
-            if txt_path is None:
-                return ValidationResult(valid=False, detail="No answer file found")
             try:
-                content = safe_read(txt_path, workspace).strip()
+                content = safe_read(answer_path, workspace).strip()
             except ValueError as e:
                 return ValidationResult(valid=False, detail=str(e))
             if not content:
@@ -264,8 +301,7 @@ class AnswerValidator:
 
         # Structure-only validation (no oracle)
         if ground_truth is None:
-            source = "answer.json" if json_path is not None else "answer.txt"
-            return ValidationResult(valid=True, detail=f"{source} found and valid")
+            return ValidationResult(valid=True, detail=f"{kind} found and valid")
 
         # Oracle matching. The file_path dimension scores against the agent's
         # STRUCTURED claimed-file list, not the flattened answer text.
