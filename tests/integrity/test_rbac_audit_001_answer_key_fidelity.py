@@ -42,27 +42,30 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-# Negation forms that, next to a parse verb, deny that OldObject is parsed.
-# Kept on the NEGATION axis only (F2): "cannot parse", "skips parsing",
-# "failing to parse" are natural rewordings of the historical falsehood. The
-# PARSE-VERB axis is deliberately NOT broadened past "pars" — see
-# _denies_oldobject_parsing for why "check"/"read"/"inspect" are out.
-_NEGATION = re.compile(
-    r"\b(not|never|cannot|can'?t|without|fails?|failing|failed"
+# The falsehood's SHAPE: a negation that attaches to the parse verb — a negation
+# form followed (within two words) by a "pars" verb. This is deliberately
+# tighter than "any negation anywhere in the clause + any 'pars' anywhere": the
+# negation must bind to the parsing, so accurate prose where the negation scopes
+# to a different word ("parsed WITHOUT error", "parsed only when Object.Raw is
+# NOT present", "parsed when Object.Raw CANNOT be decoded") is NOT a denial.
+# Covers not/never/cannot/can't/does-not/is-not parse(s|d), fails|failing to
+# parse, without|skips|omits|ignores|neglects|disregards parsing, and n't parse.
+_NEGPARSE = re.compile(
+    r"(?:\b(?:not|never|cannot|can'?t|without|fails?|failing|failed"
     r"|ignores?|ignored|skips?|skipped|skipping|omits?|omitted"
-    r"|neglects?|neglected|disregards?|disregarded)\b|n't"
+    r"|neglects?|neglected|disregards?|disregarded)\b|n't)"
+    r"(?:\s+\w+){0,2}?\s+pars"
 )
 
-# References to request.OldObject. Two forms: the collapsed identifier
-# ("oldobject", after dotted-identifier collapse — may be glued to a preceding
-# word like "request" and followed by ".Raw"->"raw", so no boundaries), OR the
-# spaced English phrase ("old object", boundary-anchored so lookalikes such as
-# "manifold object", "old objective", "threshold object" do NOT match) (F4).
-_OLDOBJECT = re.compile(r"oldobject|\bold\s+objects?\b")
-
-# The parse verb, boundary-anchored so "sparse"/"sparsely" do not leak in next
-# to the widened negation vocabulary.
-_PARSE = re.compile(r"\bpars")
+# request.OldObject, as the camelCase identifier only. _collapse turns an
+# intra-identifier dot into a SPACE (not nothing), so "request.OldObject" ->
+# "request oldobject" and the anchored token matches — while a lookalike whose
+# owner merely ends in "old" ("Threshold.Object" -> "threshold object",
+# "Household.Object", "manifold.Object.Raw") does NOT collapse into "oldobject".
+# The spaced English phrase "old object" is deliberately NOT matched (a
+# documented gap) — matching it false-positived on accurate prose ("the old
+# object's tier is never parsed").
+_OLDOBJECT = re.compile(r"\boldobject\b")
 
 # Causal-accuracy qualifier. Its presence anywhere in the SENTENCE marks the
 # accurate mechanism ("the fallback is unreachable / never reached because
@@ -74,18 +77,23 @@ _QUALIFIER = re.compile(r"\b(fallback|unreachable|reached|populated|non[-\s]?emp
 
 
 def _collapse(text: str) -> str:
-    """Normalise and collapse dotted identifiers.
+    """Normalise and collapse intra-identifier dots to a space.
 
-    Dotted identifiers (request.OldObject, r.Store.Get, Object.Raw) are collapsed
-    so the dots inside a symbol name are not mistaken for boundaries — only real
-    punctuation separates units.
+    Dotted identifiers (request.OldObject, r.Store.Get, Object.Raw) have their
+    internal dots replaced by a SPACE so the symbol is not split on the dot, yet
+    "request.OldObject" becomes two whitespace-separated tokens ("request
+    oldobject") rather than one glued run ("requestoldobject"). The space is
+    load-bearing: it lets ``\\boldobject\\b`` distinguish the real identifier
+    from a lookalike like "Threshold.Object" ("threshold object"). A
+    sentence-terminating dot (followed by a space, not a word char) is left
+    intact so it still separates sentences.
     """
-    return re.sub(r"\.(?=\w)", "", _norm(text))
+    return re.sub(r"\.(?=\w)", " ", _norm(text))
 
 
 def _sentences(text: str) -> list[str]:
     """Coarse split for the mechanism shield — sentence terminators only."""
-    return re.split(r"[.;\n]", _collapse(text))
+    return re.split(r"[.;!?\n]", _collapse(text))
 
 
 def _clauses(sentence: str) -> list[str]:
@@ -108,13 +116,16 @@ def _denies_oldobject_parsing(text: str) -> bool:
     has no backstop; missing a reworded falsehood is caught by the positive
     contract above):
 
-    * Denial detection is CLAUSE-scoped: a clause names OldObject (``oldobject``
-      collapsed, or spaced ``old object``), contains the parse verb ``pars``,
-      and carries a negation. Order-independent — catches the verb-first
-      historical falsehood ("does NOT parse request.OldObject"), the
-      subject-first form ("request.OldObject is not parsed"), and negation
-      rewordings ("never parses", "cannot parse", "skips parsing", "failing to
-      parse").
+    * Denial detection is CLAUSE-scoped: a clause names OldObject
+      (``\\boldobject\\b`` after intra-identifier dots collapse to spaces) AND
+      carries a ``_NEGPARSE`` match — a negation that attaches to the parse verb.
+      Order-independent: catches the verb-first historical falsehood ("does NOT
+      parse request.OldObject"), the subject-first form ("request.OldObject is
+      not parsed"), and negation rewordings ("never parses", "cannot parse",
+      "skips parsing", "failing to parse"). Requiring the negation to bind to the
+      parse verb (not merely co-occur in the clause) is what keeps accurate prose
+      whose negation scopes elsewhere ("parsed without error", "parsed only when
+      Object.Raw is not present") from tripping the guard.
     * The mechanism shield is SENTENCE-scoped: if the sentence containing that
       clause names the accuracy mechanism (``_QUALIFIER``) anywhere, the prose
       is the accurate finding, not a denial. The accurate framing always names
@@ -127,13 +138,17 @@ def _denies_oldobject_parsing(text: str) -> bool:
     Deliberately NOT covered (accepted, per ZFC / no-silent-caps — a heuristic
     must not pretend to be exhaustive):
 
-    * Verb-axis rewordings that avoid ``pars`` ("does not inspect/read/check
-      request.OldObject", "ignores request.OldObject"). Broadening the verb set
-      to catch these was rejected: "check" collides with the answer key's own
-      accurate idiom ("the source tier is never checked"), turning the guard
-      against a correct edit — the worse failure direction.
+    * Verb-axis rewordings that avoid the ``pars`` verb ("does not inspect / read
+      / check request.OldObject", "ignores request.OldObject", "OldObject.Parse()
+      is never invoked"). Broadening the verb set to catch these was rejected:
+      "check" collides with the answer key's own accurate idiom ("the source tier
+      is never checked"), turning the guard against a correct edit — the worse
+      failure direction.
+    * The spaced English phrase "old object" (vs the "OldObject" identifier).
+      Matching it false-positived on accurate prose ("the old object's tier is
+      never parsed").
     * A falsehood split across two SENTENCES, or within one sentence so OldObject
-      and the parse verb never share a clause (appositive comma).
+      and the negated parse verb never share a clause (appositive comma).
     * A blanket denial that crams an unrelated mechanism word into its own
       sentence ("OldObject is never parsed in any path and the table stays
       populated") — the sentence-scoped shield exonerates it. Requiring the
@@ -149,11 +164,7 @@ def _denies_oldobject_parsing(text: str) -> bool:
         if _QUALIFIER.search(sentence):
             continue
         for clause in _clauses(sentence):
-            if (
-                _OLDOBJECT.search(clause)
-                and _PARSE.search(clause)
-                and _NEGATION.search(clause)
-            ):
+            if _OLDOBJECT.search(clause) and _NEGPARSE.search(clause):
                 return True
     return False
 
@@ -206,19 +217,21 @@ def test_criteria_drop_the_oldobject_not_parsed_falsehood(
         "It cannot parse request.OldObject.",
         "The handler skips parsing request.OldObject.",
         "Failing to parse request.OldObject, it checks only the new tier.",
-        # F4: spaced "old object" paraphrase (not the collapsed identifier)
-        "The webhook does not parse the old object at all.",
         # A blanket denial is NOT exonerated by a mechanism word sitting in a
         # SEPARATE sentence — the shield is sentence-scoped, so it does not reach
         # across the period.
         "request.OldObject is never parsed. The table stays populated.",
+        # ...nor across a "!"/"?" terminator (those end a sentence too, so an
+        # unrelated qualifier before them cannot shield the following denial).
+        "Object.Raw is never populated! request.OldObject is not parsed.",
+        "Is the fallback reached? request.OldObject is not parsed on UPDATE.",
     ],
 )
 def test_guard_catches_the_falsehood_in_any_wording(denial: str) -> None:
     """Pin the guard itself: every phrasing of the historical falsehood — verb-
-    first, subject-first, and reworded negations (F2), plus the spaced-phrase
-    paraphrase (F4) — must be detected, so the guard cannot silently degrade to
-    catching only the original sentences."""
+    first, subject-first, and reworded negations (F2) — must be detected, so the
+    guard cannot silently degrade to catching only the original sentences,
+    including across "!"/"?" sentence terminators."""
     assert _denies_oldobject_parsing(denial), (
         f"guard failed to flag a request.OldObject-not-parsed denial: {denial!r}"
     )
@@ -246,14 +259,22 @@ def test_guard_catches_the_falsehood_in_any_wording(denial: str) -> None:
         "request.OldObject is referenced, but the old tier is never checked on UPDATE.",
         # Accurate fallback description whose negation scopes to Object.Raw.
         "When Object.Raw cannot be parsed, request.OldObject provides the bytes.",
+        # Negation that binds to a NON-parse word: OldObject IS parsed here, the
+        # negation scopes to "error" / "present" / "decoded". Requiring the
+        # negation to attach to the parse verb keeps these accurate statements out
+        # of the guard.
+        "request.OldObject is parsed without error on DELETE.",
+        "request.OldObject.Raw is parsed only when Object.Raw is not present.",
+        "request.OldObject is parsed when Object.Raw cannot be decoded.",
     ],
 )
 def test_guard_allows_the_accurate_framing(accurate: str) -> None:
-    """The correct analysis always names the mechanism (fallback / populated /
-    unreachable / never reached); the guard must not mistake it for a denial.
-    This pins the original two-clause framing, the confirmed false-positives
-    F0/F5 that the mechanism shield fixes, and the cause-first phrasing where the
-    mechanism precedes the denial — the regression this bead is about (a
+    """The correct analysis either names the mechanism (fallback / populated /
+    unreachable / never reached) or negates something other than the parsing; the
+    guard must not mistake it for a denial. Pins the original two-clause framing,
+    the confirmed false-positives F0/F5 that the mechanism shield fixes, the
+    cause-first phrasing where the mechanism precedes the denial, and prose whose
+    negation binds to a non-parse word — the regression this bead is about (a
     false-positive blocks a correct edit with no backstop)."""
     assert not _denies_oldobject_parsing(accurate), (
         f"guard false-positived on accurate prose: {accurate!r}"
@@ -263,16 +284,26 @@ def test_guard_allows_the_accurate_framing(accurate: str) -> None:
 @pytest.mark.parametrize(
     "lookalike",
     [
+        # spaced English words that merely end in "old" next to "object..."
         "the manifold object is never parsed",
         "the old objective standard is never parsed",
         "a threshold object is not parsed",
         "household objects are never parsed",
+        # dotted symbols whose owner ends in "old": these must NOT collapse into
+        # the "oldobject" token (the reason _collapse turns the intra-identifier
+        # dot into a space rather than deleting it).
+        "Threshold.Object is never parsed on UPDATE.",
+        "Household.Object is not parsed.",
+        "manifold.Object.Raw is never parsed.",
+        "Scaffold.Object is not parsed at all.",
     ],
 )
 def test_guard_ignores_oldobject_lookalikes(lookalike: str) -> None:
-    """The OldObject match is boundary-anchored: prose that merely contains a
-    word ending in "old" next to an "object"-prefixed word (manifold, threshold,
-    household, "old objective") does not name request.OldObject and must never be
+    """The OldObject match is anchored to the ``oldobject`` identifier token.
+    Prose that merely contains a word ending in "old" next to an "object"-prefixed
+    word — spaced ("manifold object", "old objective") OR dotted
+    ("Threshold.Object", which collapses to "threshold object", not
+    "thresholdobject") — does not name request.OldObject and must never be
     flagged, even alongside a negated parse verb."""
     assert not _denies_oldobject_parsing(lookalike), (
         f"guard false-positived on an OldObject lookalike: {lookalike!r}"
@@ -282,12 +313,18 @@ def test_guard_ignores_oldobject_lookalikes(lookalike: str) -> None:
 @pytest.mark.parametrize(
     "evasion",
     [
-        # Verb-axis rewording that avoids "pars" — broadening the verb set to
-        # catch this was rejected (it collides with the accurate "never checked"
-        # idiom); see _denies_oldobject_parsing.__doc__.
+        # Verb-axis rewording that avoids the "pars" verb — broadening the verb
+        # set to catch these was rejected (it collides with the accurate "never
+        # checked" idiom); see _denies_oldobject_parsing.__doc__.
         "The webhook ignores request.OldObject entirely.",
         "It does not inspect request.OldObject on UPDATE.",
         "The handler never reads request.OldObject.",
+        # Method-call phrasing where the negation binds to "invoked", not to a
+        # "pars" verb ("...Parse() is never invoked"): same verb-axis gap.
+        "request.OldObject.Parse() is never invoked.",
+        # Spaced English "old object" (vs the "OldObject" identifier) — matching
+        # it false-positived on accurate prose, so it is deliberately a gap.
+        "The webhook does not parse the old object at all.",
         # Falsehood split across two SENTENCES so OldObject and the parse verb
         # never share a clause.
         "request.OldObject is present. That field is not parsed.",
