@@ -825,10 +825,16 @@ CHECK_FOR = {
 }
 
 
-def _raw(check: str, ws: Path) -> subprocess.CompletedProcess:
-    """Drive one check the way runner.py does, without parsing its verdict."""
+def _raw(
+    check: str, ws: Path, base: Path = TASK_DIR
+) -> subprocess.CompletedProcess:
+    """Drive one check the way runner.py does, without parsing its verdict.
+
+    `base` supplies both the script location and the TASK_DIR env, so a test can
+    point at a temp copy of the task with a corrupted ground_truth.json.
+    """
     return subprocess.run(
-        ["bash", str(TASK_DIR / "checks" / check)],
+        ["bash", str(base / "checks" / check)],
         cwd=str(ws),
         capture_output=True,
         text=True,
@@ -836,7 +842,7 @@ def _raw(check: str, ws: Path) -> subprocess.CompletedProcess:
             "PATH": "/usr/bin:/bin:/usr/local/bin",
             "HOME": str(ws),
             "WORKSPACE": str(ws),
-            "TASK_DIR": str(TASK_DIR),
+            "TASK_DIR": str(base),
         },
         timeout=120,
     )
@@ -886,19 +892,7 @@ def test_a_corrupt_answer_key_is_an_infra_error_even_with_no_verdict_to_gate_on(
     # deliberately NO CYCLE_VERDICT.json — the gate has nothing to read
     assert not (ws / "flask" / "CYCLE_VERDICT.json").exists()
 
-    out = subprocess.run(
-        ["bash", str(task_gt / "checks" / check)],
-        cwd=str(ws),
-        capture_output=True,
-        text=True,
-        env={
-            "PATH": "/usr/bin:/bin:/usr/local/bin",
-            "HOME": str(ws),
-            "WORKSPACE": str(ws),
-            "TASK_DIR": str(task_gt),
-        },
-        timeout=120,
-    )
+    out = _raw(check, ws, base=task_gt)
     assert out.returncode == 0, f"{check} crashed instead of a verdict: {out.stderr}"
     verdict = json.loads(out.stdout.strip())
     assert "VERIFIER_INFRA_ERROR" in verdict["detail"], (
@@ -1057,19 +1051,7 @@ def test_planted_stdlib_module_cannot_forge_a_verdict(tmp_path: Path) -> None:
         _make_ws(tmp_path, "planted"),
         investigation=CORRECT_INVESTIGATION,
         # blanket-true: 2 of 4 right, 2 wrong -> negative marking scores this 0.0
-        cycle_verdict=json.dumps(
-            {
-                "claimed_edges": [
-                    {"from": f, "to": t, "imported_at_runtime": True}
-                    for f, t in (
-                        ("flask", "flask.json"),
-                        ("flask.json", "flask.globals"),
-                        ("flask.globals", "flask.app"),
-                        ("flask.app", "flask.json"),
-                    )
-                ]
-            }
-        ),
+        cycle_verdict=ALL_TRUE_VERDICT,
         resolution=CORRECT_RESOLUTION,
     )
     (ws / "json.py").write_text(
