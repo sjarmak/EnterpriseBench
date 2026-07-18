@@ -239,16 +239,25 @@ def parse_task(path: str | Path) -> TaskDefinition:
     """
     path = Path(path)
     with open(path, "rb") as f:
-        raw = tomllib.load(f)
-
-    try:
-        return _task_from_raw(raw, path=path)
-    except (KeyError, TypeError, AttributeError) as e:
-        # A ValueError from _require (or the TOML layer) already names the file
-        # and field, so it propagates unchanged with no handler here; only these
-        # residual shape errors (scalar where a table/array was expected) get
-        # wrapped.
-        raise ValueError(f"{path}: malformed task.toml: {e!r}") from e
+        # tomllib.load MUST run inside the guard: a pathologically nested TOML
+        # blows its recursive parser with RecursionError, which is neither
+        # OSError nor ValueError. With the load outside, that error escaped the
+        # contract and crashed callers whose except was narrowed to
+        # (OSError, ValueError) — e.g. noop_leak_sweep (EnterpriseBench-20nhr).
+        try:
+            raw = tomllib.load(f)
+            return _task_from_raw(raw, path=path)
+        except (OSError, ValueError):
+            # OSError = the file couldn't be read (contract). ValueError already
+            # names the file+field (tomllib.TOMLDecodeError, or _require's raise,
+            # or a shape error wrapped below). Both propagate unchanged.
+            raise
+        except Exception as e:
+            # Any other parse exception — RecursionError from deep nesting, or a
+            # residual KeyError/TypeError/AttributeError (a scalar where a table/
+            # array was expected) — becomes a ValueError naming the file, so one
+            # honest `except (OSError, ValueError)` covers the whole contract.
+            raise ValueError(f"{path}: malformed task.toml: {e!r}") from e
 
 
 def _task_from_raw(raw: Dict[str, Any], *, path: Path) -> TaskDefinition:

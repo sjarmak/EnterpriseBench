@@ -68,6 +68,11 @@ UNPARSEABLE_TASK_TOMLS = {
     "repos_as_scalars": 'repos = ["a", "b"]\n' + _TASK_BLOCK,
     # AttributeError — _parse_ground_truth calls .get on a str
     "ground_truth_as_scalar": 'ground_truth = "x"\n' + _TASK_BLOCK,
+    # RecursionError — pathologically nested TOML blows tomllib's recursive
+    # parser. Neither OSError nor ValueError, so before the fix it escaped
+    # parse_task's guard (tomllib.load ran outside it) and crashed the sweep
+    # instead of degrading here (EnterpriseBench-20nhr).
+    "deeply_nested_recursion": "key = " + "[" * 2000 + "]" * 2000,
 }
 
 # One representative shape for tests about the CONSEQUENCES of a bad task.toml,

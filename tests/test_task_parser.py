@@ -280,6 +280,24 @@ session_type = "single"
         assert needle in str(exc.value)
         assert filename in str(exc.value)
 
+    def test_deeply_nested_toml_raises_value_error_not_recursion_error(self, tmp_path):
+        # A pathologically nested TOML makes tomllib's recursive-descent parser
+        # blow the interpreter recursion limit — RecursionError, which is neither
+        # OSError nor ValueError. Before the fix, tomllib.load ran OUTSIDE
+        # parse_task's failure-class guard, so that RecursionError escaped and
+        # crashed every consumer whose except had been narrowed to
+        # (OSError, ValueError) — e.g. noop_leak_sweep (EnterpriseBench-20nhr).
+        # parse_task must convert it to a ValueError naming the file.
+        #
+        # pytest.raises(ValueError) is itself the "not RecursionError" assertion:
+        # a leaked RecursionError does not match ValueError, so this fails with the
+        # RecursionError traceback exactly when the regression reoccurs.
+        bad = tmp_path / "deeply_nested.toml"
+        bad.write_text("key = " + "[" * 2000 + "]" * 2000)
+        with pytest.raises(ValueError) as exc:
+            parse_task(bad)
+        assert "deeply_nested.toml" in str(exc.value)
+
 
 # ---------------------------------------------------------------------------
 # Dataclass construction helpers
