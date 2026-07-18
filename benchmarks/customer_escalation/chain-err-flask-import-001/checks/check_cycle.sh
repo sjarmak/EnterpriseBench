@@ -80,20 +80,31 @@ def out(score, detail):
     raise SystemExit(0)
 
 def open_agent_file(path, errors=None):
-    """Open an agent-owned deliverable, refusing a symlink at the final component.
+    """Open an agent-owned deliverable, refusing anything but a regular file.
 
-    O_NOFOLLOW, not a [ -L ] test, because test-then-open has a window and the agent owns
-    the directory: it can swap the path between the guard and the read. Measured, not
-    theorised — a review raced the guarded check with several concurrent swappers and
-    forged a perfect 1.0 on ~22% of 1500 invocations, because CYCLE_VERDICT.json carries
-    ground_truth.json exact schema, so a symlinked read of the sealed key IS a perfect
-    verdict. O_NOFOLLOW refuses at open() time, so there is no window to win. The bash
-    [ -L ] guards stay for the clear message on the honest case; this is what makes it
-    sound (EnterpriseBench-e4w15).
+    The agent owns the directory, so a [ -L ]/[ -f ] test then a separate open() has a
+    window it can swap inside. Measured, not theorised — a review raced the guarded
+    check with concurrent swappers and forged a perfect 1.0 on ~22% of 1500 invocations,
+    because CYCLE_VERDICT.json carries ground_truth.json exact schema, so a symlinked
+    read of the sealed key IS a perfect verdict. Three flags close the window at open()
+    time, where there is nothing to race:
+      O_NOFOLLOW  a symlink swapped in raises instead of reading the target.
+      O_NONBLOCK  a FIFO swapped in returns instead of blocking the read until a writer
+                  appears — a hang becomes a verifier_timeout, i.e. a no-verdict route
+                  the agent can trigger for a free re-run.
+      fstat S_ISREG  a FIFO, device or directory (which O_NOFOLLOW alone lets through)
+                  is rejected after the descriptor is open, so it is the SAME object the
+                  read will use, not a re-lstat of the path. Regular files ignore
+                  O_NONBLOCK for reads, so this is a no-op on the honest case.
+    The bash [ -L ]/[ -f ] guards stay for the clear message on the honest case; this is
+    what makes them sound (EnterpriseBench-e4w15).
     """
-    return os.fdopen(
-        os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "r", encoding="utf-8", errors=errors
-    )
+    import stat
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise OSError("agent deliverable is not a regular file: %s" % path)
+    return os.fdopen(fd, "r", encoding="utf-8", errors=errors)
 
 
 def norm(value):

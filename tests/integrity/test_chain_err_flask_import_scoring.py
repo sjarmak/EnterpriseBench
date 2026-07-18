@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import ast
 import json
+import os
+import signal
 import subprocess
 import sys
 import tomllib
@@ -630,16 +632,24 @@ def _func_ast(check: str, name: str) -> ast.FunctionDef:
     )
 
 
-def _norm_from(check: str):
-    """That check's norm(), compiled so this module can call it."""
+def _func_from(check: str, name: str, imports: str = "import os"):
+    """A helper defined in a check's heredoc, compiled so this module can call it.
+
+    `imports` supplies the module-level names the extracted function closes over (the
+    heredoc has `import json, os` at the top; a lone function pulled out of it does not).
+    """
     ns: dict = {}
+    exec(imports, ns)
     exec(
-        compile(
-            ast.Module(body=[_func_ast(check, "norm")], type_ignores=[]), check, "exec"
-        ),
+        compile(ast.Module(body=[_func_ast(check, name)], type_ignores=[]), check, "exec"),
         ns,
     )
-    return ns["norm"]
+    return ns[name]
+
+
+def _norm_from(check: str):
+    """That check's norm(), compiled so this module can call it."""
+    return _func_from(check, "norm")
 
 
 # Every function the staging contract forces us to copy, and where it lives.
@@ -997,6 +1007,46 @@ def test_a_nested_json_deliverable_cannot_opt_a_run_out_of_scoring(
 
 
 # --- the grader must not run the agent's code ------------------------------
+
+
+@pytest.mark.parametrize(
+    "check", ["check_cycle.sh", "check_investigation.sh", "check_resolution.sh"]
+)
+def test_open_agent_file_refuses_a_fifo_without_blocking(
+    tmp_path: Path, check: str
+) -> None:
+    """open_agent_file must not hang on a FIFO the agent swaps in.
+
+    The bash [ ! -f ] guard rejects a PRE-PLACED FIFO, but the agent owns the directory
+    and can swap the deliverable to a FIFO in the window between that guard and the read
+    — the same TOCTOU window O_NOFOLLOW closes for symlinks. A plain O_RDONLY open of a
+    FIFO blocks until a writer appears; under the milestone/checkpoint runners that
+    becomes a verifier_timeout, i.e. a no-verdict route the agent can trigger for a free
+    re-run. O_NONBLOCK makes the open return, and the fstat S_ISREG check then rejects it
+    (EnterpriseBench-e4w15). Driven on the extracted helper, since the bash guard hides
+    the window from an end-to-end run.
+    """
+    fn = _func_from(check, "open_agent_file")
+    fifo = tmp_path / "swapped.fifo"
+    os.mkfifo(fifo)
+
+    # A regression that drops O_NONBLOCK makes the open block forever. The alarm must
+    # RAISE (not the default SIGALRM, which kills the process and takes pytest with it),
+    # and it must raise something pytest.raises(OSError) will NOT catch — TimeoutError is
+    # an OSError subclass, so raising it would let a blocked read masquerade as the fast
+    # rejection this asserts (a vacuous pass, timed at ~5s instead of instant). RuntimeError
+    # is outside OSError, so a reintroduced block escapes pytest.raises and fails loudly.
+    def _boom(signum, frame):
+        raise RuntimeError("open_agent_file blocked on a FIFO — O_NONBLOCK is missing")
+
+    old = signal.signal(signal.SIGALRM, _boom)
+    signal.alarm(5)
+    try:
+        with pytest.raises(OSError):
+            fn(str(fifo)).read()
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
 
 
 def test_symlinked_answer_key_cannot_forge_the_whole_task(tmp_path: Path) -> None:
