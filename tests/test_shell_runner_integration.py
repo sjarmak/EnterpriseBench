@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import stat
 import subprocess
 from pathlib import Path
@@ -494,15 +495,20 @@ def _synthetic_eb_verify_plugin(root: Path, module_body: str) -> Path:
     return root
 
 
-def _fact_triples_verifier(pythonpath: str) -> str:
+def _fact_triples_verifier(pythonpath: str, stdout_prefix: str = "") -> str:
     """A check that runs the fact_triples plugin under ``pythonpath``. ``set -e``
-    aborts before the echo when the plugin import dies, so the trailing 1.0
+    aborts before the trailing echo when the plugin import dies, so the 1.0
     verdict is emitted only if the import unexpectedly SUCCEEDS — proving routing
-    keys on the death, not on the mere absence of a printed verdict."""
+    keys on the death, not on the mere absence of a printed verdict.
+
+    ``stdout_prefix``, if given, is echoed to STDOUT before the plugin runs —
+    used to prove the frame scan ignores stdout noise and keys only on stderr."""
+    noise = f"echo {shlex.quote(stdout_prefix)}\n" if stdout_prefix else ""
     return (
         "#!/usr/bin/env bash\n"
         "set -e\n"
         f'export PYTHONPATH="{pythonpath}"\n'
+        f"{noise}"
         'python3 -m eb_verify.plugins.fact_triples "$1/agent_output/answer.json"\n'
         "echo '{\"score\": 1.0, \"passed\": true, \"detail\": \"unreachable\"}'\n"
     )
@@ -660,14 +666,11 @@ class TestTransitiveDepHarnessDeath:
             tmp_path / "harness_root",
             "from __absent_harness_dep__ import Thing\n",
         )
-        verifier = (
-            "#!/usr/bin/env bash\n"
-            "set -e\n"
-            f'export PYTHONPATH="{pkg}"\n'
-            # A traceback-shaped line on STDOUT naming a /workspace subject path:
-            # if the scan were not stderr-only this would set subject and suppress.
-            "echo '  File \"/workspace/repo-a/notes.py\", line 1, in <module>'\n"
-            'python3 -m eb_verify.plugins.fact_triples "$1/agent_output/answer.json"\n'
+        # A traceback-shaped line on STDOUT naming a /workspace subject path: if
+        # the scan were not stderr-only this would set subject and suppress.
+        verifier = _fact_triples_verifier(
+            str(pkg),
+            stdout_prefix='  File "/workspace/repo-a/notes.py", line 1, in <module>',
         )
         workspace = tmp_path / "workspace"
         workspace.mkdir()
