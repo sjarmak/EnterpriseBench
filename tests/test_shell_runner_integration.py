@@ -455,3 +455,238 @@ class TestHarnessDeathAttribution:
         # Explicit: this path must NOT be routed to infra, so it must carry no
         # infra signature. Fails loudly if a future change couples the fields.
         assert INFRA_SENTINEL not in cp["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 5. Transitive-dep harness death (bead EnterpriseBench-eth0x)
+# ---------------------------------------------------------------------------
+
+# w37sj closed the eb_verify-NAMESPACE death (the package/submodule is absent, so
+# the module name after "No module named" IS eb_verify). This class covers the
+# adjacent gap it left open: a harness death from a missing THIRD-PARTY
+# dependency of a plugin. fact_triples.py does an unguarded top-level
+# `from jsonschema import ...`, so with jsonschema absent the failure is
+# "ModuleNotFoundError: No module named 'jsonschema'" — the eb_verify token
+# appears only in the traceback File-frame path, never after "No module named".
+# The name-only matcher missed it, and paired with a malformed answer.json the
+# harness death was laundered into a scored agent 0.0 (the same family w37sj fixed).
+#
+# jsonschema is currently present (4.26.0), so these tests do NOT remove it.
+# Instead each fixture reproduces the exact failure SHAPE with a synthetic
+# package whose path carries the real "/eb_verify/" segment, run through a real
+# `python3 -m` invocation so the traceback (caret lines and all) is genuine.
+
+
+def _write_py(path: Path, body: str) -> None:
+    """Write a module, creating its parent directories as needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body)
+
+
+def _synthetic_eb_verify_plugin(root: Path, module_body: str) -> Path:
+    """Build <root>/eb_verify/plugins/fact_triples.py with an eb_verify package
+    chain, so its traceback frame path contains the anchored "/eb_verify/"
+    segment exactly as the sealed sandbox copy (/workspace/.eb_verify/eb_verify/)
+    and the editable install (lib/eb_verify/) both do. Returns ``root``."""
+    _write_py(root / "eb_verify" / "__init__.py", "")
+    _write_py(root / "eb_verify" / "plugins" / "__init__.py", "")
+    _write_py(root / "eb_verify" / "plugins" / "fact_triples.py", module_body)
+    return root
+
+
+def _fact_triples_verifier(pythonpath: str) -> str:
+    """A check that runs the fact_triples plugin under ``pythonpath``. ``set -e``
+    aborts before the echo when the plugin import dies, so the trailing 1.0
+    verdict is emitted only if the import unexpectedly SUCCEEDS — proving routing
+    keys on the death, not on the mere absence of a printed verdict."""
+    return (
+        "#!/usr/bin/env bash\n"
+        "set -e\n"
+        f'export PYTHONPATH="{pythonpath}"\n'
+        'python3 -m eb_verify.plugins.fact_triples "$1/agent_output/answer.json"\n'
+        "echo '{\"score\": 1.0, \"passed\": true, \"detail\": \"unreachable\"}'\n"
+    )
+
+
+class TestTransitiveDepHarnessDeath:
+    """A harness death from a MISSING TRANSITIVE DEPENDENCY of a plugin must route
+    to infra, never launder into a scored agent 0.0 — even when answer.json is
+    also malformed (bead EnterpriseBench-eth0x, follow-up to w37sj)."""
+
+    def test_direct_missing_dep_routes_to_infra(self, tmp_path: Path) -> None:
+        # The stated reproduction: a plugin's own top-level import of an absent
+        # third-party name. The culprit frame is the eb_verify plugin itself, and
+        # the missing module name is NOT eb_verify — so only the frame-provenance
+        # rule (not the name grep) can catch it. RED before the fix: pre-fix the
+        # matcher missed this and the malformed answer laundered it to 0.0.
+        pkg = _synthetic_eb_verify_plugin(
+            tmp_path / "harness_root",
+            "from __absent_harness_dep__ import Thing\n",
+        )
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        _build_workspace(
+            workspace,
+            repos=["repo-a"],
+            verifiers={"01-harness": _fact_triples_verifier(str(pkg))},
+            answer_json=MALFORMED_ANSWER,
+        )
+        runner = _make_patched_runner(tmp_path, workspace)
+
+        result = subprocess.run(
+            ["bash", str(runner)], capture_output=True, text=True, timeout=30
+        )
+
+        data = json.loads(result.stdout)
+        assert len(data["checkpoints"]) == 1
+        cp = data["checkpoints"][0]
+        assert cp["verifier_ran"] is False, (
+            f"transitive-dep harness death laundered into agent performance: {cp}"
+        )
+        assert INFRA_SENTINEL in cp["detail"]
+
+    def test_direct_missing_dep_single_checkpoint_mode(self, tmp_path: Path) -> None:
+        # Single-checkpoint mode emits the raw per-checkpoint verdict, whose only
+        # downstream infra hook is the INFRA_SENTINEL detail signature.
+        pkg = _synthetic_eb_verify_plugin(
+            tmp_path / "harness_root",
+            "from __absent_harness_dep__ import Thing\n",
+        )
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        _build_workspace(
+            workspace,
+            repos=["repo-a"],
+            verifiers={"01-harness": _fact_triples_verifier(str(pkg))},
+            answer_json=MALFORMED_ANSWER,
+        )
+        runner = _make_patched_runner(tmp_path, workspace)
+
+        result = subprocess.run(
+            ["bash", str(runner), "01-harness"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        data = json.loads(result.stdout)
+        assert data.get("verifier_ran") is False, (
+            f"single-checkpoint transitive-dep death scored as agent: {data}"
+        )
+        assert INFRA_SENTINEL in data.get("detail", "")
+
+    def test_dep_of_dep_missing_routes_to_infra(self, tmp_path: Path) -> None:
+        # The transitive case the bead's title actually names: jsonschema is
+        # PRESENT but one of ITS deps is absent, so the culprit frame is a
+        # third-party file with NO eb_verify in its path. A deepest-frame rule
+        # would miss this; scanning all frames (harness frame present, no subject
+        # frame) catches it. This locks in the CONFIRMED-review robustness point.
+        root = tmp_path / "harness_root"
+        _synthetic_eb_verify_plugin(root, "import _harness_intermediate_dep\n")
+        _write_py(
+            root / "_harness_intermediate_dep" / "__init__.py",
+            "import __absent_leaf_dep__\n",
+        )
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        _build_workspace(
+            workspace,
+            repos=["repo-a"],
+            verifiers={"01-harness": _fact_triples_verifier(str(root))},
+            answer_json=MALFORMED_ANSWER,
+        )
+        runner = _make_patched_runner(tmp_path, workspace)
+
+        result = subprocess.run(
+            ["bash", str(runner)], capture_output=True, text=True, timeout=30
+        )
+
+        data = json.loads(result.stdout)
+        assert len(data["checkpoints"]) == 1
+        cp = data["checkpoints"][0]
+        assert cp["verifier_ran"] is False, (
+            f"dep-of-dep harness death laundered into agent performance: {cp}"
+        )
+        assert INFRA_SENTINEL in cp["detail"]
+
+    def test_subject_moduleerror_below_harness_frame_still_scored_zero(
+        self, tmp_path: Path
+    ) -> None:
+        # The surgical guard: a harness plugin that imports SUBJECT code, and the
+        # subject's own import fails. The traceback stacks an eb_verify frame ABOVE
+        # a "/workspace/<repo>/" subject frame — the exact false-positive the "no
+        # subject frame" clause exists to reject. This is the agent/task's own
+        # ModuleNotFoundError and must stay scored 0.0, not routed to infra.
+        pkg = _synthetic_eb_verify_plugin(
+            tmp_path / "harness_root", "import subjectmod\n"
+        )
+        # Subject module lives under a "/workspace/<repo>/" path so its frame is
+        # recognised as subject, not harness.
+        subject_dir = tmp_path / "workspace" / "repo-a"
+        _write_py(subject_dir / "subjectmod.py", "import __absent_subject_dep__\n")
+        workspace = tmp_path / "workspace"
+        workspace.mkdir(exist_ok=True)
+        pythonpath = os.pathsep.join([str(pkg), str(subject_dir)])
+        _build_workspace(
+            workspace,
+            repos=["repo-a"],
+            verifiers={"01-agent": _fact_triples_verifier(pythonpath)},
+            answer_json=MALFORMED_ANSWER,
+        )
+        runner = _make_patched_runner(tmp_path, workspace)
+
+        result = subprocess.run(
+            ["bash", str(runner)], capture_output=True, text=True, timeout=30
+        )
+
+        data = json.loads(result.stdout)
+        assert len(data["checkpoints"]) == 1
+        cp = data["checkpoints"][0]
+        assert cp["verifier_ran"] is True, (
+            f"subject-code ModuleNotFoundError misrouted to infra: {cp}"
+        )
+        assert cp["score"] == 0.0
+        assert INFRA_SENTINEL not in cp["detail"]
+
+    def test_stdout_frame_noise_does_not_suppress_harness_death(
+        self, tmp_path: Path
+    ) -> None:
+        # A genuine harness import death (traceback on stderr) must still route to
+        # infra when the verifier ALSO prints a subject-frame-shaped line to
+        # STDOUT. The frame scan is stderr-only precisely so stdout noise —
+        # verifier logging, or agent-echoed answer text — cannot set the subject
+        # flag and launder a real harness death back into a scored 0.0.
+        pkg = _synthetic_eb_verify_plugin(
+            tmp_path / "harness_root",
+            "from __absent_harness_dep__ import Thing\n",
+        )
+        verifier = (
+            "#!/usr/bin/env bash\n"
+            "set -e\n"
+            f'export PYTHONPATH="{pkg}"\n'
+            # A traceback-shaped line on STDOUT naming a /workspace subject path:
+            # if the scan were not stderr-only this would set subject and suppress.
+            "echo '  File \"/workspace/repo-a/notes.py\", line 1, in <module>'\n"
+            'python3 -m eb_verify.plugins.fact_triples "$1/agent_output/answer.json"\n'
+        )
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        _build_workspace(
+            workspace,
+            repos=["repo-a"],
+            verifiers={"01-harness": verifier},
+            answer_json=MALFORMED_ANSWER,
+        )
+        runner = _make_patched_runner(tmp_path, workspace)
+
+        result = subprocess.run(
+            ["bash", str(runner)], capture_output=True, text=True, timeout=30
+        )
+
+        data = json.loads(result.stdout)
+        assert len(data["checkpoints"]) == 1
+        cp = data["checkpoints"][0]
+        assert cp["verifier_ran"] is False, (
+            f"stdout frame-noise suppressed a genuine harness death: {cp}"
+        )
+        assert INFRA_SENTINEL in cp["detail"]

@@ -28,17 +28,70 @@ now_ms() {
     date +%s%3N 2>/dev/null || date +%s000
 }
 
-# Did the verifier die importing the eb_verify harness? runpy names our harness
-# two ways: the `-m` CLI form "No module named eb_verify.plugins.X" (a submodule
-# is missing) carries NO apostrophe, while the traceback form
-# "No module named 'eb_verify'" (the package is absent) does. The
-# optional-apostrophe pattern matches both at once, so this is one rule over the
-# whole eb_verify namespace, not signature whack-a-mole against an open set. It
-# names OUR harness only — subject code (httpx/flask/requests error-provenance
-# tasks) never emits this string — so a match cannot false-positive a task whose
-# own code raises ModuleNotFoundError.
+# Did the verifier die importing the eb_verify harness? Two disjoint failure
+# shapes, each with its own signal, OR'd together.
+#
+# Case 1 — the eb_verify NAMESPACE is unimportable. runpy names our harness two
+# ways: the `-m` CLI form "No module named eb_verify.plugins.X" (a submodule is
+# missing) carries NO apostrophe, while the traceback form "No module named
+# 'eb_verify'" (the package is absent) does. The optional-apostrophe pattern
+# matches both at once. This is the ONLY signal for these: runpy fails before
+# any eb_verify frame reaches the traceback, so the Case-2 frame scan cannot see
+# them — the module name is all there is. It names OUR harness only, so a match
+# cannot false-positive a task whose own code raises ModuleNotFoundError.
+#
+# Case 2 — a missing TRANSITIVE DEPENDENCY of the harness. eb_verify imports,
+# then a plugin's own import chain fails on a third-party name (e.g.
+# fact_triples.py's unguarded top-level `from jsonschema import ...`, or a dep of
+# that dep). The absent module's name is third-party, so Case 1 cannot see it.
+# We attribute on WHERE the import died, not on an enumerated module-name
+# signature, so this covers the whole open set of harness deps at once:
+#
+#   harness death  <=>  an import error occurred
+#                       AND some traceback frame is inside the eb_verify package
+#                           (the "/[.]?eb_verify/" path segment — anchored so a
+#                           subject repo dir merely CONTAINING "eb_verify", e.g.
+#                           /workspace/eb_verify_client/, is not mistaken for it)
+#                       AND NO frame is inside a subject repo (a "/workspace/"
+#                           path that is NOT the harness).
+#
+# The "no subject frame" clause is what keeps a subject task's own
+# ModuleNotFoundError (httpx/flask/requests err-provenance code) scored as agent
+# performance: subject code dies from a "/workspace/<repo>/..." frame, so a
+# subject frame is present and Case 2 stays silent. Scanning ALL frames (not just
+# the deepest) makes this correct whether the missing module is a DIRECT harness
+# import or a dep-of-a-dep, and independent of the per-frame source/caret lines
+# (PEP 657, Python 3.11+) that sit between a File frame and the exception.
+#
+# Called with stderr and stdout as SEPARATE args ($1, $2). Case 1 greps the
+# combined stream (a namespace message can surface on either). Case 2 scans
+# STDERR ONLY: CPython routes an uncaught traceback to stderr, so the frame
+# stack lives there — and stdout is arbitrary verifier logging plus agent-echoed
+# answer text (the err-provenance corpus literally prints ModuleNotFoundError
+# prose), so a coincidental `File "/workspace/<repo>/..."` line on stdout must
+# not be allowed to set the subject flag and SUPPRESS a genuine harness death,
+# which would re-open the very laundering this closes.
+#
+# LC_ALL=C keeps mawk (Debian/task-image default) byte-based; the patterns use
+# only POSIX awk (index/sub/~, [ \t] not [[:space:]]) so gawk and mawk agree.
 is_harness_import_failure() {
-    printf '%s' "$1" | grep -qE "No module named '?eb_verify"
+    local stderr_text="$1" stdout_text="$2"
+    if printf '%s\n%s' "$stderr_text" "$stdout_text" | grep -qE "No module named '?eb_verify"; then
+        return 0
+    fi
+    printf '%s' "$stderr_text" | LC_ALL=C awk '
+        function is_harness_path(p) { return (p ~ /\/[.]?eb_verify\//) }
+        /^[ \t]*File "/ {
+            p = $0
+            sub(/^[^"]*"/, "", p)
+            sub(/".*$/, "", p)
+            if (is_harness_path(p)) harness = 1
+            else if (index(p, "/workspace/") > 0) subject = 1
+            next
+        }
+        /^(ModuleNotFoundError|ImportError):/ { importerr = 1 }
+        END { exit((importerr && harness && !subject) ? 0 : 1) }
+    '
 }
 
 # The score a checkpoint actually earned, or the empty string if it earned none:
@@ -317,8 +370,7 @@ run_verifier() {
         local stderr_content
         stderr_content=$(cat "$raw_stderr" 2>/dev/null || true)
 
-        if is_harness_import_failure "$stderr_content
-$raw_stdout"; then
+        if is_harness_import_failure "$stderr_content" "$raw_stdout"; then
             # The eb_verify harness itself failed to import, so the verifier
             # could not run whatever the shape of the agent's answer. Attribution
             # is decided only AFTER the harness is cleared — checked ahead of
