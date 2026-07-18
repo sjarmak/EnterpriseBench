@@ -545,6 +545,27 @@ class TestScoringDoesNotBreakTheChecks:
                 }
             )
         )
+        # check_resolution.sh gates its evidence on the session-1 verdict, so the
+        # correct answer is BOTH files: `reason` is free text, and any token rule over
+        # free text is payable by pasting in the source file the tokens live in, which
+        # is what the gate closes (EnterpriseBench-e4w15). Without this the check
+        # scores 0.0 for a missing verdict and the assertion below would blame the
+        # workspace arg — the one thing this test exists to isolate.
+        (workspace / "flask" / "CYCLE_VERDICT.json").write_text(
+            json.dumps(
+                {
+                    "claimed_edges": [
+                        {"from": f, "to": t, "imported_at_runtime": runtime}
+                        for f, t, runtime in (
+                            ("flask", "flask.json", True),
+                            ("flask.json", "flask.globals", True),
+                            ("flask.globals", "flask.app", False),
+                            ("flask.app", "flask.json", False),
+                        )
+                    ]
+                }
+            )
+        )
         elsewhere = tmp_path / "eb_scoring"  # stands in for SCORING_WORKDIR
         elsewhere.mkdir()
 

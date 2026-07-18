@@ -79,26 +79,61 @@ def out(score, detail):
     print(json.dumps({"score": round(score, 4), "passed": score >= 0.5, "detail": detail}))
     raise SystemExit(0)
 
+def open_agent_file(path, errors=None):
+    """Open an agent-owned deliverable, refusing a symlink at the final component.
+
+    O_NOFOLLOW, not a [ -L ] test, because test-then-open has a window and the agent owns
+    the directory: it can swap the path between the guard and the read. Measured, not
+    theorised — a review raced the guarded check with several concurrent swappers and
+    forged a perfect 1.0 on ~22% of 1500 invocations, because CYCLE_VERDICT.json carries
+    ground_truth.json exact schema, so a symlinked read of the sealed key IS a perfect
+    verdict. O_NOFOLLOW refuses at open() time, so there is no window to win. The bash
+    [ -L ] guards stay for the clear message on the honest case; this is what makes it
+    sound (EnterpriseBench-e4w15).
+    """
+    return os.fdopen(
+        os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "r", encoding="utf-8", errors=errors
+    )
+
+
 def norm(value):
-    """flask.globals / flask/globals.py / ./src/flask/globals.py -> flask.globals."""
+    """Collapse every spelling of one module onto its dotted name.
+
+    flask.globals, flask/globals.py, ./flask/globals.py, src/flask/globals.py,
+    flask/src/flask/globals.py and /workspace/flask/src/flask/globals.py all denote
+    flask.globals.
+
+    Anchored on the LAST "src" segment, because the two spellings this workspace
+    actually produces both carry a prefix in front of it: the repo mounts at
+    /workspace/flask/ with the package under src/, so the workspace-relative path is
+    flask/src/flask/globals.py — the repo directory shares the package name — and the
+    absolute path the session-1 prompt itself hands the agent is
+    /workspace/flask/src/flask/globals.py. Stripping a LEADING "src/" caught only the
+    sdist-relative spelling and left those two as flask.src.flask.globals and
+    workspace.flask.src.flask.globals. Both missed the key, and negative marking then
+    floored a FULLY CORRECT verdict to 0.0 — indistinguishable from blanket-wrong, on
+    the heaviest checkpoint. Failing a correct answer for its spelling is the one
+    thing this normalization exists to prevent (EnterpriseBench-e4w15).
+    """
     s = str(value).strip().lower().replace("\\", "/")
-    # "./" first, and repeatedly: it is a natural way to spell a repo-relative path
-    # and naive path-joining produces "././x". Leaving it in made a CORRECT answer
-    # normalize to "..src.flask.globals" and silently miss the key on the
-    # heaviest-weighted checkpoint — failing the answer for its spelling, which is
-    # the one thing this normalization exists to prevent.
-    while s.startswith("./"):
-        s = s[2:]
-    if s.startswith("src/"):
-        s = s[4:]
     if s.endswith("/__init__.py"):
         s = s[: -len("/__init__.py")]
     elif s.endswith(".py"):
         s = s[:-3]
-    s = s.strip("/").replace("/", ".")
-    if s.endswith(".__init__"):
-        s = s[: -len(".__init__")]
-    return s
+    # "/" and "." are one separator here: an agent may write a path, a dotted module
+    # name, or path-joining output. Dropping empty segments absorbs a leading "/" and
+    # any "./" or "././" prefix without a special case for each.
+    parts = [p for p in s.replace("/", ".").split(".") if p]
+    for i in range(len(parts) - 1, -1, -1):
+        # A trailing "src" names a module, not the package root: cutting there would
+        # collapse "flask/src.py" to "" and, with both endpoints empty, silently drop
+        # the edge — which negative marking then charges as unanswered.
+        if parts[i] == "src" and i + 1 < len(parts):
+            parts = parts[i + 1 :]
+            break
+    if parts and parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts)
 
 # The answer key gets the same never-raise discipline as the agent file below: a
 # corrupt or hand-edited ground_truth.json must surface as VERIFIER_INFRA_ERROR, not
@@ -116,10 +151,14 @@ if not key:
     out(0.0, "VERIFIER_INFRA_ERROR: ground_truth.json has no claimed_edges")
 
 try:
-    with open(os.environ["VERDICT"], encoding="utf-8") as fh:
+    with open_agent_file(os.environ["VERDICT"]) as fh:
         data = json.load(fh)
-except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-    out(0.0, "CYCLE_VERDICT.json is not valid JSON: %s" % exc)
+except (ValueError, OSError, RecursionError) as exc:
+    # OSError too: the agent owns this file and can chmod 000 it. The bash wc -c guard
+    # fails OPEN on a permission error, so without this the check died on an unguarded
+    # open() with a bare traceback and no verdict — an agent-triggerable re-run
+    # (EnterpriseBench-e4w15).
+    out(0.0, "CYCLE_VERDICT.json could not be read as JSON: %s" % type(exc).__name__)
 
 if not isinstance(data, dict) or not isinstance(data.get("claimed_edges"), list):
     out(0.0, "CYCLE_VERDICT.json has no claimed_edges list")

@@ -29,10 +29,12 @@ expect 0) is one row of the matrix below.
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import sys
 import tomllib
+from itertools import product
 from pathlib import Path
 
 import pytest
@@ -323,6 +325,91 @@ def test_fabricated_cycle_scores_zero(tmp_path: Path, variant: str) -> None:
 
 
 
+# The head of src/flask/globals.py at flask 3.1.0, verbatim. This IS the dump vector:
+# every investigation_evidence token AND the sole resolution_correct token appear in
+# these few lines of the one file the session-1 prompt names as an edge endpoint, so a
+# `cat` of it into the two free-text deliverables scored 1.0 on both -- 0.60 of the
+# task for a file copy. `head -8` pays exactly the same, which is why a length
+# threshold is not the fix, and a multi-file cat pays any token drawn from source,
+# which is why respreading the tokens is not the fix either (EnterpriseBench-e4w15).
+GLOBALS_HEAD = '''from __future__ import annotations
+
+import typing as t
+from contextvars import ContextVar
+
+from werkzeug.local import LocalProxy
+
+if t.TYPE_CHECKING:  # pragma: no cover
+    from .app import Flask
+'''
+
+
+def _dump_ws(tmp_path: Path, name: str, cycle_verdict: str) -> Path:
+    """The dump payload in both free-text deliverables, with a caller-chosen verdict."""
+    return _write(
+        _make_ws(tmp_path, name),
+        investigation=GLOBALS_HEAD,
+        cycle_verdict=cycle_verdict,
+        resolution=json.dumps(
+            {"code_change_required": False, "reason": GLOBALS_HEAD}
+        ),
+    )
+
+
+def test_the_graded_tokens_really_are_co_located_in_one_file() -> None:
+    """Pins the premise of the two tests below. If a future edit respreads the tokens
+    so this fails, the dump tests stop testing the dump vector and start passing for a
+    reason nobody chose -- re-read them before touching this."""
+    ev = _ground_truth()["scoring_evidence"]
+    tokens = ev["investigation_evidence"] + ev["resolution_correct"]
+    assert tokens and all(t.lower() in GLOBALS_HEAD.lower() for t in tokens), (
+        f"every graded token must live in the globals.py head for the dump vector to "
+        f"exist: {tokens}"
+    )
+
+
+def test_source_dump_scores_zero(tmp_path: Path) -> None:
+    """The second blocking defect: non-prompt was necessary and NOT sufficient.
+
+    `cat src/flask/globals.py` into INVESTIGATION.md and into RESOLUTION.json's
+    free-text `reason` paid 3/3 and 1/1 tokens = 0.60 of the task, guaranteed, for zero
+    comprehension -- the same diagnosis the bead makes of the deleted check_fix.sh
+    ("cannot distinguish a fix from a comment because it never looks at the code's
+    meaning") applied verbatim to check_investigation.sh: it could not distinguish an
+    investigation from a cat. Both checkpoints now gate on the verdict, which no dump
+    produces.
+    """
+    ws = _dump_ws(tmp_path, "dump_blanket", ALL_TRUE_VERDICT)
+    got = score(ws, "runner", tmp_path)
+    assert got == 0.0, f"source dump scored {got}"
+
+
+def test_the_dump_is_zeroed_by_the_gate_and_not_by_a_missing_file(
+    tmp_path: Path,
+) -> None:
+    """Positive control for the test above, and the recorded residual, in one.
+
+    A check that never finds its deliverable also returns 0.0, so the assertion above
+    would pass for the wrong reason in exactly the failure mode it exists to detect.
+    The SAME dump bytes, behind a CORRECT verdict, must still pay their tokens: that
+    proves the payload is found and matched, so the 0.0 above is the gate biting and
+    nothing else.
+
+    It is also the residual stated in ground_truth._residual_risk, made executable
+    rather than merely asserted: past the gate, investigation_evidence credits citation
+    and not exposition, so an agent that genuinely discriminated all four edges may
+    still paste the source instead of writing prose. Accepted deliberately -- judging
+    prose is not a deterministic check -- and bounded, because it pays only agents that
+    already demonstrated the comprehension the task measures.
+    """
+    ws = _dump_ws(tmp_path, "dump_correct", CORRECT_VERDICT)
+    got = score(ws, "runner", tmp_path)
+    assert got == 1.0, (
+        f"the dump scored {got} behind a correct verdict — it should still pay its "
+        f"tokens, so test_source_dump_scores_zero is passing for the wrong reason"
+    )
+
+
 @pytest.mark.parametrize("blanket", [True, False], ids=["all_true", "all_false"])
 def test_blanket_edge_verdicts_score_zero(tmp_path: Path, blanket: bool) -> None:
     """Negative marking. 2 of 4 claimed edges are real, so any blanket answer is
@@ -351,6 +438,61 @@ def test_blanket_edge_verdicts_score_zero(tmp_path: Path, blanket: bool) -> None
     assert got == 0.0, f"blanket-{blanket} scored {got}"
 
 
+
+
+def test_documented_guessing_expectation_is_what_the_checks_actually_pay(
+    tmp_path: Path,
+) -> None:
+    """Enumerate the best no-comprehension strategy against the REAL checks.
+
+    ground_truth._residual_risk states two numbers, and this computes both rather than
+    trusting them. The previous iteration shipped a flattering claim in that exact
+    field -- "with negative marking a coin flip is worth 0 in expectation", when
+    exhaustive enumeration gives 0.1875 -- and a number in _residual_risk that no test
+    computes is an assertion, not a measurement. Overclaiming in the residual-risk field
+    of a bead about unearned scores is its own small version of the bug.
+
+    Strategy enumerated: dump globals.py into both free-text deliverables (pays every
+    token), answer "no change" deliberately (the correct decision, taken for free), and
+    guess all four edges. That is the ceiling for an agent that reads nothing.
+
+    The gate lowers the MEAN without raising the TAIL: P(1.0) is 1/16 either way,
+    because a perfect score always required a perfect verdict, which already maxed
+    cycle_discrimination. Trading a guaranteed 0.60 for nothing is the whole point.
+    """
+    edges = [(e["from"], e["to"]) for e in _ground_truth()["claimed_edges"]]
+    totals = [
+        score(
+            _dump_ws(
+                tmp_path,
+                f"guess_{i}",
+                json.dumps(
+                    {
+                        "claimed_edges": [
+                            {"from": f, "to": t, "imported_at_runtime": g}
+                            for (f, t), g in zip(edges, guess)
+                        ]
+                    }
+                ),
+            ),
+            "runner",
+            tmp_path,
+        )
+        for i, guess in enumerate(product([True, False], repeat=len(edges)))
+    ]
+
+    # len(totals) == 2 ** len(edges) holds by construction; 16 is the claim -- the
+    # documented numbers below are for FOUR claimed edges.
+    assert len(totals) == 16, f"{len(edges)} claimed edges, not 4: {edges}"
+    mean = round(sum(totals) / len(totals), 4)
+    assert mean == 0.1125, (
+        f"E[score] for the best no-comprehension strategy is {mean}, but "
+        f"ground_truth._residual_risk documents 0.1125 (it was 0.675 ungated). Fix the "
+        f"scoring or fix the recorded number — do not leave the flattering one."
+    )
+    assert sum(1 for t in totals if t == 1.0) == 1, (
+        f"P(score == 1.0) under guessing must stay 1/16 — the documented tail: {totals}"
+    )
 
 
 def test_empty_workspace_scores_zero(tmp_path: Path) -> None:
@@ -415,6 +557,159 @@ def test_correct_answer_tolerates_path_spellings_and_extra_edges(
     )
     got = score(ws, convention, tmp_path)
     assert got >= 0.9, f"correct answer with alternate spellings scored {got}"
+
+
+def test_correct_answer_tolerates_the_workspace_layout_spellings(
+    tmp_path: Path,
+) -> None:
+    """A CORRECT verdict scored 0.0 on the heaviest checkpoint, for its spelling.
+
+    The other blocking defect, and the opposite failure to the dump: norm() stripped
+    only a LEADING "src/", but the repo mounts at /workspace/flask/ with the package at
+    src/flask/. So the workspace-relative path is flask/src/flask/globals.py -- the
+    repo directory shares the package's name -- and the absolute path the session-1
+    prompt ITSELF supplies ("checked out at /workspace/flask/") is
+    /workspace/flask/src/flask/globals.py. Both normalized to a key miss
+    (flask.src.flask.globals, workspace.flask.src.flask.globals), and negative marking
+    then floored a fully correct answer to 0.0 -- indistinguishable from blanket-wrong.
+
+    The task's own layout produces these two spellings, and the existing spelling test
+    covered only spellings that already passed. Same class as the "./" bug, one step
+    out (EnterpriseBench-e4w15).
+
+    Not parametrized over CONVENTIONS, per the harness note above: what regressed is
+    norm(), which lives downstream of $WORKSPACE and is convention-independent, and the
+    two correct-answer tests already prove resolution under all three runners.
+    """
+    ws = _write(
+        _make_ws(tmp_path, "layout_spellings"),
+        investigation=CORRECT_INVESTIGATION,
+        cycle_verdict=json.dumps(
+            {
+                "claimed_edges": [
+                    {
+                        # absolute, exactly as the prompt hands the checkout over
+                        "from": "/workspace/flask/src/flask/__init__.py",
+                        "to": "/workspace/flask/src/flask/json/__init__.py",
+                        "imported_at_runtime": True,
+                    },
+                    {
+                        # workspace-relative: repo dir + package dir, both "flask"
+                        "from": "flask/src/flask/json/__init__.py",
+                        "to": "flask/src/flask/globals.py",
+                        "imported_at_runtime": True,
+                    },
+                    {
+                        "from": "/workspace/flask/src/flask/globals.py",
+                        "to": "/workspace/flask/src/flask/app.py",
+                        "imported_at_runtime": False,
+                    },
+                    {
+                        "from": "flask/src/flask/app.py",
+                        "to": "flask/src/flask/json/__init__.py",
+                        "imported_at_runtime": False,
+                    },
+                ]
+            }
+        ),
+        resolution=CORRECT_RESOLUTION,
+    )
+    got = score(ws, "runner", tmp_path)
+    assert got >= 0.9, (
+        f"correct answer spelled the way this workspace's own layout produces "
+        f"scored {got}"
+    )
+
+
+def _func_ast(check: str, name: str) -> ast.FunctionDef:
+    """A function defined inside a check's `python3 -I -c` heredoc, unevaluated."""
+    body = (TASK_DIR / "checks" / check).read_text().split("python3 -I -c '")[1]
+    tree = ast.parse(body.rsplit("'", 1)[0])
+    return next(
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name
+    )
+
+
+def _norm_from(check: str):
+    """That check's norm(), compiled so this module can call it."""
+    ns: dict = {}
+    exec(
+        compile(
+            ast.Module(body=[_func_ast(check, "norm")], type_ignores=[]), check, "exec"
+        ),
+        ns,
+    )
+    return ns["norm"]
+
+
+# Every function the staging contract forces us to copy, and where it lives.
+# check_cycle.sh scores the verdict inline, so it has no verdict_is_fully_correct().
+DUPLICATED = {
+    "norm": ("check_cycle.sh", "check_investigation.sh", "check_resolution.sh"),
+    "open_agent_file": ("check_cycle.sh", "check_investigation.sh", "check_resolution.sh"),
+    "verdict_is_fully_correct": ("check_investigation.sh", "check_resolution.sh"),
+}
+
+
+@pytest.mark.parametrize("func", sorted(DUPLICATED), ids=sorted(DUPLICATED))
+def test_the_duplicated_check_helpers_are_identical(func: str) -> None:
+    """The gate forced norm() and verdict_is_fully_correct() into more than one check,
+    and the duplication is the staging contract's price, not an oversight: run_task.py
+    copies only checks/*.sh, each individually, into a flat .verifiers/, so a shared
+    library is either never copied (outside checks/) or is itself run as a check at
+    weight 1.0 (inside checks/, tripping test_every_check_is_claimed_by_a_checkpoint).
+
+    "Keep the copies identical" is a comment, and comments do not fail CI. A future
+    editor who fixes a normalization bug in one copy would leave the gates disagreeing
+    with the checkpoint about which module an edge names — the gate would deny evidence
+    for a verdict check_cycle.sh itself scored correct, which is the one disagreement
+    this design cannot tolerate. Compare the code, ignoring docstrings: the prose
+    differs on purpose (check_cycle.sh carries the reasoning, the copies point at it).
+    """
+    checks = DUPLICATED[func]
+    bodies = {}
+    for check in checks:
+        fn = _func_ast(check, func)
+        # Drop the docstring, and only the docstring: stripping every top-level
+        # ast.Expr would also silently ignore a bare call added to one copy.
+        code = fn.body[1:] if ast.get_docstring(fn) else fn.body
+        bodies[check] = ast.dump(ast.Module(body=code, type_ignores=[]))
+    reference = checks[0]
+    diverged = [c for c, b in bodies.items() if b != bodies[reference]]
+    assert not diverged, (
+        f"{func}() in {diverged} has diverged from {reference}; the gates and the "
+        f"checkpoint would disagree about which module an edge names"
+    )
+
+
+@pytest.mark.parametrize(
+    ("spelling", "expected"),
+    [
+        ("flask.globals", "flask.globals"),
+        ("flask/globals.py", "flask.globals"),
+        ("./flask/globals.py", "flask.globals"),
+        ("src/flask/globals.py", "flask.globals"),
+        # the two the workspace layout actually produces
+        ("flask/src/flask/globals.py", "flask.globals"),
+        ("/workspace/flask/src/flask/globals.py", "flask.globals"),
+        ("/workspace/flask/src/flask/json/__init__.py", "flask.json"),
+        ("src.flask.globals", "flask.globals"),
+        ("flask\\globals.py", "flask.globals"),
+        # the case that makes the "/__init__.py" branch load-bearing rather than dead:
+        # without it the cut lands on the trailing "src" and the __init__ pop empties
+        # the list, so the edge normalizes to "" and silently vanishes.
+        ("flask/src/__init__.py", "flask.src"),
+        # a TRAILING "src" names a module, not the package root. Cutting there
+        # collapsed these to "", and two empty endpoints make an edge that is not in
+        # the key, which negative marking charges as unanswered.
+        ("flask/src.py", "flask.src"),
+        ("src", "src"),
+    ],
+)
+def test_norm_collapses_spellings_without_collapsing_modules(
+    spelling: str, expected: str
+) -> None:
+    assert _norm_from("check_cycle.sh")(spelling) == expected
 
 
 # --- the gate that should have caught this ---------------------------------
@@ -520,7 +815,225 @@ def test_task_is_inside_the_echo_gate_universe() -> None:
     }
 
 
+# --- the scoring trust boundary: a broken grader must never score ----------
+
+
+CHECK_FOR = {
+    "INVESTIGATION.md": "check_investigation.sh",
+    "CYCLE_VERDICT.json": "check_cycle.sh",
+    "RESOLUTION.json": "check_resolution.sh",
+}
+
+
+def _raw(check: str, ws: Path) -> subprocess.CompletedProcess:
+    """Drive one check the way runner.py does, without parsing its verdict."""
+    return subprocess.run(
+        ["bash", str(TASK_DIR / "checks" / check)],
+        cwd=str(ws),
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": "/usr/bin:/bin:/usr/local/bin",
+            "HOME": str(ws),
+            "WORKSPACE": str(ws),
+            "TASK_DIR": str(TASK_DIR),
+        },
+        timeout=120,
+    )
+
+
+GATED_CHECKS = ["check_investigation.sh", "check_resolution.sh"]
+
+
+@pytest.mark.parametrize("check", GATED_CHECKS)
+def test_a_corrupt_answer_key_is_an_infra_error_even_with_no_verdict_to_gate_on(
+    tmp_path: Path, check: str
+) -> None:
+    """A broken grader must never be recorded as a real agent failure.
+
+    lib/eb_verify/scorer_guard.py's boundary: a score is valid only if the pristine
+    verifier ran on real agent output. An infra failure must surface as
+    verifier_infra_error and route to the re-run channel; it must never bank a
+    legitimate 0.0.
+
+    THIS IS A REGRESSION THE GATE INTRODUCED, and it is why the gate's guards live in
+    python rather than beside the others in the bash preamble. The first version
+    pre-checked CYCLE_VERDICT.json in bash, which runs BEFORE python parses the answer
+    key — so a corrupt ground_truth.json plus a missing verdict returned
+    {"score": 0.0, "detail": "No gradeable CYCLE_VERDICT.json"} where the pre-gate check
+    had returned VERIFIER_INFRA_ERROR. The grader was broken and the agent was charged
+    for it.
+
+    The scenario is exact and the test is worthless without both halves: the gate's input
+    MISSING (so the bash pre-check would fire) and the key CORRUPT (so python would have
+    blamed the key). The check's OWN deliverable is present, so nothing else can
+    legitimately score 0 first — a first draft of this test left CYCLE_VERDICT.json in
+    place and passed against the buggy code, because the pre-check never fired.
+
+    Only the two GATED checks: check_cycle.sh owns CYCLE_VERDICT.json, so for it a
+    missing file is a real 0.0 that legitimately precedes the key. That ordering is
+    pre-existing and not this bead's (see the note in _residual_risk).
+    """
+    task_gt = tmp_path / "task"
+    (task_gt / "checks").mkdir(parents=True)
+    (task_gt / "ground_truth.json").write_text("{ this is not valid json !!!")
+    for c in CHECK_FOR.values():
+        (task_gt / "checks" / c).write_text((TASK_DIR / "checks" / c).read_text())
+
+    ws = _make_ws(tmp_path, f"corrupt_key_{check}")
+    (ws / "flask" / "INVESTIGATION.md").write_text(CORRECT_INVESTIGATION)
+    (ws / "flask" / "RESOLUTION.json").write_text(CORRECT_RESOLUTION)
+    # deliberately NO CYCLE_VERDICT.json — the gate has nothing to read
+    assert not (ws / "flask" / "CYCLE_VERDICT.json").exists()
+
+    out = subprocess.run(
+        ["bash", str(task_gt / "checks" / check)],
+        cwd=str(ws),
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": "/usr/bin:/bin:/usr/local/bin",
+            "HOME": str(ws),
+            "WORKSPACE": str(ws),
+            "TASK_DIR": str(task_gt),
+        },
+        timeout=120,
+    )
+    assert out.returncode == 0, f"{check} crashed instead of a verdict: {out.stderr}"
+    verdict = json.loads(out.stdout.strip())
+    assert "VERIFIER_INFRA_ERROR" in verdict["detail"], (
+        f"{check} recorded a corrupt answer key as a legitimate score "
+        f"{verdict['score']} instead of routing it to the re-run channel: {verdict}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("deliverable", "check"), sorted(CHECK_FOR.items()), ids=sorted(CHECK_FOR)
+)
+def test_an_unreadable_deliverable_still_returns_a_verdict(
+    tmp_path: Path, deliverable: str, check: str
+) -> None:
+    """The agent owns its deliverables and can chmod 000 them.
+
+    The bash `wc -c <"$FILE"` size guard fails OPEN on a permission error — the redirect
+    fails, the command substitution is empty, and `[ "" -gt N ]` is merely false — so
+    execution fell through to an unguarded open() and the check died with a bare
+    traceback, no verdict, exit 1. run_verifier_subprocess reads a missing verdict as an
+    InfraError and routes it to the re-run channel, so an agent could mint itself a
+    re-run on demand by making its own file unreadable.
+
+    Every path must print exactly one verdict and exit 0. An unreadable deliverable is
+    the agent's failure, so it scores 0.0 — it is not a broken grader (EnterpriseBench-e4w15).
+    """
+    ws = _make_ws(tmp_path, f"unreadable_{check}")
+    _write(
+        ws,
+        investigation=CORRECT_INVESTIGATION,
+        cycle_verdict=CORRECT_VERDICT,
+        resolution=CORRECT_RESOLUTION,
+    )
+    target = ws / "flask" / deliverable
+    target.chmod(0o000)
+    try:
+        out = _raw(check, ws)
+    finally:
+        target.chmod(0o644)
+
+    assert out.returncode == 0, (
+        f"{check} exited {out.returncode} on an unreadable {deliverable} instead of "
+        f"returning a verdict — that is an agent-triggerable re-run: {out.stderr[-300:]}"
+    )
+    assert out.stdout.strip(), f"{check} printed no verdict at all: {out.stderr[-300:]}"
+    verdict = json.loads(out.stdout.strip())
+    assert verdict["score"] == 0.0, verdict
+    assert "VERIFIER_INFRA_ERROR" not in verdict["detail"], (
+        f"an agent making its OWN file unreadable is not a grader failure and must not "
+        f"reach the re-run channel: {verdict}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("deliverable", "check"), sorted(CHECK_FOR.items()), ids=sorted(CHECK_FOR)
+)
+def test_a_nested_json_deliverable_cannot_opt_a_run_out_of_scoring(
+    tmp_path: Path, deliverable: str, check: str
+) -> None:
+    """An agent must not be able to remove its own run from the scored corpus.
+
+    json.load on a deeply nested array raises RecursionError, which subclasses
+    RuntimeError — NOT ValueError, and not OSError — so it escaped every except tuple.
+    The check then died with a bare traceback and printed no verdict, and no-verdict is
+    read as VERIFIER_INFRA_ERROR: the run leaves scored space and routes to the re-run
+    channel. So an agent that knows it answered badly could drop a 400KB file of
+    brackets and take the whole task out of the corpus, deterministically and for free.
+    That is selection bias, not a denial of service, and it is the "exit 1 vs exit 2"
+    distinction CLAUDE.md calls load-bearing: exit 1 is the agent scoring zero, exit 2 is
+    no score existing. The agent must not get to choose which one it gets.
+
+    This bead's diff is what made it worth the WHOLE task: before the gate, only
+    check_cycle.sh read CYCLE_VERDICT.json (0.40). EnterpriseBench-ifo4h tracks the
+    general shape and deferred it as "availability, not a scoring break" — true when it
+    cost 0.40 and could not be aimed. Both halves of that changed here.
+
+    The harness ran correctly; the agent's own input killed it, so it scores 0.0.
+    """
+    ws = _make_ws(tmp_path, f"nested_{check}")
+    _write(
+        ws,
+        investigation=CORRECT_INVESTIGATION,
+        cycle_verdict=CORRECT_VERDICT,
+        resolution=CORRECT_RESOLUTION,
+    )
+    depth = 200_000
+    (ws / "flask" / deliverable).write_text("[" * depth + "]" * depth)
+
+    out = _raw(check, ws)
+    assert out.returncode == 0, (
+        f"{check} died on a nested-JSON {deliverable} (exit {out.returncode}) instead of "
+        f"scoring it — no verdict is read as VERIFIER_INFRA_ERROR, which lets the agent "
+        f"opt out of the corpus: {out.stderr[-200:]}"
+    )
+    assert out.stdout.strip(), f"{check} printed no verdict: {out.stderr[-200:]}"
+    verdict = json.loads(out.stdout.strip())
+    assert verdict["score"] == 0.0, verdict
+    assert "VERIFIER_INFRA_ERROR" not in verdict["detail"], (
+        f"the agent's own malformed deliverable was blamed on the harness and routed to "
+        f"the re-run channel: {verdict}"
+    )
+
+
 # --- the grader must not run the agent's code ------------------------------
+
+
+def test_symlinked_answer_key_cannot_forge_the_whole_task(tmp_path: Path) -> None:
+    """The agent cannot READ the sealed key. It can still POINT at it.
+
+    CYCLE_VERDICT.json mirrors ground_truth.json's `claimed_edges` by design -- same
+    from/to/imported_at_runtime shape -- so the answer key IS a perfect verdict for this
+    task. Creating a symlink never requires reading its target, and the checks run as
+    the scorer identity, which can read /workspace/.task. So an agent that runs
+    `ln -s ../.task/ground_truth.json CYCLE_VERDICT.json` makes the grader feed itself
+    the key. Under the gate that unlocks the two free-text checkpoints as well, so the
+    dump payload beside it collects everything: measured at 1.00/1.00 with the `[ -L ]`
+    guards removed, versus 0.00 with them.
+
+    The guard predates this bead on check_cycle.sh; the gate is what extends the vector
+    to the other two checks, and it is guarded there identically. Driving the real
+    symlink rather than asserting the guard's presence, because a green security test
+    that cannot fail is decoration (EnterpriseBench-e4w15).
+    """
+    ws = _make_ws(tmp_path, "symlinked_key")
+    (ws / "flask" / "INVESTIGATION.md").write_text(GLOBALS_HEAD)
+    (ws / "flask" / "RESOLUTION.json").write_text(
+        json.dumps({"code_change_required": False, "reason": GLOBALS_HEAD})
+    )
+    (ws / "flask" / "CYCLE_VERDICT.json").symlink_to(TASK_DIR / "ground_truth.json")
+
+    assert score(ws, "runner", tmp_path) == 0.0, (
+        "an agent symlinked the sealed answer key as its own verdict and the grader "
+        "followed it — the key has the deliverable's exact shape, so this forges the "
+        "whole task"
+    )
 
 
 def test_planted_stdlib_module_cannot_forge_a_verdict(tmp_path: Path) -> None:
