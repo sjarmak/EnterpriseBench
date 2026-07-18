@@ -654,6 +654,44 @@ class TestTransitiveDepHarnessDeath:
         assert cp["score"] == 0.0
         assert INFRA_SENTINEL not in cp["detail"]
 
+    def test_production_shaped_harness_path_routes_to_infra(
+        self, tmp_path: Path
+    ) -> None:
+        # Regression guard for the load-bearing branch ORDER in the awk scan. The
+        # real sandbox harness lives at /workspace/.eb_verify/eb_verify/..., a path
+        # that contains BOTH "/eb_verify/" AND "/workspace/". is_harness_path is
+        # tested before the "/workspace/" subject check (and the File handler
+        # `next`s), so a genuine harness frame classifies as harness, never
+        # subject. If that order ever flipped, a real transitive-dep death would
+        # set subject from its OWN frame and self-suppress into a scored 0.0. Every
+        # other fixture builds the harness OUTSIDE /workspace, so only this test
+        # exercises the /workspace-and-/eb_verify path collision.
+        pkg = _synthetic_eb_verify_plugin(
+            tmp_path / "workspace" / ".eb_verify",
+            "from __absent_harness_dep__ import Thing\n",
+        )
+        workspace = tmp_path / "workspace"
+        workspace.mkdir(exist_ok=True)
+        _build_workspace(
+            workspace,
+            repos=["repo-a"],
+            verifiers={"01-harness": _fact_triples_verifier(str(pkg))},
+            answer_json=MALFORMED_ANSWER,
+        )
+        runner = _make_patched_runner(tmp_path, workspace)
+
+        result = subprocess.run(
+            ["bash", str(runner)], capture_output=True, text=True, timeout=30
+        )
+
+        data = json.loads(result.stdout)
+        assert len(data["checkpoints"]) == 1
+        cp = data["checkpoints"][0]
+        assert cp["verifier_ran"] is False, (
+            f"production-shaped harness-path death laundered into agent performance: {cp}"
+        )
+        assert INFRA_SENTINEL in cp["detail"]
+
     def test_stdout_frame_noise_does_not_suppress_harness_death(
         self, tmp_path: Path
     ) -> None:
