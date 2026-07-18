@@ -216,8 +216,88 @@ id = "x"
 difficulty = "medium"
 session_type = "single"
 """)
-        with pytest.raises((KeyError, Exception)):
+        with pytest.raises(ValueError) as exc:
             parse_task(minimal)
+        assert "suite" in str(exc.value)
+        assert "missing_field.toml" in str(exc.value)
+
+    def _valid_task_header(self) -> str:
+        return """
+[task]
+id = "x"
+suite = "s"
+difficulty = "medium"
+session_type = "single"
+"""
+
+    def test_missing_checkpoint_field_raises_value_error(self, tmp_path):
+        # [[checkpoints]] entry missing 'weight' — was a bare KeyError.
+        bad = tmp_path / "bad_checkpoint.toml"
+        bad.write_text(self._valid_task_header() + """
+[[checkpoints]]
+name = "c1"
+verifier = "checks/c1.sh"
+""")
+        with pytest.raises(ValueError) as exc:
+            parse_task(bad)
+        assert "weight" in str(exc.value)
+        assert "bad_checkpoint.toml" in str(exc.value)
+
+    def test_missing_repo_field_raises_value_error(self, tmp_path):
+        # [[repos]] entry missing 'rev' — was a bare KeyError.
+        bad = tmp_path / "bad_repo.toml"
+        bad.write_text(self._valid_task_header() + """
+[[repos]]
+url = "http://x"
+path = "x"
+""")
+        with pytest.raises(ValueError) as exc:
+            parse_task(bad)
+        assert "rev" in str(exc.value)
+        assert "bad_repo.toml" in str(exc.value)
+
+    def test_missing_ground_truth_file_field_raises_value_error(self, tmp_path):
+        # ground_truth.required_files entry missing 'repo' — was a bare KeyError.
+        bad = tmp_path / "bad_gt.toml"
+        bad.write_text(self._valid_task_header() + """
+[ground_truth]
+[[ground_truth.required_files]]
+path = "a.py"
+""")
+        with pytest.raises(ValueError) as exc:
+            parse_task(bad)
+        assert "repo" in str(exc.value)
+        assert "bad_gt.toml" in str(exc.value)
+
+    def test_missing_tool_access_mirror_field_raises_value_error(self, tmp_path):
+        # tool_access.sourcegraph_mirrors entry missing 'mirror_id' — bare KeyError.
+        bad = tmp_path / "bad_ta.toml"
+        bad.write_text(self._valid_task_header() + """
+[tool_access]
+[[tool_access.sourcegraph_mirrors]]
+repo = "myrepo"
+""")
+        with pytest.raises(ValueError) as exc:
+            parse_task(bad)
+        assert "mirror_id" in str(exc.value)
+        assert "bad_ta.toml" in str(exc.value)
+
+    def test_repos_as_scalars_raises_value_error(self, tmp_path):
+        # `repos = ["a", "b"]` — subscripting a str would raise TypeError; the
+        # failure-class guard converts it to ValueError like every other shape.
+        bad = tmp_path / "scalar_repos.toml"
+        bad.write_text('repos = ["a", "b"]\n' + self._valid_task_header())
+        with pytest.raises(ValueError) as exc:
+            parse_task(bad)
+        assert "scalar_repos.toml" in str(exc.value)
+
+    def test_ground_truth_as_scalar_raises_value_error(self, tmp_path):
+        # `ground_truth = "x"` — calling .get on a str would raise AttributeError.
+        bad = tmp_path / "scalar_gt.toml"
+        bad.write_text('ground_truth = "x"\n' + self._valid_task_header())
+        with pytest.raises(ValueError) as exc:
+            parse_task(bad)
+        assert "scalar_gt.toml" in str(exc.value)
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +330,9 @@ class TestDataclassConstruction:
     def test_ground_truth_require_grounded_citations_parsed(self):
         from eb_verify.task_parser import _parse_ground_truth
 
-        gt = _parse_ground_truth({"require_grounded_citations": True})
+        gt = _parse_ground_truth(
+            {"require_grounded_citations": True}, path=Path("<test>")
+        )
         assert gt.require_grounded_citations is True
 
     def test_tool_access_defaults(self):

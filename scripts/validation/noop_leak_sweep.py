@@ -101,11 +101,12 @@ def _task_definition(task_dir: Path) -> TaskDefinition | None:
     task_toml = task_dir / "task.toml"
     try:
         return parse_task(task_toml)
-    except Exception as exc:
-        # parse_task raises whatever the failing operation raises — ValueError,
-        # KeyError, TypeError, AttributeError — so the catch stays by class rather
-        # than by enumeration (evening out that contract is EnterpriseBench-20nhr).
-        # Exception and never BaseException, so an operator's Ctrl-C stays uncaught.
+    except (OSError, ValueError) as exc:
+        # parse_task raises OSError when task.toml can't be read and ValueError for
+        # any malformed content — a missing [task]/[[repos]]/[[checkpoints]] field,
+        # a bad ground_truth/tool_access entry, or a TOML syntax error. That even
+        # contract (EnterpriseBench-20nhr) is what lets this catch stay narrow: an
+        # unexpected exception type now surfaces instead of being swallowed here.
         print(
             f"warning: {task_toml}: {exc!r}; falling back to filenames for "
             "checkpoint names and to no grounded-citations appendix",

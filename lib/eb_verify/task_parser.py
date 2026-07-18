@@ -129,24 +129,41 @@ class TaskDefinition:
 # --- Helper parsers ---
 
 
-def _parse_ground_truth_file(f: Dict[str, Any]) -> GroundTruthFile:
+def _require(entry: Dict[str, Any], key: str, *, path: Path, section: str) -> Any:
+    """Look up a required key, raising ValueError (not bare KeyError) if absent.
+
+    Every malformed-task.toml failure should reach a caller as a single
+    exception type naming the file and the missing key, so one honest
+    ``except (OSError, ValueError)`` clause covers the whole contract.
+    """
+    try:
+        return entry[key]
+    except KeyError:
+        raise ValueError(
+            f"{path}: {section} entry missing required field '{key}'"
+        ) from None
+
+
+def _parse_ground_truth_file(f: Dict[str, Any], *, path: Path) -> GroundTruthFile:
     return GroundTruthFile(
-        path=f["path"],
-        repo=f["repo"],
+        path=_require(f, "path", path=path, section="ground_truth file"),
+        repo=_require(f, "repo", path=path, section="ground_truth file"),
         line_range=f.get("line_range"),
         confidence=f.get("confidence"),
         source=f.get("source"),
     )
 
 
-def _parse_ground_truth(raw_gt: Dict[str, Any]) -> GroundTruth:
+def _parse_ground_truth(raw_gt: Dict[str, Any], *, path: Path) -> GroundTruth:
     return GroundTruth(
         tiers=raw_gt.get("tiers", []),
         required_files=[
-            _parse_ground_truth_file(f) for f in raw_gt.get("required_files", [])
+            _parse_ground_truth_file(f, path=path)
+            for f in raw_gt.get("required_files", [])
         ],
         sufficient_files=[
-            _parse_ground_truth_file(f) for f in raw_gt.get("sufficient_files", [])
+            _parse_ground_truth_file(f, path=path)
+            for f in raw_gt.get("sufficient_files", [])
         ],
         require_grounded_citations=bool(
             raw_gt.get("require_grounded_citations", False)
@@ -154,9 +171,12 @@ def _parse_ground_truth(raw_gt: Dict[str, Any]) -> GroundTruth:
     )
 
 
-def _parse_tool_access(raw_ta: Dict[str, Any]) -> ToolAccess:
+def _parse_tool_access(raw_ta: Dict[str, Any], *, path: Path) -> ToolAccess:
     mirrors = [
-        SourcegraphMirror(repo=m["repo"], mirror_id=m["mirror_id"])
+        SourcegraphMirror(
+            repo=_require(m, "repo", path=path, section="tool_access mirror"),
+            mirror_id=_require(m, "mirror_id", path=path, section="tool_access mirror"),
+        )
         for m in raw_ta.get("sourcegraph_mirrors", [])
     ]
     return ToolAccess(
@@ -205,26 +225,48 @@ def _parse_metadata(raw_meta: Dict[str, Any]) -> TaskMetadata:
 
 
 def parse_task(path: str | Path) -> TaskDefinition:
-    """Parse a task.toml file and return a TaskDefinition."""
+    """Parse a task.toml file and return a TaskDefinition.
+
+    Failure contract: a malformed task.toml surfaces as exactly two exception
+    types. ``OSError`` if the file can't be read; ``ValueError`` for any bad
+    *content* — TOML syntax errors (``tomllib.TOMLDecodeError`` is a
+    ``ValueError``), a missing required field (via ``_require``), or a
+    structurally wrong shape (a scalar where a table/array is expected, which
+    the raw parsers would otherwise raise as ``KeyError``/``TypeError``/
+    ``AttributeError``). Callers can therefore write one honest
+    ``except (OSError, ValueError)`` rather than enumerating shape-dependent
+    classes (EnterpriseBench-20nhr).
+    """
     path = Path(path)
     with open(path, "rb") as f:
         raw = tomllib.load(f)
 
+    try:
+        return _task_from_raw(raw, path=path)
+    except ValueError:
+        # Precise messages from _require (and any TOML-layer ValueError) pass
+        # through unchanged — re-wrapping would only bury the named field.
+        raise
+    except (KeyError, TypeError, AttributeError) as e:
+        raise ValueError(f"{path}: malformed task.toml: {e!r}") from e
+
+
+def _task_from_raw(raw: Dict[str, Any], *, path: Path) -> TaskDefinition:
     task_section = raw.get("task", {})
     repos = [
         RepoSpec(
-            url=r["url"],
-            rev=r["rev"],
-            path=r["path"],
+            url=_require(r, "url", path=path, section="[[repos]]"),
+            rev=_require(r, "rev", path=path, section="[[repos]]"),
+            path=_require(r, "path", path=path, section="[[repos]]"),
             role=r.get("role", "primary"),
         )
         for r in raw.get("repos", [])
     ]
     checkpoints = [
         Checkpoint(
-            name=c["name"],
-            weight=c["weight"],
-            verifier=c["verifier"],
+            name=_require(c, "name", path=path, section="[[checkpoints]]"),
+            weight=_require(c, "weight", path=path, section="[[checkpoints]]"),
+            verifier=_require(c, "verifier", path=path, section="[[checkpoints]]"),
             description=c.get("description", ""),
             timeout_seconds=c.get("timeout_seconds", 120),
         )
@@ -237,10 +279,12 @@ def parse_task(path: str | Path) -> TaskDefinition:
     )
 
     raw_gt = raw.get("ground_truth")
-    ground_truth = _parse_ground_truth(raw_gt) if raw_gt is not None else None
+    ground_truth = (
+        _parse_ground_truth(raw_gt, path=path) if raw_gt is not None else None
+    )
 
     raw_ta = raw.get("tool_access")
-    tool_access = _parse_tool_access(raw_ta) if raw_ta is not None else None
+    tool_access = _parse_tool_access(raw_ta, path=path) if raw_ta is not None else None
 
     raw_lin = raw.get("csb_lineage")
     csb_lineage = _parse_csb_lineage(raw_lin) if raw_lin is not None else None
@@ -258,13 +302,10 @@ def parse_task(path: str | Path) -> TaskDefinition:
     raw_meta = raw.get("metadata")
     metadata = _parse_metadata(raw_meta) if raw_meta is not None else None
 
-    try:
-        _id = task_section["id"]
-        _suite = task_section["suite"]
-        _difficulty = task_section["difficulty"]
-        _session_type = task_section["session_type"]
-    except KeyError as e:
-        raise ValueError(f"task.toml missing required field: {e}") from e
+    _id = _require(task_section, "id", path=path, section="[task]")
+    _suite = _require(task_section, "suite", path=path, section="[task]")
+    _difficulty = _require(task_section, "difficulty", path=path, section="[task]")
+    _session_type = _require(task_section, "session_type", path=path, section="[task]")
 
     return TaskDefinition(
         id=_id,
