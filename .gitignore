@@ -35,6 +35,11 @@ runs/official/_quarantine/
 results/runs/
 runs/
 
+# Chain-run artifacts written into the task source dir (chain_runner.py writes
+# both into benchmarks/<suite>/<task_id>/; keep them out of the tracked tree)
+benchmarks/**/results.json
+benchmarks/**/chain_result.json
+
 # Sandbox artifacts
 *.tar.gz
 *.docker
