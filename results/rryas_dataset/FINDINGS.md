@@ -84,3 +84,24 @@ type-balanced 30-40, pick one path (PL to confirm):
 
 Then run the empirical mini 3-arm pilot (accounts) on whatever survives, keeping
 only tasks with arm separation (cli sgx>0 / mcp_only mcp>0, baseline not winning).
+
+---
+
+## Addendum 2026-07-19 (rryas.8 focus): re-run on current main + hard-exclusion applied
+
+The gate results above are the 2026-07-15 snapshot (122 candidates). Re-running
+`curated_gate_analyzer.py` on main after the prompt-echo re-anchoring landed changes the
+picture materially: **83 CRNT candidates, gate3 = 70 pass / 0 fail / 13 inconclusive**
+(was 47 fail), `known_prompt_echo_leaks.json` is now empty, and **all_pass = 48**
+(dependency_graph 21/48 = 44%, no longer 72%).
+
+Applying the 2026-07-19 hard-exclusion directive (findings 639lv/mgodn/ozbjt/v9okc):
+union of finding-named real task-ids = 40, **intersection with the 48 all_pass = 0**; a
+per-vector class scan for the ozbjt freebie and v9okc patch-grep mechanisms across all 48
+finds **0 hits**. Eligible pool = 48; 35 excluded (25 JSON-class/639lv, 8 gate4-inconclusive,
+2 gate4-fail).
+
+Full methodology, limitations (md-report-only scope; closed-book residual deferred to the
+pilot; dep_graph skew handled by stratified analysis, not deletion), and the candidate
+manifest are in **`MANIFEST.md`**. The empirical 3-arm pilot + PL sign-off remain the
+lock gate; `candidate_manifest.json` is explicitly a candidate, not the final set.

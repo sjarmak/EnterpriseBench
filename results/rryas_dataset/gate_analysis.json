@@ -1,0 +1,2301 @@
+[
+  {
+    "task_id": "err-provenance-02",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": null,
+      "check_error_source.sh": 0.0,
+      "check_trigger_conditions.sh": null
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "err-provenance-dual-celery-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": null,
+      "check_error_source.sh": 0.0,
+      "check_trigger_conditions.sh": null
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "err-provenance-dual-docker-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": null,
+      "check_error_source.sh": 0.0,
+      "check_trigger_conditions.sh": null
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "err-provenance-dual-grafana-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": null,
+      "check_error_source.sh": 0.0,
+      "check_trigger_conditions.sh": null
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "err-provenance-dual-requests-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": null,
+      "check_error_source.sh": 0.0,
+      "check_trigger_conditions.sh": null
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "err-provenance-dual-terraform-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": null,
+      "check_error_source.sh": 0.0,
+      "check_trigger_conditions.sh": null
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "err-provenance-tri-httpx-proxy-001",
+    "suite": "customer_escalation",
+    "stratum": "tri_repo",
+    "task_type": "error_provenance",
+    "repos": 3,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": null,
+      "check_error_source.sh": null,
+      "check_trigger_conditions.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {
+      "check_error_chain.sh": 1.0,
+      "check_error_source.sh": null,
+      "check_trigger_conditions.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "err-provenance-tri-httpx-socks-001",
+    "suite": "customer_escalation",
+    "stratum": "tri_repo",
+    "task_type": "error_provenance",
+    "repos": 3,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_exception_translation.sh": null,
+      "check_origin_and_grammar.sh": null,
+      "check_socks_transport_path.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {
+      "check_exception_translation.sh": 1.0,
+      "check_origin_and_grammar.sh": 1.0,
+      "check_socks_transport_path.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "error-prov-dual-netty-spring-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_context_loss.sh": 0.0,
+      "check_netty_error_handling.sh": 0.0,
+      "check_spring_webflux_bridge.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_error_context_loss.sh": 1.0,
+      "check_netty_error_handling.sh": 1.0,
+      "check_spring_webflux_bridge.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "error-prov-dual-otel-jaeger-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_jaeger_exporter.sh": 0.0,
+      "check_otel_batch_processor.sh": 0.0,
+      "check_silent_drop.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_jaeger_exporter.sh": 1.0,
+      "check_otel_batch_processor.sh": 1.0,
+      "check_silent_drop.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "error-prov-dual-tokio-tower-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_context_loss.sh": 0.0,
+      "check_tokio_panic_handling.sh": 0.0,
+      "check_tower_error_chain.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_context_loss.sh": 1.0,
+      "check_tokio_panic_handling.sh": 1.0,
+      "check_tower_error_chain.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "error-prov-dual-urllib3-requests-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "error_provenance",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": 0.0,
+      "check_requests_wrapping.sh": 0.0,
+      "check_urllib3_exceptions.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_error_chain.sh": 1.0,
+      "check_requests_wrapping.sh": 1.0,
+      "check_urllib3_exceptions.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "support-mapping-004",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "support_code_mapping",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_code_paths.sh": null,
+      "check_ownership.sh": null,
+      "check_related_issues.sh": null,
+      "check_severity.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {
+      "check_code_paths.sh": 0.0,
+      "check_ownership.sh": 0.0,
+      "check_related_issues.sh": 0.0,
+      "check_severity.sh": 0.0
+    },
+    "gate4_pass": null,
+    "gate4_note": "json deliverable \u2014 needs structured materialization",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "support-mapping-dual-ansible-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "support_code_mapping",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": null,
+      "check_error_source.sh": 0.0,
+      "check_trigger_conditions.sh": null
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "support-mapping-dual-flask-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "support_code_mapping",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_code_paths.sh": null,
+      "check_ownership.sh": null,
+      "check_related_issues.sh": null,
+      "check_severity.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "support-mapping-dual-grafana-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "support_code_mapping",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_code_paths.sh": null,
+      "check_ownership.sh": null,
+      "check_related_issues.sh": null,
+      "check_severity.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "support-mapping-dual-httpx-httpcore-001",
+    "suite": "customer_escalation",
+    "stratum": "dual_repo",
+    "task_type": "support_code_mapping",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_error_chain.sh": null,
+      "check_error_source.sh": null,
+      "check_trigger_conditions.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {
+      "check_error_chain.sh": 0.2,
+      "check_error_source.sh": null,
+      "check_trigger_conditions.sh": 0.33
+    },
+    "gate4_pass": null,
+    "gate4_note": "json deliverable \u2014 needs structured materialization",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "api-contract-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "api_contract",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_classification.sh": 0.0,
+      "check_direct_consumers.sh": 0.0,
+      "check_source_identification.sh": 0.0,
+      "check_transitive_impact.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_classification.sh": 1.0,
+      "check_direct_consumers.sh": 1.0,
+      "check_source_identification.sh": 1.0,
+      "check_transitive_impact.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "api-contract-002",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "api_contract",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_classification.sh": 0.0,
+      "check_direct_consumers.sh": 0.0,
+      "check_source_identification.sh": 0.0,
+      "check_transitive_impact.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_classification.sh": 1.0,
+      "check_direct_consumers.sh": 1.0,
+      "check_source_identification.sh": 1.0,
+      "check_transitive_impact.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "api-contract-dual-envoy-istio-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "api_contract",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_envoy_xds_api.sh": 0.0,
+      "check_istio_xds_gen.sh": 0.0,
+      "check_v2_v3_drift.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_envoy_xds_api.sh": 1.0,
+      "check_istio_xds_gen.sh": 1.0,
+      "check_v2_v3_drift.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "api-contract-dual-fastapi-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "api_contract",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_consumer_usage.sh": null,
+      "check_contract_source.sh": null,
+      "check_drift_analysis.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {
+      "check_consumer_usage.sh": 1.0,
+      "check_contract_source.sh": 1.0,
+      "check_drift_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "api-contract-dual-hyper-reqwest-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "api_contract",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_identify_body_types.sh": 0.0,
+      "check_migration_analysis.sh": 0.0,
+      "check_trace_reqwest_usage.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_identify_body_types.sh": 1.0,
+      "check_migration_analysis.sh": 1.0,
+      "check_trace_reqwest_usage.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "api-contract-dual-jackson-spring-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "api_contract",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_behavior_drift.sh": 0.0,
+      "check_jackson_defaults.sh": 0.0,
+      "check_spring_autoconfig.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_behavior_drift.sh": 1.0,
+      "check_jackson_defaults.sh": 1.0,
+      "check_spring_autoconfig.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "api-contract-dual-sqlalchemy-alembic-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "api_contract",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_alembic_usage.sh": 0.0,
+      "check_contract_drift.sh": 0.0,
+      "check_sqla_api_changes.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_alembic_usage.sh": 1.0,
+      "check_contract_drift.sh": 1.0,
+      "check_sqla_api_changes.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "api-contract-tri-envoy-001",
+    "suite": "dependency_management",
+    "stratum": "tri_repo",
+    "task_type": "api_contract",
+    "repos": 3,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_contract_source.sh": null,
+      "check_direct_consumers.sh": null,
+      "check_transitive_impact.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {
+      "check_contract_source.sh": 1.0,
+      "check_direct_consumers.sh": 1.0,
+      "check_transitive_impact.sh": 0.8
+    },
+    "gate4_pass": null,
+    "gate4_note": "json deliverable \u2014 needs structured materialization",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "api-contract-tri-protobuf-001",
+    "suite": "dependency_management",
+    "stratum": "tri_repo",
+    "task_type": "api_contract",
+    "repos": 3,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_compliance.sh": null,
+      "check_contract_source.sh": null,
+      "check_direct_consumers.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {
+      "check_compliance.sh": 0.81,
+      "check_contract_source.sh": 1.0,
+      "check_direct_consumers.sh": 1.0
+    },
+    "gate4_pass": null,
+    "gate4_note": "json deliverable \u2014 needs structured materialization",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "dep-graph-dual-cryptography-paramiko-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "dependency_graph",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_crypto_api_changes.sh": 0.0,
+      "check_impact_scope.sh": 0.0,
+      "check_paramiko_crypto_usage.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_crypto_api_changes.sh": 1.0,
+      "check_impact_scope.sh": 1.0,
+      "check_paramiko_crypto_usage.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-graph-dual-junit-mockito-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "dependency_graph",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_junit5_extension.sh": 0.0,
+      "check_migration_doc.sh": 0.0,
+      "check_mockito_integration.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_junit5_extension.sh": 1.0,
+      "check_migration_doc.sh": 1.0,
+      "check_mockito_integration.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-graph-dual-spring-hibernate-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "dependency_graph",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_hibernate_changes.sh": 0.0,
+      "check_migration_path.sh": 0.0,
+      "check_spring_jpa_config.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_hibernate_changes.sh": 1.0,
+      "check_migration_path.sh": 1.0,
+      "check_spring_jpa_config.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-graph-dual-tokio-hyper-001",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "dependency_graph",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_document_impact.sh": 0.0,
+      "check_identify_runtime_deps.sh": 0.0,
+      "check_trace_server_chain.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_document_impact.sh": 1.0,
+      "check_identify_runtime_deps.sh": 1.0,
+      "check_trace_server_chain.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-graph-tri-boto3-urllib3-requests-001",
+    "suite": "dependency_management",
+    "stratum": "tri_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_dep_chain_map.sh": 0.0,
+      "check_upgrade_strategy.sh": 0.0,
+      "check_version_conflicts.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_dep_chain_map.sh": 1.0,
+      "check_upgrade_strategy.sh": 1.0,
+      "check_version_conflicts.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-graph-tri-prometheus-alertmanager-grafana-001",
+    "suite": "dependency_management",
+    "stratum": "tri_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_alertmanager_receiver.sh": 0.0,
+      "check_cascade_analysis.sh": 0.0,
+      "check_grafana_query.sh": 0.0,
+      "check_prometheus_alert_api.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_alertmanager_receiver.sh": 1.0,
+      "check_cascade_analysis.sh": 1.0,
+      "check_grafana_query.sh": 1.0,
+      "check_prometheus_alert_api.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+    "suite": "dependency_management",
+    "stratum": "tri_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_identify_transitive.sh": 0.0,
+      "check_map_dep_chain.sh": 0.0,
+      "check_upgrade_strategy.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_identify_transitive.sh": 1.0,
+      "check_map_dep_chain.sh": 1.0,
+      "check_upgrade_strategy.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-001",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-002",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-003",
+    "suite": "dependency_management",
+    "stratum": "dual_repo",
+    "task_type": "dependency_graph",
+    "repos": 2,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-004",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-005",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-006",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-007",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 2,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-008",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-009",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-010",
+    "suite": "dependency_management",
+    "stratum": "tri_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 0.67,
+      "check_transitive_paths.sh": 0.67,
+      "check_version_analysis.sh": 0.67
+    },
+    "gate4_pass": false,
+    "gate4_note": "expected_solution did not pass every check",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "dep-traversal-011",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-012",
+    "suite": "dependency_management",
+    "stratum": "multi_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "BLAST_RADIUS.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cve_id.sh": 0.0,
+      "check_direct_deps.sh": 0.0,
+      "check_transitive_paths.sh": 0.0,
+      "check_version_analysis.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_cve_id.sh": 1.0,
+      "check_direct_deps.sh": 1.0,
+      "check_transitive_paths.sh": 1.0,
+      "check_version_analysis.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-tri-boto3-001",
+    "suite": "dependency_management",
+    "stratum": "tri_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "DEPENDENCY_TRACE.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_api_surface.sh": 0.0,
+      "check_botocore.sh": 0.0,
+      "check_transfer_path.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_api_surface.sh": 1.0,
+      "check_botocore.sh": 1.0,
+      "check_transfer_path.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-tri-jackson-001",
+    "suite": "dependency_management",
+    "stratum": "tri_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "DEPENDENCY_TRACE.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_autoconfig.sh": 0.0,
+      "check_integration_path.sh": 0.0,
+      "check_packages.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_autoconfig.sh": 1.0,
+      "check_integration_path.sh": 1.0,
+      "check_packages.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "dep-traversal-tri-openssl-001",
+    "suite": "dependency_management",
+    "stratum": "tri_repo",
+    "task_type": "dependency_graph",
+    "repos": 3,
+    "deliverables": [
+      "DEPENDENCY_TRACE.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_curl_integration.sh": 0.0,
+      "check_openssl_verify.sh": 0.0,
+      "check_tls_entry.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_curl_integration.sh": 1.0,
+      "check_openssl_verify.sh": 1.0,
+      "check_tls_entry.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "schema-evolution-dual-django-001",
+    "suite": "feature_delivery",
+    "stratum": "dual_repo",
+    "task_type": "db_schema_evolution",
+    "repos": 2,
+    "deliverables": [
+      "zulip/SCHEMA_IMPACT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_direct_refs.sh": 0.0,
+      "check_indirect_refs.sh": 0.0,
+      "check_schema_change.sh": 0.0,
+      "check_test_impact.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "schema-evolution-dual-sentry-001",
+    "suite": "feature_delivery",
+    "stratum": "dual_repo",
+    "task_type": "db_schema_evolution",
+    "repos": 2,
+    "deliverables": [
+      "zulip/SCHEMA_IMPACT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_direct_refs.sh": 0.0,
+      "check_indirect_refs.sh": 0.0,
+      "check_schema_change.sh": 0.0,
+      "check_test_impact.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "schema-evolution-tri-supabase-001",
+    "suite": "feature_delivery",
+    "stratum": "tri_repo",
+    "task_type": "db_schema_evolution",
+    "repos": 3,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_direct_refs.sh": null,
+      "check_indirect_refs.sh": null,
+      "check_schema_change.sh": null,
+      "check_test_impact.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "incident-investigation-004",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "moby/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_services.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_services.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-cockroach-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "cockroach/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-cortex-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "cortex/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-flux-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "flux2/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-istio-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "istio/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-kafka-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "kafka/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-loki-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "loki/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-nats-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "nats-server/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-nerdctl-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "nerdctl/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-nomad-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "nomad/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-prometheus-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "alertmanager/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-tempo-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "tempo/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-tikv-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "tikv/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-dual-vault-001",
+    "suite": "incident_response",
+    "stratum": "dual_repo",
+    "task_type": "incident_investigation",
+    "repos": 2,
+    "deliverables": [
+      "vault/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-quad-containerd-001",
+    "suite": "incident_response",
+    "stratum": "multi_repo",
+    "task_type": "incident_investigation",
+    "repos": 4,
+    "deliverables": [
+      "moby/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 5,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_containerd_seccomp.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_kubelet_seccomp.sh": 0.0,
+      "check_moby_seccomp.sh": 0.0,
+      "check_runc_seccomp.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_containerd_seccomp.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_kubelet_seccomp.sh": 1.0,
+      "check_moby_seccomp.sh": 1.0,
+      "check_runc_seccomp.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "incident-investigation-tri-containerd-001",
+    "suite": "incident_response",
+    "stratum": "tri_repo",
+    "task_type": "incident_investigation",
+    "repos": 3,
+    "deliverables": [
+      "moby/INCIDENT_REPORT.md"
+    ],
+    "n_checks": 4,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_affected_components.sh": 0.0,
+      "check_error_chain.sh": 0.0,
+      "check_remediation.sh": 0.0,
+      "check_root_cause.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_affected_components.sh": 1.0,
+      "check_error_chain.sh": 1.0,
+      "check_remediation.sh": 1.0,
+      "check_root_cause.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "config-drift-004",
+    "suite": "platform_engineering",
+    "stratum": "dual_repo",
+    "task_type": "config_drift",
+    "repos": 2,
+    "deliverables": [
+      "argo-cd/DRIFT_REPORT.json"
+    ],
+    "n_checks": 2,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_drift_points.sh": 0.0,
+      "check_expected_values.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_drift_points.sh": 0.0,
+      "check_expected_values.sh": 0.0
+    },
+    "gate4_pass": null,
+    "gate4_note": "json deliverable \u2014 needs structured materialization",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "config-drift-dual-argocd-001",
+    "suite": "platform_engineering",
+    "stratum": "dual_repo",
+    "task_type": "config_drift",
+    "repos": 2,
+    "deliverables": [
+      "DRIFT_REPORT.json",
+      "charts/DRIFT_REPORT.json"
+    ],
+    "n_checks": 2,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_drift_points.sh": 0.0,
+      "check_expected_values.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_drift_points.sh": 0.0,
+      "check_expected_values.sh": 0.0
+    },
+    "gate4_pass": null,
+    "gate4_note": "json deliverable \u2014 needs structured materialization",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "config-drift-dual-prometheus-001",
+    "suite": "platform_engineering",
+    "stratum": "dual_repo",
+    "task_type": "config_drift",
+    "repos": 2,
+    "deliverables": [
+      "DRIFT_REPORT.json",
+      "charts/DRIFT_REPORT.json"
+    ],
+    "n_checks": 2,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_drift_points.sh": 0.0,
+      "check_expected_values.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_drift_points.sh": 0.0,
+      "check_expected_values.sh": 1.0
+    },
+    "gate4_pass": null,
+    "gate4_note": "json deliverable \u2014 needs structured materialization",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "config-drift-dual-setuptools-pip-001",
+    "suite": "platform_engineering",
+    "stratum": "dual_repo",
+    "task_type": "config_drift",
+    "repos": 2,
+    "deliverables": [
+      "analysis/IMPACT_REPORT.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_drift_analysis.sh": 0.0,
+      "check_pip_vendored_usage.sh": 0.0,
+      "check_setuptools_deprecation.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_drift_analysis.sh": 1.0,
+      "check_pip_vendored_usage.sh": 1.0,
+      "check_setuptools_deprecation.sh": 1.0
+    },
+    "gate4_pass": true,
+    "gate4_note": "",
+    "notes": [],
+    "all_pass": true
+  },
+  {
+    "task_id": "config-drift-dual-terraform-001",
+    "suite": "platform_engineering",
+    "stratum": "dual_repo",
+    "task_type": "config_drift",
+    "repos": 2,
+    "deliverables": [
+      "DRIFT_REPORT.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_config_valid.sh": 0.0,
+      "check_drift_points.sh": null,
+      "check_expected_values.sh": null
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "config-drift-tri-kustomize-001",
+    "suite": "platform_engineering",
+    "stratum": "tri_repo",
+    "task_type": "config_drift",
+    "repos": 3,
+    "deliverables": [
+      "DRIFT_REPORT.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_config_valid.sh": 0.0,
+      "check_cross_repo_impact.sh": null,
+      "check_drift_points.sh": null
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "dead-code-dual-angular-001",
+    "suite": "technical_debt",
+    "stratum": "dual_repo",
+    "task_type": "dead_code_necropsy",
+    "repos": 2,
+    "deliverables": [
+      "agent_output/answer.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_cross_repo_usage.sh": null,
+      "check_dead_code.sh": null,
+      "check_removal_impact.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "dead-code-dual-k8s-001",
+    "suite": "technical_debt",
+    "stratum": "dual_repo",
+    "task_type": "dead_code_necropsy",
+    "repos": 2,
+    "deliverables": [
+      "react/dead_code_report.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_dead_code.sh": null,
+      "check_evidence.sh": null,
+      "check_feature_flags.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "dead-code-dual-react-001",
+    "suite": "technical_debt",
+    "stratum": "dual_repo",
+    "task_type": "dead_code_necropsy",
+    "repos": 2,
+    "deliverables": [
+      "react/dead_code_report.json"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_dead_code.sh": null,
+      "check_evidence.sh": null,
+      "check_feature_flags.sh": null
+    },
+    "gate3_pass": null,
+    "gate3_note": "structured deliverable \u2014 md-grep echo vector N/A",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "refactor-orchestration-001",
+    "suite": "technical_debt",
+    "stratum": "dual_repo",
+    "task_type": "refactor_orchestration",
+    "repos": 2,
+    "deliverables": [
+      "REFACTOR_PLAN.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_parallelism.sh": 0.0,
+      "check_repo_set.sh": 0.0,
+      "check_topo_order.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "refactor-orchestration-002",
+    "suite": "technical_debt",
+    "stratum": "dual_repo",
+    "task_type": "refactor_orchestration",
+    "repos": 2,
+    "deliverables": [
+      "REFACTOR_PLAN.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_parallelism.sh": 0.0,
+      "check_repo_set.sh": 0.0,
+      "check_topo_order.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "refactor-orchestration-003",
+    "suite": "technical_debt",
+    "stratum": "tri_repo",
+    "task_type": "refactor_orchestration",
+    "repos": 3,
+    "deliverables": [
+      "REFACTOR_PLAN.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_parallelism.sh": 0.0,
+      "check_repo_set.sh": 0.0,
+      "check_topo_order.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "refactor-orchestration-004",
+    "suite": "technical_debt",
+    "stratum": "tri_repo",
+    "task_type": "refactor_orchestration",
+    "repos": 3,
+    "deliverables": [
+      "REFACTOR_PLAN.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_parallelism.sh": 0.0,
+      "check_repo_set.sh": 0.0,
+      "check_topo_order.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "refactor-orchestration-tri-babel-001",
+    "suite": "technical_debt",
+    "stratum": "tri_repo",
+    "task_type": "refactor_orchestration",
+    "repos": 3,
+    "deliverables": [
+      "REFACTOR_PLAN.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_parallelism.sh": 0.0,
+      "check_repo_set.sh": 0.0,
+      "check_topo_order.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {
+      "check_parallelism.sh": 0.0,
+      "check_repo_set.sh": 0.0,
+      "check_topo_order.sh": 0.0
+    },
+    "gate4_pass": false,
+    "gate4_note": "expected_solution did not pass every check",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "refactor-orchestration-tri-spring-001",
+    "suite": "technical_debt",
+    "stratum": "tri_repo",
+    "task_type": "refactor_orchestration",
+    "repos": 3,
+    "deliverables": [
+      "REFACTOR_PLAN.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_parallelism.sh": 0.0,
+      "check_repo_set.sh": 0.0,
+      "check_topo_order.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  },
+  {
+    "task_id": "refactor-orchestration-tri-tokio-001",
+    "suite": "technical_debt",
+    "stratum": "tri_repo",
+    "task_type": "refactor_orchestration",
+    "repos": 3,
+    "deliverables": [
+      "REFACTOR_PLAN.md"
+    ],
+    "n_checks": 3,
+    "gate2_suspects": [],
+    "gate3_echo_scores": {
+      "check_parallelism.sh": 0.0,
+      "check_repo_set.sh": 0.0,
+      "check_topo_order.sh": 0.0
+    },
+    "gate3_pass": true,
+    "gate3_note": "",
+    "gate4_exp_scores": {},
+    "gate4_pass": null,
+    "gate4_note": "no expected_solution.json",
+    "notes": [],
+    "all_pass": false
+  }
+]

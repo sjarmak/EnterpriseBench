@@ -1,0 +1,497 @@
+{
+  "count": 35,
+  "finding_named_snapshot": {
+    "EnterpriseBench-639lv": [
+      "ccx-dep-trace-106",
+      "config-drift-dual-terraform-001",
+      "dead-code-001",
+      "err-provenance-01",
+      "support-mapping-001"
+    ],
+    "EnterpriseBench-mgodn": [
+      "api-contract-dual-fastapi-001",
+      "api-contract-tri-envoy-001",
+      "api-contract-tri-protobuf-001",
+      "calibration-001",
+      "calibration-002",
+      "calibration-003",
+      "calibration-004",
+      "calibration-005",
+      "calibration-006",
+      "calibration-007",
+      "calibration-008",
+      "ccx-incident-032",
+      "config-drift-dual-terraform-001",
+      "config-drift-tri-kustomize-001",
+      "dead-code-001",
+      "dead-code-002",
+      "dead-code-003",
+      "dead-code-dual-angular-001",
+      "dead-code-dual-k8s-001",
+      "dead-code-dual-react-001",
+      "err-provenance-01",
+      "err-provenance-02",
+      "err-provenance-03",
+      "err-provenance-dual-celery-001",
+      "err-provenance-dual-docker-001",
+      "err-provenance-dual-grafana-001",
+      "err-provenance-dual-requests-001",
+      "err-provenance-dual-terraform-001",
+      "err-provenance-tri-httpx-proxy-001",
+      "err-provenance-tri-httpx-socks-001",
+      "schema-evolution-tri-supabase-001",
+      "support-mapping-001",
+      "support-mapping-002",
+      "support-mapping-003",
+      "support-mapping-004",
+      "support-mapping-dual-ansible-001",
+      "support-mapping-dual-flask-001",
+      "support-mapping-dual-grafana-001",
+      "support-mapping-dual-httpx-httpcore-001"
+    ],
+    "EnterpriseBench-ozbjt": [
+      "api-contract-tri-envoy-001",
+      "api-contract-tri-protobuf-001",
+      "calibration-001",
+      "calibration-002",
+      "calibration-006",
+      "calibration-007",
+      "ccx-incident-032",
+      "dead-code-001",
+      "dead-code-dual-k8s-001",
+      "dead-code-dual-react-001",
+      "err-provenance-01",
+      "err-provenance-02",
+      "err-provenance-dual-docker-001",
+      "err-provenance-dual-grafana-001",
+      "err-provenance-dual-requests-001",
+      "err-provenance-tri-httpx-socks-001",
+      "schema-evolution-tri-supabase-001"
+    ],
+    "EnterpriseBench-v9okc": []
+  },
+  "tasks": [
+    {
+      "task_id": "api-contract-dual-fastapi-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "api_contract",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "api-contract-tri-envoy-001",
+      "suite": "dependency_management",
+      "stratum": "tri_repo",
+      "task_type": "api_contract",
+      "repos": 3,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "api-contract-tri-protobuf-001",
+      "suite": "dependency_management",
+      "stratum": "tri_repo",
+      "task_type": "api_contract",
+      "repos": 3,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "config-drift-004",
+      "suite": "platform_engineering",
+      "stratum": "dual_repo",
+      "task_type": "config_drift",
+      "repos": 2,
+      "deliverables": [
+        "argo-cd/DRIFT_REPORT.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "config-drift-dual-argocd-001",
+      "suite": "platform_engineering",
+      "stratum": "dual_repo",
+      "task_type": "config_drift",
+      "repos": 2,
+      "deliverables": [
+        "DRIFT_REPORT.json",
+        "charts/DRIFT_REPORT.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "config-drift-dual-prometheus-001",
+      "suite": "platform_engineering",
+      "stratum": "dual_repo",
+      "task_type": "config_drift",
+      "repos": 2,
+      "deliverables": [
+        "DRIFT_REPORT.json",
+        "charts/DRIFT_REPORT.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "config-drift-dual-terraform-001",
+      "suite": "platform_engineering",
+      "stratum": "dual_repo",
+      "task_type": "config_drift",
+      "repos": 2,
+      "deliverables": [
+        "DRIFT_REPORT.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "config-drift-tri-kustomize-001",
+      "suite": "platform_engineering",
+      "stratum": "tri_repo",
+      "task_type": "config_drift",
+      "repos": 3,
+      "deliverables": [
+        "DRIFT_REPORT.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "dead-code-dual-angular-001",
+      "suite": "technical_debt",
+      "stratum": "dual_repo",
+      "task_type": "dead_code_necropsy",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "dead-code-dual-k8s-001",
+      "suite": "technical_debt",
+      "stratum": "dual_repo",
+      "task_type": "dead_code_necropsy",
+      "repos": 2,
+      "deliverables": [
+        "react/dead_code_report.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "dead-code-dual-react-001",
+      "suite": "technical_debt",
+      "stratum": "dual_repo",
+      "task_type": "dead_code_necropsy",
+      "repos": 2,
+      "deliverables": [
+        "react/dead_code_report.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "err-provenance-02",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "err-provenance-dual-celery-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "err-provenance-dual-docker-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "err-provenance-dual-grafana-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "err-provenance-dual-requests-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "err-provenance-dual-terraform-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "err-provenance-tri-httpx-proxy-001",
+      "suite": "customer_escalation",
+      "stratum": "tri_repo",
+      "task_type": "error_provenance",
+      "repos": 3,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "err-provenance-tri-httpx-socks-001",
+      "suite": "customer_escalation",
+      "stratum": "tri_repo",
+      "task_type": "error_provenance",
+      "repos": 3,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "schema-evolution-tri-supabase-001",
+      "suite": "feature_delivery",
+      "stratum": "tri_repo",
+      "task_type": "db_schema_evolution",
+      "repos": 3,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "support-mapping-004",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "support_code_mapping",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "support-mapping-dual-ansible-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "support_code_mapping",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "support-mapping-dual-flask-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "support_code_mapping",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "support-mapping-dual-grafana-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "support_code_mapping",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "support-mapping-dual-httpx-httpcore-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "support_code_mapping",
+      "repos": 2,
+      "deliverables": [
+        "agent_output/answer.json"
+      ],
+      "excluded": true,
+      "reason": "639lv-class: JSON deliverable, no JSON-shaped echo vector \u2014 certified-clean-without-exercise"
+    },
+    {
+      "task_id": "refactor-orchestration-001",
+      "suite": "technical_debt",
+      "stratum": "dual_repo",
+      "task_type": "refactor_orchestration",
+      "repos": 2,
+      "deliverables": [
+        "REFACTOR_PLAN.md"
+      ],
+      "excluded": true,
+      "reason": "gate4-inconclusive: no expected_solution.json"
+    },
+    {
+      "task_id": "refactor-orchestration-002",
+      "suite": "technical_debt",
+      "stratum": "dual_repo",
+      "task_type": "refactor_orchestration",
+      "repos": 2,
+      "deliverables": [
+        "REFACTOR_PLAN.md"
+      ],
+      "excluded": true,
+      "reason": "gate4-inconclusive: no expected_solution.json"
+    },
+    {
+      "task_id": "refactor-orchestration-003",
+      "suite": "technical_debt",
+      "stratum": "tri_repo",
+      "task_type": "refactor_orchestration",
+      "repos": 3,
+      "deliverables": [
+        "REFACTOR_PLAN.md"
+      ],
+      "excluded": true,
+      "reason": "gate4-inconclusive: no expected_solution.json"
+    },
+    {
+      "task_id": "refactor-orchestration-004",
+      "suite": "technical_debt",
+      "stratum": "tri_repo",
+      "task_type": "refactor_orchestration",
+      "repos": 3,
+      "deliverables": [
+        "REFACTOR_PLAN.md"
+      ],
+      "excluded": true,
+      "reason": "gate4-inconclusive: no expected_solution.json"
+    },
+    {
+      "task_id": "refactor-orchestration-tri-spring-001",
+      "suite": "technical_debt",
+      "stratum": "tri_repo",
+      "task_type": "refactor_orchestration",
+      "repos": 3,
+      "deliverables": [
+        "REFACTOR_PLAN.md"
+      ],
+      "excluded": true,
+      "reason": "gate4-inconclusive: no expected_solution.json"
+    },
+    {
+      "task_id": "refactor-orchestration-tri-tokio-001",
+      "suite": "technical_debt",
+      "stratum": "tri_repo",
+      "task_type": "refactor_orchestration",
+      "repos": 3,
+      "deliverables": [
+        "REFACTOR_PLAN.md"
+      ],
+      "excluded": true,
+      "reason": "gate4-inconclusive: no expected_solution.json"
+    },
+    {
+      "task_id": "schema-evolution-dual-django-001",
+      "suite": "feature_delivery",
+      "stratum": "dual_repo",
+      "task_type": "db_schema_evolution",
+      "repos": 2,
+      "deliverables": [
+        "zulip/SCHEMA_IMPACT.md"
+      ],
+      "excluded": true,
+      "reason": "gate4-inconclusive: no expected_solution.json"
+    },
+    {
+      "task_id": "schema-evolution-dual-sentry-001",
+      "suite": "feature_delivery",
+      "stratum": "dual_repo",
+      "task_type": "db_schema_evolution",
+      "repos": 2,
+      "deliverables": [
+        "zulip/SCHEMA_IMPACT.md"
+      ],
+      "excluded": true,
+      "reason": "gate4-inconclusive: no expected_solution.json"
+    },
+    {
+      "task_id": "dep-traversal-010",
+      "suite": "dependency_management",
+      "stratum": "tri_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ],
+      "excluded": true,
+      "reason": "gate4: expected_solution does not pass its own checks"
+    },
+    {
+      "task_id": "refactor-orchestration-tri-babel-001",
+      "suite": "technical_debt",
+      "stratum": "tri_repo",
+      "task_type": "refactor_orchestration",
+      "repos": 3,
+      "deliverables": [
+        "REFACTOR_PLAN.md"
+      ],
+      "excluded": true,
+      "reason": "gate4: expected_solution does not pass its own checks"
+    }
+  ]
+}

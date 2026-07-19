@@ -1,0 +1,497 @@
+{
+  "count": 48,
+  "by_type": {
+    "dependency_graph": 21,
+    "incident_investigation": 16,
+    "api_contract": 6,
+    "error_provenance": 4,
+    "config_drift": 1
+  },
+  "by_stratum": {
+    "dual_repo": 30,
+    "multi_repo": 11,
+    "tri_repo": 7
+  },
+  "tasks": [
+    {
+      "task_id": "api-contract-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "api_contract",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "api-contract-002",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "api_contract",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "api-contract-dual-envoy-istio-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "api_contract",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "api-contract-dual-hyper-reqwest-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "api_contract",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "api-contract-dual-jackson-spring-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "api_contract",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "api-contract-dual-sqlalchemy-alembic-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "api_contract",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "config-drift-dual-setuptools-pip-001",
+      "suite": "platform_engineering",
+      "stratum": "dual_repo",
+      "task_type": "config_drift",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "dep-graph-dual-cryptography-paramiko-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "dependency_graph",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "dep-graph-dual-junit-mockito-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "dependency_graph",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "dep-graph-dual-spring-hibernate-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "dependency_graph",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "dep-graph-dual-tokio-hyper-001",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "dependency_graph",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "dep-graph-tri-boto3-urllib3-requests-001",
+      "suite": "dependency_management",
+      "stratum": "tri_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "dep-graph-tri-prometheus-alertmanager-grafana-001",
+      "suite": "dependency_management",
+      "stratum": "tri_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+      "suite": "dependency_management",
+      "stratum": "tri_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-001",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-002",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-003",
+      "suite": "dependency_management",
+      "stratum": "dual_repo",
+      "task_type": "dependency_graph",
+      "repos": 2,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-004",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-005",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-006",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-007",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 2,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-008",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-009",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-011",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-012",
+      "suite": "dependency_management",
+      "stratum": "multi_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "BLAST_RADIUS.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-tri-boto3-001",
+      "suite": "dependency_management",
+      "stratum": "tri_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "DEPENDENCY_TRACE.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-tri-jackson-001",
+      "suite": "dependency_management",
+      "stratum": "tri_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "DEPENDENCY_TRACE.md"
+      ]
+    },
+    {
+      "task_id": "dep-traversal-tri-openssl-001",
+      "suite": "dependency_management",
+      "stratum": "tri_repo",
+      "task_type": "dependency_graph",
+      "repos": 3,
+      "deliverables": [
+        "DEPENDENCY_TRACE.md"
+      ]
+    },
+    {
+      "task_id": "error-prov-dual-netty-spring-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "error-prov-dual-otel-jaeger-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "error-prov-dual-tokio-tower-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "error-prov-dual-urllib3-requests-001",
+      "suite": "customer_escalation",
+      "stratum": "dual_repo",
+      "task_type": "error_provenance",
+      "repos": 2,
+      "deliverables": [
+        "analysis/IMPACT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-004",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "moby/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-cockroach-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "cockroach/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-cortex-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "cortex/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-flux-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "flux2/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-istio-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "istio/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-kafka-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "kafka/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-loki-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "loki/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-nats-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "nats-server/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-nerdctl-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "nerdctl/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-nomad-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "nomad/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-prometheus-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "alertmanager/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-tempo-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "tempo/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-tikv-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "tikv/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-dual-vault-001",
+      "suite": "incident_response",
+      "stratum": "dual_repo",
+      "task_type": "incident_investigation",
+      "repos": 2,
+      "deliverables": [
+        "vault/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-quad-containerd-001",
+      "suite": "incident_response",
+      "stratum": "multi_repo",
+      "task_type": "incident_investigation",
+      "repos": 4,
+      "deliverables": [
+        "moby/INCIDENT_REPORT.md"
+      ]
+    },
+    {
+      "task_id": "incident-investigation-tri-containerd-001",
+      "suite": "incident_response",
+      "stratum": "tri_repo",
+      "task_type": "incident_investigation",
+      "repos": 3,
+      "deliverables": [
+        "moby/INCIDENT_REPORT.md"
+      ]
+    }
+  ]
+}
