@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -12,9 +13,11 @@ import pytest
 # Make scripts importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+from analyze_scores import load_all_results
 from cost_tracker import (
     DEFAULT_MODEL,
     PRICING,
+    SCHEMA_VERSION,
     ModelUsage,
     TaskCost,
     Usage,
@@ -24,7 +27,9 @@ from cost_tracker import (
     merge_model_usage,
     parse_model_usage,
     parse_trace,
+    require_schema,
     scan_results_dirs,
+    select_attempt,
     _parse_dir_identity,
 )
 
@@ -632,6 +637,9 @@ def _make_cost(
     model: str = "claude-sonnet-4-6",
     cost_source: str = "sdk",
     trace_cost_usd: float | None = None,
+    run_dir: str | None = None,
+    normalized_score: float | None = 1.0,
+    trace_timestamp: str = "",
 ) -> TaskCost:
     """Build a TaskCost record for aggregate_report tests.
 
@@ -639,6 +647,11 @@ def _make_cost(
     the record derives cost, source and model list from that single fact, so a
     record that claims one tier while carrying the other's numbers cannot be
     built here either.
+
+    ``run_dir`` defaults to a value unique per (task_id, mode), so a test that
+    does not care about re-runs gets one attempt per cell rather than an
+    accidental duplicate. ``normalized_score`` defaults to a scored (valid)
+    attempt; pass None for one the scoring layer never produced a score for.
     """
     vendor = (
         VendorUsage(
@@ -664,6 +677,9 @@ def _make_cost(
         trace_cost_usd=cost_usd if trace_cost_usd is None else trace_cost_usd,
         vendor=vendor,
         agent_duration_seconds=60.0,
+        run_dir=run_dir if run_dir is not None else f"results/{task_id}_{mode}",
+        normalized_score=normalized_score,
+        trace_timestamp=trace_timestamp,
     )
 
 
@@ -672,12 +688,11 @@ class TestAggregateReport:
         costs = [_make_cost()]
         report = aggregate_report(costs)
         assert "generated_at" in report
-        assert report["total_tasks"] == 1
-        assert report["total_cost_usd"] == 0.01
-        assert "by_mode" in report
-        assert "by_suite" in report
-        assert "by_difficulty" in report
-        assert len(report["per_task"]) == 1
+        op = report["operational_economics"]
+        assert op["attempts"] == 1
+        assert op["total_cost_usd"] == 0.01
+        assert {"by_mode", "by_suite", "by_difficulty"} <= op.keys()
+        assert len(report["per_attempt"]) == 1
 
     def test_mode_breakdown(self) -> None:
         costs = [
@@ -685,11 +700,11 @@ class TestAggregateReport:
             _make_cost(task_id="t2", mode="hybrid", cost_usd=2.0),
             _make_cost(task_id="t3", mode="mcp_only", cost_usd=0.5),
         ]
-        report = aggregate_report(costs)
-        assert report["by_mode"]["hybrid"]["count"] == 2
-        assert report["by_mode"]["hybrid"]["total_cost"] == 3.0
-        assert report["by_mode"]["hybrid"]["avg_cost"] == 1.5
-        assert report["by_mode"]["mcp_only"]["count"] == 1
+        by_mode = aggregate_report(costs)["operational_economics"]["by_mode"]
+        assert by_mode["hybrid"]["attempts"] == 2
+        assert by_mode["hybrid"]["total_cost_usd"] == 3.0
+        assert by_mode["hybrid"]["avg_cost_per_attempt"] == 1.5
+        assert by_mode["mcp_only"]["attempts"] == 1
 
     def test_suite_breakdown(self) -> None:
         costs = [
@@ -697,38 +712,40 @@ class TestAggregateReport:
             _make_cost(task_id="t2", suite="incident_response"),
             _make_cost(task_id="t3", suite="feature_delivery"),
         ]
-        report = aggregate_report(costs)
-        assert report["by_suite"]["incident_response"]["count"] == 2
-        assert report["by_suite"]["feature_delivery"]["count"] == 1
+        by_suite = aggregate_report(costs)["operational_economics"]["by_suite"]
+        assert by_suite["incident_response"]["attempts"] == 2
+        assert by_suite["feature_delivery"]["attempts"] == 1
 
     def test_difficulty_breakdown(self) -> None:
         costs = [
             _make_cost(task_id="t1", difficulty="easy"),
             _make_cost(task_id="t2", difficulty="hard"),
         ]
-        report = aggregate_report(costs)
-        assert "easy" in report["by_difficulty"]
-        assert "hard" in report["by_difficulty"]
+        by_difficulty = aggregate_report(costs)["operational_economics"][
+            "by_difficulty"
+        ]
+        assert {"easy", "hard"} <= by_difficulty.keys()
 
     def test_empty_costs(self) -> None:
         report = aggregate_report([])
-        assert report["total_tasks"] == 0
-        assert report["total_cost_usd"] == 0.0
-        assert report["per_task"] == []
+        assert report["operational_economics"]["attempts"] == 0
+        assert report["operational_economics"]["total_cost_usd"] == 0.0
+        assert report["comparison_economics"]["tasks"] == 0
+        assert report["comparison_economics"]["total_cost_usd"] == 0.0
+        assert report["per_attempt"] == []
 
-    def test_per_task_sorted_by_id(self) -> None:
+    def test_per_attempt_sorted_by_id(self) -> None:
         costs = [
             _make_cost(task_id="z-task"),
             _make_cost(task_id="a-task"),
         ]
         report = aggregate_report(costs)
-        assert report["per_task"][0]["task_id"] == "a-task"
-        assert report["per_task"][1]["task_id"] == "z-task"
+        assert report["per_attempt"][0]["task_id"] == "a-task"
+        assert report["per_attempt"][1]["task_id"] == "z-task"
 
-    def test_per_task_fields(self) -> None:
+    def test_per_attempt_fields(self) -> None:
         costs = [_make_cost(input_tokens=999, output_tokens=111)]
-        report = aggregate_report(costs)
-        entry = report["per_task"][0]
+        entry = aggregate_report(costs)["per_attempt"][0]
         assert entry["input_tokens"] == 999
         assert entry["output_tokens"] == 111
         assert entry["model"] == "claude-sonnet-4-6"
@@ -753,7 +770,7 @@ class TestUnpricedModelDisclosure:
 
     def test_all_priced_reports_no_unpriced_models(self) -> None:
         report = aggregate_report([_make_cost(task_id="t1", cost_source="trace")])
-        assert report["unpriced_models"] == []
+        assert report["operational_economics"]["unpriced_models"] == []
 
     def test_unpriced_model_is_surfaced_when_trace_derived(self) -> None:
         report = aggregate_report(
@@ -766,7 +783,7 @@ class TestUnpricedModelDisclosure:
                 ),
             ]
         )
-        assert report["unpriced_models"] == ["claude-unknown-99"]
+        assert report["operational_economics"]["unpriced_models"] == ["claude-unknown-99"]
 
     def test_unpriced_models_deduped_and_sorted(self) -> None:
         report = aggregate_report(
@@ -782,7 +799,7 @@ class TestUnpricedModelDisclosure:
                 ),
             ]
         )
-        assert report["unpriced_models"] == ["claude-unknown-42", "claude-unknown-99"]
+        assert report["operational_economics"]["unpriced_models"] == ["claude-unknown-42", "claude-unknown-99"]
 
     def test_vendor_priced_model_is_not_flagged_unpriced(self) -> None:
         """A vendor-priced run is billed from costUSD — PRICING never touches it,
@@ -793,7 +810,7 @@ class TestUnpricedModelDisclosure:
                 _make_cost(task_id="t2", model="claude-unknown-42", cost_source="sdk"),
             ]
         )
-        assert report["unpriced_models"] == []
+        assert report["operational_economics"]["unpriced_models"] == []
 
     def test_now_priced_models_not_flagged_when_trace_derived(self) -> None:
         """fable-5 and opus-4-8 are in PRICING now, so a tier-2 run of either is
@@ -804,7 +821,7 @@ class TestUnpricedModelDisclosure:
                 _make_cost(task_id="t2", model="claude-opus-4-8", cost_source="trace"),
             ]
         )
-        assert report["unpriced_models"] == []
+        assert report["operational_economics"]["unpriced_models"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -1036,24 +1053,48 @@ class TestReconciliationDisclosure:
                 _make_cost(task_id="t3", cost_source="trace"),
             ]
         )
-        assert report["cost_sources"]["sdk"] == 2
-        assert report["cost_sources"]["trace"] == 1
+        assert report["operational_economics"]["cost_sources"]["sdk"] == 2
+        assert report["operational_economics"]["cost_sources"]["trace"] == 1
 
-    def test_trace_derived_runs_are_named(self) -> None:
+    def test_trace_derived_attempts_are_named_by_run_dir(self) -> None:
+        """The key is the attempt, not the cell.
+
+        One attempt of a re-run cell can be trace-derived while another is
+        vendor-priced; a cell-level key would pin the caveat on both.
+        """
         report = aggregate_report(
             [
                 _make_cost(task_id="good", cost_source="sdk"),
-                _make_cost(task_id="degraded", mode="baseline", cost_source="trace"),
+                _make_cost(
+                    task_id="degraded",
+                    mode="baseline",
+                    cost_source="trace",
+                    run_dir="results/mcp_batch_v3/degraded_baseline",
+                ),
             ]
         )
-        assert report["cost_sources"]["trace_derived_task_ids"] == ["degraded:baseline"]
+        assert report["operational_economics"]["cost_sources"][
+            "trace_derived_attempts"
+        ] == ["degraded:baseline@results/mcp_batch_v3/degraded_baseline"]
+
+    def test_one_attempt_of_a_rerun_cell_can_be_named_alone(self) -> None:
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", run_dir="a", cost_source="sdk"),
+                _make_cost(task_id="t1", run_dir="b", cost_source="trace"),
+            ]
+        )
+        named = report["operational_economics"]["cost_sources"][
+            "trace_derived_attempts"
+        ]
+        assert named == ["t1:hybrid@b"]
 
     def test_reconciliation_delta_is_published(self) -> None:
         # Vendor says $10; the old trace derivation would have said $4.
         report = aggregate_report(
             [_make_cost(task_id="t1", cost_usd=10.0, trace_cost_usd=4.0)]
         )
-        rec = report["cost_sources"]["reconciliation"]
+        rec = report["operational_economics"]["cost_sources"]["reconciliation"]
         assert rec["vendor_cost_usd"] == 10.0
         assert rec["trace_derived_cost_usd"] == 4.0
         assert rec["delta_usd"] == 6.0
@@ -1067,12 +1108,12 @@ class TestReconciliationDisclosure:
                 _make_cost(task_id="t2", cost_usd=5.0, cost_source="trace"),
             ]
         )
-        rec = report["cost_sources"]["reconciliation"]
+        rec = report["operational_economics"]["cost_sources"]["reconciliation"]
         assert rec["vendor_cost_usd"] == 10.0
         assert rec["trace_derived_cost_usd"] == 4.0
 
     def test_empty_costs_reconcile_without_dividing_by_zero(self) -> None:
-        rec = aggregate_report([])["cost_sources"]["reconciliation"]
+        rec = aggregate_report([])["operational_economics"]["cost_sources"]["reconciliation"]
         assert rec["trace_over_vendor_ratio"] == 0.0
 
     def test_reconciliation_is_published_per_arm(self) -> None:
@@ -1094,9 +1135,9 @@ class TestReconciliationDisclosure:
             ]
         )
         assert (
-            report["cost_sources"]["reconciliation"]["trace_over_vendor_ratio"] == 0.5
+            report["operational_economics"]["cost_sources"]["reconciliation"]["trace_over_vendor_ratio"] == 0.5
         )
-        by_mode = report["by_mode"]
+        by_mode = report["operational_economics"]["by_mode"]
         assert by_mode["baseline"]["reconciliation"]["trace_over_vendor_ratio"] == 0.25
         assert by_mode["mcp_only"]["reconciliation"]["trace_over_vendor_ratio"] == 0.75
 
@@ -1105,27 +1146,41 @@ class TestReconciliationDisclosure:
         report = aggregate_report(
             [_make_cost(task_id="t1", mode="baseline", cost_source="trace")]
         )
-        rec = report["by_mode"]["baseline"]["reconciliation"]
+        rec = report["operational_economics"]["by_mode"]["baseline"]["reconciliation"]
         assert rec["vendor_cost_usd"] == 0.0
         assert rec["trace_over_vendor_ratio"] == 0.0
 
 
 class TestConsumerContract:
-    """generate_report.py and generate_charts.py read these keys. Do not drop them."""
+    """generate_report.py and generate_charts.py read these keys. Do not drop them.
+
+    Both views are pinned, not just the one a given consumer happens to render:
+    dropping either is what re-creates the single ambiguous total.
+    """
 
     def test_keys_generate_report_reads(self) -> None:
         report = aggregate_report([_make_cost(mode="hybrid", cost_usd=2.0)])
-        assert "total_cost_usd" in report
-        assert "total_tasks" in report
-        stats = report["by_mode"]["hybrid"]
-        assert {"count", "total_cost", "avg_cost"} <= stats.keys()
+        assert report["schema_version"] == SCHEMA_VERSION
+
+        op = report["operational_economics"]
+        assert {"total_cost_usd", "attempts", "by_mode"} <= op.keys()
+        assert {"attempts", "total_cost_usd", "avg_cost_per_attempt"} <= op["by_mode"][
+            "hybrid"
+        ].keys()
+
+        comp = report["comparison_economics"]
+        assert {"total_cost_usd", "tasks", "modes", "by_mode"} <= comp.keys()
+        assert {"tasks", "total_cost_usd", "avg_cost_per_task"} <= comp["by_mode"][
+            "hybrid"
+        ].keys()
 
     def test_keys_generate_charts_reads(self) -> None:
         report = aggregate_report([_make_cost(task_id="t1", mode="hybrid")])
-        entry = report["per_task"][0]
-        assert "task_id" in entry
-        assert "cost_usd" in entry
-        assert "total_cost" in report["by_mode"]["hybrid"]
+        entry = report["comparison_economics"]["per_task"][0]
+        assert {"task_id", "mode", "cost_usd"} <= entry.keys()
+        assert (
+            "total_cost_usd" in report["comparison_economics"]["by_mode"]["hybrid"]
+        )
 
 
 # Every block parse_model_usage must refuse to bill. The id names the reason, so a
@@ -1302,8 +1357,9 @@ class TestVendorBlockIntegrity:
         assert cost.cost_usd == cost.trace_cost_usd
 
         report = aggregate_report([cost])
-        assert report["cost_sources"]["trace"] == 1
-        assert report["cost_sources"]["trace_derived_task_ids"] == ["my-task:hybrid"]
+        sources = report["operational_economics"]["cost_sources"]
+        assert sources["trace"] == 1
+        assert sources["trace_derived_attempts"] == [f"my-task:hybrid@{cost.run_dir}"]
 
     def test_nan_run_cannot_poison_the_batch_total(self, tmp_path: Path) -> None:
         """One malformed run must not take the whole report down with it.
@@ -1334,9 +1390,673 @@ class TestVendorBlockIntegrity:
         costs = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
         report = aggregate_report(costs)
 
-        assert math.isfinite(report["total_cost_usd"])
-        assert report["total_cost_usd"] > 0
+        assert math.isfinite(report["operational_economics"]["total_cost_usd"])
+        assert report["operational_economics"]["total_cost_usd"] > 0
         # The corrupt run is disclosed as trace-derived, not billed at NaN.
-        assert report["cost_sources"]["trace_derived_task_ids"] == ["bad-task:hybrid"]
+        (named,) = report["operational_economics"]["cost_sources"][
+            "trace_derived_attempts"
+        ]
+        assert named.startswith("bad-task:hybrid@")
         # And the report is still strictly valid JSON (allow_nan would emit `NaN`).
         json.loads(json.dumps(report, allow_nan=False))
+
+
+# ---------------------------------------------------------------------------
+# The two economics views (EnterpriseBench-jrgs)
+# ---------------------------------------------------------------------------
+
+
+def _write_attempt(
+    root: Path,
+    batch: str,
+    task_id: str,
+    mode: str,
+    *,
+    score: float | None = 1.0,
+    timestamp: str | None = None,
+    input_tokens: int = 1000,
+    output_tokens: int = 500,
+) -> Path:
+    """Write one attempt directory: agent_trace.jsonl plus results.json.
+
+    ``score=None`` writes no results.json at all — an attempt the scoring layer
+    never produced a score for, which is what makes it invalid rather than free.
+    """
+    task_dir = root / batch / f"{task_id}_{mode}"
+    entry = _assistant_entry(input_tokens=input_tokens, output_tokens=output_tokens)
+    if timestamp is not None:
+        entry = entry | {"timestamp": timestamp}
+    _write_trace(task_dir / "agent_trace.jsonl", [entry])
+
+    if score is not None:
+        (task_dir / "results.json").write_text(
+            json.dumps(
+                {
+                    "task_id": task_id,
+                    "scores": {
+                        "checkpoints_total": 1,
+                        "task_score": score,
+                        "checkpoints": [],
+                    },
+                    "task_metadata": {"suite": "customer_escalation",
+                                      "difficulty": "medium"},
+                    "config": {"mode": mode},
+                }
+            )
+        )
+    return task_dir
+
+
+class TestAttemptIdentity:
+    """Two runs of the same (task_id, mode) are two attempts, not one row.
+
+    Before this, ``scan_results_dirs`` emitted anonymous duplicate rows: on the
+    live corpus 441 rows carried only 426 distinct pairs, and nothing in the
+    report said so.
+    """
+
+    def test_each_attempt_carries_its_own_run_dir(self, tmp_path: Path) -> None:
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
+        _write_attempt(tmp_path, "mcp_batch_v2", "t1", "hybrid")
+
+        costs = scan_results_dirs(
+            [tmp_path / "mcp_batch", tmp_path / "mcp_batch_v2"],
+            tmp_path / "benchmarks",
+        )
+        assert len(costs) == 2
+        assert len({c.run_dir for c in costs}) == 2
+        assert {(c.task_id, c.mode) for c in costs} == {("t1", "hybrid")}
+
+    def test_run_dir_is_relative_to_the_project_root(self, tmp_path: Path) -> None:
+        """cost_report.json is tracked, so an absolute path would commit a home
+        directory and make run_dir — a tiebreak key — differ per checkout."""
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
+        (cost,) = scan_results_dirs(
+            [tmp_path / "mcp_batch"], tmp_path / "benchmarks", root=tmp_path
+        )
+        assert cost.run_dir == "mcp_batch/t1_hybrid"
+
+    def test_run_dir_outside_the_root_stays_absolute(self, tmp_path: Path) -> None:
+        outside = tmp_path / "elsewhere"
+        _write_attempt(outside, "mcp_batch", "t1", "hybrid")
+        (cost,) = scan_results_dirs(
+            [outside / "mcp_batch"], tmp_path / "benchmarks", root=tmp_path / "root"
+        )
+        assert Path(cost.run_dir).is_absolute()
+
+    def test_trace_timestamp_is_read_from_the_trace(self, tmp_path: Path) -> None:
+        _write_attempt(
+            tmp_path, "mcp_batch", "t1", "hybrid", timestamp="2026-03-31T22:14:36.052Z"
+        )
+        (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert cost.trace_timestamp == "2026-03-31T22:14:36.052Z"
+
+    def test_timestamp_is_the_max_not_the_last_line(self, tmp_path: Path) -> None:
+        """Real traces end on a line with no timestamp at all.
+
+        Verified against the corpus: 28 of 29 lines in
+        results/mcp_batch/api-contract-grpc-metadata-001_hybrid/agent_trace.jsonl
+        carry a timestamp; the trailing ``last-prompt`` line does not. A
+        last-line rule would resolve most real runs to "" and silently collapse
+        every tiebreak to run_dir.
+        """
+        task_dir = tmp_path / "mcp_batch" / "t1_hybrid"
+        _write_trace(
+            task_dir / "agent_trace.jsonl",
+            [
+                {"type": "queue-operation", "timestamp": "2026-03-31T22:14:36.052Z"},
+                _assistant_entry() | {"timestamp": "2026-03-31T22:20:00.000Z"},
+                {"type": "last-prompt", "lastPrompt": "...", "sessionId": "s"},
+            ],
+        )
+        (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert cost.trace_timestamp == "2026-03-31T22:20:00.000Z"
+
+    def test_timestamp_comes_from_non_assistant_lines_too(self, tmp_path: Path) -> None:
+        """The usage loop skips non-assistant lines; the timestamp scan must not."""
+        task_dir = tmp_path / "mcp_batch" / "t1_hybrid"
+        _write_trace(
+            task_dir / "agent_trace.jsonl",
+            [
+                _assistant_entry() | {"timestamp": "2026-01-01T00:00:00Z"},
+                {"type": "queue-operation", "timestamp": "2026-09-09T00:00:00Z"},
+            ],
+        )
+        (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert cost.trace_timestamp == "2026-09-09T00:00:00Z"
+
+    def test_trace_with_no_timestamps_at_all_is_empty_not_an_error(
+        self, tmp_path: Path
+    ) -> None:
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid", timestamp=None)
+        (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert cost.trace_timestamp == ""
+
+    def test_malformed_results_json_is_invalid_not_a_crash(self, tmp_path: Path) -> None:
+        """A run that crashed mid-write leaves truncated JSON, not valid JSON."""
+        task_dir = _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid", score=None)
+        (task_dir / "results.json").write_text('{"task_id": "t1", "scor')
+        (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert cost.normalized_score is None
+
+    def test_zero_checkpoints_is_invalid_not_a_zero_score(self, tmp_path: Path) -> None:
+        """analyze_scores refuses to divide by zero here; so must the cost side.
+
+        Treating it as 0.0 would make an unscorable run eligible to represent
+        its cell, and it would lose every tiebreak to a real run only by luck.
+        """
+        task_dir = _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid", score=None)
+        (task_dir / "results.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "t1",
+                    "scores": {"checkpoints_total": 0, "task_score": 0.0},
+                    "config": {"mode": "hybrid"},
+                }
+            )
+        )
+        (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert cost.normalized_score is None
+
+    def test_attempt_without_results_json_is_invalid_not_zero(
+        self, tmp_path: Path
+    ) -> None:
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid", score=None)
+        (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert cost.normalized_score is None
+        assert cost.cost_usd > 0  # it still SPENT money; it just cannot be compared
+
+
+class TestSelectAttempt:
+    """Which attempt represents a (task_id, mode) cell, and why that rule.
+
+    The rule must match ``analyze_scores._load_results`` (highest normalized
+    score), or the cost row and the score row of the same cell describe
+    different runs and every score-vs-cost join is wrong.
+    """
+
+    def test_highest_score_wins(self) -> None:
+        low = _make_cost(run_dir="a", normalized_score=0.25, cost_usd=9.0)
+        high = _make_cost(run_dir="b", normalized_score=0.75, cost_usd=1.0)
+        assert select_attempt([low, high]) is high
+
+    def test_ties_break_on_latest_trace_timestamp(self) -> None:
+        old = _make_cost(
+            run_dir="a", normalized_score=0.5, trace_timestamp="2026-01-01T00:00:00Z"
+        )
+        new = _make_cost(
+            run_dir="b", normalized_score=0.5, trace_timestamp="2026-06-01T00:00:00Z"
+        )
+        assert select_attempt([old, new]) is new
+        assert select_attempt([new, old]) is new
+
+    def test_selection_is_independent_of_input_order_and_mtime(self) -> None:
+        """The rule is content-derived, so shuffling the scan order cannot move it.
+
+        mtime would not survive a clone or a rescore pass; the trace timestamp and
+        the score both live in the artifacts.
+        """
+        attempts = [
+            _make_cost(run_dir=f"r{i}", normalized_score=s, trace_timestamp=ts)
+            for i, (s, ts) in enumerate(
+                [(0.5, "2026-01-01T00:00:00Z"), (0.9, "2026-01-01T00:00:00Z")]
+            )
+        ]
+        assert select_attempt(attempts).run_dir == "r1"
+        assert select_attempt(list(reversed(attempts))).run_dir == "r1"
+
+    def test_fully_tied_attempts_break_on_run_dir_deterministically(self) -> None:
+        a = _make_cost(run_dir="aaa", normalized_score=0.5, trace_timestamp="T")
+        b = _make_cost(run_dir="bbb", normalized_score=0.5, trace_timestamp="T")
+        assert select_attempt([a, b]) is b
+        assert select_attempt([b, a]) is b
+
+    def test_all_invalid_selects_nothing(self) -> None:
+        assert select_attempt([_make_cost(normalized_score=None)]) is None
+
+    def test_invalid_attempt_never_outranks_a_scored_one(self) -> None:
+        scored = _make_cost(run_dir="a", normalized_score=0.0)
+        unscored = _make_cost(run_dir="z", normalized_score=None)
+        assert select_attempt([scored, unscored]) is scored
+
+
+class TestTwoViewsAreNotCollapsed:
+    """The policy: total spend and suite cost are two numbers, never one.
+
+    Operational economics sums every attempt (what was actually paid).
+    Comparison economics bills one attempt per (task_id, mode). Publishing a
+    single ambiguous total is what this bead exists to stop.
+    """
+
+    def test_operational_sums_every_attempt(self) -> None:
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode="hybrid", run_dir="a", cost_usd=1.0),
+                _make_cost(task_id="t1", mode="hybrid", run_dir="b", cost_usd=2.0),
+            ]
+        )
+        assert report["operational_economics"]["total_cost_usd"] == 3.0
+        assert report["operational_economics"]["attempts"] == 2
+
+    def test_comparison_bills_one_attempt_per_cell(self) -> None:
+        report = aggregate_report(
+            [
+                _make_cost(
+                    task_id="t1", mode="hybrid", run_dir="a",
+                    cost_usd=1.0, normalized_score=0.2,
+                ),
+                _make_cost(
+                    task_id="t1", mode="hybrid", run_dir="b",
+                    cost_usd=2.0, normalized_score=0.9,
+                ),
+            ]
+        )
+        comp = report["comparison_economics"]
+        assert comp["tasks"] == 1
+        assert comp["total_cost_usd"] == 2.0  # the selected attempt, not the sum
+
+    def test_the_two_totals_actually_differ_on_a_rerun_corpus(self) -> None:
+        """Guards the implementation that returns the attempt total under both names."""
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode="hybrid", run_dir=f"r{i}",
+                           cost_usd=1.0, normalized_score=0.5)
+                for i in range(3)
+            ]
+        )
+        assert report["operational_economics"]["total_cost_usd"] == 3.0
+        assert report["comparison_economics"]["total_cost_usd"] == 1.0
+        assert report["operational_economics"]["attempts"] == 3
+        assert report["comparison_economics"]["tasks"] == 1
+
+    def test_denominators_are_named_per_view(self) -> None:
+        """No field's meaning may depend on which block it sits in."""
+        report = aggregate_report(
+            [_make_cost(task_id="t1", mode="hybrid", run_dir="a", cost_usd=2.0)]
+        )
+        op = report["operational_economics"]["by_mode"]["hybrid"]
+        comp = report["comparison_economics"]["by_mode"]["hybrid"]
+        assert {"attempts", "avg_cost_per_attempt"} <= op.keys()
+        assert "avg_cost" not in op and "count" not in op
+        assert {"tasks", "avg_cost_per_task"} <= comp.keys()
+        assert "avg_cost" not in comp and "count" not in comp
+
+    def test_comparison_avg_divides_by_distinct_tasks(self) -> None:
+        """Re-run-heavy arms must not be weighted differently from clean ones."""
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode="hybrid", run_dir="a", cost_usd=2.0),
+                _make_cost(task_id="t1", mode="hybrid", run_dir="b", cost_usd=2.0),
+                _make_cost(task_id="t2", mode="hybrid", run_dir="c", cost_usd=4.0),
+            ]
+        )
+        by_mode = report["comparison_economics"]["by_mode"]["hybrid"]
+        assert by_mode["tasks"] == 2
+        assert by_mode["avg_cost_per_task"] == 3.0
+        # The attempt view keeps the honest per-attempt figure: 8.0 / 3.
+        op = report["operational_economics"]["by_mode"]["hybrid"]
+        assert op["attempts"] == 3
+        assert op["avg_cost_per_attempt"] == round(8.0 / 3, 6)
+
+
+class TestComparisonIsMatchedAcrossArms:
+    """Arm totals over different task sets are not comparable, so they are not built.
+
+    Policy clause 1: paired by task and arm. A task missing from an arm is
+    excluded from every arm and named.
+    """
+
+    def test_unmatched_task_is_excluded_from_all_arms(self) -> None:
+        report = aggregate_report(
+            [
+                _make_cost(task_id="both", mode="hybrid", run_dir="a", cost_usd=1.0),
+                _make_cost(task_id="both", mode="mcp_only", run_dir="b", cost_usd=2.0),
+                _make_cost(task_id="lonely", mode="hybrid", run_dir="c", cost_usd=8.0),
+            ]
+        )
+        comp = report["comparison_economics"]
+        assert comp["excluded_unmatched_task_ids"] == ["lonely"]
+        assert comp["total_cost_usd"] == 3.0  # 8.0 dropped from BOTH arms
+        assert comp["by_mode"]["hybrid"]["tasks"] == 1
+        assert comp["by_mode"]["mcp_only"]["tasks"] == 1
+
+    def test_excluded_task_still_counts_as_spend(self) -> None:
+        report = aggregate_report(
+            [
+                _make_cost(task_id="both", mode="hybrid", run_dir="a", cost_usd=1.0),
+                _make_cost(task_id="both", mode="mcp_only", run_dir="b", cost_usd=2.0),
+                _make_cost(task_id="lonely", mode="hybrid", run_dir="c", cost_usd=8.0),
+            ]
+        )
+        assert report["operational_economics"]["total_cost_usd"] == 11.0
+
+    def test_three_arms_require_presence_in_all_three(self) -> None:
+        """"Matched" means every arm seen, not merely more than one.
+
+        Production runs up to four arms. A task in two of three is not paired.
+        """
+        report = aggregate_report(
+            [
+                _make_cost(task_id="all3", mode=m, run_dir=f"a-{m}", cost_usd=1.0)
+                for m in ("baseline", "mcp_only", "hybrid")
+            ]
+            + [
+                _make_cost(task_id="only2", mode=m, run_dir=f"b-{m}", cost_usd=5.0)
+                for m in ("baseline", "hybrid")
+            ]
+        )
+        comp = report["comparison_economics"]
+        assert comp["modes"] == ["baseline", "hybrid", "mcp_only"]
+        assert comp["excluded_unmatched_task_ids"] == ["only2"]
+        assert comp["tasks"] == 3
+        assert comp["total_cost_usd"] == 3.0
+
+    def test_single_arm_corpus_matches_everything(self) -> None:
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode="hybrid", run_dir="a", cost_usd=1.0),
+                _make_cost(task_id="t2", mode="hybrid", run_dir="b", cost_usd=2.0),
+            ]
+        )
+        comp = report["comparison_economics"]
+        assert comp["excluded_unmatched_task_ids"] == []
+        assert comp["tasks"] == 2
+
+    def test_non_arm_mode_is_operational_only(self) -> None:
+        """A directory whose mode could not be parsed must not define an arm."""
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode="hybrid", run_dir="a", cost_usd=1.0),
+                _make_cost(task_id="t2", mode="unknown", run_dir="b", cost_usd=5.0),
+            ]
+        )
+        assert report["operational_economics"]["total_cost_usd"] == 6.0
+        assert report["comparison_economics"]["modes"] == ["hybrid"]
+        assert report["comparison_economics"]["total_cost_usd"] == 1.0
+
+
+class TestAttemptsAreFullyEnumerated:
+    """Policy: invalid and retry attempts are excluded from ratios but enumerated."""
+
+    def test_duplicates_are_listed_with_the_selection_named(self) -> None:
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode="hybrid", run_dir="a",
+                           cost_usd=1.0, normalized_score=0.2),
+                _make_cost(task_id="t1", mode="hybrid", run_dir="b",
+                           cost_usd=2.0, normalized_score=0.9),
+            ]
+        )
+        (dup,) = report["duplicate_attempts"]
+        assert dup["task_id"] == "t1"
+        assert dup["mode"] == "hybrid"
+        assert dup["attempts"] == 2
+        assert [r["run_dir"] for r in dup["runs"]] == ["a", "b"]
+        assert [r["selected"] for r in dup["runs"]] == [False, True]
+
+    def test_single_attempt_cells_are_not_listed_as_duplicates(self) -> None:
+        report = aggregate_report([_make_cost(task_id="t1", run_dir="a")])
+        assert report["duplicate_attempts"] == []
+
+    def test_duplicate_runs_are_ordered_by_run_dir(self) -> None:
+        """Pinned explicitly: score order and insertion order both disagree here,
+        so a passing implementation cannot be relying on either by accident."""
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", run_dir="z-last",
+                           cost_usd=1.0, normalized_score=0.9),
+                _make_cost(task_id="t1", run_dir="a-first",
+                           cost_usd=2.0, normalized_score=0.1),
+            ]
+        )
+        (dup,) = report["duplicate_attempts"]
+        assert [r["run_dir"] for r in dup["runs"]] == ["a-first", "z-last"]
+        assert [r["selected"] for r in dup["runs"]] == [False, True]
+
+
+class TestEveryDollarIsAccountedFor:
+    """Conservation: no attempt's cost may vanish between the two views.
+
+    The policy's "fully enumerated" clause is only meaningful if the gap between
+    total spend and matched suite cost can be itemized. ``per_attempt`` is the
+    complete ledger, and the comparison view is a strict subset of it — an
+    attempt dropped from both, or double-counted in one, breaks these.
+    """
+
+    def _mixed_corpus(self) -> list[TaskCost]:
+        return [
+            # matched, re-run: one attempt selected, one not
+            _make_cost(task_id="both", mode="hybrid", run_dir="h1",
+                       cost_usd=1.0, normalized_score=0.9),
+            _make_cost(task_id="both", mode="hybrid", run_dir="h2",
+                       cost_usd=2.0, normalized_score=0.1),
+            _make_cost(task_id="both", mode="baseline", run_dir="b1",
+                       cost_usd=4.0, normalized_score=0.5),
+            # unmatched: present in one arm only
+            _make_cost(task_id="lonely", mode="hybrid", run_dir="l1",
+                       cost_usd=8.0, normalized_score=0.7),
+            # unscored
+            _make_cost(task_id="both", mode="baseline", run_dir="b2",
+                       cost_usd=16.0, normalized_score=None),
+            # non-arm mode
+            _make_cost(task_id="weird", mode="unknown", run_dir="u1",
+                       cost_usd=32.0, normalized_score=0.4),
+        ]
+
+    def test_per_attempt_is_the_complete_ledger(self) -> None:
+        costs = self._mixed_corpus()
+        report = aggregate_report(costs)
+        rows = report["per_attempt"]
+        assert len(rows) == len(costs)
+        assert {r["run_dir"] for r in rows} == {c.run_dir for c in costs}
+        assert round(sum(r["cost_usd"] for r in rows), 6) == (
+            report["operational_economics"]["total_cost_usd"]
+        )
+
+    def test_the_gap_between_the_views_is_itemizable(self) -> None:
+        report = aggregate_report(self._mixed_corpus())
+        op_total = report["operational_economics"]["total_cost_usd"]
+        comp_total = report["comparison_economics"]["total_cost_usd"]
+
+        selected = {r["run_dir"] for r in report["comparison_economics"]["per_task"]}
+        unselected = [
+            r for r in report["per_attempt"] if r["run_dir"] not in selected
+        ]
+        assert round(comp_total + sum(r["cost_usd"] for r in unselected), 6) == op_total
+
+    def test_comparison_rows_are_a_strict_subset_of_the_ledger(self) -> None:
+        report = aggregate_report(self._mixed_corpus())
+        ledger = {r["run_dir"] for r in report["per_attempt"]}
+        selected = [r["run_dir"] for r in report["comparison_economics"]["per_task"]]
+        assert len(selected) == len(set(selected))  # no attempt billed twice
+        assert set(selected) < ledger
+
+    def test_every_excluded_attempt_is_locatable_in_the_ledger(self) -> None:
+        """Whatever the exclusion reason — re-run, unscored, unmatched, non-arm —
+        the attempt is findable with its run_dir and its cost."""
+        report = aggregate_report(self._mixed_corpus())
+        by_run = {r["run_dir"]: r for r in report["per_attempt"]}
+        for run_dir in ("h2", "l1", "b2", "u1"):
+            assert by_run[run_dir]["cost_usd"] > 0
+            assert by_run[run_dir]["mode"]
+
+    def test_invalid_attempts_are_enumerated(self) -> None:
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode="hybrid", run_dir="ok"),
+                _make_cost(task_id="t2", mode="hybrid", run_dir="bad",
+                           cost_usd=3.0, normalized_score=None),
+            ]
+        )
+        (bad,) = report["invalid_attempts"]
+        assert bad["task_id"] == "t2"
+        assert bad["run_dir"] == "bad"
+        assert bad["cost_usd"] == 3.0
+
+    def test_invalid_attempt_is_spend_but_never_a_comparison_row(self) -> None:
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode="hybrid", run_dir="ok", cost_usd=1.0),
+                _make_cost(task_id="t1", mode="hybrid", run_dir="bad",
+                           cost_usd=3.0, normalized_score=None),
+            ]
+        )
+        assert report["operational_economics"]["total_cost_usd"] == 4.0
+        assert report["comparison_economics"]["total_cost_usd"] == 1.0
+
+    def test_cell_with_only_invalid_attempts_has_no_comparison_row(self) -> None:
+        report = aggregate_report(
+            [_make_cost(task_id="t1", mode="hybrid", run_dir="bad",
+                        normalized_score=None)]
+        )
+        assert report["comparison_economics"]["tasks"] == 0
+        assert report["operational_economics"]["attempts"] == 1
+
+
+class TestReportSchemaGuard:
+    """A stale report must fail loudly, not render $0.00.
+
+    Every consumer reads with ``.get(key, 0)``. Feed yesterday's JSON to today's
+    reader and it prints a plausible zero — the same failure class
+    ``scorer_guard.py`` exists to forbid.
+    """
+
+    def test_report_declares_its_schema_version(self) -> None:
+        assert aggregate_report([])["schema_version"] == SCHEMA_VERSION
+
+    def test_report_records_the_selection_rule(self) -> None:
+        """Named in the JSON, not merely non-empty — a reader must not have to
+        infer which of several plausible rules produced the comparison view."""
+        rule = aggregate_report([])["selection_rule"]
+        assert "normalized_score" in rule
+        assert "timestamp" in rule
+        assert "run_dir" in rule
+
+    def test_require_schema_accepts_a_current_report(self) -> None:
+        require_schema(aggregate_report([]), "test")
+
+    def test_require_schema_rejects_a_report_with_no_version(self) -> None:
+        with pytest.raises(ValueError, match="schema_version"):
+            require_schema({"total_cost_usd": 12.0}, "test")
+
+    def test_require_schema_rejects_an_older_version(self) -> None:
+        with pytest.raises(ValueError, match="schema_version"):
+            require_schema({"schema_version": SCHEMA_VERSION - 1}, "test")
+
+
+class TestAgreesWithAnalyzeScores:
+    """The cost row and the score row of a cell must describe the SAME run.
+
+    This is the whole reason ``select_attempt`` reuses analyze_scores' key rather
+    than inventing one. A test that only checks cost_tracker in isolation would
+    not notice the two modules drifting apart.
+    """
+
+    def _corpus(self, tmp_path: Path, scores: list[tuple[str, float]]) -> list[Path]:
+        for batch, score in scores:
+            _write_attempt(
+                tmp_path, batch, "t1", "hybrid",
+                score=score, timestamp=f"2026-0{len(batch) % 9 + 1}-01T00:00:00Z",
+            )
+        return [tmp_path / batch for batch, _ in scores]
+
+    def test_both_modules_pick_the_same_run(self, tmp_path: Path) -> None:
+        dirs = self._corpus(
+            tmp_path, [("mcp_batch", 0.9), ("mcp_batch_v2", 0.1), ("mcp_batch_v3", 0.4)]
+        )
+        bench = tmp_path / "benchmarks"
+
+        (scored,) = load_all_results(dirs, bench)
+        report = aggregate_report(scan_results_dirs(dirs, bench))
+        (billed,) = report["comparison_economics"]["per_task"]
+
+        # source_path is the results.json; run_dir is its directory.
+        assert str(Path(scored.source_path).parent) == billed["run_dir"]
+        assert scored.normalized_score == billed["normalized_score"]
+
+    def test_they_agree_when_the_newest_run_scored_worst(self, tmp_path: Path) -> None:
+        """The case a naive latest-attempt rule gets wrong."""
+        dirs = self._corpus(tmp_path, [("mcp_batch", 0.9), ("mcp_batch_v2", 0.1)])
+        bench = tmp_path / "benchmarks"
+
+        (scored,) = load_all_results(dirs, bench)
+        (billed,) = aggregate_report(scan_results_dirs(dirs, bench))[
+            "comparison_economics"
+        ]["per_task"]
+        assert str(Path(scored.source_path).parent) == billed["run_dir"]
+        assert billed["normalized_score"] == 0.9
+
+
+class TestEndToEndReruns:
+    """The measured bug, end to end: more attempt rows than distinct cells."""
+
+    def test_rerun_across_batches_inflates_only_the_operational_total(
+        self, tmp_path: Path
+    ) -> None:
+        # Directory sort order (mcp_batch < mcp_batch_v2) OPPOSES the intended
+        # selection, so a lexical-order or rglob-order fallback fails this test.
+        _write_attempt(
+            tmp_path, "mcp_batch", "t1", "hybrid",
+            score=0.9, timestamp="2026-01-01T00:00:00Z",
+        )
+        _write_attempt(
+            tmp_path, "mcp_batch_v2", "t1", "hybrid",
+            score=0.1, timestamp="2026-06-01T00:00:00Z",
+        )
+        costs = scan_results_dirs(
+            [tmp_path / "mcp_batch", tmp_path / "mcp_batch_v2"],
+            tmp_path / "benchmarks",
+        )
+        report = aggregate_report(costs)
+
+        assert report["operational_economics"]["attempts"] == 2
+        assert report["comparison_economics"]["tasks"] == 1
+        assert (
+            report["operational_economics"]["total_cost_usd"]
+            > report["comparison_economics"]["total_cost_usd"]
+        )
+        (dup,) = report["duplicate_attempts"]
+        selected = [r for r in dup["runs"] if r["selected"]]
+        assert len(selected) == 1
+        assert "mcp_batch/" in selected[0]["run_dir"]  # the 0.9 run, not the newer 0.1
+
+    def test_selection_survives_identical_mtimes(self, tmp_path: Path) -> None:
+        """Proves the rule is content-derived: mtime carries no information here.
+
+        The winning attempt is deliberately the lexically *earlier* run_dir with
+        the *equal* timestamp, so neither tiebreaker can explain the result — only
+        the score can. An implementation that fell back to mtime or max(run_dir)
+        would pick the 0.2 run and fail.
+        """
+        dirs = [
+            _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid",
+                           score=0.8, timestamp="2026-01-01T00:00:00Z"),
+            _write_attempt(tmp_path, "mcp_batch_v2", "t1", "hybrid",
+                           score=0.2, timestamp="2026-01-01T00:00:00Z"),
+        ]
+        for d in dirs:
+            for f in d.iterdir():
+                os.utime(f, (1_000_000, 1_000_000))
+
+        costs = scan_results_dirs(
+            [tmp_path / "mcp_batch", tmp_path / "mcp_batch_v2"],
+            tmp_path / "benchmarks",
+        )
+        report = aggregate_report(costs)
+        (dup,) = report["duplicate_attempts"]
+        (selected,) = [r for r in dup["runs"] if r["selected"]]
+        assert selected["normalized_score"] == 0.8
+
+    def test_per_attempt_rows_are_one_per_attempt(self, tmp_path: Path) -> None:
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
+        _write_attempt(tmp_path, "mcp_batch_v2", "t1", "hybrid")
+        costs = scan_results_dirs(
+            [tmp_path / "mcp_batch", tmp_path / "mcp_batch_v2"],
+            tmp_path / "benchmarks",
+        )
+        report = aggregate_report(costs)
+        assert len(report["per_attempt"]) == 2
+        assert len(report["comparison_economics"]["per_task"]) == 1
+        assert {"run_dir", "normalized_score", "trace_timestamp"} <= set(
+            report["per_attempt"][0]
+        )

@@ -2,6 +2,27 @@
 """
 cost_tracker.py — Report per-task / aggregate costs for EnterpriseBench runs.
 
+The report publishes TWO cost views and never blends them into one number
+(EnterpriseBench-jrgs). A task re-run across batches produces one *attempt* per
+run, and the two views answer different questions about those attempts:
+
+``operational_economics``  total spend, summed over every attempt, including
+                           re-runs and attempts the scoring layer never scored.
+                           This is what was actually paid.
+``comparison_economics``   one selected attempt per (task_id, mode), restricted
+                           to tasks present in every arm. This is the only view
+                           an arm-to-arm cost claim may be built on.
+
+Publishing a single total was the bug: it is correct as spend and wrong as suite
+cost, and the report did not say which. Averaging over attempts is worse — it
+weights a re-run-heavy arm differently from a clean one, which corrupts exactly
+the arm-to-arm delta the benchmark exists to produce.
+
+The selecting rule is deliberately the one ``analyze_scores`` already uses to
+collapse (task_id, mode) — highest normalized score. If the two modules chose
+differently, the cost row and the score row of the same cell would describe
+different runs, and every score-vs-cost join would be wrong.
+
 Cost has two sources, in order:
 
 tier 1 ("sdk")    Claude Code's per-model ``modelUsage`` block in agent_stdout.log,
@@ -29,9 +50,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lib.shared import load_task_index, strip_mode_suffix
+from analyze_scores import parse_result
+from lib.shared import VALID_MODES, load_task_index, strip_mode_suffix
 
 logger = logging.getLogger(__name__)
+
+# Bumped whenever the report's shape changes. Consumers call require_schema and
+# refuse an unknown version rather than reading a missing key through
+# ``.get(key, 0)`` and rendering a plausible $0.00 — the failure class
+# lib/eb_verify/scorer_guard.py exists to forbid, applied to the cost artifact.
+SCHEMA_VERSION = 2
+
+# How ``select_attempt`` picks the one attempt that represents a (task_id, mode)
+# cell. Published in the report so a reader never has to infer it.
+SELECTION_RULE = (
+    "highest normalized_score, then latest trace timestamp, then run_dir; "
+    "attempts with no score are never selected. Matches analyze_scores."
+)
 
 # ---------------------------------------------------------------------------
 # Pricing — per million tokens. Tier-2 runs only; tier-1 runs are billed with the
@@ -148,8 +183,30 @@ class Usage:
 
 
 @dataclass(frozen=True)
+class TraceScan:
+    """One pass over an agent_trace.jsonl: its usage and when it ran.
+
+    The timestamp comes out of the same pass rather than a second one — the
+    traces run to thousands of lines and are already fully decoded here.
+    """
+
+    usage: Usage
+    last_timestamp: str
+
+
+@dataclass(frozen=True)
 class TaskCost:
-    """Per-task cost record.
+    """One *attempt* — a single run of one task in one mode.
+
+    Two runs of the same (task_id, mode) are two records, distinguished by
+    ``run_dir``. They used to be indistinguishable, which is what let re-runs
+    inflate the batch total silently.
+
+    ``normalized_score`` is None when the scoring layer produced no score for
+    this attempt. Such an attempt still spent money (it belongs to the
+    operational view) but cannot represent its cell (it is never selected for
+    the comparison view). ``trace_timestamp`` is read from the trace itself, so
+    it survives a clone or a rescore pass; file mtime does not.
 
     ``vendor`` is the tier: present means the run is billed from the vendor's own
     total, absent means it falls back to the trace derivation. Cost, source and
@@ -169,6 +226,15 @@ class TaskCost:
     trace_cost_usd: float
     vendor: VendorUsage | None
     agent_duration_seconds: float
+    run_dir: str
+    normalized_score: float | None
+    trace_timestamp: str = ""
+
+    @property
+    def cell(self) -> tuple[str, str]:
+        """The (task_id, mode) cell this attempt belongs to."""
+
+        return (self.task_id, self.mode)
 
     @property
     def cost_usd(self) -> float:
@@ -217,6 +283,12 @@ def _request_key(entry: dict[str, Any]) -> str | None:
 
 
 def parse_trace(trace_path: Path) -> Usage:
+    """Token usage for one run — :func:`scan_trace` without the timestamp."""
+
+    return scan_trace(trace_path).usage
+
+
+def scan_trace(trace_path: Path) -> TraceScan:
     """Read an agent_trace.jsonl and sum token usage once per API request.
 
     The tier-2 (fallback) token source, reached only when a run carries no vendor
@@ -233,6 +305,11 @@ def parse_trace(trace_path: Path) -> Usage:
 
     Usage on non-assistant lines (sub-agent / Task tool results) is not counted
     — see EnterpriseBench-jepu.
+
+    ``last_timestamp`` is the largest ISO-8601 ``timestamp`` on any line of the
+    trace, assistant or not (the first line of a real trace is a
+    ``queue-operation``). It orders re-runs of the same cell without reference
+    to file mtime, which no copy, clone or rescore pass preserves.
     """
 
     # request key -> that request's most complete usage snapshot. A line with no
@@ -242,6 +319,7 @@ def parse_trace(trace_path: Path) -> Usage:
     selected: dict[str | int, dict[str, Any]] = {}
     model = ""
     ungrouped_lines = 0
+    last_timestamp = ""
 
     with trace_path.open() as fh:
         for line_no, line in enumerate(fh):
@@ -257,6 +335,12 @@ def parse_trace(trace_path: Path) -> Usage:
                 # input to skip, not a reason to abort the batch.
                 logger.warning("Skipping malformed line in %s", trace_path)
                 continue
+
+            # Read before the assistant filter: the timestamp rides on every
+            # line type, and the earliest lines of a trace are not assistant.
+            stamp = entry.get("timestamp")
+            if isinstance(stamp, str) and stamp > last_timestamp:
+                last_timestamp = stamp
 
             if entry.get("type") != "assistant":
                 continue
@@ -306,13 +390,16 @@ def parse_trace(trace_path: Path) -> Usage:
     def total(field: str) -> int:
         return sum(u.get(field, 0) for u in selected.values())
 
-    return Usage(
-        input_tokens=total("input_tokens"),
-        output_tokens=total("output_tokens"),
-        cache_write_tokens=total("cache_creation_input_tokens"),
-        cache_read_tokens=total("cache_read_input_tokens"),
-        model=model or DEFAULT_MODEL,
-        num_requests=len(selected),
+    return TraceScan(
+        usage=Usage(
+            input_tokens=total("input_tokens"),
+            output_tokens=total("output_tokens"),
+            cache_write_tokens=total("cache_creation_input_tokens"),
+            cache_read_tokens=total("cache_read_input_tokens"),
+            model=model or DEFAULT_MODEL,
+            num_requests=len(selected),
+        ),
+        last_timestamp=last_timestamp,
     )
 
 
@@ -581,11 +668,59 @@ def _parse_dir_identity(dir_path: Path) -> tuple[str, str]:
     return task_id, mode
 
 
+def _attempt_score(task_dir: Path, benchmarks_root: Path) -> float | None:
+    """Return this attempt's normalized score, or None if it has none.
+
+    Delegates to ``analyze_scores.parse_result`` rather than re-deriving
+    ``task_score / checkpoints_total`` locally. The coupling is the point: cost
+    selection has to collapse a (task_id, mode) cell to the same attempt the
+    score pipeline does, and a private copy of the normalization would drift
+    apart silently.
+
+    None means the scoring layer produced nothing for this run — no results.json,
+    no scores block, or zero checkpoints. That is a real distinction, not a zero:
+    the attempt still spent money, it just cannot stand for its cell.
+    """
+
+    results_path = task_dir / "results.json"
+    if not results_path.exists():
+        return None
+
+    result = parse_result(results_path, benchmarks_root)
+    return None if result is None else result.normalized_score
+
+
+def _run_dir_label(task_dir: Path, root: Path | None) -> str:
+    """Identify an attempt's directory, relative to *root* when it is under it.
+
+    cost_report.json is a tracked artifact, so an absolute path would commit one
+    machine's home directory and make the report non-portable — and ``run_dir``
+    is a tiebreak key, so it has to read the same on every checkout. Falls back
+    to the absolute path for a directory outside *root*, which is still correct,
+    just not portable; there is nothing shorter to say about it.
+    """
+
+    if root is None:
+        return str(task_dir)
+    try:
+        return str(task_dir.resolve().relative_to(root.resolve()))
+    except ValueError:
+        return str(task_dir)
+
+
 def scan_results_dirs(
     dirs: list[Path],
     benchmarks_root: Path,
+    root: Path | None = None,
 ) -> list[TaskCost]:
-    """Find all result directories containing agent_trace.jsonl and compute costs."""
+    """Find every result directory with an agent_trace.jsonl and cost its attempt.
+
+    One record per attempt, not per cell: a task re-run in several batches
+    yields several records that differ only in ``run_dir``. Collapsing them is
+    :func:`select_attempt`'s job, and only the comparison view asks for it.
+
+    *root* is the project root that ``run_dir`` is reported relative to.
+    """
 
     costs: list[TaskCost] = []
 
@@ -602,7 +737,8 @@ def scan_results_dirs(
             # The trace is parsed unconditionally: it is the tier-2 cost when there
             # is no vendor block, the reconciliation baseline when there is, and
             # the only source of num_requests either way.
-            trace_usage = parse_trace(trace_path)
+            scan = scan_trace(trace_path)
+            trace_usage = scan.usage
             trace_cost = compute_cost(trace_usage)
 
             vendor = parse_model_usage(task_dir / "agent_stdout.log")
@@ -633,6 +769,9 @@ def scan_results_dirs(
                     trace_cost_usd=trace_cost,
                     vendor=vendor,
                     agent_duration_seconds=duration,
+                    run_dir=_run_dir_label(task_dir, root),
+                    normalized_score=_attempt_score(task_dir, benchmarks_root),
+                    trace_timestamp=scan.last_timestamp,
                 )
             )
 
@@ -671,28 +810,169 @@ def _reconcile(items: list[TaskCost]) -> dict[str, Any]:
     }
 
 
-def _bucket_stats(items: list[TaskCost]) -> dict[str, Any]:
-    """Compute summary stats for a list of TaskCost records."""
+def _attempt_bucket(items: list[TaskCost]) -> dict[str, Any]:
+    """Operational-view stats: denominated in attempts, because spend is."""
 
-    count = len(items)
+    attempts = len(items)
     total_cost = round(sum(t.cost_usd for t in items), 6)
-    total_input = sum(t.usage.input_tokens for t in items)
-    total_output = sum(t.usage.output_tokens for t in items)
     return {
-        "count": count,
-        "total_cost": total_cost,
-        "avg_cost": round(total_cost / count, 6) if count else 0.0,
-        "total_input_tokens": total_input,
-        "total_output_tokens": total_output,
+        "attempts": attempts,
+        "total_cost_usd": total_cost,
+        "avg_cost_per_attempt": round(total_cost / attempts, 6) if attempts else 0.0,
+        "total_input_tokens": sum(t.usage.input_tokens for t in items),
+        "total_output_tokens": sum(t.usage.output_tokens for t in items),
         "reconciliation": _reconcile(items),
     }
+
+
+def _comparison_bucket(items: list[TaskCost]) -> dict[str, Any]:
+    """Comparison-view stats: denominated in tasks, one selected attempt each.
+
+    ``avg_cost_per_task`` is the figure an arm-to-arm claim may use. Dividing by
+    attempts instead weights a re-run-heavy arm differently from a clean one.
+    """
+
+    tasks = len(items)
+    total_cost = round(sum(t.cost_usd for t in items), 6)
+    return {
+        "tasks": tasks,
+        "total_cost_usd": total_cost,
+        "avg_cost_per_task": round(total_cost / tasks, 6) if tasks else 0.0,
+        "total_input_tokens": sum(t.usage.input_tokens for t in items),
+        "total_output_tokens": sum(t.usage.output_tokens for t in items),
+    }
+
+
+def _group_by(
+    items: list[TaskCost], key: Any
+) -> dict[str, list[TaskCost]]:
+    grouped: dict[str, list[TaskCost]] = {}
+    for tc in items:
+        grouped.setdefault(key(tc), []).append(tc)
+    return grouped
+
+
+def select_attempt(attempts: list[TaskCost]) -> TaskCost | None:
+    """Pick the one attempt that represents a (task_id, mode) cell.
+
+    Highest normalized score, ties broken by latest trace timestamp and then by
+    ``run_dir``. Returns None when no attempt in the cell was scored.
+
+    The primary key is ``analyze_scores``' — that module already collapses
+    (task_id, mode) by highest score, and a different rule here would pair each
+    cell's cost with a *different* run than its score, silently breaking every
+    score-vs-cost join downstream. ``TestAgreesWithAnalyzeScores`` pins that.
+
+    Both tiebreakers are content-derived and total, so the result does not depend
+    on scan order, filesystem order, or mtime. ``analyze_scores`` has no
+    tiebreaker at all — it compares with a strict ``>`` and so keeps whichever
+    equally-scored run ``rglob`` reached first — so on an exact score tie the two
+    modules can still pick different runs. The score is identical either way; the
+    cost need not be. Fixed separately in EnterpriseBench-ye0tp; do not "fix" it
+    here by dropping the tiebreakers, which would make this side non-deterministic
+    too rather than making both sides agree.
+    """
+
+    scored = [a for a in attempts if a.normalized_score is not None]
+    if not scored:
+        return None
+    return max(scored, key=lambda a: (a.normalized_score, a.trace_timestamp, a.run_dir))
+
+
+def comparison_attempts(costs: list[TaskCost]) -> tuple[list[TaskCost], list[str]]:
+    """Return the matched, selected attempt set and the task_ids it excluded.
+
+    Two restrictions, in order:
+
+    1. One attempt per (task_id, mode), via :func:`select_attempt`. Unscored
+       attempts drop out here; a cell with only unscored attempts has no row.
+    2. Only tasks present in *every* arm survive. Per-arm totals over different
+       task sets are not comparable, and rendering them side by side (which the
+       charts do) invites exactly the conclusion the data cannot support.
+
+    Modes outside :data:`VALID_MODES` — an unparseable directory name resolving
+    to "unknown" — define no arm and are operational-only. Letting one in would
+    collapse the intersection to nothing.
+    """
+
+    cells: dict[tuple[str, str], list[TaskCost]] = {}
+    for tc in costs:
+        if tc.mode in VALID_MODES:
+            cells.setdefault(tc.cell, []).append(tc)
+
+    selected = {cell: pick for cell, items in cells.items()
+                if (pick := select_attempt(items)) is not None}
+
+    modes = {mode for _, mode in selected}
+    arms_per_task: dict[str, set[str]] = {}
+    for task_id, mode in selected:
+        arms_per_task.setdefault(task_id, set()).add(mode)
+
+    matched = {tid for tid, arms in arms_per_task.items() if arms == modes}
+    rows = [tc for cell, tc in sorted(selected.items()) if cell[0] in matched]
+    return rows, sorted(set(arms_per_task) - matched)
+
+
+def _duplicate_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
+    """Enumerate every re-run cell, naming which attempt the comparison view took.
+
+    The policy requires retry attempts to be excluded from ratios *and* fully
+    enumerated. A count alone would leave a reader unable to check the selection.
+    """
+
+    cells: dict[tuple[str, str], list[TaskCost]] = {}
+    for tc in costs:
+        cells.setdefault(tc.cell, []).append(tc)
+
+    listing: list[dict[str, Any]] = []
+    for (task_id, mode), items in sorted(cells.items()):
+        if len(items) < 2:
+            continue
+        chosen = select_attempt(items)
+        listing.append(
+            {
+                "task_id": task_id,
+                "mode": mode,
+                "attempts": len(items),
+                "runs": [
+                    {
+                        "run_dir": tc.run_dir,
+                        "cost_usd": tc.cost_usd,
+                        "normalized_score": tc.normalized_score,
+                        "trace_timestamp": tc.trace_timestamp,
+                        "selected": tc is chosen,
+                    }
+                    for tc in sorted(items, key=lambda t: t.run_dir)
+                ],
+            }
+        )
+    return listing
+
+
+def _invalid_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
+    """Enumerate attempts the scoring layer never scored. They are spend, not zero."""
+
+    return [
+        {
+            "task_id": tc.task_id,
+            "mode": tc.mode,
+            "run_dir": tc.run_dir,
+            "cost_usd": tc.cost_usd,
+            "reason": "no_normalized_score",
+        }
+        for tc in sorted(costs, key=lambda t: (t.task_id, t.mode, t.run_dir))
+        if tc.normalized_score is None
+    ]
 
 
 def _cost_source_summary(costs: list[TaskCost]) -> dict[str, Any]:
     """Report where cost came from, and how far the trace derivation missed.
 
-    Names every trace-derived run rather than counting it: those carry the old
-    distortion, and a reader must not have to guess which rows are mixed in.
+    Names every trace-derived attempt rather than counting it: those carry the
+    old distortion, and a reader must not have to guess which rows are mixed in.
+    The key is the run directory, not ``task:mode`` — one attempt of a re-run
+    cell can be trace-derived while another is vendor-priced, and a cell-level
+    key would misattribute the caveat to both.
     """
 
     trace = [tc for tc in costs if tc.vendor is None]
@@ -700,43 +980,63 @@ def _cost_source_summary(costs: list[TaskCost]) -> dict[str, Any]:
     return {
         "sdk": len(costs) - len(trace),
         "trace": len(trace),
-        "trace_derived_task_ids": sorted(f"{tc.task_id}:{tc.mode}" for tc in trace),
+        "trace_derived_attempts": sorted(
+            f"{tc.task_id}:{tc.mode}@{tc.run_dir}" for tc in trace
+        ),
         "reconciliation": _reconcile(costs),
     }
 
 
+def _attempt_row(tc: TaskCost) -> dict[str, Any]:
+    return {
+        "task_id": tc.task_id,
+        "mode": tc.mode,
+        "suite": tc.suite,
+        "difficulty": tc.difficulty,
+        "run_dir": tc.run_dir,
+        "normalized_score": tc.normalized_score,
+        "trace_timestamp": tc.trace_timestamp,
+        "model": tc.usage.model,
+        "models": list(tc.models),
+        "input_tokens": tc.usage.input_tokens,
+        "output_tokens": tc.usage.output_tokens,
+        "cache_write_tokens": tc.usage.cache_write_tokens,
+        "cache_read_tokens": tc.usage.cache_read_tokens,
+        "num_requests": tc.usage.num_requests,
+        "cost_usd": tc.cost_usd,
+        "cost_source": tc.cost_source,
+        "trace_cost_usd": tc.trace_cost_usd,
+        "agent_duration_seconds": tc.agent_duration_seconds,
+    }
+
+
+def require_schema(report: dict[str, Any], consumer: str) -> None:
+    """Raise unless *report* is a cost report this consumer can read.
+
+    Every consumer reads cost fields through ``.get(key, default)``. Feed a
+    report written by another schema to such a reader and it renders a plausible
+    $0.00 instead of failing — a fabricated number, which is precisely what the
+    scoring trust boundary forbids. So the version is checked, not defaulted.
+    """
+
+    version = report.get("schema_version")
+    if version != SCHEMA_VERSION:
+        raise ValueError(
+            f"{consumer}: cost report declares schema_version={version!r}, "
+            f"expected {SCHEMA_VERSION}. Regenerate it with "
+            f"`python3 scripts/cost_tracker.py` — reading it as-is would print "
+            f"zeros for every missing field."
+        )
+
+
 def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
-    """Build the full cost report with suite/mode/difficulty breakdowns."""
+    """Build the cost report: total spend and matched suite cost, never blended.
 
-    by_mode: dict[str, list[TaskCost]] = {}
-    by_suite: dict[str, list[TaskCost]] = {}
-    by_difficulty: dict[str, list[TaskCost]] = {}
+    See the module docstring for why the two views exist and why neither may be
+    published as "the" cost.
+    """
 
-    for tc in costs:
-        by_mode.setdefault(tc.mode, []).append(tc)
-        by_suite.setdefault(tc.suite, []).append(tc)
-        by_difficulty.setdefault(tc.difficulty, []).append(tc)
-
-    per_task = [
-        {
-            "task_id": tc.task_id,
-            "mode": tc.mode,
-            "suite": tc.suite,
-            "difficulty": tc.difficulty,
-            "model": tc.usage.model,
-            "models": list(tc.models),
-            "input_tokens": tc.usage.input_tokens,
-            "output_tokens": tc.usage.output_tokens,
-            "cache_write_tokens": tc.usage.cache_write_tokens,
-            "cache_read_tokens": tc.usage.cache_read_tokens,
-            "num_requests": tc.usage.num_requests,
-            "cost_usd": tc.cost_usd,
-            "cost_source": tc.cost_source,
-            "trace_cost_usd": tc.trace_cost_usd,
-            "agent_duration_seconds": tc.agent_duration_seconds,
-        }
-        for tc in sorted(costs, key=lambda c: c.task_id)
-    ]
+    matched, unmatched_task_ids = comparison_attempts(costs)
 
     # Only the trace-derived population is exposed to PRICING, so only it can be
     # mispriced. An unpriced model here is billed at DEFAULT_MODEL rates, and such
@@ -758,18 +1058,52 @@ def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
             ", ".join(unpriced_models),
         )
 
+    def buckets(items: list[TaskCost], stats: Any) -> dict[str, Any]:
+        return {
+            "by_mode": {
+                k: stats(v) for k, v in sorted(_group_by(items, lambda t: t.mode).items())
+            },
+            "by_suite": {
+                k: stats(v)
+                for k, v in sorted(_group_by(items, lambda t: t.suite).items())
+            },
+            "by_difficulty": {
+                k: stats(v)
+                for k, v in sorted(_group_by(items, lambda t: t.difficulty).items())
+            },
+        }
+
     return {
+        "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "total_cost_usd": round(sum(tc.cost_usd for tc in costs), 6),
-        "total_tasks": len(costs),
-        "unpriced_models": unpriced_models,
-        "cost_sources": _cost_source_summary(costs),
-        "by_mode": {k: _bucket_stats(v) for k, v in sorted(by_mode.items())},
-        "by_suite": {k: _bucket_stats(v) for k, v in sorted(by_suite.items())},
-        "by_difficulty": {
-            k: _bucket_stats(v) for k, v in sorted(by_difficulty.items())
+        "selection_rule": SELECTION_RULE,
+        "operational_economics": {
+            "description": (
+                "Total spend across every attempt, re-runs and unscored runs "
+                "included. What was actually paid; not comparable across arms."
+            ),
+            "total_cost_usd": round(sum(tc.cost_usd for tc in costs), 6),
+            "attempts": len(costs),
+            "unpriced_models": unpriced_models,
+            "cost_sources": _cost_source_summary(costs),
+            **buckets(costs, _attempt_bucket),
         },
-        "per_task": per_task,
+        "comparison_economics": {
+            "description": (
+                "One selected attempt per (task_id, mode), restricted to tasks "
+                "present in every arm. The only view an arm-to-arm cost claim "
+                "may be built on."
+            ),
+            "total_cost_usd": round(sum(tc.cost_usd for tc in matched), 6),
+            "tasks": len(matched),
+            "modes": sorted({tc.mode for tc in matched}),
+            "excluded_unmatched_task_ids": unmatched_task_ids,
+            **buckets(matched, _comparison_bucket),
+            "per_task": [_attempt_row(tc) for tc in matched],
+        },
+        "duplicate_attempts": _duplicate_attempts(costs),
+        "invalid_attempts": _invalid_attempts(costs),
+        "per_attempt": [_attempt_row(tc) for tc in sorted(costs, key=lambda c: (c.task_id, c.mode, c.run_dir))],
     }
 
 
@@ -813,7 +1147,8 @@ def main(argv: list[str] | None = None) -> None:
         "--output",
         type=Path,
         default=None,
-        help="Output path for cost_report.json (default: results/cost_report.json).",
+        help="Output path for cost_report.json "
+        "(default: results/analysis/cost_report.json).",
     )
     parser.add_argument(
         "--benchmarks-root",
@@ -837,7 +1172,7 @@ def main(argv: list[str] | None = None) -> None:
 
     project_root = Path(__file__).resolve().parent.parent
     benchmarks_root = args.benchmarks_root or (project_root / "benchmarks")
-    output_path = args.output or (project_root / "results" / "cost_report.json")
+    output_path = args.output or (project_root / "results" / "analysis" / "cost_report.json")
     result_dirs = args.results_dir or _discover_default_dirs(project_root)
 
     if not result_dirs:
@@ -845,7 +1180,7 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     logger.info("Scanning %d result directories...", len(result_dirs))
-    costs = scan_results_dirs(result_dirs, benchmarks_root)
+    costs = scan_results_dirs(result_dirs, benchmarks_root, root=project_root)
     logger.info("Found %d tasks with trace data.", len(costs))
 
     report = aggregate_report(costs)

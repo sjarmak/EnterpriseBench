@@ -64,6 +64,11 @@ analyze: ## Run the score analysis engine (always re-scans raw runs)
 	@mkdir -p $(dir $(ANALYSIS_JSON))
 	$(PYTHON) scripts/analyze_scores.py --output $(ANALYSIS_JSON)
 
+.PHONY: cost
+cost: ## Regenerate the cost report (both economics views)
+	@mkdir -p $(dir $(COST_REPORT))
+	$(PYTHON) scripts/cost_tracker.py --output $(COST_REPORT)
+
 .PHONY: charts
 charts: analyze ## Regenerate PNG charts from analysis JSON
 	@mkdir -p $(CHARTS_DIR)

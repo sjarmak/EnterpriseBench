@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts.cost_tracker import SCHEMA_VERSION
 from scripts.generate_charts import (
     chart_calibration_check,
     chart_cost_by_mode,
@@ -192,16 +193,46 @@ MINIMAL_DATA: dict = {
     ],
 }
 
+# The comparison view is what the charts render: one row per (task_id, mode),
+# matched across arms. Note task-001 appears once per arm at DIFFERENT costs —
+# keying the lookup on task_id alone collapses them (EnterpriseBench-jrgs).
 MINIMAL_COST: dict = {
-    "by_mode": {
-        "baseline": {"total_cost_usd": 12.50},
-        "hybrid": {"total_cost_usd": 8.30},
+    "schema_version": SCHEMA_VERSION,
+    "selection_rule": "test",
+    "operational_economics": {
+        "total_cost_usd": 30.0,
+        "attempts": 8,
+        "by_mode": {
+            "baseline": {"attempts": 4, "total_cost_usd": 18.0,
+                         "avg_cost_per_attempt": 4.5},
+            "hybrid": {"attempts": 4, "total_cost_usd": 12.0,
+                       "avg_cost_per_attempt": 3.0},
+        },
     },
-    "per_task": [
-        {"task_id": "task-001", "cost_usd": 1.50},
-        {"task_id": "task-002", "cost_usd": 2.00},
-        {"task_id": "task-003", "cost_usd": 0.80},
-    ],
+    "comparison_economics": {
+        "total_cost_usd": 20.80,
+        "tasks": 6,
+        "modes": ["baseline", "hybrid"],
+        "excluded_unmatched_task_ids": [],
+        "by_mode": {
+            "baseline": {"tasks": 3, "total_cost_usd": 4.30,
+                         "avg_cost_per_task": 1.433333},
+            "hybrid": {"tasks": 3, "total_cost_usd": 16.50,
+                       "avg_cost_per_task": 5.50},
+        },
+        # task-003's hybrid run cost exactly $0.00 — a falsy value the old
+        # `entry.get("cost_usd") or ...` lookup discarded instead of plotting.
+        "per_task": [
+            {"task_id": "task-001", "mode": "baseline", "cost_usd": 1.50},
+            {"task_id": "task-001", "mode": "hybrid", "cost_usd": 9.90},
+            {"task_id": "task-002", "mode": "baseline", "cost_usd": 2.00},
+            {"task_id": "task-002", "mode": "hybrid", "cost_usd": 6.60},
+            {"task_id": "task-003", "mode": "baseline", "cost_usd": 0.80},
+            {"task_id": "task-003", "mode": "hybrid", "cost_usd": 0.0},
+        ],
+    },
+    "duplicate_attempts": [],
+    "invalid_attempts": [],
 }
 
 
@@ -282,6 +313,45 @@ def test_chart_cost_per_task(out_dir: Path) -> None:
 def test_chart_cost_by_mode(out_dir: Path) -> None:
     path = chart_cost_by_mode(MINIMAL_DATA, MINIMAL_COST, out_dir)
     _assert_png(path)
+
+
+class TestCostLookupIsKeyedOnTheCell:
+    """A task runs in every arm, so task_id alone does not identify a cost row.
+
+    Keying on task_id let each mode's row overwrite the previous one, and every
+    series then plotted whichever row happened to land last — silently, with the
+    same y-values under different mode colours (EnterpriseBench-jrgs).
+    """
+
+    def _scatter_ys(self, out_dir: Path, mode: str) -> list[float]:
+        """Re-derive what the chart would plot for *mode*, from the same inputs."""
+        cost_by_cell = {
+            (e["task_id"], e["mode"]): e
+            for e in MINIMAL_COST["comparison_economics"]["per_task"]
+        }
+        return [
+            cost_by_cell[(t["task_id"], mode)]["cost_usd"]
+            for t in MINIMAL_DATA["per_task"]
+            if t.get("scores", {}).get(mode) is not None
+            and (t["task_id"], mode) in cost_by_cell
+        ]
+
+    def test_arms_do_not_share_one_collapsed_cost_series(self, out_dir: Path) -> None:
+        baseline = self._scatter_ys(out_dir, "baseline")
+        hybrid = self._scatter_ys(out_dir, "hybrid")
+        assert baseline and hybrid
+        assert baseline != hybrid
+
+    def test_a_zero_cost_run_is_plotted_not_dropped(self, out_dir: Path) -> None:
+        """`cost_entry.get("cost_usd") or ...` discarded a legitimate $0.00 point."""
+        assert 0.0 in self._scatter_ys(out_dir, "hybrid")
+
+    def test_stale_report_raises_instead_of_charting_zeros(self, out_dir: Path) -> None:
+        stale = {"by_mode": {"baseline": {"total_cost": 12.5}}, "per_task": []}
+        with pytest.raises(ValueError, match="schema_version"):
+            chart_cost_by_mode(MINIMAL_DATA, stale, out_dir)
+        with pytest.raises(ValueError, match="schema_version"):
+            chart_cost_per_task(MINIMAL_DATA, stale, out_dir)
 
 
 # ── Orchestrator tests ───────────────────────────────────────────────────────

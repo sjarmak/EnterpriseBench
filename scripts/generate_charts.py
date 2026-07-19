@@ -25,6 +25,13 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import seaborn as sns  # noqa: E402
 
+# scripts/ has no __init__.py, and cost_tracker's own `from lib.shared import ...`
+# assumes this directory is on the path. True when run as a script; not true when
+# this module is imported as `scripts.generate_charts`.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from cost_tracker import require_schema  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 # ── Palette ──────────────────────────────────────────────────────────────────
@@ -388,12 +395,22 @@ def chart_calibration_check(data: dict[str, Any], out: Path) -> Path:
 def chart_cost_per_task(
     data: dict[str, Any], cost_data: dict[str, Any], out: Path
 ) -> Path:
-    """Scatter plot: x=score, y=cost_usd, colored by mode."""
+    """Scatter plot: x=score, y=cost_usd, colored by mode.
+
+    Costs come from the comparison view, which bills one attempt per
+    (task_id, mode) using the same selection rule analyze_scores uses — so each
+    point's score and cost describe the same run.
+    """
+    require_schema(cost_data, "generate_charts.chart_cost_per_task")
+
     per_task = data.get("per_task", [])
-    cost_by_task: dict[str, dict[str, Any]] = {}
-    for entry in cost_data.get("per_task", cost_data.get("tasks", [])):
-        tid = entry.get("task_id", "")
-        cost_by_task[tid] = entry
+    # Keyed on the cell, not the task: a task runs in every arm, and keying on
+    # task_id alone let each mode's row overwrite the previous one, so every
+    # series silently plotted whichever row happened to land last.
+    cost_by_cell: dict[tuple[str, str], dict[str, Any]] = {
+        (entry["task_id"], entry["mode"]): entry
+        for entry in cost_data["comparison_economics"]["per_task"]
+    }
 
     modes = _modes_present(data)
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -402,8 +419,9 @@ def chart_cost_per_task(
         xs, ys = [], []
         for t in per_task:
             score = t.get("scores", {}).get(mode)
-            cost_entry = cost_by_task.get(t["task_id"], {})
-            cost = cost_entry.get("cost_usd") or cost_entry.get("costs", {}).get(mode)
+            # Explicit None check: a genuine $0.00 run is falsy, and `or` would
+            # discard the point rather than plot it.
+            cost = cost_by_cell.get((t["task_id"], mode), {}).get("cost_usd")
             if score is not None and cost is not None:
                 xs.append(score)
                 ys.append(cost)
@@ -425,13 +443,18 @@ def chart_cost_per_task(
 def chart_cost_by_mode(
     data: dict[str, Any], cost_data: dict[str, Any], out: Path
 ) -> Path:
-    """Bar chart: total cost per mode."""
-    by_mode_cost = cost_data.get("by_mode", {})
+    """Bar chart: total cost per mode, over the matched task set.
+
+    Bars sit side by side and read as directly comparable, so they have to be:
+    the comparison view restricts every arm to the tasks present in all of them.
+    Operational totals cover different task sets per arm and would not.
+    """
+    require_schema(cost_data, "generate_charts.chart_cost_by_mode")
+
+    comparison = cost_data["comparison_economics"]
+    by_mode_cost = comparison["by_mode"]
     modes = [m for m in MODE_ORDER if m in by_mode_cost]
-    totals = [
-        by_mode_cost[m].get("total_cost", by_mode_cost[m].get("total_cost_usd", 0))
-        for m in modes
-    ]
+    totals = [by_mode_cost[m]["total_cost_usd"] for m in modes]
     colors = [MODE_COLORS[m] for m in modes]
 
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -446,7 +469,7 @@ def chart_cost_by_mode(
             fontsize=10,
         )
     ax.set_ylabel("Total Cost (USD)")
-    ax.set_title("Total Cost by Mode")
+    ax.set_title(f"Cost by Mode ({comparison['tasks']} tasks matched across arms)")
     dest = out / "cost_by_mode.png"
     fig.tight_layout()
     fig.savefig(dest, dpi=DPI)
@@ -533,7 +556,7 @@ def main() -> None:
     parser.add_argument(
         "--cost-report",
         type=Path,
-        default=Path("results/cost_report.json"),
+        default=Path("results/analysis/cost_report.json"),
         help="Path to cost_report.json (skip if missing)",
     )
     parser.add_argument(

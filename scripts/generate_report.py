@@ -17,6 +17,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# scripts/ has no __init__.py, and cost_tracker's own `from lib.shared import ...`
+# assumes this directory is on the path. True when run as a script; not true when
+# this module is imported as `scripts.generate_report`.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from cost_tracker import require_schema  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -405,7 +412,13 @@ def build_reproducibility_section(inputs: ReportInputs) -> str:
 
 
 def build_cost_section(inputs: ReportInputs) -> str:
-    """Generate cost analysis section."""
+    """Render both cost views, each with its denominator named.
+
+    The two answer different questions and must never be merged: operational is
+    what was paid across every attempt, comparison is what the matched suite
+    costs per arm. A single "total cost" line was correct as one and wrong as
+    the other, with nothing saying which (EnterpriseBench-jrgs).
+    """
     cr = inputs.cost_report
     if cr is None:
         return (
@@ -413,28 +426,76 @@ def build_cost_section(inputs: ReportInputs) -> str:
             "`python3 scripts/cost_tracker.py` to generate.\n"
         )
 
-    lines = [f"- Total cost: ${cr.get('total_cost_usd', 0):.2f}"]
+    require_schema(cr, "generate_report.build_cost_section")
+    op = cr["operational_economics"]
+    comp = cr["comparison_economics"]
 
-    by_mode = cr.get("by_mode", {})
-    if by_mode:
-        headers = ["Mode", "Tasks", "Total Cost", "Avg Cost"]
-        rows: list[list[str]] = []
-        for mode in sorted(by_mode.keys()):
-            s = by_mode[mode]
-            rows.append(
+    lines = [
+        "**Operational economics** — total spend across every attempt, "
+        "re-runs and unscored runs included. Not comparable across arms.",
+        "",
+        f"- Total spend: ${op['total_cost_usd']:.2f} over {op['attempts']} attempts",
+    ]
+
+    if op["by_mode"]:
+        lines.append(
+            make_table(
+                ["Mode", "Attempts", "Total Spend", "Avg / Attempt"],
                 [
-                    mode,
-                    str(s.get("count", 0)),
-                    f"${s.get('total_cost', 0):.2f}",
-                    f"${s.get('avg_cost', 0):.2f}",
-                ]
+                    [
+                        mode,
+                        str(s["attempts"]),
+                        f"${s['total_cost_usd']:.2f}",
+                        f"${s['avg_cost_per_attempt']:.2f}",
+                    ]
+                    for mode, s in sorted(op["by_mode"].items())
+                ],
             )
-        lines.append(make_table(headers, rows))
+        )
 
-    total_tasks = cr.get("total_tasks", 0)
-    total_cost = cr.get("total_cost_usd", 0)
-    if total_tasks > 0:
-        lines.append(f"- Average cost per task: ${total_cost / total_tasks:.2f}")
+    lines += [
+        "",
+        "**Comparison economics** — one attempt per (task, arm), restricted to "
+        f"the {comp['tasks']} tasks present in every arm. "
+        f"Selection: {cr['selection_rule']}",
+        "",
+        f"- Matched suite cost: ${comp['total_cost_usd']:.2f}",
+    ]
+
+    if comp["by_mode"]:
+        lines.append(
+            make_table(
+                ["Mode", "Tasks", "Total Cost", "Avg / Task"],
+                [
+                    [
+                        mode,
+                        str(s["tasks"]),
+                        f"${s['total_cost_usd']:.2f}",
+                        f"${s['avg_cost_per_task']:.2f}",
+                    ]
+                    for mode, s in sorted(comp["by_mode"].items())
+                ],
+            )
+        )
+
+    # Exclusions are disclosed, not silently dropped: a reader comparing the two
+    # totals must be able to see what the gap is made of.
+    excluded = comp["excluded_unmatched_task_ids"]
+    if excluded:
+        lines.append(
+            f"- Excluded from comparison (not present in every arm, "
+            f"{len(excluded)}): {', '.join(excluded)}"
+        )
+    if cr["duplicate_attempts"]:
+        lines.append(
+            f"- Re-run cells (counted once in comparison, "
+            f"every attempt billed in spend): {len(cr['duplicate_attempts'])}"
+        )
+    if cr["invalid_attempts"]:
+        lines.append(
+            f"- Unscored attempts (billed as spend, never compared): "
+            f"{len(cr['invalid_attempts'])}"
+        )
 
     chart = _chart_ref("cost_by_mode.png", "Cost by Mode", inputs.available_charts)
     return "\n".join(lines) + "\n" + chart
@@ -620,7 +681,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--cost-report",
         type=Path,
-        default=ROOT / "results" / "cost_report.json",
+        default=ROOT / "results" / "analysis" / "cost_report.json",
         help="Path to cost_report.json (optional)",
     )
     parser.add_argument(

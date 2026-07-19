@@ -10,6 +10,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+from cost_tracker import SCHEMA_VERSION
 from generate_report import (
     ReportInputs,
     build_calibration_section,
@@ -312,24 +313,86 @@ class TestReproducibilitySection:
         assert "**PASS**" in result
 
 
+def _cost_report(**overrides: object) -> dict:
+    """A schema-current cost report where the two views deliberately disagree."""
+    report = {
+        "schema_version": SCHEMA_VERSION,
+        "selection_rule": "highest normalized_score, then latest trace timestamp",
+        "operational_economics": {
+            "total_cost_usd": 123.45,
+            "attempts": 50,
+            "by_mode": {
+                "baseline": {"attempts": 30, "total_cost_usd": 80.0,
+                             "avg_cost_per_attempt": 2.67},
+                "hybrid": {"attempts": 20, "total_cost_usd": 43.45,
+                           "avg_cost_per_attempt": 2.17},
+            },
+        },
+        "comparison_economics": {
+            "total_cost_usd": 96.00,
+            "tasks": 40,
+            "modes": ["baseline", "hybrid"],
+            "excluded_unmatched_task_ids": ["orphan-001"],
+            "by_mode": {
+                "baseline": {"tasks": 20, "total_cost_usd": 56.0,
+                             "avg_cost_per_task": 2.80},
+                "hybrid": {"tasks": 20, "total_cost_usd": 40.0,
+                           "avg_cost_per_task": 2.00},
+            },
+            "per_task": [],
+        },
+        "duplicate_attempts": [{"task_id": "t1", "mode": "hybrid", "attempts": 2,
+                                "runs": []}],
+        "invalid_attempts": [{"task_id": "t2", "mode": "baseline",
+                              "run_dir": "d", "cost_usd": 1.0,
+                              "reason": "no_normalized_score"}],
+    }
+    report.update(overrides)
+    return report
+
+
 class TestCostSection:
     def test_missing_report(self) -> None:
         result = build_cost_section(_make_inputs())
         assert "not yet generated" in result
 
-    def test_present_report(self) -> None:
-        cost = {
-            "total_cost_usd": 123.45,
-            "total_tasks": 50,
-            "by_mode": {
-                "baseline": {"count": 30, "total_cost": 80.0, "avg_cost": 2.67},
-                "hybrid": {"count": 20, "total_cost": 43.45, "avg_cost": 2.17},
-            },
-        }
-        result = build_cost_section(_make_inputs(cost_report=cost))
-        assert "$123.45" in result
+    def test_both_views_are_rendered_with_their_denominators(self) -> None:
+        """One "Total cost" line was correct as spend and wrong as suite cost."""
+        result = build_cost_section(_make_inputs(cost_report=_cost_report()))
+        assert "$123.45" in result and "50 attempts" in result
+        assert "$96.00" in result and "40 tasks" in result
+        assert "Operational economics" in result
+        assert "Comparison economics" in result
         assert "baseline" in result
-        assert "Average cost per task" in result
+
+    def test_per_arm_averages_come_from_the_comparison_view(self) -> None:
+        result = build_cost_section(_make_inputs(cost_report=_cost_report()))
+        assert "$2.80" in result  # baseline avg per matched task
+        assert "$2.00" in result  # hybrid avg per matched task
+
+    def test_selection_rule_is_stated(self) -> None:
+        result = build_cost_section(_make_inputs(cost_report=_cost_report()))
+        assert "highest normalized_score" in result
+
+    def test_exclusions_are_disclosed(self) -> None:
+        result = build_cost_section(_make_inputs(cost_report=_cost_report()))
+        assert "orphan-001" in result
+        assert "Re-run cells" in result
+        assert "Unscored attempts" in result
+
+    def test_clean_corpus_discloses_nothing_spurious(self) -> None:
+        clean = _cost_report(duplicate_attempts=[], invalid_attempts=[])
+        clean["comparison_economics"]["excluded_unmatched_task_ids"] = []
+        result = build_cost_section(_make_inputs(cost_report=clean))
+        assert "Re-run cells" not in result
+        assert "Unscored attempts" not in result
+        assert "Excluded from comparison" not in result
+
+    def test_stale_report_raises_instead_of_printing_zeros(self) -> None:
+        """`.get(key, 0)` on a foreign schema renders a fabricated $0.00."""
+        stale = {"total_cost_usd": 123.45, "total_tasks": 50, "by_mode": {}}
+        with pytest.raises(ValueError, match="schema_version"):
+            build_cost_section(_make_inputs(cost_report=stale))
 
 
 class TestKeyFindings:
@@ -421,11 +484,7 @@ class TestFullReport:
         assert "not yet generated" in report  # both missing
 
     def test_with_all_optional_inputs(self) -> None:
-        cost = {
-            "total_cost_usd": 50.0,
-            "total_tasks": 10,
-            "by_mode": {"baseline": {"count": 10, "total_cost": 50.0, "avg_cost": 5.0}},
-        }
+        cost = _cost_report()
         repro = {
             "sample_size": 10,
             "variance_threshold": 0.15,
@@ -436,7 +495,8 @@ class TestFullReport:
         }
         inputs = _make_inputs(cost_report=cost, reproducibility_report=repro)
         report = generate_report(inputs)
-        assert "$50.00" in report
+        assert "$123.45" in report  # operational
+        assert "$96.00" in report  # comparison
         assert "**PASS**" in report
 
 
