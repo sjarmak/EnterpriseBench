@@ -40,17 +40,23 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import glob
 import json
-import os
 import re
 import subprocess
+import sys
+from collections import Counter
+from functools import lru_cache
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BENCH = REPO_ROOT / "benchmarks"
 OUT_DIR = REPO_ROOT / "results" / "rryas_dataset"
 GATE_ANALYSIS = OUT_DIR / "gate_analysis.json"
+
+# The canonical task enumerator (name-based _archived/mined skips), shared with the
+# audit_* scripts — avoids a private, substring-based re-implementation.
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from lib.tasks import find_task_dirs  # noqa: E402
 
 # Open verifier/reward-integrity findings the 2026-07-19 directive excludes.
 FINDING_BEADS = ["EnterpriseBench-639lv", "EnterpriseBench-mgodn",
@@ -64,54 +70,59 @@ _FULL_CREDIT_RE = re.compile(
     r'|(?:score|full_credit|FULL_CREDIT)\s*=\s*1(?:\.0+)?\b',
     re.I,
 )
-# ...and does so guarded by an absence/emptiness test on ground truth (ozbjt freebie).
-_ABSENCE_HINT_RE = re.compile(r"\bnot\b|\bempty\b|\bno\b|==\s*0|len\(|\.get\(|absent|missing",
-                              re.I)
-# Proximity window (chars) between the full-credit emission and the absence hint.
-# LIMITATION (documented, like the closed-book residual): this is a proximity +
-# literal-value heuristic, not an AST/block analysis. A guard set >_FREEBIE_WINDOW
-# chars from the credit line, or full credit reached through multi-hop variable
-# indirection, can evade it. 0/48 eligible tasks trip either mode today; the invariant
-# test re-runs this scan so a regression that lands a freebie in a manifest task's
-# checks fails CI, but a novel evasion shape would need the detector widened.
+# ...guarded by an absence/emptiness test (ozbjt freebie is "full credit when the GT
+# collection is empty"), AND referencing ground truth nearby — the GT reference keeps a
+# bare `.get(`/`len(` next to any future pass-path score literal from causing a false
+# exclusion, while still matching the real shape (`if not gt_flag_names:` → score 1.0).
+_ABSENCE_HINT_RE = re.compile(r"\bnot\b|\bempty\b|\bno\b|==\s*0|absent|missing", re.I)
+_GT_REF_RE = re.compile(r"\bgt\b|gt_|ground.?truth|expected|golden|oracle", re.I)
+# Proximity window (chars) around the full-credit emission for both hints.
+# LIMITATION (documented, like the closed-book residual): a proximity + literal-value
+# heuristic, not AST/block analysis. A guard >_FREEBIE_WINDOW chars away, or full credit
+# reached through multi-hop variable indirection, can evade it. 0/48 eligible tasks trip
+# it today; the invariant test re-runs the scan so a regression that lands a freebie in a
+# manifest task fails CI, but a novel evasion shape would need the detector widened.
 _FREEBIE_WINDOW = 600
 # v9okc: scoring by grepping a patch/diff.
-_PATCH_RE = re.compile(r"\bgit\s+(diff|apply)\b|\.patch\b|\.diff\b|\bdiff\b.*grep", re.I)
+_PATCH_RE = re.compile(r"\bgit\s+(?:diff|apply)\b|\.patch\b|\.diff\b|\bdiff\b.*grep", re.I)
+
+
+@lru_cache(maxsize=1)
+def _task_index() -> dict[str, Path]:
+    """{task_id: task_dir} over the active corpus — one tree walk, shared by
+    task_dir() and real_task_ids()."""
+    return {d.name: d for d in find_task_dirs()}
 
 
 def task_dir(task_id: str) -> Path | None:
-    hits = [os.path.dirname(t) for t in glob.glob(str(BENCH / "*" / task_id / "task.toml"))]
-    return Path(hits[0]) if hits else None
+    return _task_index().get(task_id)
+
+
+def _read_checks(tdir: Path) -> list[tuple[str, str]]:
+    """(basename, text) for every checks/*.sh — one glob+read, shared by both scans."""
+    return [(chk.name, chk.read_text(errors="replace"))
+            for chk in sorted(tdir.glob("checks/*.sh"))]
 
 
 def freebie_checks(tdir: Path) -> list[str]:
     """Check basenames that emit full credit inside an absence/empty GT branch (ozbjt)."""
     hits = []
-    for chk in sorted(glob.glob(str(tdir / "checks" / "*.sh"))):
-        txt = Path(chk).read_text(errors="replace")
+    for name, txt in _read_checks(tdir):
         for m in _FULL_CREDIT_RE.finditer(txt):
-            window = txt[max(0, m.start() - _FREEBIE_WINDOW):m.end() + 40]
-            if _ABSENCE_HINT_RE.search(window):
-                hits.append(os.path.basename(chk))
+            window = txt[max(0, m.start() - _FREEBIE_WINDOW):m.end() + _FREEBIE_WINDOW]
+            if _ABSENCE_HINT_RE.search(window) and _GT_REF_RE.search(window):
+                hits.append(name)
                 break
     return hits
 
 
 def patch_checks(tdir: Path) -> list[str]:
     """Check basenames that score by grepping a patch/diff (v9okc)."""
-    return [
-        os.path.basename(chk)
-        for chk in sorted(glob.glob(str(tdir / "checks" / "*.sh")))
-        if _PATCH_RE.search(Path(chk).read_text(errors="replace"))
-    ]
+    return [name for name, txt in _read_checks(tdir) if _PATCH_RE.search(txt)]
 
 
 def real_task_ids() -> set[str]:
-    return {
-        os.path.basename(os.path.dirname(t))
-        for t in glob.glob(str(BENCH / "*" / "*" / "task.toml"))
-        if "_archived" not in t and "mined" not in t
-    }
+    return set(_task_index())
 
 
 class FindingLookupError(RuntimeError):
@@ -141,7 +152,12 @@ def finding_named_sets() -> dict[str, list[str]]:
                 f"`bd show {bead}` returned rc={proc.returncode} / empty output; "
                 f"refusing to treat a bd outage as 'no task named' — {proc.stderr.strip()[:200]}"
             )
-        named[bead] = sorted(t for t in reals if t in proc.stdout)
+        # Whole-token match (ids contain hyphens) so a short id can't false-match as a
+        # substring of a longer id or of unrelated prose.
+        named[bead] = sorted(
+            t for t in reals
+            if re.search(rf"(?<![\w-]){re.escape(t)}(?![\w-])", proc.stdout)
+        )
     return named
 
 
@@ -185,6 +201,9 @@ def curate() -> dict:
             exclusions.append({**rec, "excluded": True, "reason": reason})
             continue
         # all_pass: apply name-set + per-vector class exclusions (C1).
+        # (all_pass ⟹ md-gradeable: a JSON deliverable drives gate3 to None, so it can
+        # never be all_pass — that upstream gate is why the eligible set is md-report-only
+        # without an explicit suffix filter here.)
         # Fail CLOSED if the task dir vanished — never let an all_pass task skip the
         # load-bearing class scan and fall through to eligible unexamined.
         if tdir is None:
@@ -211,10 +230,8 @@ def curate() -> dict:
 
 
 def _dist(rows: list[dict], key: str) -> dict[str, int]:
-    out: dict[str, int] = {}
-    for r in rows:
-        out[r[key]] = out.get(r[key], 0) + 1
-    return dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0])))
+    counts = Counter(r[key] for r in rows)
+    return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
 def _dump(path: Path, obj: dict) -> None:
@@ -252,28 +269,24 @@ def write_artifacts(result: dict) -> None:
 
 
 def _drift(result: dict) -> list[str]:
-    """Committed artifacts vs a fresh curate() — id sets AND exclusion reason map."""
-    stale: list[str] = []
+    """Committed artifacts vs a fresh curate() — id sets AND exclusion reason map.
+
+    Each artifact declares its own extractor next to its expected data, so both
+    sides are data-driven (no filename-string branching)."""
     fresh_eligible = {r["task_id"] for r in result["eligible"]}
     fresh_excl = {r["task_id"]: r["reason"] for r in result["exclusions"]}
-    checks: list[tuple[str, set | dict]] = [
-        ("eligible_pool.json", fresh_eligible),
-        ("candidate_manifest.json", fresh_eligible),
-        ("exclusions.json", fresh_excl),
+    artifacts: list[tuple[str, set | dict, "callable"]] = [
+        ("eligible_pool.json", fresh_eligible, lambda d: {t["task_id"] for t in d["tasks"]}),
+        ("candidate_manifest.json", fresh_eligible, lambda d: set(d["task_ids"])),
+        ("exclusions.json", fresh_excl, lambda d: {t["task_id"]: t["reason"] for t in d["tasks"]}),
     ]
-    for name, fresh in checks:
+    stale: list[str] = []
+    for name, fresh, extract in artifacts:
         path = OUT_DIR / name
         if not path.exists():
             stale.append(f"{name} missing")
             continue
-        doc = json.loads(path.read_text(encoding="utf-8"))
-        if name == "exclusions.json":
-            committed: set | dict = {t["task_id"]: t["reason"] for t in doc["tasks"]}
-        elif "task_ids" in doc:
-            committed = set(doc["task_ids"])
-        else:
-            committed = {t["task_id"] for t in doc.get("tasks", [])}
-        if committed != fresh:
+        if extract(json.loads(path.read_text(encoding="utf-8"))) != fresh:
             stale.append(f"{name}: committed != fresh (re-run curate_rryas_manifest.py)")
     return stale
 

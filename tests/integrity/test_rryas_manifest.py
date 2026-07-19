@@ -1,21 +1,20 @@
 """Invariants for the rryas curated 3-arm candidate manifest.
 
-What is genuinely RE-DERIVED from the live corpus (a static read would rubber-stamp
-stale evidence, same reasoning as the scorer-guard doctrine: a verdict is valid only
-if the pristine verifier ran):
-  * gate 3 (prompt-echo): ``echo_leak`` re-runs every check against a ``cp
-    instruction.md`` echo per manifest task — a reintroduced leak fails here;
+Everything the manifest depends on is RE-DERIVED from the live corpus (a static read of
+``gate_analysis.json`` would rubber-stamp stale evidence, same reasoning as the
+scorer-guard doctrine: a verdict is valid only if the pristine verifier ran):
+  * gates 2+3+4: ``analyzer.analyze`` re-runs the source-file heuristic, the prompt-echo
+    attack, and the expected_solution consistency checks per manifest task — a drift in
+    any gate flips ``all_pass`` and fails here. (An earlier mtime "staleness" guard was
+    removed: git does not version mtimes, so on a fresh clone it passed vacuously — the
+    exact CI environment where drift lands. Live re-derivation is the honest guard.)
   * the per-vector class scan (ozbjt freebie / v9okc patch-grep) is re-run per task;
   * the name-set lookup is re-queried live from ``bd`` and matched to the committed
     snapshot, so a ``bd`` outage fails LOUD rather than reading as "no task named".
 
-What is TRUSTED from the last ``curated_gate_analyzer.py`` run, NOT re-executed here:
-  * gate 2 (ground-truth-file source heuristic) and gate 4 (expected_solution
-    consistency) come from the committed ``gate_analysis.json``. Re-running them means
-    re-running every task's checks against its expected_solution — too slow for CI.
-    ``test_gate_analysis_not_stale`` instead asserts the snapshot is newer than every
-    input it depends on, so gate2/4 drift is caught as staleness rather than silently
-    trusted.
+The committed ``gate_analysis.json`` supplies only the task LIST/metadata (suite, type);
+its cached verdicts are ignored — ``analyze`` recomputes them. Metadata drift is caught
+by the sync test.
 
 Guards, per the architect + reviewer findings folded into MANIFEST.md.
 """
@@ -61,6 +60,10 @@ def _manifest_task_ids() -> list[str]:
 
 MANIFEST_IDS = _manifest_task_ids()
 
+# task_id -> pool dict (task LIST/metadata only; analyze() recomputes every gate verdict).
+_POOL_BY_ID = {t["task_id"]: t
+               for t in json.loads((OUT_DIR / "gate_analysis.json").read_text(encoding="utf-8"))}
+
 
 def test_manifest_nonempty_and_bounded():
     # The candidate set is the full verified-clean survivor pool; it must not be
@@ -70,12 +73,17 @@ def test_manifest_nonempty_and_bounded():
 
 
 @pytest.mark.parametrize("task_id", MANIFEST_IDS)
-def test_candidate_is_still_echo_clean(task_id):
-    """RE-DERIVED: re-run every check against a prompt echo; nothing may score > 0."""
-    tdir = curator.task_dir(task_id)
-    assert tdir is not None, f"{task_id}: task dir not found"
-    leak = analyzer.echo_leak(tdir)
-    assert leak == {}, f"{task_id}: prompt-echo leak reappeared: {leak}"
+def test_candidate_rederives_all_pass(task_id):
+    """RE-DERIVED live: re-run gates 2+3+4 (source heuristic, prompt-echo, expected_solution
+    consistency) from the corpus; a drift in any gate flips all_pass and fails here."""
+    task = _POOL_BY_ID.get(task_id)
+    assert task is not None, f"{task_id}: absent from gate_analysis.json"
+    result = analyzer.analyze(task)
+    assert result.all_pass, (
+        f"{task_id}: re-derived gates no longer all-pass "
+        f"(gate2_suspects={result.gate2_suspects}, gate3_pass={result.gate3_pass}, "
+        f"gate4_pass={result.gate4_pass})"
+    )
 
 
 @pytest.mark.parametrize("task_id", MANIFEST_IDS)
@@ -127,25 +135,3 @@ def test_committed_manifest_and_exclusions_in_sync_with_curation():
                       for t in json.loads((OUT_DIR / "exclusions.json").read_text(
                           encoding="utf-8"))["tasks"]}
     assert committed_excl == fresh_excl, "exclusions.json reason attribution drifted"
-
-
-def test_gate_analysis_not_stale():
-    """gate2/gate4 are trusted from gate_analysis.json (not re-run here); guard against
-    a stale snapshot by asserting it is newer than every input it summarizes for the
-    manifest tasks — a checks/*.sh or expected_solution.json edited after the snapshot
-    would otherwise be silently trusted."""
-    ga = OUT_DIR / "gate_analysis.json"
-    assert ga.exists(), "gate_analysis.json missing; run curated_gate_analyzer.py --json"
-    ga_mtime = ga.stat().st_mtime
-    newer: list[str] = []
-    for tid in MANIFEST_IDS:
-        tdir = curator.task_dir(tid)
-        inputs = list((tdir).glob("checks/*.sh"))
-        exp = tdir / "expected_solution.json"
-        if exp.exists():
-            inputs.append(exp)
-        for f in inputs:
-            if f.stat().st_mtime > ga_mtime:
-                newer.append(str(f.relative_to(REPO_ROOT)))
-    assert not newer, ("gate_analysis.json is older than inputs it summarizes "
-                       f"(gate2/4 may be stale); regenerate. Newer: {sorted(newer)[:10]}")
