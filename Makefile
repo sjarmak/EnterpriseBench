@@ -109,5 +109,5 @@ test: ## Run the test suite (override PYTEST_PATHS / PYTEST_ARGS)
 
 .PHONY: clean
 clean: ## Remove generated analysis artifacts (does NOT touch raw runs)
-	rm -f $(ANALYSIS_JSON) $(REPORT_MD)
+	rm -f $(ANALYSIS_JSON) $(REPORT_MD) $(COST_REPORT)
 	rm -rf $(CHARTS_DIR)

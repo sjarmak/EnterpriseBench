@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import generate_charts
 from scripts.cost_tracker import SCHEMA_VERSION
 from scripts.generate_charts import (
     chart_calibration_check,
@@ -323,28 +324,40 @@ class TestCostLookupIsKeyedOnTheCell:
     same y-values under different mode colours (EnterpriseBench-jrgs).
     """
 
-    def _scatter_ys(self, out_dir: Path, mode: str) -> list[float]:
-        """Re-derive what the chart would plot for *mode*, from the same inputs."""
-        cost_by_cell = {
-            (e["task_id"], e["mode"]): e
-            for e in MINIMAL_COST["comparison_economics"]["per_task"]
+    def _scatter_ys(self, monkeypatch, out_dir: Path) -> dict[str, list[float]]:
+        """Run the real chart and read back the costs it plotted, per mode.
+
+        Re-deriving the lookup here instead would assert against a copy of the
+        code under test, so breaking the chart would leave these tests green.
+        """
+        axes = []
+        real_subplots = generate_charts.plt.subplots
+
+        def spy(*args, **kwargs):
+            fig, ax = real_subplots(*args, **kwargs)
+            axes.append(ax)
+            return fig, ax
+
+        monkeypatch.setattr(generate_charts.plt, "subplots", spy)
+        chart_cost_per_task(MINIMAL_DATA, MINIMAL_COST, out_dir)
+        (ax,) = axes
+        return {
+            series.get_label(): [float(y) for _, y in series.get_offsets()]
+            for series in ax.collections
         }
-        return [
-            cost_by_cell[(t["task_id"], mode)]["cost_usd"]
-            for t in MINIMAL_DATA["per_task"]
-            if t.get("scores", {}).get(mode) is not None
-            and (t["task_id"], mode) in cost_by_cell
-        ]
 
-    def test_arms_do_not_share_one_collapsed_cost_series(self, out_dir: Path) -> None:
-        baseline = self._scatter_ys(out_dir, "baseline")
-        hybrid = self._scatter_ys(out_dir, "hybrid")
-        assert baseline and hybrid
-        assert baseline != hybrid
+    def test_arms_do_not_share_one_collapsed_cost_series(
+        self, monkeypatch, out_dir: Path
+    ) -> None:
+        plotted = self._scatter_ys(monkeypatch, out_dir)
+        assert plotted["baseline"] and plotted["hybrid"]
+        assert plotted["baseline"] != plotted["hybrid"]
 
-    def test_a_zero_cost_run_is_plotted_not_dropped(self, out_dir: Path) -> None:
+    def test_a_zero_cost_run_is_plotted_not_dropped(
+        self, monkeypatch, out_dir: Path
+    ) -> None:
         """`cost_entry.get("cost_usd") or ...` discarded a legitimate $0.00 point."""
-        assert 0.0 in self._scatter_ys(out_dir, "hybrid")
+        assert 0.0 in self._scatter_ys(monkeypatch, out_dir)["hybrid"]
 
     def test_stale_report_raises_instead_of_charting_zeros(self, out_dir: Path) -> None:
         stale = {"by_mode": {"baseline": {"total_cost": 12.5}}, "per_task": []}

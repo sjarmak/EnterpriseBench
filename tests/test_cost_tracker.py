@@ -26,9 +26,9 @@ from cost_tracker import (
     compute_cost,
     merge_model_usage,
     parse_model_usage,
-    parse_trace,
     require_schema,
     scan_results_dirs,
+    scan_trace,
     select_attempt,
     _parse_dir_identity,
 )
@@ -119,7 +119,7 @@ def _synthetic_error_entry() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# parse_trace
+# scan_trace
 # ---------------------------------------------------------------------------
 
 
@@ -129,7 +129,7 @@ class TestParseTrace:
             tmp_path / "agent_trace.jsonl",
             [_assistant_entry(input_tokens=200, output_tokens=80)],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
         assert usage.input_tokens == 200
         assert usage.output_tokens == 80
         assert usage.cache_write_tokens == 0
@@ -146,7 +146,7 @@ class TestParseTrace:
                 _assistant_entry(input_tokens=200, output_tokens=30, cache_read=500),
             ],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
         assert usage.input_tokens == 300
         assert usage.output_tokens == 80
         assert usage.cache_write_tokens == 10
@@ -155,7 +155,7 @@ class TestParseTrace:
 
     def test_empty_trace(self, tmp_path: Path) -> None:
         trace = _write_trace(tmp_path / "agent_trace.jsonl", [])
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
         assert usage.input_tokens == 0
         assert usage.num_requests == 0
         assert usage.model == DEFAULT_MODEL
@@ -174,7 +174,7 @@ class TestParseTrace:
                 ),
             ],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
         assert usage.model == "claude-opus-4-8"
         assert usage.input_tokens == 1000
         assert usage.output_tokens == 500
@@ -189,7 +189,7 @@ class TestParseTrace:
             tmp_path / "agent_trace.jsonl",
             [_synthetic_error_entry()],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
         assert usage.model == DEFAULT_MODEL
         assert usage.input_tokens == 0
         assert usage.output_tokens == 0
@@ -202,7 +202,7 @@ class TestParseTrace:
             fh.write(
                 json.dumps(_assistant_entry(input_tokens=42, output_tokens=7)) + "\n"
             )
-        usage = parse_trace(path)
+        usage = scan_trace(path).usage
         assert usage.input_tokens == 42
         assert usage.num_requests == 1
 
@@ -218,7 +218,7 @@ class TestParseTrace:
             fh.write(
                 json.dumps(_assistant_entry(input_tokens=42, output_tokens=7)) + "\n"
             )
-        usage = parse_trace(path)
+        usage = scan_trace(path).usage
         assert usage.input_tokens == 42
         assert usage.num_requests == 1
 
@@ -232,7 +232,7 @@ class TestParseTrace:
             fh.write(
                 json.dumps(_assistant_entry(input_tokens=42, output_tokens=7)) + "\n"
             )
-        usage = parse_trace(path)
+        usage = scan_trace(path).usage
         assert usage.input_tokens == 42
         assert usage.num_requests == 1
 
@@ -244,7 +244,7 @@ class TestParseTrace:
                 {"type": "user", "message": {"role": "user"}},
             ],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
         assert usage.num_requests == 0
 
     def test_model_captured_from_first_assistant(self, tmp_path: Path) -> None:
@@ -255,12 +255,12 @@ class TestParseTrace:
                 _assistant_entry(model="claude-haiku-4-5"),
             ],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
         assert usage.model == "claude-opus-4-6"
 
 
 # ---------------------------------------------------------------------------
-# parse_trace — per-request dedup (EnterpriseBench-ewr8)
+# scan_trace — per-request dedup (EnterpriseBench-ewr8)
 # ---------------------------------------------------------------------------
 
 
@@ -283,7 +283,7 @@ class TestRequestIdDedup:
                 _block_entry("req_A", output_tokens=335, block_type="tool_use"),
             ],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
 
         assert usage.output_tokens == 335  # final, not 8 (first) and not 343 (sum)
         assert usage.input_tokens == 3  # counted once, not 6
@@ -301,7 +301,7 @@ class TestRequestIdDedup:
             tmp_path / "agent_trace.jsonl",
             [_block_entry("req_B", output_tokens=937) for _ in range(7)],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
 
         assert usage.output_tokens == 937  # not 6559
         assert usage.input_tokens == 3  # not 21
@@ -322,7 +322,7 @@ class TestRequestIdDedup:
                 _block_entry("req_C", output_tokens=500, block_type="text"),
             ],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
 
         assert usage.output_tokens == 500
         assert usage.input_tokens == 3
@@ -338,7 +338,7 @@ class TestRequestIdDedup:
                 _block_entry("req_B", output_tokens=250, cache_read=19655),
             ],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
 
         assert usage.output_tokens == 350  # 100 + 250
         assert usage.input_tokens == 6  # 3 + 3, one per request
@@ -363,7 +363,7 @@ class TestRequestIdDedup:
             tmp_path / "agent_trace.jsonl",
             [_block_entry("req_D", output_tokens=812), error_record],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
 
         assert usage.output_tokens == 812
         assert usage.input_tokens == 3
@@ -382,7 +382,7 @@ class TestRequestIdDedup:
                 for out in (8, 640)
             ],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
 
         assert usage.output_tokens == 640  # not 648
         assert usage.input_tokens == 3  # not 6
@@ -403,7 +403,7 @@ class TestRequestIdDedup:
                 _assistant_entry(input_tokens=200, output_tokens=30),
             ],
         )
-        usage = parse_trace(trace)
+        usage = scan_trace(trace).usage
 
         assert usage.input_tokens == 300
         assert usage.output_tokens == 80

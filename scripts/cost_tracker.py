@@ -47,6 +47,7 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from operator import attrgetter
 from pathlib import Path
 from typing import Any
 
@@ -116,7 +117,7 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 
 # Claude Code stamps this on an ``isApiErrorMessage`` assistant line (a 401/429
 # placeholder) in place of a real model name. It is a sentinel, not a model, so
-# ``parse_trace`` refuses to let it latch a run's representative model: a
+# ``scan_trace`` refuses to let it latch a run's representative model: a
 # pure-error run then resolves to DEFAULT_MODEL at zero usage (zero cost), and a
 # retried run keeps the real model from its successful turn. Guarding at capture
 # is what keeps such tokens from being mispriced and dropped from the
@@ -280,12 +281,6 @@ def _request_key(entry: dict[str, Any]) -> str | None:
         return msg_id
 
     return None
-
-
-def parse_trace(trace_path: Path) -> Usage:
-    """Token usage for one run — :func:`scan_trace` without the timestamp."""
-
-    return scan_trace(trace_path).usage
 
 
 def scan_trace(trace_path: Path) -> TraceScan:
@@ -810,43 +805,51 @@ def _reconcile(items: list[TaskCost]) -> dict[str, Any]:
     }
 
 
-def _attempt_bucket(items: list[TaskCost]) -> dict[str, Any]:
-    """Operational-view stats: denominated in attempts, because spend is."""
+def _bucket(items: list[TaskCost], unit: str, reconcile: bool) -> dict[str, Any]:
+    """Stats for one slice of a view, denominated in *unit*.
 
-    attempts = len(items)
-    total_cost = round(sum(t.cost_usd for t in items), 6)
-    return {
-        "attempts": attempts,
-        "total_cost_usd": total_cost,
-        "avg_cost_per_attempt": round(total_cost / attempts, 6) if attempts else 0.0,
-        "total_input_tokens": sum(t.usage.input_tokens for t in items),
-        "total_output_tokens": sum(t.usage.output_tokens for t in items),
-        "reconciliation": _reconcile(items),
-    }
-
-
-def _comparison_bucket(items: list[TaskCost]) -> dict[str, Any]:
-    """Comparison-view stats: denominated in tasks, one selected attempt each.
+    The unit is spelled into the key names — ``attempts``/``avg_cost_per_attempt``
+    for the operational view, ``tasks``/``avg_cost_per_task`` for the comparison
+    one — so a reader who takes the average from the wrong view gets a KeyError
+    rather than a plausible number over the wrong denominator. One function
+    rather than two keeps the four shared fields from drifting apart, which is
+    the same failure this whole report exists to prevent.
 
     ``avg_cost_per_task`` is the figure an arm-to-arm claim may use. Dividing by
     attempts instead weights a re-run-heavy arm differently from a clean one.
+
+    *reconcile* is operational-only: the comparison view bills one attempt per
+    cell, so a vendor-vs-trace ratio over it describes a sample, not the spend.
     """
 
-    tasks = len(items)
+    count = len(items)
     total_cost = round(sum(t.cost_usd for t in items), 6)
-    return {
-        "tasks": tasks,
+    bucket = {
+        f"{unit}s": count,
         "total_cost_usd": total_cost,
-        "avg_cost_per_task": round(total_cost / tasks, 6) if tasks else 0.0,
+        f"avg_cost_per_{unit}": round(total_cost / count, 6) if count else 0.0,
         "total_input_tokens": sum(t.usage.input_tokens for t in items),
         "total_output_tokens": sum(t.usage.output_tokens for t in items),
     }
+    if reconcile:
+        bucket["reconciliation"] = _reconcile(items)
+    return bucket
 
 
-def _group_by(
-    items: list[TaskCost], key: Any
-) -> dict[str, list[TaskCost]]:
-    grouped: dict[str, list[TaskCost]] = {}
+def _buckets(items: list[TaskCost], unit: str, reconcile: bool) -> dict[str, Any]:
+    """The three dimensional breakdowns of a view, all on the same denominator."""
+
+    return {
+        f"by_{dim}": {
+            k: _bucket(v, unit, reconcile)
+            for k, v in sorted(_group_by(items, attrgetter(dim)).items())
+        }
+        for dim in ("mode", "suite", "difficulty")
+    }
+
+
+def _group_by(items: list[TaskCost], key: Any) -> dict[Any, list[TaskCost]]:
+    grouped: dict[Any, list[TaskCost]] = {}
     for tc in items:
         grouped.setdefault(key(tc), []).append(tc)
     return grouped
@@ -895,10 +898,7 @@ def comparison_attempts(costs: list[TaskCost]) -> tuple[list[TaskCost], list[str
     collapse the intersection to nothing.
     """
 
-    cells: dict[tuple[str, str], list[TaskCost]] = {}
-    for tc in costs:
-        if tc.mode in VALID_MODES:
-            cells.setdefault(tc.cell, []).append(tc)
+    cells = _group_by([tc for tc in costs if tc.mode in VALID_MODES], attrgetter("cell"))
 
     selected = {cell: pick for cell, items in cells.items()
                 if (pick := select_attempt(items)) is not None}
@@ -920,12 +920,8 @@ def _duplicate_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
     enumerated. A count alone would leave a reader unable to check the selection.
     """
 
-    cells: dict[tuple[str, str], list[TaskCost]] = {}
-    for tc in costs:
-        cells.setdefault(tc.cell, []).append(tc)
-
     listing: list[dict[str, Any]] = []
-    for (task_id, mode), items in sorted(cells.items()):
+    for (task_id, mode), items in sorted(_group_by(costs, attrgetter("cell")).items()):
         if len(items) < 2:
             continue
         chosen = select_attempt(items)
@@ -949,7 +945,7 @@ def _duplicate_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
     return listing
 
 
-def _invalid_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
+def _invalid_attempts(ordered: list[TaskCost]) -> list[dict[str, Any]]:
     """Enumerate attempts the scoring layer never scored. They are spend, not zero."""
 
     return [
@@ -960,7 +956,7 @@ def _invalid_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
             "cost_usd": tc.cost_usd,
             "reason": "no_normalized_score",
         }
-        for tc in sorted(costs, key=lambda t: (t.task_id, t.mode, t.run_dir))
+        for tc in ordered
         if tc.normalized_score is None
     ]
 
@@ -1037,6 +1033,7 @@ def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
     """
 
     matched, unmatched_task_ids = comparison_attempts(costs)
+    ordered = sorted(costs, key=lambda c: (c.task_id, c.mode, c.run_dir))
 
     # Only the trace-derived population is exposed to PRICING, so only it can be
     # mispriced. An unpriced model here is billed at DEFAULT_MODEL rates, and such
@@ -1058,21 +1055,6 @@ def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
             ", ".join(unpriced_models),
         )
 
-    def buckets(items: list[TaskCost], stats: Any) -> dict[str, Any]:
-        return {
-            "by_mode": {
-                k: stats(v) for k, v in sorted(_group_by(items, lambda t: t.mode).items())
-            },
-            "by_suite": {
-                k: stats(v)
-                for k, v in sorted(_group_by(items, lambda t: t.suite).items())
-            },
-            "by_difficulty": {
-                k: stats(v)
-                for k, v in sorted(_group_by(items, lambda t: t.difficulty).items())
-            },
-        }
-
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1086,7 +1068,7 @@ def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
             "attempts": len(costs),
             "unpriced_models": unpriced_models,
             "cost_sources": _cost_source_summary(costs),
-            **buckets(costs, _attempt_bucket),
+            **_buckets(costs, "attempt", reconcile=True),
         },
         "comparison_economics": {
             "description": (
@@ -1098,12 +1080,12 @@ def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
             "tasks": len(matched),
             "modes": sorted({tc.mode for tc in matched}),
             "excluded_unmatched_task_ids": unmatched_task_ids,
-            **buckets(matched, _comparison_bucket),
+            **_buckets(matched, "task", reconcile=False),
             "per_task": [_attempt_row(tc) for tc in matched],
         },
         "duplicate_attempts": _duplicate_attempts(costs),
-        "invalid_attempts": _invalid_attempts(costs),
-        "per_attempt": [_attempt_row(tc) for tc in sorted(costs, key=lambda c: (c.task_id, c.mode, c.run_dir))],
+        "invalid_attempts": _invalid_attempts(ordered),
+        "per_attempt": [_attempt_row(tc) for tc in ordered],
     }
 
 
