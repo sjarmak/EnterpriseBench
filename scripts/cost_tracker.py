@@ -13,17 +13,16 @@ run, and the two views answer different questions about those attempts:
                            to tasks present in every arm. This is the only view
                            an arm-to-arm cost claim may be built on.
 
-Publishing a single total was the bug: it is correct as spend and wrong as suite
-cost, and the report did not say which. Averaging over attempts is worse — it
-weights a re-run-heavy arm differently from a clean one, which corrupts exactly
-the arm-to-arm delta the benchmark exists to produce.
+No single total is published: one number is correct as spend and wrong as suite
+cost, and nothing in the JSON would say which. Nor is any average taken over
+attempts — that weights a re-run-heavy arm differently from a clean one, which
+corrupts exactly the arm-to-arm delta the benchmark exists to produce.
 
-The same ambiguity has a second form, and it is the one that survives a fix to
-the first: a count of (task_id, mode) CELLS published under the name ``tasks``.
-It reads as a task count, so a four-arm sweep states its size at four times the
-truth, and the number is rendered into report prose and baked into chart titles.
-So every count in the comparison view is a count of distinct task_ids — in the
-headline and in all three breakdowns — and the cell list is named ``per_cell``.
+Every count in the comparison view counts distinct task_ids — in the headline
+and in all three breakdowns — and the list of (task_id, mode) rows is named
+``per_cell``. A cell count published under the name ``tasks`` reads as a task
+count, so a four-arm sweep would state its size at four times the truth, in
+report prose and baked into chart titles.
 
 The selecting rule is deliberately the one ``analyze_scores`` already uses to
 collapse (task_id, mode) — highest normalized score. If the two modules chose
@@ -63,6 +62,8 @@ from analyze_scores import parse_result
 from lib.shared import VALID_MODES, load_task_index, strip_mode_suffix
 
 logger = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Bumped whenever the report's shape changes. Consumers call require_schema and
 # refuse an unknown version rather than reading a missing key through
@@ -693,7 +694,7 @@ def _attempt_score(task_dir: Path, benchmarks_root: Path) -> float | None:
     return None if result is None else result.normalized_score
 
 
-def _run_dir_label(task_dir: Path, root: Path | None) -> str:
+def _run_dir_label(task_dir: Path, root: Path) -> str:
     """Identify an attempt's directory, relative to *root* when it is under it.
 
     cost_report.json is a tracked artifact, so an absolute path would commit one
@@ -703,8 +704,6 @@ def _run_dir_label(task_dir: Path, root: Path | None) -> str:
     just not portable; there is nothing shorter to say about it.
     """
 
-    if root is None:
-        return str(task_dir)
     try:
         return str(task_dir.resolve().relative_to(root.resolve()))
     except ValueError:
@@ -714,7 +713,7 @@ def _run_dir_label(task_dir: Path, root: Path | None) -> str:
 def scan_results_dirs(
     dirs: list[Path],
     benchmarks_root: Path,
-    root: Path | None = None,
+    root: Path = PROJECT_ROOT,
 ) -> list[TaskCost]:
     """Find every result directory with an agent_trace.jsonl and cost its attempt.
 
@@ -722,7 +721,10 @@ def scan_results_dirs(
     yields several records that differ only in ``run_dir``. Collapsing them is
     :func:`select_attempt`'s job, and only the comparison view asks for it.
 
-    *root* is the project root that ``run_dir`` is reported relative to.
+    *root* is the project root that ``run_dir`` is reported relative to. It
+    defaults to this checkout rather than to None: ``run_dir`` is both a
+    published field and a tiebreak key, so leaving it absolute has to be a
+    caller's deliberate choice, not what happens when nobody says.
     """
 
     costs: list[TaskCost] = []
@@ -886,14 +888,18 @@ def _buckets(
     ``by_mode`` slices within one arm; ``by_suite`` and ``by_difficulty`` slice
     across all of them. The operational view passes the same denominator twice
     because an attempt is an attempt in either direction.
+
+    The dimensions are a table rather than a branch on the dimension name, so a
+    fourth breakdown has to declare its denominator instead of inheriting one.
     """
 
+    dims = (("mode", in_arm), ("suite", across_arms), ("difficulty", across_arms))
     return {
         f"by_{dim}": {
-            k: _bucket(v, in_arm if dim == "mode" else across_arms, reconcile)
+            k: _bucket(v, unit, reconcile)
             for k, v in sorted(_group_by(items, attrgetter(dim)).items())
         }
-        for dim in ("mode", "suite", "difficulty")
+        for dim, unit in dims
     }
 
 
@@ -937,10 +943,8 @@ class ComparisonSet:
 
     One object rather than a tuple the caller re-derives fields from. ``rows``
     is one attempt per (task_id, mode) CELL, so ``len(rows)`` is
-    ``len(task_ids) * len(modes)``, not a task count. That collision — a cell
-    count published under a task name — is the defect this module was rewritten
-    to remove, so the two are separate fields here rather than one the caller
-    measures whichever way it happens to need.
+    ``len(task_ids) * len(modes)``, not a task count. The two are separate
+    fields so no caller can measure one by taking the length of the other.
 
     Tuples, not lists: ``frozen=True`` stops a field being rebound but not a
     list being appended to, and these four have to agree with each other. A
@@ -1244,17 +1248,16 @@ def main(argv: list[str] | None = None) -> None:
         format="%(levelname)s: %(message)s",
     )
 
-    project_root = Path(__file__).resolve().parent.parent
-    benchmarks_root = args.benchmarks_root or (project_root / "benchmarks")
-    output_path = args.output or (project_root / "results" / "analysis" / "cost_report.json")
-    result_dirs = args.results_dir or _discover_default_dirs(project_root)
+    benchmarks_root = args.benchmarks_root or (PROJECT_ROOT / "benchmarks")
+    output_path = args.output or (PROJECT_ROOT / "results" / "analysis" / "cost_report.json")
+    result_dirs = args.results_dir or _discover_default_dirs(PROJECT_ROOT)
 
     if not result_dirs:
         logger.error("No result directories found.")
         return
 
     logger.info("Scanning %d result directories...", len(result_dirs))
-    costs = scan_results_dirs(result_dirs, benchmarks_root, root=project_root)
+    costs = scan_results_dirs(result_dirs, benchmarks_root, root=PROJECT_ROOT)
     logger.info("Found %d attempts with trace data.", len(costs))
 
     report = aggregate_report(costs)

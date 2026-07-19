@@ -319,6 +319,7 @@ def _cost_report(**overrides: object) -> dict:
         "schema_version": SCHEMA_VERSION,
         "selection_rule": "highest normalized_score, then latest trace timestamp",
         "operational_economics": {
+            "description": "Total spend across every attempt.",
             "total_cost_usd": 123.45,
             "attempts": 50,
             "by_mode": {
@@ -331,6 +332,7 @@ def _cost_report(**overrides: object) -> dict:
         "comparison_economics": {
             # 20 tasks, each run in both arms — so 40 cells, and 20 is what the
             # prose "present in every arm" may say (EnterpriseBench-jrgs).
+            "description": "One attempt per (task_id, mode), matched across arms.",
             "total_cost_usd": 96.00,
             "tasks": 20,
             "modes": ["baseline", "hybrid"],
@@ -371,6 +373,15 @@ class TestCostSection:
         result = build_cost_section(_make_inputs(cost_report=_cost_report()))
         assert "$2.80" in result  # baseline avg per matched task
         assert "$2.00" in result  # hybrid avg per matched task
+
+    def test_view_meanings_come_from_the_report_not_this_module(self) -> None:
+        """Restating a denominator here is a second copy that can drift from it."""
+        report = _cost_report()
+        report["operational_economics"]["description"] = "SPEND-BLURB"
+        report["comparison_economics"]["description"] = "MATCHED-BLURB"
+        result = build_cost_section(_make_inputs(cost_report=report))
+        assert "SPEND-BLURB" in result
+        assert "MATCHED-BLURB" in result
 
     def test_selection_rule_is_stated(self) -> None:
         result = build_cost_section(_make_inputs(cost_report=_cost_report()))

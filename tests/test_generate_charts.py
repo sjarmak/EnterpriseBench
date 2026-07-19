@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -316,7 +317,7 @@ def test_chart_cost_by_mode(out_dir: Path) -> None:
     _assert_png(path)
 
 
-def _rendered_ax(monkeypatch, chart_fn, out_dir: Path):
+def _rendered_ax(monkeypatch, chart_fn, out_dir: Path, cost: dict | None = None):
     """Run the real chart and hand back the Axes it drew on.
 
     Re-deriving what the chart does here instead would assert against a copy of
@@ -331,7 +332,7 @@ def _rendered_ax(monkeypatch, chart_fn, out_dir: Path):
         return fig, ax
 
     monkeypatch.setattr(generate_charts.plt, "subplots", spy)
-    chart_fn(MINIMAL_DATA, MINIMAL_COST, out_dir)
+    chart_fn(MINIMAL_DATA, MINIMAL_COST if cost is None else cost, out_dir)
     (ax,) = axes
     return ax
 
@@ -345,6 +346,26 @@ def test_cost_by_mode_title_counts_tasks_not_cells(monkeypatch, out_dir: Path) -
     """
     ax = _rendered_ax(monkeypatch, chart_cost_by_mode, out_dir)
     assert "3 tasks matched across arms" in ax.get_title()
+
+
+def test_cost_by_mode_draws_every_matched_arm(monkeypatch, out_dir: Path) -> None:
+    """The bars are the arms the matching used, not the ones MODE_ORDER lists.
+
+    `cli` is a real arm and is absent from MODE_ORDER. Filtering the bars by that
+    display list drops it while the title still counts its tasks, so the caption
+    claims a wider matching than the figure shows.
+    """
+    cost = copy.deepcopy(MINIMAL_COST)
+    assert "cli" not in generate_charts.MODE_ORDER
+    cost["comparison_economics"]["modes"].append("cli")
+    cost["comparison_economics"]["by_mode"]["cli"] = {
+        "tasks": 3, "total_cost_usd": 7.0, "avg_cost_per_task": 2.333333
+    }
+
+    ax = _rendered_ax(monkeypatch, chart_cost_by_mode, out_dir, cost=cost)
+    assert [t.get_text() for t in ax.get_xticklabels()] == [
+        "baseline", "hybrid", "cli"
+    ]
 
 
 class TestCostLookupIsKeyedOnTheCell:

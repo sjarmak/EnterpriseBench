@@ -412,12 +412,12 @@ def build_reproducibility_section(inputs: ReportInputs) -> str:
 
 
 def build_cost_section(inputs: ReportInputs) -> str:
-    """Render both cost views, each with its denominator named.
+    """Render both cost views, each under the description its producer publishes.
 
     The two answer different questions and must never be merged: operational is
     what was paid across every attempt, comparison is what the matched suite
-    costs per arm. A single "total cost" line was correct as one and wrong as
-    the other, with nothing saying which (EnterpriseBench-jrgs).
+    costs per arm. What each one means is read out of the report rather than
+    restated here, so the prose cannot drift from the numbers it labels.
     """
     cr = inputs.cost_report
     if cr is None:
@@ -431,8 +431,7 @@ def build_cost_section(inputs: ReportInputs) -> str:
     comp = cr["comparison_economics"]
 
     lines = [
-        "**Operational economics** — total spend across every attempt, "
-        "re-runs and unscored runs included. Not comparable across arms.",
+        f"**Operational economics** — {op['description']}",
         "",
         f"- Total spend: ${op['total_cost_usd']:.2f} over {op['attempts']} attempts",
     ]
@@ -455,11 +454,11 @@ def build_cost_section(inputs: ReportInputs) -> str:
 
     lines += [
         "",
-        "**Comparison economics** — one attempt per (task, arm), restricted to "
-        f"the {comp['tasks']} tasks present in every arm. "
+        f"**Comparison economics** — {comp['description']} "
         f"Selection: {cr['selection_rule']}",
         "",
-        f"- Matched suite cost: ${comp['total_cost_usd']:.2f}",
+        f"- Matched suite cost: ${comp['total_cost_usd']:.2f} "
+        f"over {comp['tasks']} tasks",
     ]
 
     if comp["by_mode"]:

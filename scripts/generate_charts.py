@@ -41,7 +41,14 @@ MODE_COLORS: dict[str, str] = {
     "mcp_only": "#55A868",
 }
 MODE_ORDER: list[str] = ["baseline", "hybrid", "mcp_only"]
+# For an arm MODE_ORDER has no colour for, so it can still be drawn.
+UNLISTED_MODE_COLOR = "#937860"
 DPI = 150
+
+
+def _display_rank(mode: str) -> tuple[int, str]:
+    """Sort key placing MODE_ORDER arms first, then any other arm by name."""
+    return (MODE_ORDER.index(mode) if mode in MODE_ORDER else len(MODE_ORDER), mode)
 
 
 def _modes_present(data: dict[str, Any]) -> list[str]:
@@ -453,9 +460,13 @@ def chart_cost_by_mode(
 
     comparison = cost_data["comparison_economics"]
     by_mode_cost = comparison["by_mode"]
-    modes = [m for m in MODE_ORDER if m in by_mode_cost]
+    # Every arm the comparison view matched gets a bar. Filtering by MODE_ORDER
+    # instead would drop an arm the display list has not heard of — `cli`, today
+    # — while the title still counted its tasks, so the caption would describe a
+    # wider matching than the bars show. MODE_ORDER orders what is there.
+    modes = sorted(by_mode_cost, key=_display_rank)
     totals = [by_mode_cost[m]["total_cost_usd"] for m in modes]
-    colors = [MODE_COLORS[m] for m in modes]
+    colors = [MODE_COLORS.get(m, UNLISTED_MODE_COLOR) for m in modes]
 
     fig, ax = plt.subplots(figsize=(10, 6))
     bars = ax.bar(modes, totals, color=colors, edgecolor="white")
