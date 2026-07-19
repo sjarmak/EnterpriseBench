@@ -329,8 +329,10 @@ def _cost_report(**overrides: object) -> dict:
             },
         },
         "comparison_economics": {
+            # 20 tasks, each run in both arms — so 40 cells, and 20 is what the
+            # prose "present in every arm" may say (EnterpriseBench-jrgs).
             "total_cost_usd": 96.00,
-            "tasks": 40,
+            "tasks": 20,
             "modes": ["baseline", "hybrid"],
             "excluded_unmatched_task_ids": ["orphan-001"],
             "by_mode": {
@@ -339,7 +341,7 @@ def _cost_report(**overrides: object) -> dict:
                 "hybrid": {"tasks": 20, "total_cost_usd": 40.0,
                            "avg_cost_per_task": 2.00},
             },
-            "per_task": [],
+            "per_cell": [],
         },
         "duplicate_attempts": [{"task_id": "t1", "mode": "hybrid", "attempts": 2,
                                 "runs": []}],
@@ -360,7 +362,7 @@ class TestCostSection:
         """One "Total cost" line was correct as spend and wrong as suite cost."""
         result = build_cost_section(_make_inputs(cost_report=_cost_report()))
         assert "$123.45" in result and "50 attempts" in result
-        assert "$96.00" in result and "40 tasks" in result
+        assert "$96.00" in result and "20 tasks" in result
         assert "Operational economics" in result
         assert "Comparison economics" in result
         assert "baseline" in result

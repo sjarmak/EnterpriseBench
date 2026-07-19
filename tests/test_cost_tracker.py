@@ -7,6 +7,7 @@ import math
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -1176,7 +1177,7 @@ class TestConsumerContract:
 
     def test_keys_generate_charts_reads(self) -> None:
         report = aggregate_report([_make_cost(task_id="t1", mode="hybrid")])
-        entry = report["comparison_economics"]["per_task"][0]
+        entry = report["comparison_economics"]["per_cell"][0]
         assert {"task_id", "mode", "cost_usd"} <= entry.keys()
         assert (
             "total_cost_usd" in report["comparison_economics"]["by_mode"]["hybrid"]
@@ -1681,6 +1682,31 @@ class TestTwoViewsAreNotCollapsed:
         assert {"tasks", "avg_cost_per_task"} <= comp.keys()
         assert "avg_cost" not in comp and "count" not in comp
 
+    def test_cross_arm_average_does_not_reuse_the_per_arm_key(self) -> None:
+        """Same rule one level down: by_suite sums arms, by_mode does not.
+
+        Within an arm, ``avg_cost_per_task`` is what one task cost in that arm.
+        A suite bucket sums every arm, so its average is what one task cost
+        across the whole sweep — a different number answering a different
+        question. Sharing the key would put the meaning back inside the block,
+        which is exactly what the test above forbids one level up.
+        """
+        report = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode=m, run_dir=f"a-{m}", cost_usd=2.0)
+                for m in ("baseline", "hybrid")
+            ]
+        )
+        comp = report["comparison_economics"]
+        by_mode = comp["by_mode"]["baseline"]
+        by_suite = comp["by_suite"]["customer_escalation"]
+
+        assert by_mode["avg_cost_per_task"] == 2.0
+        assert "avg_cost_per_task_across_arms" not in by_mode
+
+        assert by_suite["avg_cost_per_task_across_arms"] == 4.0
+        assert "avg_cost_per_task" not in by_suite
+
     def test_comparison_avg_divides_by_distinct_tasks(self) -> None:
         """Re-run-heavy arms must not be weighted differently from clean ones."""
         report = aggregate_report(
@@ -1748,8 +1774,13 @@ class TestComparisonIsMatchedAcrossArms:
         comp = report["comparison_economics"]
         assert comp["modes"] == ["baseline", "hybrid", "mcp_only"]
         assert comp["excluded_unmatched_task_ids"] == ["only2"]
-        assert comp["tasks"] == 3
+        # One task, matched in three arms. The count is TASKS, not the three
+        # (task_id, mode) cells that carry them — publishing 3 here is what put
+        # "restricted to the 3 tasks present in every arm" into the report prose
+        # and "3 tasks matched across arms" into a published PNG title.
+        assert comp["tasks"] == 1
         assert comp["total_cost_usd"] == 3.0
+        assert len(comp["per_cell"]) == 3
 
     def test_single_arm_corpus_matches_everything(self) -> None:
         report = aggregate_report(
@@ -1773,6 +1804,134 @@ class TestComparisonIsMatchedAcrossArms:
         assert report["operational_economics"]["total_cost_usd"] == 6.0
         assert report["comparison_economics"]["modes"] == ["hybrid"]
         assert report["comparison_economics"]["total_cost_usd"] == 1.0
+
+
+class TestComparisonDenominatorIsTasks:
+    """Every count in the comparison view is TASKS, in every dimension.
+
+    ``by_mode`` was correct by accident — within one arm a (task_id, mode) cell
+    IS a task — which is what let the cell count masquerade as a task count
+    everywhere else. ``by_suite``/``by_difficulty`` sum across arms, so there
+    the two diverge by a factor of the arm count: on a four-arm sweep a suite
+    with one task reported four.
+    """
+
+    def _two_arms_two_suites(self) -> dict[str, Any]:
+        return aggregate_report(
+            [
+                _make_cost(
+                    task_id=task, mode=mode, suite=suite,
+                    run_dir=f"{task}-{mode}", cost_usd=1.0,
+                )
+                for task, suite in (("esc1", "customer_escalation"), ("dep1", "dep_traversal"))
+                for mode in ("baseline", "hybrid")
+            ]
+        )
+
+    def test_suite_bucket_counts_tasks_not_cells(self) -> None:
+        by_suite = self._two_arms_two_suites()["comparison_economics"]["by_suite"]
+        assert by_suite["customer_escalation"]["tasks"] == 1
+        assert by_suite["dep_traversal"]["tasks"] == 1
+
+    def test_difficulty_bucket_counts_tasks_not_cells(self) -> None:
+        by_diff = self._two_arms_two_suites()["comparison_economics"]["by_difficulty"]
+        assert by_diff["medium"]["tasks"] == 2
+
+    def test_dimension_counts_sum_to_the_headline_count(self) -> None:
+        """The invariant a reader relies on to trust any breakdown at all."""
+        comp = self._two_arms_two_suites()["comparison_economics"]
+        assert comp["tasks"] == 2
+        assert sum(b["tasks"] for b in comp["by_suite"].values()) == comp["tasks"]
+        assert sum(b["tasks"] for b in comp["by_difficulty"].values()) == comp["tasks"]
+
+    def test_every_arm_ran_every_matched_task(self) -> None:
+        """Matching is what makes this true; by_mode must show it, not assume it."""
+        comp = self._two_arms_two_suites()["comparison_economics"]
+        assert all(b["tasks"] == comp["tasks"] for b in comp["by_mode"].values())
+
+    def test_cross_arm_average_divides_by_distinct_tasks(self) -> None:
+        by_suite = self._two_arms_two_suites()["comparison_economics"]["by_suite"]
+        # $1 per cell x 2 arms over 1 task. Dividing by the 2 cells would report
+        # $1.00 and read as "this suite's tasks cost a dollar each".
+        assert by_suite["customer_escalation"]["total_cost_usd"] == 2.0
+        assert by_suite["customer_escalation"]["avg_cost_per_task_across_arms"] == 2.0
+
+    def test_per_cell_is_one_row_per_task_and_arm(self) -> None:
+        """The row list is cells; only its NAME ever claimed otherwise.
+
+        Each row carries its own mode and run_dir, and generate_charts keys the
+        list on (task_id, mode) for that reason. A reader who took ``len()`` as
+        a task count got the right answer only while ``tasks`` was equally wrong.
+        """
+        comp = self._two_arms_two_suites()["comparison_economics"]
+        assert len(comp["per_cell"]) == comp["tasks"] * len(comp["modes"])
+        assert {(r["task_id"], r["mode"]) for r in comp["per_cell"]} == {
+            (task, mode)
+            for task in ("esc1", "dep1")
+            for mode in ("baseline", "hybrid")
+        }
+
+
+class TestArmSetSurvivesAnUnscoredArm:
+    """An arm that scored nothing must keep its seat and empty the comparison.
+
+    Deriving the arm set from the SCORED cells lets a wholly-failed arm drop out
+    of the intersection, so the survivors match each other perfectly and the
+    report reads as a complete comparison with an arm missing. The failure is
+    silent in both directions: nothing says the arm is gone, and nothing says
+    the remaining numbers cover fewer arms than the run did.
+    """
+
+    @staticmethod
+    def _one_arm_scored_nothing() -> dict[str, Any]:
+        return aggregate_report(
+            [
+                _make_cost(task_id=task, mode="baseline", run_dir=f"{task}-b",
+                           cost_usd=1.0, normalized_score=0.5)
+                for task in ("t1", "t2")
+            ]
+            + [
+                _make_cost(task_id=task, mode="mcp_only", run_dir=f"{task}-m",
+                           cost_usd=1.0, normalized_score=None)
+                for task in ("t1", "t2")
+            ]
+        )
+
+    def test_dead_arm_is_still_named(self) -> None:
+        comp = self._one_arm_scored_nothing()["comparison_economics"]
+        assert comp["modes"] == ["baseline", "mcp_only"]
+
+    def test_nothing_matches_when_an_arm_scored_nothing(self) -> None:
+        comp = self._one_arm_scored_nothing()["comparison_economics"]
+        assert comp["tasks"] == 0
+        assert comp["total_cost_usd"] == 0.0
+        assert comp["by_mode"] == {}
+
+    def test_every_task_is_named_as_excluded(self) -> None:
+        comp = self._one_arm_scored_nothing()["comparison_economics"]
+        assert comp["excluded_unmatched_task_ids"] == ["t1", "t2"]
+
+    def test_the_spend_is_still_reported(self) -> None:
+        """The comparison view empties; the money does not disappear with it."""
+        op = self._one_arm_scored_nothing()["operational_economics"]
+        assert op["total_cost_usd"] == 4.0
+        assert op["attempts"] == 4
+
+    def test_an_unparseable_mode_still_defines_no_arm(self) -> None:
+        """Widening the arm source must not widen it to non-arms.
+
+        "unknown" is a directory name that would not parse, not a fourth arm.
+        Letting it in would collapse every intersection to nothing.
+        """
+        comp = aggregate_report(
+            [
+                _make_cost(task_id="t1", mode="hybrid", run_dir="a", cost_usd=1.0),
+                _make_cost(task_id="t1", mode="unknown", run_dir="b",
+                           cost_usd=5.0, normalized_score=None),
+            ]
+        )["comparison_economics"]
+        assert comp["modes"] == ["hybrid"]
+        assert comp["tasks"] == 1
 
 
 class TestAttemptsAreFullyEnumerated:
@@ -1858,7 +2017,7 @@ class TestEveryDollarIsAccountedFor:
         op_total = report["operational_economics"]["total_cost_usd"]
         comp_total = report["comparison_economics"]["total_cost_usd"]
 
-        selected = {r["run_dir"] for r in report["comparison_economics"]["per_task"]}
+        selected = {r["run_dir"] for r in report["comparison_economics"]["per_cell"]}
         unselected = [
             r for r in report["per_attempt"] if r["run_dir"] not in selected
         ]
@@ -1867,7 +2026,7 @@ class TestEveryDollarIsAccountedFor:
     def test_comparison_rows_are_a_strict_subset_of_the_ledger(self) -> None:
         report = aggregate_report(self._mixed_corpus())
         ledger = {r["run_dir"] for r in report["per_attempt"]}
-        selected = [r["run_dir"] for r in report["comparison_economics"]["per_task"]]
+        selected = [r["run_dir"] for r in report["comparison_economics"]["per_cell"]]
         assert len(selected) == len(set(selected))  # no attempt billed twice
         assert set(selected) < ledger
 
@@ -1911,6 +2070,46 @@ class TestEveryDollarIsAccountedFor:
         )
         assert report["comparison_economics"]["tasks"] == 0
         assert report["operational_economics"]["attempts"] == 1
+
+    def test_a_never_scored_task_is_invalid_not_unmatched(self) -> None:
+        """One exclusion, one list, one accurate label.
+
+        ``excluded_unmatched_task_ids`` is rendered as "not present in every
+        arm". A task nothing ever scored WAS present; the scoring layer produced
+        nothing for it. Listing it there would state something false about it and
+        report it twice, since ``invalid_attempts`` already carries every
+        unscored attempt with its run_dir and cost.
+        """
+        report = aggregate_report(
+            [_make_cost(task_id="t1", mode="hybrid", run_dir="bad",
+                        normalized_score=None)]
+        )
+        assert report["comparison_economics"]["excluded_unmatched_task_ids"] == []
+        assert [r["run_dir"] for r in report["invalid_attempts"]] == ["bad"]
+
+    def test_the_same_holds_when_it_ran_in_only_one_arm(self) -> None:
+        """Absence from the excluded list is about scoring, not about coverage.
+
+        "ghost" ran in one arm of two, so it was genuinely not present in every
+        arm — yet it still does not belong in a list that means "some arm scored
+        this and another did not". Nothing scored it anywhere, so it never
+        entered the matching to be excluded from it.
+        """
+        report = aggregate_report(
+            [
+                _make_cost(task_id="real", mode=m, run_dir=f"r-{m}",
+                           normalized_score=0.5)
+                for m in ("baseline", "mcp_only")
+            ]
+            + [
+                _make_cost(task_id="ghost", mode="baseline", run_dir="g-b",
+                           normalized_score=None),
+            ]
+        )
+        comp = report["comparison_economics"]
+        assert comp["excluded_unmatched_task_ids"] == []
+        assert comp["tasks"] == 1
+        assert [r["task_id"] for r in report["invalid_attempts"]] == ["ghost"]
 
 
 class TestReportSchemaGuard:
@@ -1968,7 +2167,7 @@ class TestAgreesWithAnalyzeScores:
 
         (scored,) = load_all_results(dirs, bench)
         report = aggregate_report(scan_results_dirs(dirs, bench))
-        (billed,) = report["comparison_economics"]["per_task"]
+        (billed,) = report["comparison_economics"]["per_cell"]
 
         # source_path is the results.json; run_dir is its directory.
         assert str(Path(scored.source_path).parent) == billed["run_dir"]
@@ -1982,7 +2181,7 @@ class TestAgreesWithAnalyzeScores:
         (scored,) = load_all_results(dirs, bench)
         (billed,) = aggregate_report(scan_results_dirs(dirs, bench))[
             "comparison_economics"
-        ]["per_task"]
+        ]["per_cell"]
         assert str(Path(scored.source_path).parent) == billed["run_dir"]
         assert billed["normalized_score"] == 0.9
 
@@ -2056,7 +2255,7 @@ class TestEndToEndReruns:
         )
         report = aggregate_report(costs)
         assert len(report["per_attempt"]) == 2
-        assert len(report["comparison_economics"]["per_task"]) == 1
+        assert len(report["comparison_economics"]["per_cell"]) == 1
         assert {"run_dir", "normalized_score", "trace_timestamp"} <= set(
             report["per_attempt"][0]
         )

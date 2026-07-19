@@ -409,7 +409,7 @@ def chart_cost_per_task(
     # series silently plotted whichever row happened to land last.
     cost_by_cell: dict[tuple[str, str], dict[str, Any]] = {
         (entry["task_id"], entry["mode"]): entry
-        for entry in cost_data["comparison_economics"]["per_task"]
+        for entry in cost_data["comparison_economics"]["per_cell"]
     }
 
     modes = _modes_present(data)

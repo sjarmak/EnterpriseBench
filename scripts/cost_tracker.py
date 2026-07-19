@@ -18,6 +18,13 @@ cost, and the report did not say which. Averaging over attempts is worse — it
 weights a re-run-heavy arm differently from a clean one, which corrupts exactly
 the arm-to-arm delta the benchmark exists to produce.
 
+The same ambiguity has a second form, and it is the one that survives a fix to
+the first: a count of (task_id, mode) CELLS published under the name ``tasks``.
+It reads as a task count, so a four-arm sweep states its size at four times the
+truth, and the number is rendered into report prose and baked into chart titles.
+So every count in the comparison view is a count of distinct task_ids — in the
+headline and in all three breakdowns — and the cell list is named ``per_cell``.
+
 The selecting rule is deliberately the one ``analyze_scores`` already uses to
 collapse (task_id, mode) — highest normalized score. If the two modules chose
 differently, the cost row and the score row of the same cell would describe
@@ -45,6 +52,7 @@ import argparse
 import json
 import logging
 import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from operator import attrgetter
@@ -60,7 +68,7 @@ logger = logging.getLogger(__name__)
 # refuse an unknown version rather than reading a missing key through
 # ``.get(key, 0)`` and rendering a plausible $0.00 — the failure class
 # lib/eb_verify/scorer_guard.py exists to forbid, applied to the cost artifact.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # How ``select_attempt`` picks the one attempt that represents a (task_id, mode)
 # cell. Published in the report so a reader never has to infer it.
@@ -805,29 +813,60 @@ def _reconcile(items: list[TaskCost]) -> dict[str, Any]:
     }
 
 
-def _bucket(items: list[TaskCost], unit: str, reconcile: bool) -> dict[str, Any]:
-    """Stats for one slice of a view, denominated in *unit*.
+def _distinct_tasks(items: list[TaskCost]) -> int:
+    return len({t.task_id for t in items})
 
-    The unit is spelled into the key names — ``attempts``/``avg_cost_per_attempt``
-    for the operational view, ``tasks``/``avg_cost_per_task`` for the comparison
-    one — so a reader who takes the average from the wrong view gets a KeyError
-    rather than a plausible number over the wrong denominator. One function
-    rather than two keeps the four shared fields from drifting apart, which is
-    the same failure this whole report exists to prevent.
 
-    ``avg_cost_per_task`` is the figure an arm-to-arm claim may use. Dividing by
-    attempts instead weights a re-run-heavy arm differently from a clean one.
+@dataclass(frozen=True)
+class Denominator:
+    """What a bucket divides by, and the key names that say so out loud.
+
+    The denominator is spelled into both key names, so a reader who reaches for
+    an average the enclosing block does not publish gets a KeyError rather than
+    a plausible number over the wrong divisor. Carrying the counting rule here
+    rather than branching on a bare string means a new denominator cannot be
+    introduced without declaring how it counts.
+    """
+
+    count_key: str
+    avg_key: str
+    count: Callable[[list[TaskCost]], int]
+
+
+#: The operational view bills every attempt, because every attempt was paid for.
+ATTEMPTS = Denominator("attempts", "avg_cost_per_attempt", len)
+
+#: Within one arm a (task_id, mode) cell IS a task, so this is what one task
+#: cost in that arm — the only average an arm-to-arm claim may use. Dividing by
+#: attempts instead weights a re-run-heavy arm differently from a clean one.
+TASKS_IN_ARM = Denominator("tasks", "avg_cost_per_task", _distinct_tasks)
+
+#: A suite or difficulty slice spans every arm, so its total sums the arms and
+#: its average is what one task cost across the whole sweep. That answers a
+#: different question than TASKS_IN_ARM, so it does not reuse the key: sharing
+#: it would put a field's meaning back inside its enclosing block.
+TASKS_ACROSS_ARMS = Denominator(
+    "tasks", "avg_cost_per_task_across_arms", _distinct_tasks
+)
+
+
+def _bucket(items: list[TaskCost], unit: Denominator, reconcile: bool) -> dict[str, Any]:
+    """Stats for one slice of a view, denominated per *unit*.
+
+    One function rather than one per view keeps the four shared fields from
+    drifting apart, which is the same failure this whole report exists to
+    prevent.
 
     *reconcile* is operational-only: the comparison view bills one attempt per
     cell, so a vendor-vs-trace ratio over it describes a sample, not the spend.
     """
 
-    count = len(items)
+    count = unit.count(items)
     total_cost = round(sum(t.cost_usd for t in items), 6)
     bucket = {
-        f"{unit}s": count,
+        unit.count_key: count,
         "total_cost_usd": total_cost,
-        f"avg_cost_per_{unit}": round(total_cost / count, 6) if count else 0.0,
+        unit.avg_key: round(total_cost / count, 6) if count else 0.0,
         "total_input_tokens": sum(t.usage.input_tokens for t in items),
         "total_output_tokens": sum(t.usage.output_tokens for t in items),
     }
@@ -836,19 +875,29 @@ def _bucket(items: list[TaskCost], unit: str, reconcile: bool) -> dict[str, Any]
     return bucket
 
 
-def _buckets(items: list[TaskCost], unit: str, reconcile: bool) -> dict[str, Any]:
-    """The three dimensional breakdowns of a view, all on the same denominator."""
+def _buckets(
+    items: Sequence[TaskCost],
+    in_arm: Denominator,
+    across_arms: Denominator,
+    reconcile: bool,
+) -> dict[str, Any]:
+    """The three dimensional breakdowns of a view.
+
+    ``by_mode`` slices within one arm; ``by_suite`` and ``by_difficulty`` slice
+    across all of them. The operational view passes the same denominator twice
+    because an attempt is an attempt in either direction.
+    """
 
     return {
         f"by_{dim}": {
-            k: _bucket(v, unit, reconcile)
+            k: _bucket(v, in_arm if dim == "mode" else across_arms, reconcile)
             for k, v in sorted(_group_by(items, attrgetter(dim)).items())
         }
         for dim in ("mode", "suite", "difficulty")
     }
 
 
-def _group_by(items: list[TaskCost], key: Any) -> dict[Any, list[TaskCost]]:
+def _group_by(items: Sequence[TaskCost], key: Any) -> dict[Any, list[TaskCost]]:
     grouped: dict[Any, list[TaskCost]] = {}
     for tc in items:
         grouped.setdefault(key(tc), []).append(tc)
@@ -882,8 +931,31 @@ def select_attempt(attempts: list[TaskCost]) -> TaskCost | None:
     return max(scored, key=lambda a: (a.normalized_score, a.trace_timestamp, a.run_dir))
 
 
-def comparison_attempts(costs: list[TaskCost]) -> tuple[list[TaskCost], list[str]]:
-    """Return the matched, selected attempt set and the task_ids it excluded.
+@dataclass(frozen=True)
+class ComparisonSet:
+    """The matched comparison population and every count the report makes of it.
+
+    One object rather than a tuple the caller re-derives fields from. ``rows``
+    is one attempt per (task_id, mode) CELL, so ``len(rows)`` is
+    ``len(task_ids) * len(modes)``, not a task count. That collision — a cell
+    count published under a task name — is the defect this module was rewritten
+    to remove, so the two are separate fields here rather than one the caller
+    measures whichever way it happens to need.
+
+    Tuples, not lists: ``frozen=True`` stops a field being rebound but not a
+    list being appended to, and these four have to agree with each other. A
+    caller that grew ``rows`` would move ``len(rows)`` off ``tasks x modes``
+    and re-open the counting ambiguity from the inside.
+    """
+
+    rows: tuple[TaskCost, ...]
+    task_ids: tuple[str, ...]
+    modes: tuple[str, ...]
+    excluded_task_ids: tuple[str, ...]
+
+
+def comparison_attempts(costs: list[TaskCost]) -> ComparisonSet:
+    """Select the matched, comparable attempt set out of every attempt made.
 
     Two restrictions, in order:
 
@@ -893,24 +965,42 @@ def comparison_attempts(costs: list[TaskCost]) -> tuple[list[TaskCost], list[str
        task sets are not comparable, and rendering them side by side (which the
        charts do) invites exactly the conclusion the data cannot support.
 
+    The arm set comes from every in-scope attempt, scored or not. Deriving it
+    from the selected cells instead would let an arm that scored nothing — a
+    verifier or infra outage across one whole arm — silently leave the
+    intersection rather than empty it. An arm that ran must keep its seat: with
+    it, nothing matches and every task is named as excluded, which is a
+    diagnosable report. Without it, the remaining arms match perfectly and
+    nothing says an arm is gone.
+
     Modes outside :data:`VALID_MODES` — an unparseable directory name resolving
     to "unknown" — define no arm and are operational-only. Letting one in would
     collapse the intersection to nothing.
+
+    A task no arm ever scored never enters the matching at all, so it is absent
+    here rather than listed as excluded — whether it ran in every arm or in one.
+    "Unmatched" says some arm scored it and another did not, which is false in
+    either shape. ``invalid_attempts`` enumerates it, with its run_dir and cost.
     """
 
-    cells = _group_by([tc for tc in costs if tc.mode in VALID_MODES], attrgetter("cell"))
+    in_scope = [tc for tc in costs if tc.mode in VALID_MODES]
+    cells = _group_by(in_scope, attrgetter("cell"))
 
     selected = {cell: pick for cell, items in cells.items()
                 if (pick := select_attempt(items)) is not None}
 
-    modes = {mode for _, mode in selected}
+    modes = {tc.mode for tc in in_scope}
     arms_per_task: dict[str, set[str]] = {}
     for task_id, mode in selected:
         arms_per_task.setdefault(task_id, set()).add(mode)
 
     matched = {tid for tid, arms in arms_per_task.items() if arms == modes}
-    rows = [tc for cell, tc in sorted(selected.items()) if cell[0] in matched]
-    return rows, sorted(set(arms_per_task) - matched)
+    return ComparisonSet(
+        rows=tuple(tc for cell, tc in sorted(selected.items()) if cell[0] in matched),
+        task_ids=tuple(sorted(matched)),
+        modes=tuple(sorted(modes)),
+        excluded_task_ids=tuple(sorted(set(arms_per_task) - matched)),
+    )
 
 
 def _duplicate_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
@@ -1032,7 +1122,7 @@ def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
     published as "the" cost.
     """
 
-    matched, unmatched_task_ids = comparison_attempts(costs)
+    comparison = comparison_attempts(costs)
     ordered = sorted(costs, key=lambda c: (c.task_id, c.mode, c.run_dir))
 
     # Only the trace-derived population is exposed to PRICING, so only it can be
@@ -1068,7 +1158,7 @@ def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
             "attempts": len(costs),
             "unpriced_models": unpriced_models,
             "cost_sources": _cost_source_summary(costs),
-            **_buckets(costs, "attempt", reconcile=True),
+            **_buckets(costs, ATTEMPTS, ATTEMPTS, reconcile=True),
         },
         "comparison_economics": {
             "description": (
@@ -1076,12 +1166,14 @@ def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
                 "present in every arm. The only view an arm-to-arm cost claim "
                 "may be built on."
             ),
-            "total_cost_usd": round(sum(tc.cost_usd for tc in matched), 6),
-            "tasks": len(matched),
-            "modes": sorted({tc.mode for tc in matched}),
-            "excluded_unmatched_task_ids": unmatched_task_ids,
-            **_buckets(matched, "task", reconcile=False),
-            "per_task": [_attempt_row(tc) for tc in matched],
+            "total_cost_usd": round(sum(tc.cost_usd for tc in comparison.rows), 6),
+            "tasks": len(comparison.task_ids),
+            # list(), not the tuple itself: this dict is a JSON document, and its
+            # array fields are read back as lists by every consumer and test.
+            "modes": list(comparison.modes),
+            "excluded_unmatched_task_ids": list(comparison.excluded_task_ids),
+            **_buckets(comparison.rows, TASKS_IN_ARM, TASKS_ACROSS_ARMS, reconcile=False),
+            "per_cell": [_attempt_row(tc) for tc in comparison.rows],
         },
         "duplicate_attempts": _duplicate_attempts(costs),
         "invalid_attempts": _invalid_attempts(ordered),
@@ -1163,7 +1255,7 @@ def main(argv: list[str] | None = None) -> None:
 
     logger.info("Scanning %d result directories...", len(result_dirs))
     costs = scan_results_dirs(result_dirs, benchmarks_root, root=project_root)
-    logger.info("Found %d tasks with trace data.", len(costs))
+    logger.info("Found %d attempts with trace data.", len(costs))
 
     report = aggregate_report(costs)
 

@@ -212,7 +212,7 @@ MINIMAL_COST: dict = {
     },
     "comparison_economics": {
         "total_cost_usd": 20.80,
-        "tasks": 6,
+        "tasks": 3,
         "modes": ["baseline", "hybrid"],
         "excluded_unmatched_task_ids": [],
         "by_mode": {
@@ -223,7 +223,7 @@ MINIMAL_COST: dict = {
         },
         # task-003's hybrid run cost exactly $0.00 — a falsy value the old
         # `entry.get("cost_usd") or ...` lookup discarded instead of plotting.
-        "per_task": [
+        "per_cell": [
             {"task_id": "task-001", "mode": "baseline", "cost_usd": 1.50},
             {"task_id": "task-001", "mode": "hybrid", "cost_usd": 9.90},
             {"task_id": "task-002", "mode": "baseline", "cost_usd": 2.00},
@@ -316,6 +316,37 @@ def test_chart_cost_by_mode(out_dir: Path) -> None:
     _assert_png(path)
 
 
+def _rendered_ax(monkeypatch, chart_fn, out_dir: Path):
+    """Run the real chart and hand back the Axes it drew on.
+
+    Re-deriving what the chart does here instead would assert against a copy of
+    the code under test, so breaking the chart would leave these tests green.
+    """
+    axes = []
+    real_subplots = generate_charts.plt.subplots
+
+    def spy(*args, **kwargs):
+        fig, ax = real_subplots(*args, **kwargs)
+        axes.append(ax)
+        return fig, ax
+
+    monkeypatch.setattr(generate_charts.plt, "subplots", spy)
+    chart_fn(MINIMAL_DATA, MINIMAL_COST, out_dir)
+    (ax,) = axes
+    return ax
+
+
+def test_cost_by_mode_title_counts_tasks_not_cells(monkeypatch, out_dir: Path) -> None:
+    """The one number in this module that ships to readers as an image.
+
+    A wrong count in JSON can be re-read; this one is rendered into a PNG that
+    goes into the paper. MINIMAL_COST is 3 tasks across 2 arms, so a title
+    reading "6" is the cell count wearing the word "tasks".
+    """
+    ax = _rendered_ax(monkeypatch, chart_cost_by_mode, out_dir)
+    assert "3 tasks matched across arms" in ax.get_title()
+
+
 class TestCostLookupIsKeyedOnTheCell:
     """A task runs in every arm, so task_id alone does not identify a cost row.
 
@@ -325,22 +356,8 @@ class TestCostLookupIsKeyedOnTheCell:
     """
 
     def _scatter_ys(self, monkeypatch, out_dir: Path) -> dict[str, list[float]]:
-        """Run the real chart and read back the costs it plotted, per mode.
-
-        Re-deriving the lookup here instead would assert against a copy of the
-        code under test, so breaking the chart would leave these tests green.
-        """
-        axes = []
-        real_subplots = generate_charts.plt.subplots
-
-        def spy(*args, **kwargs):
-            fig, ax = real_subplots(*args, **kwargs)
-            axes.append(ax)
-            return fig, ax
-
-        monkeypatch.setattr(generate_charts.plt, "subplots", spy)
-        chart_cost_per_task(MINIMAL_DATA, MINIMAL_COST, out_dir)
-        (ax,) = axes
+        """Read back the costs the real chart plotted, per mode."""
+        ax = _rendered_ax(monkeypatch, chart_cost_per_task, out_dir)
         return {
             series.get_label(): [float(y) for _, y in series.get_offsets()]
             for series in ax.collections
