@@ -63,38 +63,59 @@ FINDING_BEADS = ["EnterpriseBench-639lv", "EnterpriseBench-mgodn",
                  "EnterpriseBench-ozbjt", "EnterpriseBench-v9okc"]
 BD_TIMEOUT = 60  # seconds for a `bd show`
 
-# A check emits a hardcoded full-credit score, as a JSON literal, a shell/python
-# assignment, or a named full-credit constant. `1`, `1.0`, `1.00` all count.
+# A check emits a hardcoded full-credit score, as a JSON literal or an assignment to a
+# score/full_credit variable. `1`, `1.0`, `1.00` count; the negative lookahead rejects
+# `1.5`/`15` (a value >1 is not "full credit"), and the leading `\b` on the assignment
+# alternative stops `severity_score = 1.0` (a correct-answer check, not a freebie) from
+# matching on the `score` tail of a longer identifier.
 _FULL_CREDIT_RE = re.compile(
-    r'"score"\s*:\s*1(?:\.0+)?\b'
-    r'|(?:score|full_credit|FULL_CREDIT)\s*=\s*1(?:\.0+)?\b',
+    r'"score"\s*:\s*1(?:\.0+)?(?![\d.])'
+    r'|\b(?:score|full_credit)\s*=\s*1(?:\.0+)?(?![\d.])',
     re.I,
 )
-# ...guarded by an absence/emptiness test (ozbjt freebie is "full credit when the GT
-# collection is empty"), AND referencing ground truth nearby — the GT reference keeps a
-# bare `.get(`/`len(` next to any future pass-path score literal from causing a false
-# exclusion, while still matching the real shape (`if not gt_flag_names:` → score 1.0).
-_ABSENCE_HINT_RE = re.compile(r"\bnot\b|\bempty\b|\bno\b|==\s*0|absent|missing", re.I)
-_GT_REF_RE = re.compile(r"\bgt\b|gt_|ground.?truth|expected|golden|oracle", re.I)
-# Proximity window (chars) around the full-credit emission for both hints.
-# LIMITATION (documented, like the closed-book residual): a proximity + literal-value
-# heuristic, not AST/block analysis. A guard >_FREEBIE_WINDOW chars away, or full credit
-# reached through multi-hop variable indirection, can evade it. 0/48 eligible tasks trip
-# it today; the invariant test re-runs the scan so a regression that lands a freebie in a
-# manifest task fails CI, but a novel evasion shape would need the detector widened.
-_FREEBIE_WINDOW = 600
-# v9okc: scoring by grepping a patch/diff.
-_PATCH_RE = re.compile(r"\bgit\s+(?:diff|apply)\b|\.patch\b|\.diff\b|\bdiff\b.*grep", re.I)
+# ...co-located with a test that the GROUND TRUTH itself is empty/absent — the ozbjt
+# freebie is "full credit when the GT collection is empty", NOT "full credit when the
+# agent's answer is correct". Matching an *empty-GT* condition (rather than any absence
+# word near any GT word) is what separates `if not gt_flag_names: score=1.0` (a freebie)
+# from `if expected_severity in agent_severity: score=1.0` (a correct-answer check).
+_EMPTY_GT_RE = re.compile(
+    r"\bnot\s+[\w.]*(?:gt|ground|expected|golden|oracle)"            # if not gt_flags:
+    r"|(?:gt|ground.?truth|expected|golden|oracle)\w*.{0,12}?"       # gt... is empty / == 0
+    r"(?:\bis\s+(?:none|empty)\b|==\s*(?:0\b|none|\[\]|\{\}|\"\"|'')|\.empty\b|\bmissing\b|\babsent\b)",
+    re.I,
+)
+# Chars between the empty-GT test and the full-credit emission (same branch).
+# LIMITATION (documented, like the closed-book residual): a co-location + literal-value
+# heuristic, not AST/block analysis. An empty-GT test >_FREEBIE_WINDOW chars from the
+# credit line, or reached through multi-hop indirection, can evade it. 0/48 eligible tasks
+# trip it today; the invariant test re-runs the scan so a regression that lands a freebie
+# in a manifest task fails CI, but a novel evasion shape would need the detector widened.
+_FREEBIE_WINDOW = 250
+# v9okc: scoring a PATCH by applying/grepping it. Intentionally narrow — `git apply` and
+# `.patch` file references — so a legitimate output-comparison idiom (`diff -u expected
+# actual | grep`, or a `git diff` for display) is not misread as patch-grep scoring.
+_PATCH_RE = re.compile(r"\bgit\s+apply\b|\.patch\b", re.I)
 
 
 @lru_cache(maxsize=1)
-def _task_index() -> dict[str, Path]:
-    """{task_id: task_dir} over the active corpus — one tree walk, shared by
-    task_dir() and real_task_ids()."""
-    return {d.name: d for d in find_task_dirs()}
+def _task_index() -> dict[str, Path | None]:
+    """{task_id: task_dir} over the active corpus — one tree walk, shared by task_dir()
+    and real_task_ids(). Task ids are NOT unique across suites; a collided id maps to
+    None so an unqualified task_dir() lookup fails closed rather than silently picking a
+    single suite (which would read the WRONG suite's checks in the class scan)."""
+    idx: dict[str, Path | None] = {}
+    for d in find_task_dirs():
+        idx[d.name] = None if d.name in idx else d
+    return idx
 
 
-def task_dir(task_id: str) -> Path | None:
+def task_dir(task_id: str, suite: str | None = None) -> Path | None:
+    """Resolve a task dir. Pass *suite* to match analyzer.analyze()'s (suite, task_id)
+    resolution and disambiguate cross-suite id collisions; without it, a collided id
+    resolves to None."""
+    if suite is not None:
+        cand = BENCH / suite / task_id
+        return cand if (cand / "task.toml").is_file() else None
     return _task_index().get(task_id)
 
 
@@ -110,7 +131,7 @@ def freebie_checks(tdir: Path) -> list[str]:
     for name, txt in _read_checks(tdir):
         for m in _FULL_CREDIT_RE.finditer(txt):
             window = txt[max(0, m.start() - _FREEBIE_WINDOW):m.end() + _FREEBIE_WINDOW]
-            if _ABSENCE_HINT_RE.search(window) and _GT_REF_RE.search(window):
+            if _EMPTY_GT_RE.search(window):
                 hits.append(name)
                 break
     return hits
@@ -178,7 +199,7 @@ def curate() -> dict:
     eligible, exclusions = [], []
     for t in pool:
         tid = t["task_id"]
-        tdir = task_dir(tid)
+        tdir = task_dir(tid, t["suite"])  # suite-qualified: matches analyze()'s resolution
         rec = {
             "task_id": tid, "suite": t["suite"], "stratum": t["stratum"],
             "task_type": t["task_type"], "repos": t["repos"],

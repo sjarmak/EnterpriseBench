@@ -8,7 +8,11 @@ scorer-guard doctrine: a verdict is valid only if the pristine verifier ran):
     any gate flips ``all_pass`` and fails here. (An earlier mtime "staleness" guard was
     removed: git does not version mtimes, so on a fresh clone it passed vacuously — the
     exact CI environment where drift lands. Live re-derivation is the honest guard.)
-  * the per-vector class scan (ozbjt freebie / v9okc patch-grep) is re-run per task;
+  * the per-vector class scan (ozbjt freebie / v9okc patch-grep) is re-run per task. NB:
+    the test re-runs the SAME heuristic detector curate() used, so it is a regression
+    tripwire, not an independent oracle — a freebie shape the detector cannot recognize
+    passes both. The independent guard against reward-hacking is the pilot's
+    "baseline does not trivially win" criterion (see MANIFEST.md);
   * the name-set lookup is re-queried live from ``bd`` and matched to the committed
     snapshot, so a ``bd`` outage fails LOUD rather than reading as "no task named".
 
@@ -86,22 +90,34 @@ def test_candidate_rederives_all_pass(task_id):
     )
 
 
+def _tdir(task_id: str) -> Path:
+    """Suite-qualified task dir (matches analyze()'s resolution; avoids cross-suite id
+    collisions). Fails the test loudly rather than passing None downstream."""
+    task = _POOL_BY_ID.get(task_id)
+    assert task is not None, f"{task_id}: absent from gate_analysis.json"
+    tdir = curator.task_dir(task_id, task["suite"])
+    assert tdir is not None, f"{task_id}: task dir not resolvable in suite {task['suite']}"
+    return tdir
+
+
 @pytest.mark.parametrize("task_id", MANIFEST_IDS)
 def test_candidate_has_no_freebie_or_patchgrep(task_id):
     """RE-DERIVED per-vector class scan for the ozbjt/v9okc mechanisms."""
-    tdir = curator.task_dir(task_id)
+    tdir = _tdir(task_id)
     assert curator.freebie_checks(tdir) == [], f"{task_id}: ozbjt freebie mechanism present"
     assert curator.patch_checks(tdir) == [], f"{task_id}: v9okc patch-grep mechanism present"
 
 
 @pytest.mark.parametrize("task_id", MANIFEST_IDS)
 def test_candidate_is_md_report_and_multirepo(task_id):
-    """Retrieval-necessity + the md-report-only scope the study is limited to."""
-    tdir = curator.task_dir(task_id)
+    """Retrieval-necessity (>=2 repos) + the md-report-only scope the study is limited to."""
+    tdir = _tdir(task_id)
     deliverables = analyzer.deliverable_paths(tdir)
     assert deliverables, f"{task_id}: no deliverable declared"
     assert all(d.endswith(".md") for d in deliverables), \
         f"{task_id}: non-md deliverable {deliverables} (JSON deliverables are excluded, 639lv)"
+    assert _POOL_BY_ID[task_id]["repos"] >= 2, \
+        f"{task_id}: single-repo task cannot separate the arms (repos={_POOL_BY_ID[task_id]['repos']})"
 
 
 def test_committed_snapshot_has_no_manifest_overlap():
@@ -112,13 +128,15 @@ def test_committed_snapshot_has_no_manifest_overlap():
     assert not overlap, f"candidates named by an open integrity finding: {sorted(overlap)}"
 
 
-def test_live_finding_lookup_matches_snapshot():
-    """RE-DERIVED + fail-loud: re-query bd; a bd outage raises FindingLookupError here
-    (never a vacuous pass), and live drift from the committed snapshot is caught."""
-    live = curator.finding_named_sets()  # raises if bd is unavailable
-    snapshot = json.loads((OUT_DIR / "exclusions.json").read_text(encoding="utf-8"))
-    assert live == snapshot["finding_named_snapshot"], \
-        "live bd finding-named sets drifted from the committed snapshot; re-run curate"
+def test_live_finding_lookup_names_no_candidate():
+    """RE-DERIVED + fail-loud: re-query bd (a bd outage raises FindingLookupError here,
+    never a vacuous pass) and assert the LIVE named set overlaps no candidate. Asserts the
+    invariant that matters rather than exact snapshot equality, so an unrelated edit to a
+    finding bead's prose does not break CI — only a finding that actually names a candidate
+    does."""
+    live = set().union(*curator.finding_named_sets().values())  # raises if bd unavailable
+    overlap = live & set(MANIFEST_IDS)
+    assert not overlap, f"live bd finding names a candidate: {sorted(overlap)}"
 
 
 def test_committed_manifest_and_exclusions_in_sync_with_curation():
@@ -135,3 +153,28 @@ def test_committed_manifest_and_exclusions_in_sync_with_curation():
                       for t in json.loads((OUT_DIR / "exclusions.json").read_text(
                           encoding="utf-8"))["tasks"]}
     assert committed_excl == fresh_excl, "exclusions.json reason attribution drifted"
+
+
+_EXCLUDED = json.loads((OUT_DIR / "exclusions.json").read_text(encoding="utf-8"))
+_EXCLUDED_IDS = [t["task_id"] for t in _EXCLUDED["tasks"]]
+_SNAPSHOT_NAMED = set().union(*_EXCLUDED["finding_named_snapshot"].values())
+
+
+@pytest.mark.parametrize("task_id", _EXCLUDED_IDS)
+def test_excluded_task_still_belongs_excluded(task_id):
+    """RE-DERIVED for the EXCLUDED set too (not just eligible): curate() reads gate
+    verdicts from the committed gate_analysis.json, so a task whose checks were fixed to
+    all-pass could stay excluded forever with a stale reason and no test would notice.
+    Re-derive gates live; if a committed-excluded task now all-passes AND carries neither a
+    class-scan mechanism nor a finding name, it should have been promoted to eligible."""
+    task = _POOL_BY_ID.get(task_id)
+    assert task is not None, f"{task_id}: absent from gate_analysis.json"
+    if not analyzer.analyze(task).all_pass:
+        return  # legitimately excluded by a gate — nothing stale
+    tdir = curator.task_dir(task_id, task["suite"])
+    class_excluded = bool(curator.freebie_checks(tdir) or curator.patch_checks(tdir))
+    assert class_excluded or task_id in _SNAPSHOT_NAMED, (
+        f"{task_id} re-derives all-pass and is neither class- nor finding-excluded; it "
+        f"belongs in the eligible pool but is committed as excluded — regenerate "
+        f"gate_analysis.json and re-run curate_rryas_manifest.py"
+    )
