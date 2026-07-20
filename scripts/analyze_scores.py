@@ -28,6 +28,20 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# `make analyze` / `make cost` invoke this script directly, with no
+# PYTHONPATH=lib — only the test target sets it. Bootstrap the same way
+# run_task.py does so the contract check works on a checkout where
+# `pip install -e lib/` has not been run.
+if str(PROJECT_ROOT / "lib") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "lib"))
+
+from eb_verify.score_contract import (  # noqa: E402
+    LEGACY_SCORE_CONTRACT_VERSION,
+    SCORE_CONTRACT_VERSION,
+    ScoreContractError,
+    read_task_score,
+)
+
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -47,7 +61,7 @@ class TaskResult:
     mode: str
     success: bool
     task_score: float  # raw
-    normalized_score: float  # task_score / checkpoints_total
+    normalized_score: float  # task_score on the v2 contract scale, in [0,1]
     all_passed: bool
     checkpoints_passed: int
     checkpoints_total: int
@@ -146,8 +160,21 @@ def _parse_toml_metadata(path: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def parse_result(result_path: Path, benchmarks_root: Path) -> TaskResult | None:
-    """Parse a single results.json into a TaskResult."""
+def parse_result(
+    result_path: Path,
+    benchmarks_root: Path,
+    *,
+    allow_legacy: bool = False,
+) -> TaskResult | None:
+    """Parse a single results.json into a TaskResult.
+
+    Raises ``eb_verify.score_contract.ScoreContractError`` for a result whose
+    ``task_score`` cannot be read at a known contract version. That is
+    deliberately not a skip: a result with an unreadable score is not a result
+    with no score, and silently dropping it would shrink the corpus without
+    saying so. Pass *allow_legacy* to read a pre-contract corpus under v1
+    semantics.
+    """
     try:
         data = json.loads(result_path.read_text())
     except (json.JSONDecodeError, OSError) as exc:
@@ -164,13 +191,24 @@ def parse_result(result_path: Path, benchmarks_root: Path) -> TaskResult | None:
         logger.warning("No scores in %s", result_path)
         return None
 
+    # This filter runs BEFORE the contract check, and the order is load-bearing.
+    # The infra/integrity channel synthesizes a scores block with no checkpoints
+    # and no contract stamp (run_task._run_scoring's tampered-seal and
+    # verifier-infra payloads), as does chain_runner's score file. Those are
+    # dropped here as they always have been. Checking the contract first would
+    # turn every one of them into a crash.
     checkpoints_total = scores.get("checkpoints_total", 0)
     if checkpoints_total == 0:
         logger.warning("Zero checkpoints_total in %s", result_path)
         return None
 
+    # task_score means what the contract says it means, and nothing infers it
+    # from the value — a v1 four-checkpoint run at 0.2 each persists 0.8, which
+    # is indistinguishable from a v2 0.8. See eb_verify.score_contract.
     task_score = scores.get("task_score", 0.0)
-    normalized = task_score / checkpoints_total
+    normalized = read_task_score(
+        scores, f"analyze_scores ({result_path})", allow_legacy=allow_legacy
+    )
 
     checkpoints = tuple(
         Checkpoint(
@@ -213,18 +251,51 @@ def parse_result(result_path: Path, benchmarks_root: Path) -> TaskResult | None:
 def load_all_results(
     results_dirs: list[Path],
     benchmarks_root: Path,
+    *,
+    allow_legacy: bool = False,
 ) -> list[TaskResult]:
-    """Scan all results dirs, parse, and deduplicate."""
+    """Scan all results dirs, parse, and deduplicate.
+
+    Raises :class:`ScoreContractError` if any result could not be read at a
+    known contract, but only after scanning everything — the scan does not stop
+    at the first one. Aborting mid-``rglob`` would report a single filename and
+    hide how much of the corpus is affected, when the answer an operator needs
+    is "how many, and is this the whole historical corpus or one stray file".
+    The run still produces no analysis: a partial corpus silently renamed to
+    the full one is the failure this contract exists to prevent.
+    """
     all_results: list[TaskResult] = []
+    unreadable: list[str] = []
 
     for rdir in results_dirs:
         if not rdir.exists():
             logger.debug("Results dir not found: %s", rdir)
             continue
         for rjson in rdir.rglob("results.json"):
-            tr = parse_result(rjson, benchmarks_root)
+            try:
+                tr = parse_result(rjson, benchmarks_root, allow_legacy=allow_legacy)
+            except ScoreContractError:
+                unreadable.append(str(rjson))
+                continue
             if tr is not None:
                 all_results.append(tr)
+
+    if unreadable:
+        shown = unreadable[:3]
+        elided = len(unreadable) - len(shown)
+        raise ScoreContractError(
+            f"{len(unreadable)} of {len(unreadable) + len(all_results)} results "
+            f"declare no score contract, so what their task_score means is "
+            f"unknown — a pre-contract sum and a v{SCORE_CONTRACT_VERSION} "
+            f"weighted mean are not distinguishable by inspection, so neither "
+            f"is assumed:\n"
+            + "\n".join(f"  {u}" for u in shown)
+            + (f"\n  ... and {elided} more" if elided else "")
+            + "\n\nNo analysis was written. Re-run those tasks to produce "
+            f"v{SCORE_CONTRACT_VERSION} results, point --results-dir at only "
+            "the current corpus, or pass --legacy-score-contract to read them "
+            f"under v{LEGACY_SCORE_CONTRACT_VERSION} semantics."
+        )
 
     # Deduplicate: same task_id + mode -> keep highest score
     best: dict[tuple[str, str], TaskResult] = {}
@@ -465,11 +536,18 @@ def per_task_summary(results: list[TaskResult]) -> list[dict[str, Any]]:
 def analyze(
     results_dirs: list[Path],
     benchmarks_root: Path,
+    *,
+    allow_legacy: bool = False,
 ) -> dict[str, Any]:
-    results = load_all_results(results_dirs, benchmarks_root)
+    results = load_all_results(results_dirs, benchmarks_root, allow_legacy=allow_legacy)
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        # Which contract the numbers below were read at. A report that does not
+        # say this is a report whose scale a reader has to guess.
+        "score_contract_version": (
+            LEGACY_SCORE_CONTRACT_VERSION if allow_legacy else SCORE_CONTRACT_VERSION
+        ),
         "total_results": len(results),
         "by_mode": by_mode(results),
         "by_suite": by_group_and_mode(results, "suite"),
@@ -524,6 +602,17 @@ def main(argv: list[str] | None = None) -> None:
         help="Output JSON path.",
     )
     parser.add_argument(
+        "--legacy-score-contract",
+        action="store_true",
+        help=(
+            "Read unversioned results under v1 semantics (task_score is an "
+            "unweighted 0-N sum, normalized by checkpoint count). For "
+            "analysing the historical corpus only — the two regimes are not "
+            "distinguishable by inspection, so this is an assertion about the "
+            "corpus, not a detection."
+        ),
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -543,7 +632,16 @@ def main(argv: list[str] | None = None) -> None:
     logger.info("Results dirs: %s", [str(d) for d in args.results_dirs])
     logger.info("Benchmarks root: %s", args.benchmarks_root)
 
-    report = analyze(args.results_dirs, args.benchmarks_root)
+    try:
+        report = analyze(
+            args.results_dirs,
+            args.benchmarks_root,
+            allow_legacy=args.legacy_score_contract,
+        )
+    except ScoreContractError as exc:
+        # An expected, actionable condition — the message already names the
+        # files and the flag. A traceback here would bury both.
+        sys.exit(f"error: {exc}")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, default=str) + "\n")

@@ -1437,6 +1437,11 @@ def _write_attempt(
                     "scores": {
                         "checkpoints_total": 1,
                         "task_score": score,
+                        # Cost selection reads the score through
+                        # analyze_scores.parse_result, which refuses a result
+                        # that does not say which contract its task_score is
+                        # written at (eb_verify.score_contract).
+                        "score_contract_version": 2,
                         "checkpoints": [],
                     },
                     "task_metadata": {"suite": "customer_escalation",

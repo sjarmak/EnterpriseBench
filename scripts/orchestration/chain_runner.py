@@ -34,6 +34,7 @@ except ImportError:
 from orchestration.session import SessionConfig, SessionResult, run_session
 from orchestration.milestone import SessionScore, run_session_milestones
 from orchestration.runner_cli import add_passthrough_args
+from eb_verify.score_contract import SCORE_CONTRACT_KEY, SCORE_CONTRACT_VERSION  # noqa: E402
 from eb_verify.scorer_guard import InfraError
 
 logger = logging.getLogger(__name__)
@@ -550,7 +551,16 @@ def main():
     # total_score reaches here only for a valid chain that produced no score: an
     # invalid run exits nonzero below and is read at run_benchmark's error channel.
     with open(score_path, "w") as f:
-        json.dump({"scores": {"task_score": result.total_score}}, f, indent=2)
+        json.dump(
+            {
+                "scores": {
+                    "task_score": result.total_score,
+                    SCORE_CONTRACT_KEY: SCORE_CONTRACT_VERSION,
+                }
+            },
+            f,
+            indent=2,
+        )
 
     if result.is_invalid:
         # Nonzero exit routes the run to run_benchmark's error channel, so an

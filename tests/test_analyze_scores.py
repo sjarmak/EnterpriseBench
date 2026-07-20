@@ -36,7 +36,7 @@ from analyze_scores import (
 def _make_result(
     task_id: str = "test-task-001",
     mode: str = "baseline",
-    task_score: float = 2.0,
+    task_score: float = 0.6667,
     checkpoints_total: int = 3,
     all_passed: bool = False,
     checkpoints_passed: int = 2,
@@ -44,13 +44,18 @@ def _make_result(
     task_type: str = "error_provenance",
     difficulty: str = "medium",
 ) -> TaskResult:
-    normalized = task_score / checkpoints_total if checkpoints_total else 0.0
+    # task_score IS the normalized score: under the v2 contract
+    # (eb_verify.score_contract) it is the weighted mean, already in [0,1], and
+    # checkpoints_total is a task SHAPE that no longer enters the arithmetic.
+    # This helper used to re-derive normalized = task_score / checkpoints_total,
+    # which meant every assertion below re-stated the defect being tested and
+    # passed under the buggy and the corrected implementation alike.
     return TaskResult(
         task_id=task_id,
         mode=mode,
         success=True,
         task_score=task_score,
-        normalized_score=normalized,
+        normalized_score=task_score,
         all_passed=all_passed,
         checkpoints_passed=checkpoints_passed,
         checkpoints_total=checkpoints_total,
@@ -74,16 +79,17 @@ def _write_results_json(path: Path, **overrides: object) -> None:
         "task_id": overrides.get("task_id", "test-task-001"),
         "success": True,
         "scores": {
-            "task_score": overrides.get("task_score", 2.0),
+            "task_score": overrides.get("task_score", 0.6667),
+            "score_contract_version": overrides.get("score_contract_version", 2),
             "all_passed": overrides.get("all_passed", False),
             "checkpoints_passed": overrides.get("checkpoints_passed", 2),
             "checkpoints_total": overrides.get("checkpoints_total", 3),
             "checkpoints": overrides.get(
                 "checkpoints",
                 [
-                    {"name": "cp1", "weight": 1.0, "score": 1.0, "passed": True},
-                    {"name": "cp2", "weight": 1.0, "score": 1.0, "passed": True},
-                    {"name": "cp3", "weight": 1.0, "score": 0.0, "passed": False},
+                    {"name": "cp1", "weight": 0.3333, "score": 1.0, "passed": True},
+                    {"name": "cp2", "weight": 0.3333, "score": 1.0, "passed": True},
+                    {"name": "cp3", "weight": 0.3334, "score": 0.0, "passed": False},
                 ],
             ),
         },
@@ -107,21 +113,19 @@ def _write_results_json(path: Path, **overrides: object) -> None:
 
 
 class TestScoreNormalization:
-    def test_basic_normalization(self):
-        r = _make_result(task_score=2.0, checkpoints_total=4)
-        assert r.normalized_score == pytest.approx(0.5)
+    """Normalization is a property of parse_result, not of this file's helper.
 
-    def test_perfect_score(self):
-        r = _make_result(task_score=3.0, checkpoints_total=3, all_passed=True)
-        assert r.normalized_score == pytest.approx(1.0)
+    The four tests that used to live here asserted that
+    ``task_score / checkpoints_total`` equals ``task_score / checkpoints_total``
+    — they exercised the fixture builder, so they were green throughout the
+    double-normalization defect. The real coverage is in
+    tests/test_score_contract.py, which runs the production loader over
+    materially different task shapes and asserts literals.
+    """
 
-    def test_zero_score(self):
-        r = _make_result(task_score=0.0, checkpoints_total=5)
-        assert r.normalized_score == pytest.approx(0.0)
-
-    def test_partial_score(self):
-        r = _make_result(task_score=1.5, checkpoints_total=3)
-        assert r.normalized_score == pytest.approx(0.5)
+    def test_normalized_score_is_the_contract_value_verbatim(self):
+        r = _make_result(task_score=0.75, checkpoints_total=4)
+        assert r.normalized_score == pytest.approx(0.75)
 
 
 # ---------------------------------------------------------------------------
@@ -137,12 +141,12 @@ class TestDeduplication:
         benchmarks = tmp_path / "benchmarks"
         benchmarks.mkdir()
 
-        _write_results_json(dir1 / "test-task-001" / "results.json", task_score=1.0)
-        _write_results_json(dir2 / "test-task-001" / "results.json", task_score=2.0)
+        _write_results_json(dir1 / "test-task-001" / "results.json", task_score=0.3333)
+        _write_results_json(dir2 / "test-task-001" / "results.json", task_score=0.6667)
 
         results = load_all_results([dir1, dir2], benchmarks)
         assert len(results) == 1
-        assert results[0].normalized_score == pytest.approx(2.0 / 3)
+        assert results[0].normalized_score == pytest.approx(0.6667)
 
     def test_different_modes_kept(self, tmp_path: Path):
         """Different modes for same task are NOT deduplicated."""
@@ -152,11 +156,11 @@ class TestDeduplication:
 
         _write_results_json(
             dir1 / "test-task-001" / "results.json",
-            task_score=1.0,
+            task_score=0.3333,
         )
         _write_results_json(
             dir1 / "test-task-001_hybrid" / "results.json",
-            task_score=2.0,
+            task_score=0.6667,
             config={"mode": "hybrid"},
         )
 
@@ -173,16 +177,16 @@ class TestMCPDelta:
     def test_basic_delta(self):
         results = [
             _make_result(
-                task_id="t1", mode="baseline", task_score=1.0, checkpoints_total=2
+                task_id="t1", mode="baseline", task_score=0.5, checkpoints_total=2
             ),
             _make_result(
-                task_id="t1", mode="hybrid", task_score=2.0, checkpoints_total=2
+                task_id="t1", mode="hybrid", task_score=1.0, checkpoints_total=2
             ),
             _make_result(
-                task_id="t2", mode="baseline", task_score=2.0, checkpoints_total=2
+                task_id="t2", mode="baseline", task_score=1.0, checkpoints_total=2
             ),
             _make_result(
-                task_id="t2", mode="hybrid", task_score=2.0, checkpoints_total=2
+                task_id="t2", mode="hybrid", task_score=1.0, checkpoints_total=2
             ),
         ]
         delta = _compute_delta(results, "hybrid")
@@ -203,10 +207,10 @@ class TestMCPDelta:
     def test_degradation(self):
         results = [
             _make_result(
-                task_id="t1", mode="baseline", task_score=3.0, checkpoints_total=3
+                task_id="t1", mode="baseline", task_score=1.0, checkpoints_total=3
             ),
             _make_result(
-                task_id="t1", mode="mcp_only", task_score=1.0, checkpoints_total=3
+                task_id="t1", mode="mcp_only", task_score=0.3333, checkpoints_total=3
             ),
         ]
         delta = _compute_delta(results, "mcp_only")
@@ -226,13 +230,13 @@ class TestCalibrationBias:
             _make_result(
                 task_id="cal-test-001",
                 mode="baseline",
-                task_score=2.0,
+                task_score=0.6667,
                 checkpoints_total=3,
             ),
             _make_result(
                 task_id="cal-test-001",
                 mode="hybrid",
-                task_score=2.0,
+                task_score=0.6667,
                 checkpoints_total=3,
             ),
         ]
@@ -246,13 +250,13 @@ class TestCalibrationBias:
             _make_result(
                 task_id="cal-test-001",
                 mode="baseline",
-                task_score=1.0,
+                task_score=0.3333,
                 checkpoints_total=3,
             ),
             _make_result(
                 task_id="cal-test-001",
                 mode="hybrid",
-                task_score=3.0,
+                task_score=1.0,
                 checkpoints_total=3,
             ),
         ]
@@ -378,13 +382,14 @@ class TestMetadataFallback:
             "task_id": "my-task-001",
             "success": True,
             "scores": {
-                "task_score": 1.0,
+                "task_score": 0.5,
+                "score_contract_version": 2,
                 "all_passed": False,
                 "checkpoints_passed": 1,
                 "checkpoints_total": 2,
                 "checkpoints": [
-                    {"name": "cp1", "weight": 1.0, "score": 1.0, "passed": True},
-                    {"name": "cp2", "weight": 1.0, "score": 0.0, "passed": False},
+                    {"name": "cp1", "weight": 0.5, "score": 1.0, "passed": True},
+                    {"name": "cp2", "weight": 0.5, "score": 0.0, "passed": False},
                 ],
             },
             "timing": {"agent": 50.0},
@@ -425,7 +430,7 @@ class TestDistStats:
         assert stats["mean"] is None
 
     def test_single_result(self):
-        r = _make_result(task_score=2.0, checkpoints_total=4)
+        r = _make_result(task_score=0.5, checkpoints_total=4)
         stats = _dist_stats([r])
         assert stats["count"] == 1
         assert stats["mean"] == pytest.approx(0.5)
@@ -433,7 +438,7 @@ class TestDistStats:
 
     def test_multiple_results(self):
         results = [
-            _make_result(task_id=f"t{i}", task_score=float(i), checkpoints_total=3)
+            _make_result(task_id=f"t{i}", task_score=i / 3, checkpoints_total=3)
             for i in range(4)
         ]
         stats = _dist_stats(results)
@@ -451,10 +456,10 @@ class TestPerTaskSummary:
     def test_cross_mode_summary(self):
         results = [
             _make_result(
-                task_id="t1", mode="baseline", task_score=1.0, checkpoints_total=2
+                task_id="t1", mode="baseline", task_score=0.5, checkpoints_total=2
             ),
             _make_result(
-                task_id="t1", mode="hybrid", task_score=2.0, checkpoints_total=2
+                task_id="t1", mode="hybrid", task_score=1.0, checkpoints_total=2
             ),
         ]
         summary = per_task_summary(results)

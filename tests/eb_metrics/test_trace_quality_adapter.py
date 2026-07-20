@@ -79,13 +79,13 @@ def test_clean_record_is_valid_with_full_precision() -> None:
             {"name": "b", "passed": True},
             {"name": "c", "passed": True},
         ],
-        task_score=3.0,
+        task_score=1.0,
     )
     m = metrics_from_eb_record(rec, run_name="baseline")
 
     assert m.validity == "valid"
     assert m.validity_reason is None
-    assert m.score == 3.0
+    assert m.score == 1.0
     assert m.scorer_passed is True
     assert m.precision == 1.0
     assert m.recall is None
@@ -141,7 +141,7 @@ def test_partial_checkpoints_record_emits_per_checkpoint_flags() -> None:
             {"name": "cp_two", "passed": True},
             {"name": "cp_three", "passed": False},
         ],
-        task_score=2.0,
+        task_score=0.6667,
     )
     m = metrics_from_eb_record(rec, run_name="with_mcp")
 

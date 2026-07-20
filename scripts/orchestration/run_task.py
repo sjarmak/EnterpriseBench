@@ -105,6 +105,7 @@ from agents.harnesses.claude.cli.sgx import (
 # Scorer trust boundary — single definition of "infra failure vs real score",
 # shared by every scoring entry point in this file and by code_patch.validate.
 sys.path.insert(0, str(REPO_ROOT / "lib"))
+from eb_verify.score_contract import SCORE_CONTRACT_KEY, SCORE_CONTRACT_VERSION  # noqa: E402
 from eb_verify.scorer_guard import InfraError, guard_verifier_output
 
 try:
@@ -1276,8 +1277,11 @@ def _setup_container(
     # Map checkpoint verifier name -> (weight, timeout) from the task toml so
     # test_runner.sh can read real weights from .verifiers/<name>.meta. Keyed by
     # the same name the .sh file is copied under (verifier basename, "check_"
-    # prefix stripped). Without this, every checkpoint defaults to weight 1.0
-    # and task_score becomes a 0-N sum instead of the toml-weighted 0-1.
+    # prefix stripped). Without this, every checkpoint defaults to weight 1.0,
+    # so task_score becomes the UNWEIGHTED mean of the checkpoints instead of
+    # the toml-weighted one — still in [0,1] since the scorer divides by total
+    # weight (eb_verify.score_contract v2), but no longer the number the task
+    # author specified. Before that contract it was worse: an unbounded 0-N sum.
     checkpoint_meta = _verifier_meta_by_name(task_data.get("checkpoints", []))
 
     checks_dir = task_dir / "checks"
@@ -1991,12 +1995,21 @@ def _apply_llm_judge(
         cp["judge_score"] = judge_score
         cp["grep_score"] = grep_score
 
-    # Recompute task_score
+    # Recompute task_score. This is the LAST writer of task_score on an
+    # llm_curator task, so it owes the same contract the shell scorer emits:
+    # the weighted MEAN (eb_verify.score_contract, v2). It previously computed
+    # total_weight, guarded on it, and then never divided by it — a weighted
+    # sum masquerading as the scorer's number.
+    #
+    # On zero total weight the answer is 0.0, not the pre-judge score: every
+    # checkpoint has already been capped in place above, so leaving the old
+    # number standing would publish a task_score that no longer matches its own
+    # checkpoints. Unreachable while task validation enforces weights summing
+    # to 1.0 — it is there so a gate failure yields an honest 0.0.
     total_weight = sum(c.get("weight", 1.0) for c in checkpoints)
-    if total_weight > 0:
-        scores["task_score"] = sum(
-            c.get("score", 0.0) * c.get("weight", 1.0) for c in checkpoints
-        )
+    weighted = sum(c.get("score", 0.0) * c.get("weight", 1.0) for c in checkpoints)
+    scores["task_score"] = weighted / total_weight if total_weight > 0 else 0.0
+    scores[SCORE_CONTRACT_KEY] = SCORE_CONTRACT_VERSION
 
     return scores
 

@@ -278,6 +278,13 @@ discover_repos() {
 # lockstep with eb_verify.scorer_guard.INFRA_SENTINEL, which greps for it.
 INFRA_SENTINEL="VERIFIER_INFRA_ERROR"
 
+# What the task_score emitted below means. Mirrors
+# eb_verify.score_contract.SCORE_CONTRACT_VERSION — this is bash and cannot
+# import it, so change it here and there together;
+# tests/test_score_contract.py asserts the two agree. See that module for why
+# an unstamped score is refused by consumers rather than inferred.
+SCORE_CONTRACT_VERSION=2
+
 # Sourced (via BASH_ENV) by every verifier shell. Bash calls
 # command_not_found_handle for any command it cannot find in ANY context —
 # including inside `if python3 ... 2>/dev/null`, where the verifier's own
@@ -536,6 +543,7 @@ TOTAL=0
 PASSED=0
 CHECKPOINT_RESULTS=""
 WEIGHTED_SCORE="0"
+TOTAL_WEIGHT="0"
 
 for verifier in "$VERIFIER_DIR"/*.sh; do
     [ -f "$verifier" ] || continue
@@ -551,7 +559,15 @@ for verifier in "$VERIFIER_DIR"/*.sh; do
     meta_file="$VERIFIER_DIR/${name}.meta"
     if [ -f "$meta_file" ]; then
         w=$(grep -oP '(?<=weight=)\S+' "$meta_file" 2>/dev/null || true)
-        [[ "$w" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && weight="$w"
+        # NON-NEGATIVE only. A weight now feeds a DIVISION (the v2 contract's
+        # weighted mean) as well as a multiplication, and a weighted mean of
+        # scores in [0,1] is itself in [0,1] only while every weight is >= 0 —
+        # magnitude does not matter, sign does. A negative weight would make
+        # task_score exceed 1.0 (w=2.0/score=1.0 plus w=-1.0/score=0.0 gives
+        # 2.0) with nothing downstream range-checking the top-level number.
+        # schemas/task.schema.json bounds weight to [0,1] already; this is the
+        # copy of that rule that does not depend on the offline gate having run.
+        [[ "$w" =~ ^[0-9]+(\.[0-9]+)?$ ]] && weight="$w"
     fi
 
     # Read timeout from .meta file if present
@@ -589,6 +605,7 @@ for verifier in "$VERIFIER_DIR"/*.sh; do
     # awk for float math; LC_ALL=C for the same mawk locale reason as parse_score
     # (a comma locale prints "0,5000" and task_score stops being a JSON number).
     WEIGHTED_SCORE=$(LC_ALL=C awk "BEGIN { printf \"%.4f\", $WEIGHTED_SCORE + ($checkpoint_score * $weight) }")
+    TOTAL_WEIGHT=$(LC_ALL=C awk "BEGIN { printf \"%.4f\", $TOTAL_WEIGHT + $weight }")
 
     # Build checkpoint result JSON entry (detail is already a quoted JSON
     # string). name comes from an agent-writable filename in .verifiers/ —
@@ -609,6 +626,33 @@ for verifier in "$VERIFIER_DIR"/*.sh; do
 done
 
 echo "Results: $PASSED/$TOTAL checkpoints passed" >&2
+
+# The score contract (v2): task_score is the weighted MEAN, not the weighted
+# sum. Dividing here is what puts task_score in [0,1] by construction rather
+# than by the authoring convention that weights sum to 1.0 — a convention that
+# task validation does enforce, but that this scorer cannot observe. Consumers
+# then read the number as-is; the second normalization one of them used to
+# apply (dividing by the checkpoint COUNT) is what this contract exists to end.
+#
+# A zero total weight is NOT a 0.0. Weights are non-negative (enforced at the
+# parse above), so the only way to reach zero is for every checkpoint to be
+# weighted zero — malformed grading metadata, not an agent that earned nothing.
+# Emitting 0.0 there would be exactly the false-zero the scorer trust boundary
+# forbids: a harness defect recorded as a measured failure. It routes to the
+# infra channel instead, which is a re-run rather than a grade.
+#
+# Scoped to TOTAL > 0 on purpose. Zero checkpoints is a different failure —
+# no verifier ran at all — and the empty {"checkpoints": []} payload it already
+# emits is what scorer_guard books as ``no_checkpoints_run``. Claiming the
+# weight problem there would relabel that channel.
+if [ "$TOTAL" -gt 0 ] && [ "$(LC_ALL=C awk "BEGIN { print ($TOTAL_WEIGHT > 0) ? 1 : 0 }")" != "1" ]; then
+    printf '{"task_score": 0.0, "all_passed": false, "checkpoints": [], "error": "%s: checkpoint weights sum to %s — cannot compute a weighted score"}\n' \
+        "$INFRA_SENTINEL" "$(json_escape "$TOTAL_WEIGHT")"
+    exit 1
+fi
+if [ "$TOTAL" -gt 0 ]; then
+    WEIGHTED_SCORE=$(LC_ALL=C awk "BEGIN { printf \"%.4f\", $WEIGHTED_SCORE / $TOTAL_WEIGHT }")
+fi
 
 ALL_PASSED="false"
 EXIT_CODE=1
@@ -635,6 +679,7 @@ REPOS_JSON=$(
 RESULT_JSON=$(cat <<RESULT_JSON
 {
   "task_score": $WEIGHTED_SCORE,
+  "score_contract_version": $SCORE_CONTRACT_VERSION,
   "all_passed": $ALL_PASSED,
   "checkpoints_passed": $PASSED,
   "checkpoints_total": $TOTAL,

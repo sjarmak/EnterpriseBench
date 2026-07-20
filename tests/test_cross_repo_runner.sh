@@ -230,7 +230,7 @@ exit_code=$?
 if echo "$output" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-assert set(d.keys()) == {'task_score', 'all_passed', 'checkpoints_passed', 'checkpoints_total', 'repos', 'checkpoints'}, d.keys()
+assert set(d.keys()) == {'task_score', 'score_contract_version', 'all_passed', 'checkpoints_passed', 'checkpoints_total', 'repos', 'checkpoints'}, d.keys()
 assert 'pad' not in d, 'injected key escaped the repos array'
 assert '$MALICIOUS_REPO' in d['repos'], 'malicious repo name missing or mangled'
 # 3 verifiers exist by this point: 01/02 from Test 2, 03 from Test 6.
@@ -265,7 +265,7 @@ exit_code=$?
 if echo "$output" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-assert set(d.keys()) == {'task_score', 'all_passed', 'checkpoints_passed', 'checkpoints_total', 'repos', 'checkpoints'}, d.keys()
+assert set(d.keys()) == {'task_score', 'score_contract_version', 'all_passed', 'checkpoints_passed', 'checkpoints_total', 'repos', 'checkpoints'}, d.keys()
 assert 'pad' not in d, 'injected key escaped the top-level object'
 by_name = {c['name']: c for c in d['checkpoints']}
 assert '$MALICIOUS_CHECKPOINT' in by_name, 'malicious checkpoint name missing or mangled'
@@ -301,7 +301,7 @@ exit_code=$?
 if [ ! -e /tmp/eb_test_runner_pwned ] && echo "$output" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-assert set(d.keys()) == {'task_score', 'all_passed', 'checkpoints_passed', 'checkpoints_total', 'repos', 'checkpoints'}, d.keys()
+assert set(d.keys()) == {'task_score', 'score_contract_version', 'all_passed', 'checkpoints_passed', 'checkpoints_total', 'repos', 'checkpoints'}, d.keys()
 by_name = {c['name']: c for c in d['checkpoints']}
 assert by_name['01-alpha-exists']['weight'] == 1.0, by_name['01-alpha-exists']['weight']
 " 2>/dev/null; then

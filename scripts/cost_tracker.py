@@ -51,6 +51,7 @@ import argparse
 import json
 import logging
 import math
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -59,6 +60,7 @@ from pathlib import Path
 from typing import Any
 
 from analyze_scores import parse_result
+from eb_verify.score_contract import ScoreContractError
 from lib.shared import VALID_MODES, load_task_index, strip_mode_suffix
 
 logger = logging.getLogger(__name__)
@@ -672,14 +674,17 @@ def _parse_dir_identity(dir_path: Path) -> tuple[str, str]:
     return task_id, mode
 
 
-def _attempt_score(task_dir: Path, benchmarks_root: Path) -> float | None:
+def _attempt_score(
+    task_dir: Path, benchmarks_root: Path, *, allow_legacy: bool = False
+) -> float | None:
     """Return this attempt's normalized score, or None if it has none.
 
-    Delegates to ``analyze_scores.parse_result`` rather than re-deriving
-    ``task_score / checkpoints_total`` locally. The coupling is the point: cost
-    selection has to collapse a (task_id, mode) cell to the same attempt the
-    score pipeline does, and a private copy of the normalization would drift
-    apart silently.
+    Delegates to ``analyze_scores.parse_result`` rather than reading
+    ``task_score`` locally. The coupling is the point: cost selection has to
+    collapse a (task_id, mode) cell to the same attempt the score pipeline
+    does, and a private read would drift apart silently — including from the
+    contract check that decides what ``task_score`` even means
+    (``eb_verify.score_contract``).
 
     None means the scoring layer produced nothing for this run — no results.json,
     no scores block, or zero checkpoints. That is a real distinction, not a zero:
@@ -690,7 +695,7 @@ def _attempt_score(task_dir: Path, benchmarks_root: Path) -> float | None:
     if not results_path.exists():
         return None
 
-    result = parse_result(results_path, benchmarks_root)
+    result = parse_result(results_path, benchmarks_root, allow_legacy=allow_legacy)
     return None if result is None else result.normalized_score
 
 
@@ -714,6 +719,8 @@ def scan_results_dirs(
     dirs: list[Path],
     benchmarks_root: Path,
     root: Path = PROJECT_ROOT,
+    *,
+    allow_legacy: bool = False,
 ) -> list[TaskCost]:
     """Find every result directory with an agent_trace.jsonl and cost its attempt.
 
@@ -728,6 +735,7 @@ def scan_results_dirs(
     """
 
     costs: list[TaskCost] = []
+    unreadable: list[str] = []
 
     for root_dir in dirs:
         if not root_dir.is_dir():
@@ -764,6 +772,20 @@ def scan_results_dirs(
                 except Exception:
                     logger.warning("Failed to read %s", metrics_path)
 
+            # Same fail-closed rule as analyze_scores, and for the same
+            # reason: the two modules must collapse a (task_id, mode) cell to
+            # the SAME attempt, which they cannot do if one of them silently
+            # drops the attempts the other refuses. Collected and raised once
+            # after the scan so the operator learns how much of the corpus is
+            # affected, not just which file came first.
+            try:
+                score = _attempt_score(
+                    task_dir, benchmarks_root, allow_legacy=allow_legacy
+                )
+            except ScoreContractError:
+                unreadable.append(str(task_dir))
+                continue
+
             costs.append(
                 TaskCost(
                     task_id=task_id,
@@ -775,10 +797,24 @@ def scan_results_dirs(
                     vendor=vendor,
                     agent_duration_seconds=duration,
                     run_dir=_run_dir_label(task_dir, root),
-                    normalized_score=_attempt_score(task_dir, benchmarks_root),
+                    normalized_score=score,
                     trace_timestamp=scan.last_timestamp,
                 )
             )
+
+    if unreadable:
+        shown = unreadable[:3]
+        elided = len(unreadable) - len(shown)
+        raise ScoreContractError(
+            f"{len(unreadable)} attempt(s) declare no score contract, so what "
+            f"their task_score means is unknown and neither reading is "
+            f"assumed:\n"
+            + "\n".join(f"  {u}" for u in shown)
+            + (f"\n  ... and {elided} more" if elided else "")
+            + "\n\nNo cost report was written. Re-run those tasks, point "
+            "--results-dir at only the current corpus, or pass "
+            "--legacy-score-contract."
+        )
 
     return costs
 
@@ -1235,6 +1271,17 @@ def main(argv: list[str] | None = None) -> None:
         help="Benchmarks directory for task metadata (default: benchmarks/).",
     )
     parser.add_argument(
+        "--legacy-score-contract",
+        action="store_true",
+        help=(
+            "Read unversioned results under v1 score semantics. Mirrors the "
+            "flag of the same name on analyze_scores.py — cost selection ranks "
+            "attempts by the score that module produces, so the two have to be "
+            "reading the corpus at the same contract or they collapse each "
+            "cell to a different attempt."
+        ),
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -1257,7 +1304,15 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     logger.info("Scanning %d result directories...", len(result_dirs))
-    costs = scan_results_dirs(result_dirs, benchmarks_root, root=PROJECT_ROOT)
+    try:
+        costs = scan_results_dirs(
+            result_dirs,
+            benchmarks_root,
+            root=PROJECT_ROOT,
+            allow_legacy=args.legacy_score_contract,
+        )
+    except ScoreContractError as exc:
+        sys.exit(f"error: {exc}")
     logger.info("Found %d attempts with trace data.", len(costs))
 
     report = aggregate_report(costs)
