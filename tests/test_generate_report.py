@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from cost_tracker import SCHEMA_VERSION
+from cost_tracker import SCHEMA_VERSION, SELECTION_RULE
 from generate_report import (
     ReportInputs,
     build_calibration_section,
@@ -317,7 +317,7 @@ def _cost_report(**overrides: object) -> dict:
     """A schema-current cost report where the two views deliberately disagree."""
     report = {
         "schema_version": SCHEMA_VERSION,
-        "selection_rule": "highest normalized_score, then latest trace timestamp",
+        "selection_rule": SELECTION_RULE,
         "operational_economics": {
             "description": "Total spend across every attempt.",
             "total_cost_usd": 123.45,
@@ -384,8 +384,10 @@ class TestCostSection:
         assert "MATCHED-BLURB" in result
 
     def test_selection_rule_is_stated(self) -> None:
+        """Carries the producer's own wording, so the rendered report cannot
+        keep describing a selection rule cost_tracker no longer applies."""
         result = build_cost_section(_make_inputs(cost_report=_cost_report()))
-        assert "highest normalized_score" in result
+        assert SELECTION_RULE in result
 
     def test_exclusions_are_disclosed(self) -> None:
         result = build_cost_section(_make_inputs(cost_report=_cost_report()))

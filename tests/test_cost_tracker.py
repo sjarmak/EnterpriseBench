@@ -1417,11 +1417,14 @@ def _write_attempt(
     timestamp: str | None = None,
     input_tokens: int = 1000,
     output_tokens: int = 500,
+    status: str | None = None,
 ) -> Path:
     """Write one attempt directory: agent_trace.jsonl plus results.json.
 
     ``score=None`` writes no results.json at all — an attempt the scoring layer
     never produced a score for, which is what makes it invalid rather than free.
+    ``status`` writes the field run_task persists; ``"invalid"`` is a run that
+    was scored and must still never be selected.
     """
     task_dir = root / batch / f"{task_id}_{mode}"
     entry = _assistant_entry(input_tokens=input_tokens, output_tokens=output_tokens)
@@ -1448,6 +1451,7 @@ def _write_attempt(
                                       "difficulty": "medium"},
                     "config": {"mode": mode},
                 }
+                | ({"status": status} if status is not None else {})
             )
         )
     return task_dir
@@ -1576,36 +1580,40 @@ class TestAttemptIdentity:
 class TestSelectAttempt:
     """Which attempt represents a (task_id, mode) cell, and why that rule.
 
-    The rule must match ``analyze_scores._load_results`` (highest normalized
-    score), or the cost row and the score row of the same cell describe
+    The rule must match ``analyze_scores.load_all_results`` (earliest valid
+    attempt), or the cost row and the score row of the same cell describe
     different runs and every score-vs-cost join is wrong.
     """
 
-    def test_highest_score_wins(self) -> None:
-        low = _make_cost(run_dir="a", normalized_score=0.25, cost_usd=9.0)
-        high = _make_cost(run_dir="b", normalized_score=0.75, cost_usd=1.0)
-        assert select_attempt([low, high]) is high
+    def test_the_earliest_attempt_wins_whatever_it_scored(self) -> None:
+        """The bias this rule exists to remove: picking the best of N re-runs
+        makes a cell's score rise with how often it happened to be retried."""
+        first = _make_cost(
+            run_dir="a", normalized_score=0.25, trace_timestamp="2026-01-01T00:00:00Z"
+        )
+        rerun = _make_cost(
+            run_dir="b", normalized_score=0.75, trace_timestamp="2026-06-01T00:00:00Z"
+        )
+        assert select_attempt([first, rerun]) is first
+        assert select_attempt([rerun, first]) is first
 
-    def test_ties_break_on_latest_trace_timestamp(self) -> None:
-        old = _make_cost(
-            run_dir="a", normalized_score=0.5, trace_timestamp="2026-01-01T00:00:00Z"
+    def test_an_undated_attempt_never_displaces_a_dated_one(self) -> None:
+        dated = _make_cost(
+            run_dir="z", normalized_score=0.5, trace_timestamp="2026-06-01T00:00:00Z"
         )
-        new = _make_cost(
-            run_dir="b", normalized_score=0.5, trace_timestamp="2026-06-01T00:00:00Z"
-        )
-        assert select_attempt([old, new]) is new
-        assert select_attempt([new, old]) is new
+        undated = _make_cost(run_dir="a", normalized_score=0.9, trace_timestamp="")
+        assert select_attempt([undated, dated]) is dated
 
     def test_selection_is_independent_of_input_order_and_mtime(self) -> None:
         """The rule is content-derived, so shuffling the scan order cannot move it.
 
-        mtime would not survive a clone or a rescore pass; the trace timestamp and
-        the score both live in the artifacts.
+        mtime would not survive a clone or a rescore pass; the trace timestamp
+        lives in the artifact.
         """
         attempts = [
             _make_cost(run_dir=f"r{i}", normalized_score=s, trace_timestamp=ts)
             for i, (s, ts) in enumerate(
-                [(0.5, "2026-01-01T00:00:00Z"), (0.9, "2026-01-01T00:00:00Z")]
+                [(0.5, "2026-06-01T00:00:00Z"), (0.9, "2026-01-01T00:00:00Z")]
             )
         ]
         assert select_attempt(attempts).run_dir == "r1"
@@ -1613,9 +1621,9 @@ class TestSelectAttempt:
 
     def test_fully_tied_attempts_break_on_run_dir_deterministically(self) -> None:
         a = _make_cost(run_dir="aaa", normalized_score=0.5, trace_timestamp="T")
-        b = _make_cost(run_dir="bbb", normalized_score=0.5, trace_timestamp="T")
-        assert select_attempt([a, b]) is b
-        assert select_attempt([b, a]) is b
+        b = _make_cost(run_dir="bbb", normalized_score=0.9, trace_timestamp="T")
+        assert select_attempt([a, b]) is a
+        assert select_attempt([b, a]) is a
 
     def test_all_invalid_selects_nothing(self) -> None:
         assert select_attempt([_make_cost(normalized_score=None)]) is None
@@ -1659,7 +1667,7 @@ class TestTwoViewsAreNotCollapsed:
         )
         comp = report["comparison_economics"]
         assert comp["tasks"] == 1
-        assert comp["total_cost_usd"] == 2.0  # the selected attempt, not the sum
+        assert comp["total_cost_usd"] == 1.0  # the selected attempt, not the sum
 
     def test_the_two_totals_actually_differ_on_a_rerun_corpus(self) -> None:
         """Guards the implementation that returns the attempt total under both names."""
@@ -1956,7 +1964,7 @@ class TestAttemptsAreFullyEnumerated:
         assert dup["mode"] == "hybrid"
         assert dup["attempts"] == 2
         assert [r["run_dir"] for r in dup["runs"]] == ["a", "b"]
-        assert [r["selected"] for r in dup["runs"]] == [False, True]
+        assert [r["selected"] for r in dup["runs"]] == [True, False]
 
     def test_single_attempt_cells_are_not_listed_as_duplicates(self) -> None:
         report = aggregate_report([_make_cost(task_id="t1", run_dir="a")])
@@ -1975,7 +1983,7 @@ class TestAttemptsAreFullyEnumerated:
         )
         (dup,) = report["duplicate_attempts"]
         assert [r["run_dir"] for r in dup["runs"]] == ["a-first", "z-last"]
-        assert [r["selected"] for r in dup["runs"]] == [False, True]
+        assert [r["selected"] for r in dup["runs"]] == [True, False]
 
 
 class TestEveryDollarIsAccountedFor:
@@ -2132,9 +2140,12 @@ class TestReportSchemaGuard:
         """Named in the JSON, not merely non-empty — a reader must not have to
         infer which of several plausible rules produced the comparison view."""
         rule = aggregate_report([])["selection_rule"]
-        assert "normalized_score" in rule
+        assert "earliest valid attempt" in rule
         assert "timestamp" in rule
         assert "run_dir" in rule
+        # The published rule must say the score is not an input; a reader has to
+        # be able to rule out best-of-N selection from the artifact alone.
+        assert "The score is not an input" in rule
 
     def test_require_schema_accepts_a_current_report(self) -> None:
         require_schema(aggregate_report([]), "test")
@@ -2174,21 +2185,44 @@ class TestAgreesWithAnalyzeScores:
         report = aggregate_report(scan_results_dirs(dirs, bench))
         (billed,) = report["comparison_economics"]["per_cell"]
 
-        # source_path is the results.json; run_dir is its directory.
-        assert str(Path(scored.source_path).parent) == billed["run_dir"]
+        assert scored.run_dir == billed["run_dir"]
         assert scored.normalized_score == billed["normalized_score"]
 
-    def test_they_agree_when_the_newest_run_scored_worst(self, tmp_path: Path) -> None:
-        """The case a naive latest-attempt rule gets wrong."""
-        dirs = self._corpus(tmp_path, [("mcp_batch", 0.9), ("mcp_batch_v2", 0.1)])
+    def test_they_agree_when_the_first_run_scored_best(self, tmp_path: Path) -> None:
+        """The case a best-of-N rule and an earliest rule disagree on: both
+        modules must land on the first attempt, and on the same one."""
+        dirs = self._corpus(tmp_path, [("mcp_batch", 0.1), ("mcp_batch_v2", 0.9)])
         bench = tmp_path / "benchmarks"
 
         (scored,) = load_all_results(dirs, bench)
         (billed,) = aggregate_report(scan_results_dirs(dirs, bench))[
             "comparison_economics"
         ]["per_cell"]
-        assert str(Path(scored.source_path).parent) == billed["run_dir"]
-        assert billed["normalized_score"] == 0.9
+        assert scored.run_dir == billed["run_dir"]
+        assert billed["normalized_score"] == 0.1
+
+    def test_they_agree_on_skipping_an_invalid_first_attempt(
+        self, tmp_path: Path
+    ) -> None:
+        """Both sides fail closed on persisted status, or the score comes from
+        the re-run and the cost from the run it replaced."""
+        _write_attempt(
+            tmp_path, "mcp_batch", "t1", "hybrid",
+            score=0.9, timestamp="2026-01-01T00:00:00Z", status="invalid",
+        )
+        _write_attempt(
+            tmp_path, "mcp_batch_v2", "t1", "hybrid",
+            score=0.4, timestamp="2026-06-01T00:00:00Z",
+        )
+        dirs = [tmp_path / "mcp_batch", tmp_path / "mcp_batch_v2"]
+        bench = tmp_path / "benchmarks"
+
+        (scored,) = load_all_results(dirs, bench)
+        (billed,) = aggregate_report(scan_results_dirs(dirs, bench))[
+            "comparison_economics"
+        ]["per_cell"]
+        assert scored.run_dir == billed["run_dir"]
+        assert billed["normalized_score"] == 0.4
 
 
 class TestEndToEndReruns:

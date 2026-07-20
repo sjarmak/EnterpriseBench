@@ -60,6 +60,12 @@ from pathlib import Path
 from typing import Any
 
 from analyze_scores import parse_result
+from lib.attempt_policy import (
+    SELECTION_RULE,
+    attempt_sort_key,
+    newer_timestamp,
+    run_dir_label,
+)
 from lib.shared import VALID_MODES, load_task_index, strip_mode_suffix
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -85,13 +91,6 @@ logger = logging.getLogger(__name__)
 # ``.get(key, 0)`` and rendering a plausible $0.00 — the failure class
 # lib/eb_verify/scorer_guard.py exists to forbid, applied to the cost artifact.
 SCHEMA_VERSION = 3
-
-# How ``select_attempt`` picks the one attempt that represents a (task_id, mode)
-# cell. Published in the report so a reader never has to infer it.
-SELECTION_RULE = (
-    "highest normalized_score, then latest trace timestamp, then run_dir; "
-    "attempts with no score are never selected. Matches analyze_scores."
-)
 
 # ---------------------------------------------------------------------------
 # Pricing — per million tokens. Tier-2 runs only; tier-1 runs are billed with the
@@ -357,9 +356,10 @@ def scan_trace(trace_path: Path) -> TraceScan:
 
             # Read before the assistant filter: the timestamp rides on every
             # line type, and the earliest lines of a trace are not assistant.
-            stamp = entry.get("timestamp")
-            if isinstance(stamp, str) and stamp > last_timestamp:
-                last_timestamp = stamp
+            # Folded by the shared helper so this pass and analyze_scores'
+            # cannot date the same attempt differently and order a cell's
+            # attempts two ways.
+            last_timestamp = newer_timestamp(entry, last_timestamp)
 
             if entry.get("type") != "assistant":
                 continue
@@ -699,9 +699,11 @@ def _attempt_score(
     contract check that decides what ``task_score`` even means
     (``eb_verify.score_contract``).
 
-    None means the scoring layer produced nothing for this run — no results.json,
-    no scores block, or zero checkpoints. That is a real distinction, not a zero:
-    the attempt still spent money, it just cannot stand for its cell.
+    None means the scoring layer produced nothing usable for this run — no
+    results.json, no scores block, zero checkpoints, or a persisted
+    ``status=invalid`` that ``parse_result`` fails closed on. That is a real
+    distinction, not a zero: the attempt still spent money and stays in the
+    operational view, it just cannot stand for its cell.
     """
 
     results_path = task_dir / "results.json"
@@ -710,22 +712,6 @@ def _attempt_score(
 
     result = parse_result(results_path, benchmarks_root, allow_legacy=allow_legacy)
     return None if result is None else result.normalized_score
-
-
-def _run_dir_label(task_dir: Path, root: Path) -> str:
-    """Identify an attempt's directory, relative to *root* when it is under it.
-
-    cost_report.json is a tracked artifact, so an absolute path would commit one
-    machine's home directory and make the report non-portable — and ``run_dir``
-    is a tiebreak key, so it has to read the same on every checkout. Falls back
-    to the absolute path for a directory outside *root*, which is still correct,
-    just not portable; there is nothing shorter to say about it.
-    """
-
-    try:
-        return str(task_dir.resolve().relative_to(root.resolve()))
-    except ValueError:
-        return str(task_dir)
 
 
 def scan_results_dirs(
@@ -809,7 +795,7 @@ def scan_results_dirs(
                     trace_cost_usd=trace_cost,
                     vendor=vendor,
                     agent_duration_seconds=duration,
-                    run_dir=_run_dir_label(task_dir, root),
+                    run_dir=run_dir_label(task_dir, root),
                     normalized_score=score,
                     trace_timestamp=scan.last_timestamp,
                 )
@@ -959,28 +945,23 @@ def _group_by(items: Sequence[TaskCost], key: Any) -> dict[Any, list[TaskCost]]:
 def select_attempt(attempts: list[TaskCost]) -> TaskCost | None:
     """Pick the one attempt that represents a (task_id, mode) cell.
 
-    Highest normalized score, ties broken by latest trace timestamp and then by
-    ``run_dir``. Returns None when no attempt in the cell was scored.
+    The earliest valid attempt: ascending trace timestamp, then ``run_dir``,
+    with undated attempts last. Returns None when no attempt in the cell was
+    scored — an unscored or invalid-status attempt still spent money and stays
+    in the operational view, it just cannot stand for its cell.
 
-    The primary key is ``analyze_scores``' — that module already collapses
-    (task_id, mode) by highest score, and a different rule here would pair each
-    cell's cost with a *different* run than its score, silently breaking every
-    score-vs-cost join downstream. ``TestAgreesWithAnalyzeScores`` pins that.
-
-    Both tiebreakers are content-derived and total, so the result does not depend
-    on scan order, filesystem order, or mtime. ``analyze_scores`` has no
-    tiebreaker at all — it compares with a strict ``>`` and so keeps whichever
-    equally-scored run ``rglob`` reached first — so on an exact score tie the two
-    modules can still pick different runs. The score is identical either way; the
-    cost need not be. Fixed separately in EnterpriseBench-ye0tp; do not "fix" it
-    here by dropping the tiebreakers, which would make this side non-deterministic
-    too rather than making both sides agree.
+    The order is ``analyze_scores``' order, computed by the same
+    :func:`attempt_sort_key` over the same two content-derived components, so
+    the two modules resolve a cell to the same run and a score-vs-cost join
+    pairs one run's score with that run's cost. ``TestAgreesWithAnalyzeScores``
+    pins it. The score is deliberately not an input: see
+    ``scripts/lib/attempt_policy``.
     """
 
     scored = [a for a in attempts if a.normalized_score is not None]
     if not scored:
         return None
-    return max(scored, key=lambda a: (a.normalized_score, a.trace_timestamp, a.run_dir))
+    return min(scored, key=lambda a: attempt_sort_key(a.trace_timestamp, a.run_dir))
 
 
 @dataclass(frozen=True)

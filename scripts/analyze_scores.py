@@ -24,6 +24,15 @@ try:
 except ImportError:
     import tomli as tomllib  # type: ignore[no-redefine]
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from lib.attempt_policy import (  # noqa: E402
+    attempt_sort_key,
+    is_invalid_status,
+    read_trace_timestamp,
+    run_dir_label,
+)
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -73,6 +82,12 @@ class TaskResult:
     languages: tuple[str, ...]
     agent_time: float | None  # seconds
     source_path: str
+    # When this attempt ran, and which directory it ran in — the two components
+    # of the prespecified selection order (see scripts/lib/attempt_policy.py).
+    # ``run_dir`` is labelled the way cost_tracker labels it so a cell's score
+    # and its cost cannot be resolved to two different runs on a timestamp tie.
+    trace_timestamp: str = ""
+    run_dir: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +202,14 @@ def parse_result(
         logger.warning("No task_id in %s", result_path)
         return None
 
+    # Before the scores block, not after: run_task marks a run invalid for
+    # reasons that fire after the verifier has already written a score (the
+    # integrity and zero-MCP gates), so a scored results.json is not evidence
+    # the run is scoreable. Reading only ``scores`` resurrects exactly those.
+    if is_invalid_status(data.get("status")):
+        logger.warning("Skipping %s: persisted status=invalid", result_path)
+        return None
+
     scores = data.get("scores")
     if not scores:
         logger.warning("No scores in %s", result_path)
@@ -246,6 +269,8 @@ def parse_result(
         languages=tuple(tm.get("languages", [])),
         agent_time=agent_time,
         source_path=str(result_path),
+        trace_timestamp=read_trace_timestamp(result_path.parent),
+        run_dir=run_dir_label(result_path.parent, PROJECT_ROOT),
     )
 
 
@@ -295,14 +320,21 @@ def load_all_results(
             f"under v{LEGACY_SCORE_CONTRACT_VERSION} semantics."
         )
 
-    # Deduplicate: same task_id + mode -> keep highest score
-    best: dict[tuple[str, str], TaskResult] = {}
+    # Collapse each (task_id, mode) cell to its earliest valid attempt. Keeping
+    # the highest-scoring one instead took a maximum over however many times the
+    # cell happened to be re-run, which inflates a cell's score with its retry
+    # count — and arms are not retried equally. The rule is prespecified: no
+    # field of the outcome is an input to it.
+    selected: dict[tuple[str, str], TaskResult] = {}
     for tr in all_results:
         key = (tr.task_id, tr.mode)
-        if key not in best or tr.normalized_score > best[key].normalized_score:
-            best[key] = tr
+        incumbent = selected.get(key)
+        if incumbent is None or attempt_sort_key(
+            tr.trace_timestamp, tr.run_dir
+        ) < attempt_sort_key(incumbent.trace_timestamp, incumbent.run_dir):
+            selected[key] = tr
 
-    deduped = list(best.values())
+    deduped = list(selected.values())
     logger.info("Loaded %d results (%d after dedup)", len(all_results), len(deduped))
     return deduped
 

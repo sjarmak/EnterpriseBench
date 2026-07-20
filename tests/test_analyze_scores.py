@@ -103,8 +103,28 @@ def _write_results_json(path: Path, **overrides: object) -> None:
     }
     if "config" in overrides:
         data["config"] = overrides["config"]
+    if "status" in overrides:
+        data["status"] = overrides["status"]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data))
+
+
+def _write_attempt(
+    batch_dir: Path, *, timestamp: str | None = None, **overrides: object
+) -> Path:
+    """Write one attempt directory: results.json plus a dated agent_trace.jsonl.
+
+    The trace is what dates the attempt, and the date is what orders a cell's
+    attempts, so a selection test that writes only results.json is testing the
+    run_dir tiebreak rather than the rule.
+    """
+    task_dir = batch_dir / "test-task-001"
+    _write_results_json(task_dir / "results.json", **overrides)
+    if timestamp is not None:
+        (task_dir / "agent_trace.jsonl").write_text(
+            json.dumps({"type": "assistant", "timestamp": timestamp}) + "\n"
+        )
+    return task_dir
 
 
 # ---------------------------------------------------------------------------
@@ -134,19 +154,49 @@ class TestScoreNormalization:
 
 
 class TestDeduplication:
-    def test_keeps_highest_score(self, tmp_path: Path):
-        """When same task_id+mode appears twice, keep the higher score."""
+    def test_keeps_the_earliest_attempt_not_the_best_one(self, tmp_path: Path):
+        """A cell is represented by its first attempt, whatever the re-run scored.
+
+        Keeping the maximum over N attempts made a cell's reported score a
+        function of how often it happened to be retried, and arms are not
+        retried equally — the bias does not cancel between arms.
+        """
         dir1 = tmp_path / "run1"
         dir2 = tmp_path / "run2"
         benchmarks = tmp_path / "benchmarks"
         benchmarks.mkdir()
 
-        _write_results_json(dir1 / "test-task-001" / "results.json", task_score=0.3333)
-        _write_results_json(dir2 / "test-task-001" / "results.json", task_score=0.6667)
+        _write_attempt(dir1, task_score=0.3333, timestamp="2026-01-01T00:00:00Z")
+        _write_attempt(dir2, task_score=0.6667, timestamp="2026-06-01T00:00:00Z")
 
         results = load_all_results([dir1, dir2], benchmarks)
         assert len(results) == 1
-        assert results[0].normalized_score == pytest.approx(0.6667)
+        assert results[0].normalized_score == pytest.approx(0.3333)
+
+    def test_an_invalid_attempt_is_never_selected(self, tmp_path: Path):
+        """The resurrection case: run_task marks a run invalid for gates that
+        fire after the verifier already wrote a score, so a scored results.json
+        is not evidence the run is scoreable."""
+        dir1 = tmp_path / "run1"
+        dir2 = tmp_path / "run2"
+        benchmarks = tmp_path / "benchmarks"
+        benchmarks.mkdir()
+
+        _write_attempt(
+            dir1, task_score=1.0, timestamp="2026-01-01T00:00:00Z", status="invalid"
+        )
+        _write_attempt(dir2, task_score=0.3333, timestamp="2026-06-01T00:00:00Z")
+
+        results = load_all_results([dir1, dir2], benchmarks)
+        assert len(results) == 1
+        assert results[0].normalized_score == pytest.approx(0.3333)
+
+    def test_a_cell_whose_every_attempt_is_invalid_drops_out(self, tmp_path: Path):
+        benchmarks = tmp_path / "benchmarks"
+        benchmarks.mkdir()
+        _write_attempt(tmp_path / "run1", status="invalid")
+
+        assert load_all_results([tmp_path / "run1"], benchmarks) == []
 
     def test_different_modes_kept(self, tmp_path: Path):
         """Different modes for same task are NOT deduplicated."""
