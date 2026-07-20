@@ -34,7 +34,11 @@ except ImportError:
 from orchestration.session import SessionConfig, SessionResult, run_session
 from orchestration.milestone import SessionScore, run_session_milestones
 from orchestration.runner_cli import add_passthrough_args
-from eb_verify.score_contract import SCORE_CONTRACT_KEY, SCORE_CONTRACT_VERSION  # noqa: E402
+from eb_verify.score_contract import (  # noqa: E402
+    SCORE_CONTRACT_KEY,
+    SCORE_CONTRACT_VERSION,
+    weighted_mean,
+)
 from eb_verify.scorer_guard import InfraError
 
 logger = logging.getLogger(__name__)
@@ -450,19 +454,11 @@ def _compute_total_score(chain_result: ChainResult, task_def: ChainTaskDefinitio
         cp["name"]: cp.get("weight", 1.0) for cp in task_def.final_checkpoints
     }
 
-    weighted_sum = 0.0
-    weight_sum = 0.0
-
-    for mr in all_milestone_results:
-        if mr.milestone_name in final_cp_weights:
-            w = final_cp_weights[mr.milestone_name]
-        else:
-            # Inter-session milestones: small fixed weight
-            w = 0.1
-        weighted_sum += mr.score * w
-        weight_sum += w
-
-    chain_result.total_score = weighted_sum / weight_sum if weight_sum > 0 else 0.0
+    chain_result.total_score = weighted_mean(
+        # Inter-session milestones carry a small fixed weight.
+        (mr.score, final_cp_weights.get(mr.milestone_name, 0.1))
+        for mr in all_milestone_results
+    )
     chain_result.final_score = chain_result.total_score
 
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from eb_verify.score_contract import weighted_mean
 from eb_verify.scorer_guard import InfraError
 
 
@@ -88,13 +89,7 @@ class VerificationResult:
 
 def compute_score(results: List[CheckpointResult]) -> float:
     """Compute weighted total from checkpoint results. Weights should sum to 1.0."""
-    if not results:
-        return 0.0
-    total_weight = sum(r.weight for r in results)
-    if total_weight == 0.0:
-        return 0.0
-    raw = sum(r.score * r.weight for r in results)
-    return raw / total_weight
+    return weighted_mean((r.score, r.weight) for r in results)
 
 
 def write_reward(result: VerificationResult, output_path: str | Path = "reward.txt") -> Path:

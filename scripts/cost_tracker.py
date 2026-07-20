@@ -60,12 +60,25 @@ from pathlib import Path
 from typing import Any
 
 from analyze_scores import parse_result
-from eb_verify.score_contract import ScoreContractError
 from lib.shared import VALID_MODES, load_task_index, strip_mode_suffix
 
-logger = logging.getLogger(__name__)
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Bootstrap `lib/` the same way analyze_scores.py does. Importing it above
+# happens to do this as a side effect, but relying on that makes the eb_verify
+# import below silently ordering-dependent: any isort/ruff reorder that lifts
+# `eb_verify` above `analyze_scores` breaks `make cost` on a checkout without
+# an editable install. Doing it explicitly costs three lines and removes the
+# ordering as a correctness condition.
+if str(PROJECT_ROOT / "lib") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "lib"))
+
+from eb_verify.score_contract import (  # noqa: E402
+    ScoreContractError,
+    format_unreadable_sample,
+)
+
+logger = logging.getLogger(__name__)
 
 # Bumped whenever the report's shape changes. Consumers call require_schema and
 # refuse an unknown version rather than reading a missing key through
@@ -803,14 +816,11 @@ def scan_results_dirs(
             )
 
     if unreadable:
-        shown = unreadable[:3]
-        elided = len(unreadable) - len(shown)
         raise ScoreContractError(
             f"{len(unreadable)} attempt(s) declare no score contract, so what "
             f"their task_score means is unknown and neither reading is "
             f"assumed:\n"
-            + "\n".join(f"  {u}" for u in shown)
-            + (f"\n  ... and {elided} more" if elided else "")
+            + format_unreadable_sample(unreadable)
             + "\n\nNo cost report was written. Re-run those tasks, point "
             "--results-dir at only the current corpus, or pass "
             "--legacy-score-contract."

@@ -39,6 +39,7 @@ from eb_verify.score_contract import (  # noqa: E402
     LEGACY_SCORE_CONTRACT_VERSION,
     SCORE_CONTRACT_VERSION,
     ScoreContractError,
+    format_unreadable_sample,
     read_task_score,
 )
 
@@ -281,16 +282,13 @@ def load_all_results(
                 all_results.append(tr)
 
     if unreadable:
-        shown = unreadable[:3]
-        elided = len(unreadable) - len(shown)
         raise ScoreContractError(
             f"{len(unreadable)} of {len(unreadable) + len(all_results)} results "
             f"declare no score contract, so what their task_score means is "
             f"unknown — a pre-contract sum and a v{SCORE_CONTRACT_VERSION} "
             f"weighted mean are not distinguishable by inspection, so neither "
             f"is assumed:\n"
-            + "\n".join(f"  {u}" for u in shown)
-            + (f"\n  ... and {elided} more" if elided else "")
+            + format_unreadable_sample(unreadable)
             + "\n\nNo analysis was written. Re-run those tasks to produce "
             f"v{SCORE_CONTRACT_VERSION} results, point --results-dir at only "
             "the current corpus, or pass --legacy-score-contract to read them "

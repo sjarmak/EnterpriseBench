@@ -56,8 +56,11 @@ Producers write it into the scores object they emit:
   the *last* writer of ``task_score`` on a ``llm_curator`` task.
 * ``scripts/orchestration/chain_runner.py`` — the chain scorer.
 
-:func:`eb_verify.scoring.compute_score` is the reference implementation of the
-v2 formula; the producers above agree with it rather than defining their own.
+:func:`weighted_mean` is the one implementation of the v2 formula. Every Python
+producer above calls it, as does :func:`eb_verify.scoring.compute_score`, so the
+arithmetic exists once and a bump to v3 has one site to edit. The shell scorer
+is the sole mirror, and it is a mirror only because it runs before this package
+is importable.
 
 In ``results.json`` the stamp lands inside the ``scores`` object, i.e.
 ``results.json["scores"]["score_contract_version"]``, because the runner
@@ -66,7 +69,7 @@ writes the scorer's JSON there verbatim.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 __all__ = [
@@ -75,6 +78,8 @@ __all__ = [
     "ScoreContractError",
     "SCORE_CONTRACT_KEY",
     "read_task_score",
+    "weighted_mean",
+    "format_unreadable_sample",
 ]
 
 #: The current contract. Bump only alongside a change to what ``task_score``
@@ -91,6 +96,47 @@ SCORE_CONTRACT_KEY = "score_contract_version"
 
 class ScoreContractError(ValueError):
     """An artifact's ``task_score`` cannot be read at a known contract."""
+
+
+def weighted_mean(weighted_scores: Iterable[tuple[float, float]]) -> float:
+    """Return the v2 ``task_score`` for ``(score, weight)`` pairs.
+
+    The division is what makes the ``[0, 1]`` range an invariant, so it is the
+    load-bearing half of the contract this module states — which is why the
+    arithmetic lives here rather than at each producer. Every Python producer
+    calls this; ``scripts/sandbox/test_runner.sh`` mirrors it in awk because it
+    runs before this package is importable, and ``tests/test_score_contract.py``
+    pins the two together.
+
+    Zero total weight yields 0.0 rather than raising, preserving what all three
+    Python producers already did. It is unreachable while task validation
+    enforces weights summing to 1.0; it is here so a gate failure yields an
+    honest 0.0 instead of a ZeroDivisionError. Non-positive totals take the same
+    branch: a negative total weight would flip the sign of the mean, and an
+    inverted score is a worse answer than a zero one.
+    """
+
+    pairs = list(weighted_scores)
+    total_weight = sum(weight for _, weight in pairs)
+    if total_weight <= 0:
+        return 0.0
+    return sum(score * weight for score, weight in pairs) / total_weight
+
+
+def format_unreadable_sample(paths: Iterable[str], limit: int = 3) -> str:
+    """Render *paths* as an indented sample, eliding the tail past *limit*.
+
+    Both corpus scanners collect every unreadable artifact and report once, so
+    both need the same sample-with-elision block. Only the surrounding prose
+    differs between them — each states its own remedy — so this shares the
+    index arithmetic and nothing else.
+    """
+
+    paths = list(paths)
+    shown = paths[:limit]
+    elided = len(paths) - len(shown)
+    block = "\n".join(f"  {p}" for p in shown)
+    return block + (f"\n  ... and {elided} more" if elided else "")
 
 
 def read_task_score(
