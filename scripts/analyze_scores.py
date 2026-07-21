@@ -400,7 +400,7 @@ def _compute_delta(
 
     # Statistical tests
     result.update(
-        _statistical_tests(
+        statistical_tests(
             [baseline_map[tid].normalized_score for tid in paired_ids],
             [mcp_map[tid].normalized_score for tid in paired_ids],
         )
@@ -409,7 +409,7 @@ def _compute_delta(
     return result
 
 
-def _statistical_tests(
+def statistical_tests(
     baseline_scores: list[float],
     mcp_scores: list[float],
 ) -> dict[str, Any]:
@@ -446,6 +446,11 @@ def _statistical_tests(
         result["note"] = "scipy not installed"
 
     return result
+
+
+#: The capsule-driven study report runs the same paired tests over receipt
+#: scores, so the two paths cannot drift into different significance rules.
+_statistical_tests = statistical_tests
 
 
 def mcp_deltas(results: list[TaskResult]) -> dict[str, dict[str, Any]]:
