@@ -14,6 +14,7 @@ import math
 import re
 import statistics
 import sys
+from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,11 +28,14 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib.attempt_policy import (  # noqa: E402
+    AttemptPolicy,
     attempt_sort_key,
     is_invalid_status,
+    load_attempt_policy,
     read_trace_timestamp,
     run_dir_label,
 )
+from lib.shared import MODE_SUFFIXES, VALID_MODES  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +108,7 @@ def infer_mode(result_path: Path, data: dict[str, Any]) -> str:
 
     # Infer from parent directory name
     parent = result_path.parent.name
-    for suffix in ("_hybrid", "_mcp_only", "_baseline"):
+    for suffix in MODE_SUFFIXES:
         if parent.endswith(suffix):
             return suffix.lstrip("_")
 
@@ -112,7 +116,7 @@ def infer_mode(result_path: Path, data: dict[str, Any]) -> str:
     grandparent = result_path.parent.parent.name
     if grandparent.startswith("mcp_batch"):
         # Directory name should contain mode suffix
-        for suffix in ("_hybrid", "_mcp_only", "_baseline"):
+        for suffix in MODE_SUFFIXES:
             if parent.endswith(suffix):
                 return suffix.lstrip("_")
         # If in mcp_batch but no suffix, check if dirname contains mode hint
@@ -122,7 +126,7 @@ def infer_mode(result_path: Path, data: dict[str, Any]) -> str:
             return "mcp_only"
 
     # Multi-mode layout: results/runs/<task_id>/<mode>/results.json
-    if parent in ("baseline", "mcp_only", "hybrid"):
+    if parent in VALID_MODES:
         return parent
 
     # Default for results/runs/ (legacy single-mode layout)
@@ -195,6 +199,14 @@ def parse_result(
         data = json.loads(result_path.read_text())
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Skipping %s: %s", result_path, exc)
+        return None
+
+    # Valid JSON that is not an object: a partial write, or a serialization bug.
+    # Without this, ``data.get`` raises AttributeError and takes down the whole
+    # load_all_results scan rather than this one attempt — the cost side already
+    # fails closed on the same shape (cost_tracker._attempt_facts).
+    if not isinstance(data, dict):
+        logger.warning("Skipping %s: results.json is not a JSON object", result_path)
         return None
 
     task_id = data.get("task_id")
@@ -280,7 +292,7 @@ def load_all_results(
     *,
     allow_legacy: bool = False,
 ) -> list[TaskResult]:
-    """Scan all results dirs, parse, and deduplicate.
+    """Scan results and collapse each task/arm cell to one declared attempt.
 
     Raises :class:`ScoreContractError` if any result could not be read at a
     known contract, but only after scanning everything — the scan does not stop
@@ -289,6 +301,12 @@ def load_all_results(
     is "how many, and is this the whole historical corpus or one stray file".
     The run still produces no analysis: a partial corpus silently renamed to
     the full one is the failure this contract exists to prevent.
+
+    The selection rule is not a parameter: this function implements exactly one
+    rule, and the study's declared policy is checked against it once, at the
+    entry point, before any results.json is opened (:func:`main`). Reading the
+    config here would instead give every caller — including every tmp_path test
+    — an implicit dependency on the checkout's study_spec.json.
     """
     all_results: list[TaskResult] = []
     unreadable: list[str] = []
@@ -324,17 +342,17 @@ def load_all_results(
     # the highest-scoring one instead took a maximum over however many times the
     # cell happened to be re-run, which inflates a cell's score with its retry
     # count — and arms are not retried equally. The rule is prespecified: no
-    # field of the outcome is an input to it.
-    selected: dict[tuple[str, str], TaskResult] = {}
+    # field of the outcome is an input to it. ``attempt_sort_key`` is the same
+    # function cost_tracker.select_attempt orders by, over the same two fields,
+    # so the two modules cannot resolve a cell to different runs.
+    by_cell: dict[tuple[str, str], list[TaskResult]] = defaultdict(list)
     for tr in all_results:
-        key = (tr.task_id, tr.mode)
-        incumbent = selected.get(key)
-        if incumbent is None or attempt_sort_key(
-            tr.trace_timestamp, tr.run_dir
-        ) < attempt_sort_key(incumbent.trace_timestamp, incumbent.run_dir):
-            selected[key] = tr
+        by_cell[(tr.task_id, tr.mode)].append(tr)
 
-    deduped = list(selected.values())
+    deduped = [
+        min(attempts, key=lambda t: attempt_sort_key(t.trace_timestamp, t.run_dir))
+        for attempts in by_cell.values()
+    ]
     logger.info("Loaded %d results (%d after dedup)", len(all_results), len(deduped))
     return deduped
 
@@ -571,13 +589,24 @@ def per_task_summary(results: list[TaskResult]) -> list[dict[str, Any]]:
 def analyze(
     results_dirs: list[Path],
     benchmarks_root: Path,
+    policy: AttemptPolicy | None = None,
     *,
     allow_legacy: bool = False,
 ) -> dict[str, Any]:
-    results = load_all_results(results_dirs, benchmarks_root, allow_legacy=allow_legacy)
+    """Build the score report. *policy* is published so a reader holding the
+    artifact can tell which pin produced it; it is refused unless it names the
+    rule :func:`load_all_results` actually applies."""
+
+    if policy is not None:
+        policy.require_implemented("analyze")
+
+    results = load_all_results(
+        results_dirs, benchmarks_root, allow_legacy=allow_legacy
+    )
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "attempt_policy": (policy.as_dict() if policy else None),
         # Which contract the numbers below were read at. A report that does not
         # say this is a report whose scale a reader has to guess.
         "score_contract_version": (
@@ -667,10 +696,17 @@ def main(argv: list[str] | None = None) -> None:
     logger.info("Results dirs: %s", [str(d) for d in args.results_dirs])
     logger.info("Benchmarks root: %s", args.benchmarks_root)
 
+    # Read the pin before a single results.json is opened. A spec declaring a
+    # selection this code does not implement stops the run here, rather than
+    # producing a report under a rule the study did not declare.
+    policy = load_attempt_policy()
+    logger.info("Attempt policy: %s (%s)", policy.selection, policy.spec_path)
+
     try:
         report = analyze(
             args.results_dirs,
             args.benchmarks_root,
+            policy,
             allow_legacy=args.legacy_score_contract,
         )
     except ScoreContractError as exc:

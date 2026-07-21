@@ -24,12 +24,26 @@ Two independent gates, both fail-closed:
 Both ``analyze_scores`` (which reports the score) and ``cost_tracker`` (which
 bills the cell) import from here. They must collapse a cell to the same attempt
 or every score-vs-cost join pairs one run's score with another run's cost.
+
+**What this rule is not.** Prespecified is not tamper-proof. The order is keyed
+on the trace timestamp, and ``agent_trace.jsonl`` is copied verbatim out of
+``/home/agent/.claude/projects`` — the filesystem run_task's own comment calls
+agent-controlled. An agent with a shell can rewrite its session JSONL before
+teardown and stamp its attempt earliest, which is best-of-N selection re-entered
+through the ordering key. Closing that needs a host-authored attempt clock,
+which results.json does not carry today (``timing`` holds monotonic durations,
+not wall-clock): EnterpriseBench-rryas.23, which blocks the paid run and the
+publication. Until it lands, an arm-to-arm delta rests on the agents not having
+forged their traces, and the published policy block says so rather than
+implying an integrity guarantee this module cannot make.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -44,8 +58,152 @@ SELECTION_RULE = (
     "earliest valid attempt: ascending trace timestamp, then run_dir. The score "
     "is not an input — a re-run cell is not resolved in favour of its best "
     "outcome. Attempts persisted status=invalid, and attempts the scoring layer "
-    "produced no score for, are never selected. Matches analyze_scores."
+    "produced no score for, are never selected. Matches analyze_scores. "
+    "PROVENANCE LIMIT: the timestamp is read from agent_trace.jsonl, which is "
+    "copied from an agent-controlled filesystem and is not corroborated against "
+    "a host clock, so this order is outcome-independent but not tamper-proof "
+    "(EnterpriseBench-rryas.23)."
 )
+
+
+# ---------------------------------------------------------------------------
+# The pin: the study declares its selection before any outcome is read
+# ---------------------------------------------------------------------------
+
+# The only implemented selection. There is deliberately no "highest_score"
+# value: the rule this bead removed must not be re-declarable from a config
+# file, or the pin becomes a switch for turning the bias back on.
+SELECTION_EARLIEST_VALID = "earliest_valid"
+
+STUDY_SPEC_SCHEMA_VERSION = 1
+
+# configs/study_spec.json, resolved from this file rather than from the working
+# directory — the analysis scripts are run from batch jobs and from the repo
+# root alike, and a cwd-relative spec would resolve to a different pin depending
+# on where the caller stood.
+DEFAULT_STUDY_SPEC = Path(__file__).resolve().parents[2] / "configs" / "study_spec.json"
+
+
+class AttemptPolicyError(ValueError):
+    """The declared policy cannot be honoured, so no analysis may proceed.
+
+    Every path out of :func:`load_attempt_policy` and
+    :meth:`AttemptPolicy.require_implemented` that is not a usable policy
+    raises this. Falling back to the built-in rule on an unreadable or
+    unrecognised spec would report a study under a rule the study did not
+    declare — the failure the spec exists to make impossible.
+
+    A ``ValueError`` subclass so that "the declared policy is unusable" is one
+    catchable thing. Two channels — this for the loader, a bare ``ValueError``
+    for the guard — meant no single ``except`` could wrap an entry point, which
+    is the one place a friendly message for this failure belongs.
+    """
+
+
+@dataclass(frozen=True)
+class AttemptPolicy:
+    """The attempt-selection rule a study declared, and where it declared it.
+
+    Frozen because it is read once at an entry point and threaded down: a stage
+    that could rewrite it mid-run would defeat "pinned before outcomes".
+    """
+
+    selection: str
+    version: int
+    spec_path: str
+
+    def require_implemented(self, consumer: str) -> None:
+        """Raise unless this code implements the declared selection.
+
+        Both report producers call it before publishing the policy block, so no
+        artifact can name a rule that is not the rule its rows were chosen by.
+        It catches a policy constructed in code; :func:`load_attempt_policy`
+        rejects the same values earlier.
+        """
+
+        if self.selection != SELECTION_EARLIEST_VALID:
+            raise AttemptPolicyError(
+                f"{consumer} implements {SELECTION_EARLIEST_VALID!r}, not "
+                f"{self.selection!r}."
+            )
+
+    def as_dict(self) -> dict[str, Any]:
+        """The published block. ``rule`` has one producer, so a reader comparing
+        two artifacts is comparing the same sentence."""
+
+        return {
+            "selection": self.selection,
+            "version": self.version,
+            "spec_path": self.spec_path,
+            "rule": SELECTION_RULE,
+        }
+
+
+def load_attempt_policy(spec_path: Path | None = None) -> AttemptPolicy:
+    """Read the ``attempt_policy`` block of the StudySpec, or raise.
+
+    Only this module's own key is read. ``configs/study_spec.json`` is shared
+    with the wider Study Capsule (EnterpriseBench-rryas.11), which will add
+    sibling blocks; rejecting a file for carrying keys this loader does not
+    understand would force the two beads into a schema fight over one document.
+    """
+
+    path = DEFAULT_STUDY_SPEC if spec_path is None else Path(spec_path)
+
+    if not path.is_file():
+        raise AttemptPolicyError(
+            f"StudySpec not found at {path}. The attempt-selection policy is "
+            f"pinned in that file; analysis cannot declare a rule it has not read."
+        )
+
+    try:
+        spec = json.loads(path.read_text())
+    except ValueError as exc:
+        raise AttemptPolicyError(f"StudySpec {path} is not valid JSON: {exc}") from exc
+    except OSError as exc:
+        raise AttemptPolicyError(f"StudySpec {path} cannot be read: {exc}") from exc
+
+    if not isinstance(spec, dict):
+        raise AttemptPolicyError(f"StudySpec {path} must be a JSON object.")
+
+    declared_schema = spec.get("schema_version")
+    # bool before equality: ``True == 1``, so a spec declaring
+    # ``"schema_version": true`` would otherwise pass as version 1. The nested
+    # ``version`` field already guards this; the two must agree.
+    if (
+        not isinstance(declared_schema, int)
+        or isinstance(declared_schema, bool)
+        or declared_schema != STUDY_SPEC_SCHEMA_VERSION
+    ):
+        raise AttemptPolicyError(
+            f"StudySpec {path} declares schema_version={declared_schema!r}, "
+            f"expected {STUDY_SPEC_SCHEMA_VERSION}. A spec written against "
+            f"another schema may mean something different by the same key."
+        )
+
+    block = spec.get("attempt_policy")
+    if not isinstance(block, dict):
+        raise AttemptPolicyError(
+            f"StudySpec {path} has no attempt_policy object. The selection rule "
+            f"is not optional — an unpinned study cannot be reported."
+        )
+
+    selection = block.get("selection")
+    if selection != SELECTION_EARLIEST_VALID:
+        raise AttemptPolicyError(
+            f"StudySpec {path} declares attempt_policy.selection={selection!r}, "
+            f"which this code does not implement. The only implemented selection "
+            f"is {SELECTION_EARLIEST_VALID!r}."
+        )
+
+    version = block.get("version")
+    if not isinstance(version, int) or isinstance(version, bool):
+        raise AttemptPolicyError(
+            f"StudySpec {path} declares attempt_policy.version={version!r}; "
+            f"an integer is required so two artifacts can be compared by it."
+        )
+
+    return AttemptPolicy(selection=selection, version=version, spec_path=str(path))
 
 
 def is_invalid_status(status: Any) -> bool:
@@ -60,18 +218,52 @@ def is_invalid_status(status: Any) -> bool:
     return isinstance(status, str) and status.strip().lower() == RUN_STATUS_INVALID
 
 
+def instant(stamp: str) -> tuple[int, float]:
+    """Sortable instant for one ISO-8601 string.
+
+    Parsed rather than compared as text. Raw string order only matches
+    chronological order when every timestamp shares one exact format, and a
+    study runs for months across CLI versions: ``...:00.123456Z`` sorts *before*
+    ``...:00Z`` lexicographically because ``.`` < ``Z``, so a precision change
+    mid-corpus would silently reorder cells with no adversary involved.
+
+    The raw text is deliberately *not* carried in the key. Two spellings of one
+    moment must compare equal, so that the tie falls through to ``run_dir`` —
+    the documented tiebreak — rather than to whichever spelling happens to sort
+    first. An unparseable string still has to sort somewhere, and it sorts after
+    every parseable one, the same fail-late posture undated attempts get.
+    """
+
+    try:
+        parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return (1, 0.0)
+    if parsed.tzinfo is None:
+        # A naive stamp is read as UTC. Guessing local time would make the
+        # order depend on the machine the report was generated on.
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return (0, parsed.timestamp())
+
+
 def newer_timestamp(entry: dict[str, Any], current: str) -> str:
     """Fold one trace line's ISO-8601 ``timestamp`` into the running maximum.
 
     The single definition of "when did this attempt run". Both trace readers
     call it, so the two cannot drift into dating the same attempt differently
     and ordering a cell's attempts two ways.
+
+    ``""`` means "no timestamp seen yet" and loses to anything, which is why it
+    is special-cased rather than run through :func:`instant`. A stamp that ties
+    the running maximum leaves it alone, so a trace whose stamps are all
+    unparseable is dated by its first line rather than by text order.
     """
 
     stamp = entry.get("timestamp")
-    if isinstance(stamp, str) and stamp > current:
+    if not isinstance(stamp, str) or not stamp:
+        return current
+    if not current:
         return stamp
-    return current
+    return stamp if instant(stamp) > instant(current) else current
 
 
 def read_trace_timestamp(attempt_dir: Path) -> str:
@@ -122,7 +314,9 @@ def run_dir_label(attempt_dir: Path, root: Path) -> str:
         return str(attempt_dir)
 
 
-def attempt_sort_key(trace_timestamp: str, run_dir: str) -> tuple[int, str, str]:
+def attempt_sort_key(
+    trace_timestamp: str, run_dir: str
+) -> tuple[int, tuple[int, float], str]:
     """Total order over a cell's attempts; ``min`` of it is the selected one.
 
     The leading flag sorts undated attempts last rather than first, which is
@@ -131,4 +325,6 @@ def attempt_sort_key(trace_timestamp: str, run_dir: str) -> tuple[int, str, str]
     order or filesystem order.
     """
 
-    return (0 if trace_timestamp else 1, trace_timestamp, run_dir)
+    if not trace_timestamp:
+        return (1, (0, 0.0), run_dir)
+    return (0, instant(trace_timestamp), run_dir)

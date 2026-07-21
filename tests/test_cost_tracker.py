@@ -15,6 +15,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from analyze_scores import load_all_results
+from lib.attempt_policy import (
+    SELECTION_EARLIEST_VALID,
+    AttemptPolicy,
+    load_attempt_policy,
+)
 from cost_tracker import (
     DEFAULT_MODEL,
     PRICING,
@@ -1407,26 +1412,27 @@ class TestVendorBlockIntegrity:
 # ---------------------------------------------------------------------------
 
 
-def _write_attempt(
-    root: Path,
-    batch: str,
+def _write_attempt_at(
+    task_dir: Path,
+    *,
     task_id: str,
     mode: str,
-    *,
     score: float | None = 1.0,
-    timestamp: str | None = None,
+    timestamp: str | None = "2026-01-01T00:00:00Z",
     input_tokens: int = 1000,
     output_tokens: int = 500,
     status: str | None = None,
 ) -> Path:
-    """Write one attempt directory: agent_trace.jsonl plus results.json.
+    """Write one attempt at an explicit directory, decoupled from its identity.
+
+    The directory name says nothing about the attempt here, which is what lets a
+    test build a corpus where the path and the results.json disagree.
 
     ``score=None`` writes no results.json at all — an attempt the scoring layer
     never produced a score for, which is what makes it invalid rather than free.
     ``status`` writes the field run_task persists; ``"invalid"`` is a run that
     was scored and must still never be selected.
     """
-    task_dir = root / batch / f"{task_id}_{mode}"
     entry = _assistant_entry(input_tokens=input_tokens, output_tokens=output_tokens)
     if timestamp is not None:
         entry = entry | {"timestamp": timestamp}
@@ -1455,6 +1461,32 @@ def _write_attempt(
             )
         )
     return task_dir
+
+
+def _write_attempt(
+    root: Path,
+    batch: str,
+    task_id: str,
+    mode: str,
+    *,
+    score: float | None = 1.0,
+    timestamp: str | None = None,
+    input_tokens: int = 1000,
+    output_tokens: int = 500,
+    status: str | None = None,
+) -> Path:
+    """Write one attempt at the conventional ``<batch>/<task_id>_<mode>`` path,
+    where the directory name and the results.json agree about identity."""
+    return _write_attempt_at(
+        root / batch / f"{task_id}_{mode}",
+        task_id=task_id,
+        mode=mode,
+        score=score,
+        timestamp=timestamp,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        status=status,
+    )
 
 
 class TestAttemptIdentity:
@@ -2261,16 +2293,18 @@ class TestEndToEndReruns:
     def test_selection_survives_identical_mtimes(self, tmp_path: Path) -> None:
         """Proves the rule is content-derived: mtime carries no information here.
 
-        The winning attempt is deliberately the lexically *earlier* run_dir with
-        the *equal* timestamp, so neither tiebreaker can explain the result — only
-        the score can. An implementation that fell back to mtime or max(run_dir)
-        would pick the 0.2 run and fail.
+        Both attempts share a timestamp, so ``run_dir`` alone decides — and the
+        lexically earlier directory deliberately carries the *lower* score. An
+        implementation that fell back to mtime, or regressed to best-of-N, picks
+        the 0.8 run and fails. (The earlier version of this test gave the
+        lexically-first directory the higher score, so best-of-N and
+        earliest-valid agreed on it and the assertion discriminated nothing.)
         """
         dirs = [
             _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid",
-                           score=0.8, timestamp="2026-01-01T00:00:00Z"),
-            _write_attempt(tmp_path, "mcp_batch_v2", "t1", "hybrid",
                            score=0.2, timestamp="2026-01-01T00:00:00Z"),
+            _write_attempt(tmp_path, "mcp_batch_v2", "t1", "hybrid",
+                           score=0.8, timestamp="2026-01-01T00:00:00Z"),
         ]
         for d in dirs:
             for f in d.iterdir():
@@ -2283,7 +2317,7 @@ class TestEndToEndReruns:
         report = aggregate_report(costs)
         (dup,) = report["duplicate_attempts"]
         (selected,) = [r for r in dup["runs"] if r["selected"]]
-        assert selected["normalized_score"] == 0.8
+        assert selected["normalized_score"] == 0.2
 
     def test_per_attempt_rows_are_one_per_attempt(self, tmp_path: Path) -> None:
         _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
@@ -2298,3 +2332,212 @@ class TestEndToEndReruns:
         assert {"run_dir", "normalized_score", "trace_timestamp"} <= set(
             report["per_attempt"][0]
         )
+
+
+# ---------------------------------------------------------------------------
+# Attempt identity is the results.json's, not the directory path's
+# (EnterpriseBench-rryas.13)
+# ---------------------------------------------------------------------------
+
+
+def _cell_ids(costs: list[TaskCost]) -> set[tuple[str, str]]:
+    return {(c.task_id, c.mode) for c in costs}
+
+
+class TestIdentityComesFromTheResult:
+    """The cost side must file an attempt under the identity the score side does.
+
+    Sharing the *ordering* is not enough: if the two modules disagree about
+    which cell an attempt belongs to, they order two different sets and a
+    score-vs-cost join pairs one run's score with another run's cost. The path
+    is only a fallback, for attempts with no parseable results.json.
+    """
+
+    def test_a_legacy_flat_dir_is_filed_under_its_declared_mode(
+        self, tmp_path: Path
+    ) -> None:
+        """results/runs/<task_id>/ was assumed baseline by the path parser. On the
+        live corpus results/runs/cal-drift-flask-config-001/ declares
+        config.mode=mcp_only, so its cost was billed to baseline while
+        analyze_scores credited its score to mcp_only."""
+        _write_attempt_at(
+            tmp_path / "runs" / "task-a",
+            task_id="task-a",
+            mode="mcp_only",
+        )
+        costs = scan_results_dirs([tmp_path / "runs"], tmp_path / "benchmarks")
+        assert _cell_ids(costs) == {("task-a", "mcp_only")}
+
+    def test_a_truncated_directory_name_does_not_invent_a_task(
+        self, tmp_path: Path
+    ) -> None:
+        """strip_mode_suffix("cal-drift_hybrid") yields the phantom task "cal-drift".
+        Six such directories exist across mcp_batch_v4..v7 on the live corpus, and
+        they are re-run cells — the exact population the policy governs."""
+        _write_attempt_at(
+            tmp_path / "mcp_batch_v4" / "cal-drift_hybrid",
+            task_id="cal-drift-flask-config-001",
+            mode="hybrid",
+        )
+        costs = scan_results_dirs([tmp_path / "mcp_batch_v4"], tmp_path / "benchmarks")
+        assert _cell_ids(costs) == {("cal-drift-flask-config-001", "hybrid")}
+
+    def test_the_cli_arm_is_not_erased(self, tmp_path: Path) -> None:
+        """Neither identity path knew "cli" though it is in VALID_MODES, so a cli
+        run resolved to mode="unknown" and was dropped from comparison economics
+        — the arm would have silently vanished from the headline it belongs in."""
+        _write_attempt_at(
+            tmp_path / "runs" / "task-a" / "cli", task_id="task-a", mode="cli"
+        )
+        costs = scan_results_dirs([tmp_path / "runs"], tmp_path / "benchmarks")
+        assert _cell_ids(costs) == {("task-a", "cli")}
+        report = aggregate_report(costs)
+        assert report["comparison_economics"]["modes"] == ["cli"]
+
+    def test_the_path_still_identifies_an_unparseable_attempt(
+        self, tmp_path: Path
+    ) -> None:
+        """No results.json means no declared identity, and the attempt must not
+        drop out — it spent money and belongs in the operational view."""
+        _write_attempt_at(
+            tmp_path / "mcp_batch" / "task-a_hybrid",
+            task_id="task-a",
+            mode="hybrid",
+            score=None,
+        )
+        costs = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert _cell_ids(costs) == {("task-a", "hybrid")}
+        assert costs[0].cost_usd > 0
+
+    def test_an_invalid_attempt_keeps_its_declared_identity(
+        self, tmp_path: Path
+    ) -> None:
+        """parse_result fails closed on status=invalid, so identity cannot be read
+        back off it — but the attempt's spend still has to land in the right arm."""
+        _write_attempt_at(
+            tmp_path / "runs" / "task-a",
+            task_id="task-a",
+            mode="mcp_only",
+            status="invalid",
+        )
+        costs = scan_results_dirs([tmp_path / "runs"], tmp_path / "benchmarks")
+        assert _cell_ids(costs) == {("task-a", "mcp_only")}
+        assert costs[0].normalized_score is None
+
+    def test_both_readers_resolve_a_divergent_corpus_to_the_same_cells(
+        self, tmp_path: Path
+    ) -> None:
+        """The criterion itself, on a corpus where path and results.json disagree
+        in both directions at once."""
+        _write_attempt_at(
+            tmp_path / "runs" / "cal-drift-flask-config-001",
+            task_id="cal-drift-flask-config-001",
+            mode="mcp_only",
+        )
+        _write_attempt_at(
+            tmp_path / "mcp_batch_v4" / "cal-drift_hybrid",
+            task_id="cal-drift-flask-config-001",
+            mode="hybrid",
+        )
+        dirs = [tmp_path / "runs", tmp_path / "mcp_batch_v4"]
+
+        costs = scan_results_dirs(dirs, tmp_path / "benchmarks")
+        results = load_all_results(dirs, tmp_path / "benchmarks")
+
+        assert _cell_ids(costs) == {(r.task_id, r.mode) for r in results}
+
+
+class TestReportPublishesThePinnedPolicy:
+    """The report has to name the rule its rows were selected by. A reader
+    holding an artifact cannot otherwise tell which policy produced it."""
+
+    def test_the_policy_block_is_published(self, tmp_path: Path) -> None:
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
+        costs = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        report = aggregate_report(costs, policy=load_attempt_policy())
+
+        policy = report["attempt_policy"]
+        assert policy["selection"] == SELECTION_EARLIEST_VALID
+        assert isinstance(policy["version"], int)
+        assert policy["spec_path"]
+        assert policy["rule"] == report["selection_rule"]
+
+    def test_an_unpinned_call_publishes_no_policy(self, tmp_path: Path) -> None:
+        """Symmetric with analyze_scores.analyze: passing nothing pins nothing
+        and reads no config file. An artifact that names a policy must have been
+        produced under one, and the two producers must not disagree about what
+        the absent argument means."""
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
+        costs = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert aggregate_report(costs)["attempt_policy"] is None
+
+    def test_the_declared_policy_is_the_one_that_selected(self, tmp_path: Path) -> None:
+        """A caller may pass a policy; the report must publish what was used, not
+        what the config file happens to say at read time."""
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
+        costs = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        policy = AttemptPolicy(
+            selection=SELECTION_EARLIEST_VALID, version=99, spec_path="/somewhere/spec.json"
+        )
+        report = aggregate_report(costs, policy=policy)
+        assert report["attempt_policy"]["version"] == 99
+        assert report["attempt_policy"]["spec_path"] == "/somewhere/spec.json"
+
+    def test_the_schema_version_moved_with_the_selection_semantics(self) -> None:
+        """A pre-rryas.13 report declares 3 and its rows were chosen by
+        highest-score. Left at 3, require_schema would accept it and
+        generate_report would render it as if it followed this policy."""
+        assert SCHEMA_VERSION >= 4
+
+
+class TestInvalidAttemptReasonsAreDistinct:
+    """``no_normalized_score`` conflated four different failures, one of which
+    (a malformed results.json) is a *reader* failure being recorded as a
+    property of the attempt — the scorer_guard distinction applied to cost."""
+
+    def _reasons(self, tmp_path: Path, dirs: list[str]) -> dict[str, str]:
+        costs = scan_results_dirs(
+            [tmp_path / d for d in dirs], tmp_path / "benchmarks"
+        )
+        report = aggregate_report(costs)
+        return {r["run_dir"]: r["reason"] for r in report["invalid_attempts"]}
+
+    def test_a_persisted_invalid_status_is_named_as_such(self, tmp_path: Path) -> None:
+        _write_attempt(tmp_path, "b1", "t1", "hybrid", score=1.0, status="invalid")
+        reasons = self._reasons(tmp_path, ["b1"])
+        assert set(reasons.values()) == {"status_invalid"}
+
+    def test_a_missing_results_json_is_named_as_such(self, tmp_path: Path) -> None:
+        _write_attempt(tmp_path, "b1", "t1", "hybrid", score=None)
+        reasons = self._reasons(tmp_path, ["b1"])
+        assert set(reasons.values()) == {"no_results_json"}
+
+    def test_a_malformed_results_json_is_not_an_attempt_property(
+        self, tmp_path: Path
+    ) -> None:
+        task_dir = _write_attempt(tmp_path, "b1", "t1", "hybrid")
+        (task_dir / "results.json").write_text("{not json")
+        reasons = self._reasons(tmp_path, ["b1"])
+        assert set(reasons.values()) == {"unreadable_results_json"}
+
+    def test_an_unscored_run_is_distinguished_from_an_invalidated_one(
+        self, tmp_path: Path
+    ) -> None:
+        task_dir = _write_attempt(tmp_path, "b1", "t1", "hybrid")
+        (task_dir / "results.json").write_text(
+            json.dumps({"task_id": "t1", "config": {"mode": "hybrid"}, "scores": {}})
+        )
+        reasons = self._reasons(tmp_path, ["b1"])
+        assert set(reasons.values()) == {"no_normalized_score"}
+
+    def test_a_policy_the_code_cannot_apply_is_refused(self, tmp_path: Path) -> None:
+        """The report may not publish a rule select_attempt did not apply."""
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
+        costs = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        with pytest.raises(ValueError, match="highest_score"):
+            aggregate_report(
+                costs,
+                policy=AttemptPolicy(
+                    selection="highest_score", version=1, spec_path="/x.json"
+                ),
+            )

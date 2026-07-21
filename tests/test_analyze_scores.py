@@ -13,9 +13,12 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+from lib.attempt_policy import SELECTION_EARLIEST_VALID, AttemptPolicy
+
 from analyze_scores import (
     Checkpoint,
     TaskResult,
+    analyze,
     _compute_delta,
     _dist_stats,
     _statistical_tests,
@@ -528,3 +531,111 @@ class TestPerTaskSummary:
         results2 = [_make_result(task_id="normal-001")]
         summary2 = per_task_summary(results2)
         assert summary2[0]["is_calibration"] is False
+
+
+class TestAnalyzePinsThePolicy:
+    """The reward side's half of "pinned before outcomes". Without these, the
+    guard and the published block in ``analyze`` can both be deleted and the
+    whole suite still passes — verified by mutation during review.
+    """
+
+    def _corpus(self, tmp_path: Path) -> Path:
+        run = tmp_path / "runs" / "task-a"
+        run.mkdir(parents=True)
+        (run / "results.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "task-a",
+                    "scores": {
+                        "checkpoints_total": 2,
+                        "task_score": 1.0,
+                        "score_contract_version": 2,
+                        "checkpoints": [],
+                    },
+                    "task_metadata": {"suite": "s", "difficulty": "medium"},
+                    "config": {"mode": "baseline"},
+                }
+            )
+        )
+        return tmp_path / "runs"
+
+    def test_the_declared_policy_is_published(self, tmp_path: Path) -> None:
+        policy = AttemptPolicy(
+            selection=SELECTION_EARLIEST_VALID, version=7, spec_path="/spec.json"
+        )
+        report = analyze([self._corpus(tmp_path)], tmp_path / "benchmarks", policy)
+        assert report["attempt_policy"]["version"] == 7
+        assert report["attempt_policy"]["spec_path"] == "/spec.json"
+        assert report["total_results"] == 1
+
+    def test_a_policy_the_code_cannot_apply_is_refused(self, tmp_path: Path) -> None:
+        """A report may not name a rule load_all_results did not apply."""
+        with pytest.raises(ValueError, match="highest_score"):
+            analyze(
+                [self._corpus(tmp_path)],
+                tmp_path / "benchmarks",
+                AttemptPolicy(
+                    selection="highest_score", version=1, spec_path="/spec.json"
+                ),
+            )
+
+    def test_an_unpinned_call_publishes_no_policy(self, tmp_path: Path) -> None:
+        """Absent, not silently defaulted: an artifact that names a policy must
+        have been produced under one."""
+        report = analyze([self._corpus(tmp_path)], tmp_path / "benchmarks")
+        assert report["attempt_policy"] is None
+
+
+class TestParseResultFailsClosedOnJunk:
+    def test_valid_json_that_is_not_an_object_is_skipped_not_a_crash(
+        self, tmp_path: Path
+    ) -> None:
+        """A partial write or a serialization bug produces well-formed JSON of
+        the wrong shape. Before this, data.get raised AttributeError and took
+        down the whole load_all_results scan, not just this attempt."""
+        for payload in ("null", "42", '"a string"', "[1, 2, 3]"):
+            path = tmp_path / "results.json"
+            path.write_text(payload)
+            assert parse_result(path, tmp_path / "benchmarks") is None
+
+    def test_one_junk_attempt_does_not_abort_the_scan(self, tmp_path: Path) -> None:
+        junk = tmp_path / "runs" / "junk"
+        junk.mkdir(parents=True)
+        (junk / "results.json").write_text("[1, 2, 3]")
+
+        good = tmp_path / "runs" / "task-a"
+        good.mkdir(parents=True)
+        (good / "results.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "task-a",
+                    "scores": {
+                        "checkpoints_total": 1,
+                        "task_score": 1.0,
+                        "score_contract_version": 2,
+                        "checkpoints": [],
+                    },
+                    "task_metadata": {"suite": "s", "difficulty": "medium"},
+                    "config": {"mode": "baseline"},
+                }
+            )
+        )
+
+        results = load_all_results([tmp_path / "runs"], tmp_path / "benchmarks")
+        assert [r.task_id for r in results] == ["task-a"]
+
+
+class TestModeSuffixesCoverEveryArm:
+    """Three copies of the suffix list existed and every one had missed "cli"
+    since that arm was wired, so a <task>_cli directory read as baseline."""
+
+    @pytest.mark.parametrize("mode", ["baseline", "mcp_only", "hybrid", "cli"])
+    def test_a_suffixed_batch_dir_resolves_to_its_arm(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        path = tmp_path / "mcp_batch_v9" / f"task-a_{mode}" / "results.json"
+        assert infer_mode(path, {}) == mode
+
+    def test_config_mode_still_wins_over_the_path(self, tmp_path: Path) -> None:
+        path = tmp_path / "mcp_batch_v9" / "task-a_baseline" / "results.json"
+        assert infer_mode(path, {"config": {"mode": "cli"}}) == "cli"

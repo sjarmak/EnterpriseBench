@@ -16,7 +16,13 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 VALID_MODES = ("baseline", "mcp_only", "hybrid", "cli")
-MODE_SUFFIXES = ("_hybrid", "_mcp_only", "_baseline")
+# Derived, not hand-listed: three copies of this list existed and every one of
+# them had silently missed "cli" since that arm was wired, so a <task>_cli
+# directory resolved to baseline. Longest-first so a suffix that is a suffix of
+# another cannot shadow it.
+MODE_SUFFIXES = tuple(
+    sorted((f"_{mode}" for mode in VALID_MODES), key=len, reverse=True)
+)
 
 
 def strip_mode_suffix(dirname: str) -> tuple[str, str]:
