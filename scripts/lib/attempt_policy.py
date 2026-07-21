@@ -245,12 +245,15 @@ def instant(stamp: str) -> tuple[int, float]:
     return (0, parsed.timestamp())
 
 
-def newer_timestamp(entry: dict[str, Any], current: str) -> str:
+def newer_timestamp(entry: Any, current: str) -> str:
     """Fold one trace line's ISO-8601 ``timestamp`` into the running maximum.
 
     The single definition of "when did this attempt run". Both trace readers
     call it, so the two cannot drift into dating the same attempt differently
-    and ordering a cell's attempts two ways.
+    and ordering a cell's attempts two ways. That guarantee is why a line which
+    is valid JSON but not an object is absorbed here rather than at each call
+    site: it carries no timestamp either way, and a caller that forgot the check
+    would abort a whole scan on one junk line while the other reader skipped it.
 
     ``""`` means "no timestamp seen yet" and loses to anything, which is why it
     is special-cased rather than run through :func:`instant`. A stamp that ties
@@ -258,6 +261,8 @@ def newer_timestamp(entry: dict[str, Any], current: str) -> str:
     unparseable is dated by its first line rather than by text order.
     """
 
+    if not isinstance(entry, dict):
+        return current
     stamp = entry.get("timestamp")
     if not isinstance(stamp, str) or not stamp:
         return current
@@ -289,8 +294,7 @@ def read_trace_timestamp(attempt_dir: Path) -> str:
                     entry = json.loads(line)
                 except (ValueError, RecursionError):
                     continue
-                if isinstance(entry, dict):
-                    last = newer_timestamp(entry, last)
+                last = newer_timestamp(entry, last)
     except OSError as exc:
         logger.warning("Cannot date attempt %s: %s", attempt_dir, exc)
         return ""
@@ -319,12 +323,17 @@ def attempt_sort_key(
 ) -> tuple[int, tuple[int, float], str]:
     """Total order over a cell's attempts; ``min`` of it is the selected one.
 
-    The leading flag sorts undated attempts last rather than first, which is
-    where empty-string-ascending would otherwise put them. Both remaining
-    components are content-derived, so the selection does not depend on scan
-    order or filesystem order.
+    The leading flag sorts attempts this module cannot date last rather than
+    first, which is where empty-string-ascending would otherwise put them.
+    Undateable is one class, not two: an absent stamp and an unparseable one are
+    equally uninformative about when the attempt ran, so the flag is taken from
+    :func:`instant` rather than from emptiness. Ranking a corrupt stamp ahead of
+    a missing one would make writing garbage into the trace a cheaper way to win
+    selection than writing a plausible early date (EnterpriseBench-rryas.23).
+
+    Both remaining components are content-derived, so the selection does not
+    depend on scan order or filesystem order.
     """
 
-    if not trace_timestamp:
-        return (1, (0, 0.0), run_dir)
-    return (0, instant(trace_timestamp), run_dir)
+    moment = instant(trace_timestamp)
+    return (moment[0], moment, run_dir)

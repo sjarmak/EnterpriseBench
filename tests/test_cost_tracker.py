@@ -14,6 +14,7 @@ import pytest
 # Make scripts importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import cost_tracker
 from analyze_scores import load_all_results
 from lib.attempt_policy import (
     SELECTION_EARLIEST_VALID,
@@ -205,6 +206,25 @@ class TestParseTrace:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w") as fh:
             fh.write("not valid json\n")
+            fh.write(
+                json.dumps(_assistant_entry(input_tokens=42, output_tokens=7)) + "\n"
+            )
+        usage = scan_trace(path).usage
+        assert usage.input_tokens == 42
+        assert usage.num_requests == 1
+
+    def test_a_valid_json_non_object_line_is_skipped(self, tmp_path: Path) -> None:
+        """A line that parses cleanly but is a list, number or string has no
+        ``.get``. Unguarded it aborted scan_results_dirs — and so the whole cost
+        report — over one junk line in one attempt's trace. read_trace_timestamp
+        skipped the same line, so the two readers this module claims cannot
+        drift behaved differently on identical input."""
+        path = tmp_path / "agent_trace.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as fh:
+            fh.write("[1, 2, 3]\n")
+            fh.write('"a bare string"\n')
+            fh.write("17\n")
             fh.write(
                 json.dumps(_assistant_entry(input_tokens=42, output_tokens=7)) + "\n"
             )
@@ -2469,6 +2489,23 @@ class TestReportPublishesThePinnedPolicy:
         the absent argument means."""
         _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
         costs = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+        assert aggregate_report(costs)["attempt_policy"] is None
+
+    def test_an_unpinned_call_does_not_touch_the_shipped_spec(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The half of the contract the published field cannot show. Loading the
+        spec behind a defaulted argument makes a broken configs/study_spec.json
+        break callers that never asked for a policy, and hides a disk read and a
+        possible raise behind what reads as a pure default — while the value it
+        produces is not the one published."""
+        _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
+        costs = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+
+        def _explode(*_args: object, **_kwargs: object) -> AttemptPolicy:
+            raise AssertionError("aggregate_report read the spec it was not given")
+
+        monkeypatch.setattr(cost_tracker, "load_attempt_policy", _explode)
         assert aggregate_report(costs)["attempt_policy"] is None
 
     def test_the_declared_policy_is_the_one_that_selected(self, tmp_path: Path) -> None:

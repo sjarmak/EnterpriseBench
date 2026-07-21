@@ -374,6 +374,14 @@ def scan_trace(trace_path: Path) -> TraceScan:
                 logger.warning("Skipping malformed line in %s", trace_path)
                 continue
 
+            if not isinstance(entry, dict):
+                # Valid JSON, but a list/number/string has no fields to read.
+                # Skipping matches read_trace_timestamp, which drops the same
+                # line; without this the scan aborted on the ``type`` lookup
+                # below and took the whole cost report down with it.
+                logger.warning("Skipping non-object line in %s", trace_path)
+                continue
+
             # Read before the assistant filter: the timestamp rides on every
             # line type, and the earliest lines of a trace are not assistant.
             # Folded by the shared helper so this pass and analyze_scores'
@@ -1229,12 +1237,18 @@ def aggregate_report(
     *policy* is the attempt-selection rule the run was made under, published so a
     reader holding the artifact can tell which pin produced it rather than
     trusting that the checkout's spec still says what it said at generation
-    time. It defaults to the shipped spec; ``main`` reads it once, up front.
+    time. ``main`` reads the pin once, up front, and passes it here.
+
+    Omitting it publishes no policy and reads no spec, exactly as in
+    :func:`analyze_scores.analyze`. Defaulting to a disk read instead would let a
+    broken ``configs/study_spec.json`` break callers that never asked for a
+    policy, and would hide a read and a possible raise behind what reads as a
+    pure default — for a value the report does not publish anyway.
     """
 
-    resolved_policy = load_attempt_policy() if policy is None else policy
-    # The report must not publish a rule ``select_attempt`` did not apply.
-    resolved_policy.require_implemented("aggregate_report")
+    if policy is not None:
+        # The report must not publish a rule ``select_attempt`` did not apply.
+        policy.require_implemented("aggregate_report")
 
     comparison = comparison_attempts(costs)
     ordered = sorted(costs, key=lambda c: (c.task_id, c.mode, c.run_dir))

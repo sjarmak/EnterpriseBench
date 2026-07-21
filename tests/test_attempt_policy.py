@@ -116,6 +116,15 @@ class TestFormatDrift:
             "9999-01-01T00:00:00Z", "z"
         )
 
+    def test_a_non_object_trace_line_leaves_the_running_maximum_alone(self) -> None:
+        """A line that is valid JSON but not an object carries no timestamp. The
+        guard lives at the shared seam so neither reader can crash on input the
+        other skips — the drift this helper exists to prevent."""
+        assert newer_timestamp([1, 2, 3], "2026-01-01T00:00:00Z") == (
+            "2026-01-01T00:00:00Z"
+        )
+        assert newer_timestamp("a string", "") == ""
+
     def test_the_running_maximum_uses_the_instant_not_the_text(self) -> None:
         current = "2026-01-01T00:00:05.123456Z"
         assert newer_timestamp({"timestamp": "2026-01-01T00:00:09Z"}, current) == (
@@ -146,6 +155,20 @@ class TestAttemptSortKey:
         """The trap: "" is the smallest string, so a plain tuple would rank an
         attempt that could not be dated ahead of every one that could."""
         assert attempt_sort_key("", "a") > attempt_sort_key("1970-01-01T00:00:00Z", "z")
+
+    def test_a_corrupt_stamp_does_not_outrank_a_missing_one(self) -> None:
+        """Undateable is one class, not two. An absent stamp and an unparseable
+        one say exactly as much about when the attempt ran — nothing — so if a
+        corrupt stamp sorted ahead of a missing one, writing garbage into
+        agent_trace.jsonl would be a cheaper way to win selection than writing a
+        plausible early date (EnterpriseBench-rryas.23)."""
+        assert attempt_sort_key("not-a-date", "z") > attempt_sort_key("", "a")
+        assert attempt_sort_key("not-a-date", "a") < attempt_sort_key("", "z")
+
+    def test_a_corrupt_and_a_missing_stamp_tie_on_run_dir(self) -> None:
+        """The consequence of the class being one: the tie falls through to the
+        documented run_dir tiebreak rather than to the presence of garbage."""
+        assert attempt_sort_key("not-a-date", "a") == attempt_sort_key("", "a")
 
 
 def _write_spec(path: Path, spec: object) -> Path:
@@ -306,5 +329,5 @@ class TestLoadAttemptPolicy:
     def test_the_policy_is_frozen(self) -> None:
         """It is read once at an entry point and passed down; a stage that could
         rewrite it mid-run would defeat 'pinned before outcomes'."""
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             load_attempt_policy().selection = "something_else"  # type: ignore[misc]
