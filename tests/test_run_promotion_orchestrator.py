@@ -108,6 +108,22 @@ class TestContext:
         with pytest.raises(ValueError, match="resume_from must be >= 0"):
             rpo.RunPromotionOrchestrator(ctx)
 
+    @pytest.mark.parametrize("run_id", ["..", "sub/..", "a/b", "/tmp/escape"])
+    def test_run_id_cannot_escape_promotion_roots(
+        self, workdir: Path, run_id: str
+    ) -> None:
+        with pytest.raises(ValueError, match="run_id"):
+            rpo.build_context(
+                run_id=run_id,
+                target_state="official",
+                repo_root=workdir,
+            )
+
+    def test_resume_cannot_skip_capsule_revalidation(self, workdir: Path) -> None:
+        ctx = _make_ctx(workdir, "r1", resume_from=6)
+        with pytest.raises(ValueError, match="resume_from"):
+            rpo.RunPromotionOrchestrator(ctx)
+
     def test_default_pipeline_has_nine_steps(self) -> None:
         pipeline = rpo.build_default_pipeline()
         names = [s.name for s in pipeline]
@@ -146,6 +162,17 @@ class TestValidateOnly:
         assert report.succeeded
         assert [s.step_name for s in report.steps] == ["validate_a", "validate_b"]
         assert not ctx.staging_dir.exists()
+
+    def test_validation_failure_writes_no_forensics(self, workdir: Path) -> None:
+        ctx = _make_ctx(workdir, "r1")
+        report = rpo.RunPromotionOrchestrator(
+            ctx,
+            [_step("validate_crash", fail=True)],
+        ).run(validate_only=True)
+
+        assert not report.succeeded
+        assert report.forensics_path is None
+        assert not ctx.forensics_dir.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +347,34 @@ class TestValidateInputs:
 
 
 class TestReadOnlyValidators:
+    def test_declared_task_ids_resolve_to_exact_task_files(self, workdir: Path) -> None:
+        _make_run(workdir, "r1")
+        task_dir = workdir / "benchmarks" / "suite" / "t1"
+        task_dir.mkdir(parents=True)
+        task_toml = task_dir / "task.toml"
+        task_toml.write_text('[task]\nid = "t1"\n')
+
+        assert rpo._declared_task_tomls(_make_ctx(workdir, "r1")) == (task_toml,)
+
+    def test_duplicate_declared_task_ids_fail_closed(self, workdir: Path) -> None:
+        _make_run(workdir, "r1")
+        for suite in ("a", "b"):
+            task_dir = workdir / "benchmarks" / suite / "t1"
+            task_dir.mkdir(parents=True)
+            (task_dir / "task.toml").write_text('[task]\nid = "t1"\n')
+
+        with pytest.raises(RuntimeError, match="2 matches"):
+            rpo._declared_task_tomls(_make_ctx(workdir, "r1"))
+
+    def test_malformed_task_candidate_fails_closed(self, workdir: Path) -> None:
+        _make_run(workdir, "r1")
+        task_dir = workdir / "benchmarks" / "suite" / "broken"
+        task_dir.mkdir(parents=True)
+        (task_dir / "task.toml").write_text("[task\n")
+
+        with pytest.raises(RuntimeError, match="cannot read"):
+            rpo._declared_task_tomls(_make_ctx(workdir, "r1"))
+
     @pytest.mark.parametrize(
         ("step", "script_name"),
         [
@@ -345,11 +400,19 @@ class TestReadOnlyValidators:
             return 0, "", ""
 
         monkeypatch.setattr(rpo, "_run_subprocess", succeed)
+        if step is rpo._step_validate_crnt:
+            monkeypatch.setattr(
+                rpo,
+                "_declared_task_tomls",
+                lambda _ctx: (workdir / "benchmarks" / "task.toml",),
+            )
 
         outcome = step(_make_ctx(workdir, "r1"))
 
         assert outcome.status == "reversible"
         assert script_name in " ".join(calls[0])
+        if step is rpo._step_validate_crnt:
+            assert "--all" not in calls[0]
 
     @pytest.mark.parametrize(
         "step",
@@ -370,6 +433,12 @@ class TestReadOnlyValidators:
             "_run_subprocess",
             lambda _cmd, _cwd: (2, "", "validator exploded"),
         )
+        if step is rpo._step_validate_crnt:
+            monkeypatch.setattr(
+                rpo,
+                "_declared_task_tomls",
+                lambda _ctx: (workdir / "benchmarks" / "task.toml",),
+            )
 
         with pytest.raises(RuntimeError, match="validator exploded"):
             step(_make_ctx(workdir, "r1"))
@@ -459,8 +528,10 @@ class TestStageMetrics:
         assert len(calls) == 1
         cmd = calls[0]
         assert cmd[1].endswith("scripts/analysis/study_report.py")
-        assert cmd[cmd.index("--spec") + 1] == str(ctx.spec_path)
-        assert cmd[cmd.index("--receipts") + 1] == str(ctx.receipts_path)
+        assert cmd[cmd.index("--spec") + 1] == str(ctx.staging_dir / "study_spec.json")
+        assert cmd[cmd.index("--receipts") + 1] == str(
+            ctx.staging_dir / "receipts.jsonl"
+        )
         assert "--results-dir" not in cmd
         assert "quarantined" not in cmd
 

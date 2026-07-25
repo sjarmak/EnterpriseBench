@@ -41,6 +41,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -49,6 +50,11 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # type: ignore[no-redef]
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +70,8 @@ from eb_study import CapsuleError, StudyCapsule, StudySpec  # noqa: E402
 MAX_ERROR_DETAIL_LEN = 4_000
 
 VALID_TARGET_STATES = frozenset({"official", "candidate"})
+MAX_SAFE_RESUME_STEP = 5
+RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 
 # ---------------------------------------------------------------------------
@@ -240,21 +248,47 @@ def _step_validate_tasks_preflight(ctx: PromotionContext) -> StepOutcome:
 
 def _step_validate_crnt(ctx: PromotionContext) -> StepOutcome:
     """Validate Cross-Repo Necessity Test for multi-repo tasks."""
-    cmd = [
-        sys.executable,
-        str(ctx.repo_root / "scripts" / "validation" / "crnt_validator.py"),
-        "--all",
-    ]
-    rc, _stdout, stderr = _run_subprocess(cmd, ctx.repo_root)
-    if rc != 0:
-        raise RuntimeError(
-            f"crnt_validator.py exited {rc}: {stderr[-MAX_ERROR_DETAIL_LEN:]}"
-        )
+    task_tomls = _declared_task_tomls(ctx)
+    validator = ctx.repo_root / "scripts" / "validation" / "crnt_validator.py"
+    for task_toml in task_tomls:
+        cmd = [sys.executable, str(validator), str(task_toml), "--json"]
+        rc, _stdout, stderr = _run_subprocess(cmd, ctx.repo_root)
+        if rc != 0:
+            raise RuntimeError(
+                f"crnt_validator.py exited {rc} for {task_toml}: "
+                f"{stderr[-MAX_ERROR_DETAIL_LEN:]}"
+            )
     return StepOutcome(
         step_name="validate_crnt",
         status="reversible",
-        details="crnt ok",
+        details=f"crnt ok ({len(task_tomls)} declared tasks)",
     )
+
+
+def _declared_task_tomls(ctx: PromotionContext) -> tuple[Path, ...]:
+    """Resolve every spec task ID to exactly one benchmark task.toml."""
+
+    spec = StudySpec.load(ctx.spec_path)
+    expected = set(spec.task_ids)
+    matches: dict[str, list[Path]] = {task_id: [] for task_id in spec.task_ids}
+    for path in (ctx.repo_root / "benchmarks").rglob("task.toml"):
+        try:
+            with path.open("rb") as handle:
+                task_id = tomllib.load(handle).get("task", {}).get("id")
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raise RuntimeError(
+                f"cannot read declared task candidate {path}: {exc}"
+            ) from exc
+        if task_id in expected:
+            matches[task_id].append(path)
+
+    invalid = {task_id: paths for task_id, paths in matches.items() if len(paths) != 1}
+    if invalid:
+        detail = ", ".join(
+            f"{task_id}={len(paths)} matches" for task_id, paths in invalid.items()
+        )
+        raise RuntimeError(f"declared task resolution failed: {detail}")
+    return tuple(matches[task_id][0] for task_id in spec.task_ids)
 
 
 def _step_validate_expected_solutions(ctx: PromotionContext) -> StepOutcome:
@@ -295,13 +329,17 @@ def _step_stage_metrics(ctx: PromotionContext) -> StepOutcome:
 
     ctx.staging_dir.mkdir(parents=True, exist_ok=True)
     output_path = ctx.staging_dir / "score_analysis.json"
+    staged_spec = ctx.staging_dir / "study_spec.json"
+    staged_receipts = ctx.staging_dir / "receipts.jsonl"
+    shutil.copy2(ctx.spec_path, staged_spec)
+    shutil.copy2(ctx.receipts_path, staged_receipts)
     cmd = [
         sys.executable,
         str(ctx.study_report_path),
         "--spec",
-        str(ctx.spec_path),
+        str(staged_spec),
         "--receipts",
-        str(ctx.receipts_path),
+        str(staged_receipts),
         "--output",
         str(output_path),
     ]
@@ -313,9 +351,7 @@ def _step_stage_metrics(ctx: PromotionContext) -> StepOutcome:
     if not output_path.is_file():
         raise RuntimeError(f"study_report.py did not write {output_path}")
 
-    paired_tasks = _validate_study_analysis(output_path, ctx)
-    shutil.copy2(ctx.spec_path, ctx.staging_dir / "study_spec.json")
-    shutil.copy2(ctx.receipts_path, ctx.staging_dir / "receipts.jsonl")
+    paired_tasks = _validate_study_analysis(output_path, ctx, staged_spec)
 
     return StepOutcome(
         step_name="stage_metrics",
@@ -329,7 +365,11 @@ def _step_stage_metrics(ctx: PromotionContext) -> StepOutcome:
     )
 
 
-def _validate_study_analysis(analysis_path: Path, ctx: PromotionContext) -> int:
+def _validate_study_analysis(
+    analysis_path: Path,
+    ctx: PromotionContext,
+    spec_path: Path,
+) -> int:
     """Verify the staged report still names the exact validated capsule."""
     try:
         analysis = json.loads(analysis_path.read_text())
@@ -344,7 +384,7 @@ def _validate_study_analysis(analysis_path: Path, ctx: PromotionContext) -> int:
             f"staged analysis is unreadable: {analysis_path}: "
             "missing provenance/completeness"
         )
-    spec = StudySpec.load(ctx.spec_path)
+    spec = StudySpec.load(spec_path)
     if provenance.get("study_id") != spec.study_id:
         raise RuntimeError(
             f"staged analysis study_id={provenance.get('study_id')!r}, "
@@ -642,6 +682,11 @@ class RunPromotionOrchestrator:
             )
         if ctx.resume_from < 0:
             raise ValueError("resume_from must be >= 0")
+        if ctx.resume_from > MAX_SAFE_RESUME_STEP:
+            raise ValueError(
+                f"resume_from must be <= {MAX_SAFE_RESUME_STEP}; later steps "
+                "would skip capsule revalidation"
+            )
 
         self._ctx = ctx
         self._pipeline = list(pipeline or build_default_pipeline())
@@ -730,7 +775,7 @@ class RunPromotionOrchestrator:
                 self._ctx.run_id,
                 exc,
             )
-            forensics = self._write_forensics(completed, exc)
+            forensics = None if validate_only else self._write_forensics(completed, exc)
             self._rollback_completed(completed)
             return PromotionReport(
                 run_id=self._ctx.run_id,
@@ -858,6 +903,11 @@ def build_context(
     study_report_path: Optional[Path] = None,
 ) -> PromotionContext:
     repo_root = repo_root or REPO_ROOT
+    if RUN_ID_RE.fullmatch(run_id) is None:
+        raise ValueError(
+            "run_id must be a single safe path component containing only "
+            "letters, digits, '.', '_' or '-'"
+        )
     raw_root = raw_runs_root or (repo_root / "results" / "runs")
     official_root = official_runs_root or (repo_root / "results" / "official_runs")
     raw_run_dir = raw_root / run_id
