@@ -280,6 +280,36 @@ class TestRollback:
 
 
 class TestResume:
+    def test_resume_never_skips_validation_steps(self, workdir: Path) -> None:
+        executed: list[str] = []
+
+        def step(name: str) -> rpo.Step:
+            def execute(_ctx: rpo.PromotionContext) -> rpo.StepOutcome:
+                executed.append(name)
+                return rpo.StepOutcome(name, "reversible")
+
+            return rpo.Step(name=name, execute=execute)
+
+        ctx = _make_ctx(workdir, "r1", resume_from=5)
+        pipeline = [
+            step("validate_inputs"),
+            step("validate_tasks"),
+            step("validate_crnt"),
+            step("validate_expected_solutions"),
+            step("stage_metrics"),
+        ]
+
+        report = rpo.RunPromotionOrchestrator(ctx, pipeline).run()
+
+        assert report.succeeded
+        assert executed == [
+            "validate_inputs",
+            "validate_tasks",
+            "validate_crnt",
+            "validate_expected_solutions",
+            "stage_metrics",
+        ]
+
     def test_resume_from_step_skips_earlier_steps(self, workdir: Path) -> None:
         executed: list[str] = []
 
@@ -485,6 +515,42 @@ def _fake_analyzer(
 
 
 class TestStageMetrics:
+    def test_source_capsule_replacement_after_validation_fails_closed(
+        self, workdir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        run_dir = _make_run(workdir, "r1")
+        ctx = _make_ctx(workdir, "r1")
+        _fake_analyzer(monkeypatch, [])
+
+        def replace_capsule(_ctx: rpo.PromotionContext) -> rpo.StepOutcome:
+            replacement = make_spec(
+                study_id="r1",
+                task_ids=["t2"],
+                repetitions=1,
+                max_attempts=1,
+            )
+            (run_dir / "study_spec.json").write_text(json.dumps(replacement.to_json()))
+            receipts = [
+                make_receipt(replacement, "t2", arm, 1) for arm in replacement.arm_names
+            ]
+            (run_dir / "receipts.jsonl").write_text(
+                "".join(json.dumps(receipt.to_json()) + "\n" for receipt in receipts)
+            )
+            return rpo.StepOutcome("replace_capsule", "reversible")
+
+        report = rpo.RunPromotionOrchestrator(
+            ctx,
+            [
+                rpo.Step("validate_inputs", rpo._step_validate_inputs),
+                rpo.Step("replace_capsule", replace_capsule),
+                rpo.Step("stage_metrics", rpo._step_stage_metrics),
+            ],
+        ).run()
+
+        assert not report.succeeded
+        assert "changed after validation" in report.error
+        assert not (ctx.staging_dir / "score_analysis.json").exists()
+
     def test_real_report_ignores_higher_scoring_unrelated_capsule(
         self, workdir: Path
     ) -> None:

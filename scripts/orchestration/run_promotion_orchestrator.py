@@ -1,38 +1,9 @@
 #!/usr/bin/env python3
-"""Atomic run-promotion orchestrator for EnterpriseBench.
+"""Atomically promote one validated benchmark capsule.
 
-Coordinates the multi-step promotion of a benchmark run from raw
-``results/runs/<run_id>/`` artefacts into the durable, official-run state at
-``results/official_runs/<run_id>/``.
-
-The promotion sequence has historically been a chain of ad-hoc Make targets
-(``analyze`` → ``charts`` → ``report`` → manual copy), with no transactional
-guarantee. A mid-flight failure leaves the official-runs tree in a partial
-state — the same defect documented in CSB-BUG-011 (``docs/csb_bugs.md``).
-
-This orchestrator wraps the sequence in:
-
-* a stage → publish split (everything writes to a sibling staging dir; the
-  final move is a single ``os.rename``);
-* per-step rollback hooks executed LIFO when any step raises;
-* a forensic snapshot of partial state on failure;
-* ``--validate-only`` to gate read-only checks before any write happens;
-* ``--resume-from-step N`` to pick up after a transient failure without
-  re-running the upstream validators.
-
-Usage::
-
-    python3 scripts/orchestration/run_promotion_orchestrator.py \
-        --run-id 20260429_001 --target-state official
-
-    python3 scripts/orchestration/run_promotion_orchestrator.py \
-        --run-id 20260429_001 --validate-only
-
-    python3 scripts/orchestration/run_promotion_orchestrator.py \
-        --run-id 20260429_001 --resume-from-step 5
-
-The class :class:`RunPromotionOrchestrator` is also importable for callers
-(CI, mayor-driven dispatch) that want to invoke promotion programmatically.
+The pipeline validates, stages, and publishes a named capsule with LIFO
+rollback and failure forensics. Validation-only mode performs no writes, and
+resume mode always re-runs the read-only validation gates.
 """
 
 from __future__ import annotations
@@ -46,15 +17,10 @@ import shutil
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Optional
-
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib  # type: ignore[no-redef]
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +29,18 @@ DEFAULT_RAW_RUNS_ROOT = REPO_ROOT / "results" / "runs"
 DEFAULT_OFFICIAL_RUNS_ROOT = REPO_ROOT / "results" / "official_runs"
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 
-from eb_study import CapsuleError, StudyCapsule, StudySpec  # noqa: E402
+from promotion_capsule import (  # noqa: E402
+    capsule_snapshot as _capsule_snapshot,
+    declared_task_tomls as _declared_task_tomls,
+    stage_metrics as _stage_capsule_metrics,
+    validate_inputs as _step_validate_inputs,
+)
+from promotion_types import (  # noqa: E402
+    PromotionContext,
+    PromotionReport,
+    Step,
+    StepOutcome,
+)
 
 # Maximum failure-class string length retained for forensics; trimming keeps
 # the forensics JSON readable when callers attach long stderr blobs.
@@ -75,140 +52,8 @@ RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 
 # ---------------------------------------------------------------------------
-# Data types
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class StepOutcome:
-    """Immutable record of a single step execution.
-
-    A ``status`` of ``"reversible"`` means the step performed work that the
-    accompanying rollback hook can fully undo. ``"forward_only"`` means the
-    step succeeded but its effect cannot be reversed by software (e.g.
-    side-effects on external systems); the orchestrator will not roll it back
-    automatically — callers must use ``--resume-from-step`` to retry.
-    """
-
-    step_name: str
-    status: str  # "reversible" | "forward_only" | "skipped" | "dry_run" | "failed"
-    details: str = ""
-    artifacts: tuple[str, ...] = ()
-    duration_seconds: float = 0.0
-
-
-@dataclass(frozen=True)
-class PromotionContext:
-    """Immutable execution context for a promotion attempt."""
-
-    run_id: str
-    target_state: str
-    repo_root: Path
-    study_report_path: Path
-    raw_run_dir: Path
-    spec_path: Path
-    receipts_path: Path
-    staging_dir: Path
-    final_dir: Path
-    registry_path: Path
-    forensics_dir: Path
-    dry_run: bool
-    resume_from: int
-
-
-@dataclass(frozen=True)
-class PromotionReport:
-    """Top-level outcome of an orchestrator invocation."""
-
-    run_id: str
-    target_state: str
-    started_at: str
-    finished_at: str
-    succeeded: bool
-    steps: tuple[StepOutcome, ...]
-    forensics_path: Optional[str] = None
-    error: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "run_id": self.run_id,
-            "target_state": self.target_state,
-            "started_at": self.started_at,
-            "finished_at": self.finished_at,
-            "succeeded": self.succeeded,
-            "forensics_path": self.forensics_path,
-            "error": self.error,
-            "steps": [asdict(s) for s in self.steps],
-        }
-
-
-# ---------------------------------------------------------------------------
-# Step protocol
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Step:
-    """A single step in the promotion pipeline.
-
-    ``execute`` performs the work and is responsible for raising on failure.
-    ``rollback`` is called by the orchestrator when a *later* step fails; it
-    must be idempotent and tolerate being called even when the step never ran.
-
-    ``reversible=False`` marks steps whose effect cannot be undone in
-    software (currently none of the implemented steps need this, but the
-    field is reserved for future external-system steps).
-    """
-
-    name: str
-    execute: Callable[[PromotionContext], StepOutcome]
-    rollback: Callable[[PromotionContext], None] = field(default=lambda _ctx: None)
-    reversible: bool = True
-
-
-# ---------------------------------------------------------------------------
 # Step implementations
 # ---------------------------------------------------------------------------
-
-
-def _step_validate_inputs(ctx: PromotionContext) -> StepOutcome:
-    """Validate the exact named Study Capsule that promotion will consume.
-
-    No directory discovery occurs here or downstream. The spec must name the
-    requested run, every receipt must validate against its hash, and every
-    declared task/arm/repetition slot must have a comparable valid trial.
-    """
-    if not ctx.raw_run_dir.is_dir():
-        raise FileNotFoundError(f"Raw run directory not found: {ctx.raw_run_dir}")
-
-    try:
-        spec = StudySpec.load(ctx.spec_path)
-    except CapsuleError as exc:
-        raise ValueError(f"invalid study spec: {exc}") from exc
-    if spec.study_id != ctx.run_id:
-        raise ValueError(
-            f"study_id {spec.study_id!r} does not match promoted run {ctx.run_id!r}"
-        )
-
-    try:
-        capsule = StudyCapsule.load(ctx.spec_path, ctx.receipts_path)
-        paired = capsule.paired_valid()
-    except CapsuleError as exc:
-        raise ValueError(f"study capsule is incomplete or invalid: {exc}") from exc
-    if paired.excluded:
-        raise ValueError(
-            f"study capsule is incomplete: {len(paired.excluded)} declared "
-            "task(s) are missing one or more arm/repetition slots"
-        )
-
-    return StepOutcome(
-        step_name="validate_inputs",
-        status="reversible",
-        details=(
-            f"study_id={spec.study_id} spec_hash={spec.spec_hash} "
-            f"receipts={len(capsule.receipts)}"
-        ),
-    )
 
 
 def _run_subprocess(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
@@ -265,32 +110,6 @@ def _step_validate_crnt(ctx: PromotionContext) -> StepOutcome:
     )
 
 
-def _declared_task_tomls(ctx: PromotionContext) -> tuple[Path, ...]:
-    """Resolve every spec task ID to exactly one benchmark task.toml."""
-
-    spec = StudySpec.load(ctx.spec_path)
-    expected = set(spec.task_ids)
-    matches: dict[str, list[Path]] = {task_id: [] for task_id in spec.task_ids}
-    for path in (ctx.repo_root / "benchmarks").rglob("task.toml"):
-        try:
-            with path.open("rb") as handle:
-                task_id = tomllib.load(handle).get("task", {}).get("id")
-        except (OSError, tomllib.TOMLDecodeError) as exc:
-            raise RuntimeError(
-                f"cannot read declared task candidate {path}: {exc}"
-            ) from exc
-        if task_id in expected:
-            matches[task_id].append(path)
-
-    invalid = {task_id: paths for task_id, paths in matches.items() if len(paths) != 1}
-    if invalid:
-        detail = ", ".join(
-            f"{task_id}={len(paths)} matches" for task_id, paths in invalid.items()
-        )
-        raise RuntimeError(f"declared task resolution failed: {detail}")
-    return tuple(matches[task_id][0] for task_id in spec.task_ids)
-
-
 def _step_validate_expected_solutions(ctx: PromotionContext) -> StepOutcome:
     """Validate expected_solution.json files."""
     cmd = [
@@ -314,98 +133,13 @@ def _step_validate_expected_solutions(ctx: PromotionContext) -> StepOutcome:
 
 
 def _step_stage_metrics(ctx: PromotionContext) -> StepOutcome:
-    """Build the named capsule's report into staging.
+    """Build the exact validated named capsule's report into staging."""
 
-    ``study_report.py`` accepts only an explicit spec and receipt log. It has no
-    recursive discovery fallback, so historical, smoke, sibling, and
-    quarantined result directories are outside the input boundary.
-    """
-    if ctx.dry_run:
-        return StepOutcome(
-            step_name="stage_metrics",
-            status="dry_run",
-            details="would aggregate metrics into staging",
-        )
-
-    ctx.staging_dir.mkdir(parents=True, exist_ok=True)
-    output_path = ctx.staging_dir / "score_analysis.json"
-    staged_spec = ctx.staging_dir / "study_spec.json"
-    staged_receipts = ctx.staging_dir / "receipts.jsonl"
-    shutil.copy2(ctx.spec_path, staged_spec)
-    shutil.copy2(ctx.receipts_path, staged_receipts)
-    cmd = [
-        sys.executable,
-        str(ctx.study_report_path),
-        "--spec",
-        str(staged_spec),
-        "--receipts",
-        str(staged_receipts),
-        "--output",
-        str(output_path),
-    ]
-    rc, _stdout, stderr = _run_subprocess(cmd, ctx.repo_root)
-    if rc != 0:
-        raise RuntimeError(
-            f"study_report.py exited {rc}: {stderr[-MAX_ERROR_DETAIL_LEN:]}"
-        )
-    if not output_path.is_file():
-        raise RuntimeError(f"study_report.py did not write {output_path}")
-
-    paired_tasks = _validate_study_analysis(output_path, ctx, staged_spec)
-
-    return StepOutcome(
-        step_name="stage_metrics",
-        status="reversible",
-        details=f"wrote {output_path.name} ({paired_tasks} paired tasks)",
-        artifacts=(
-            str(output_path),
-            str(ctx.staging_dir / "study_spec.json"),
-            str(ctx.staging_dir / "receipts.jsonl"),
-        ),
+    return _stage_capsule_metrics(
+        ctx,
+        _run_subprocess,
+        MAX_ERROR_DETAIL_LEN,
     )
-
-
-def _validate_study_analysis(
-    analysis_path: Path,
-    ctx: PromotionContext,
-    spec_path: Path,
-) -> int:
-    """Verify the staged report still names the exact validated capsule."""
-    try:
-        analysis = json.loads(analysis_path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"staged analysis is unreadable: {analysis_path}: {exc}")
-    if not isinstance(analysis, dict):
-        raise RuntimeError(f"staged analysis is unreadable: {analysis_path}")
-    provenance = analysis.get("provenance")
-    completeness = analysis.get("completeness")
-    if not isinstance(provenance, dict) or not isinstance(completeness, dict):
-        raise RuntimeError(
-            f"staged analysis is unreadable: {analysis_path}: "
-            "missing provenance/completeness"
-        )
-    spec = StudySpec.load(spec_path)
-    if provenance.get("study_id") != spec.study_id:
-        raise RuntimeError(
-            f"staged analysis study_id={provenance.get('study_id')!r}, "
-            f"expected {spec.study_id!r}"
-        )
-    if provenance.get("spec_hash") != spec.spec_hash:
-        raise RuntimeError(
-            f"staged analysis spec_hash={provenance.get('spec_hash')!r}, "
-            f"expected {spec.spec_hash!r}"
-        )
-    paired = completeness.get("paired_tasks")
-    declared = completeness.get("declared_tasks")
-    excluded = completeness.get("excluded_tasks")
-    if not isinstance(paired, int) or paired < 1:
-        raise RuntimeError("staged analysis has no paired tasks")
-    if paired != declared or excluded:
-        raise RuntimeError(
-            "staged analysis is incomplete: paired_tasks must equal "
-            "declared_tasks and excluded_tasks must be empty"
-        )
-    return paired
 
 
 def _step_stage_charts(ctx: PromotionContext) -> StepOutcome:
@@ -714,7 +448,9 @@ class RunPromotionOrchestrator:
 
         try:
             for index, step in enumerate(self._pipeline, start=1):
-                if index < self._ctx.resume_from:
+                if index < self._ctx.resume_from and not step.name.startswith(
+                    "validate"
+                ):
                     completed.append(
                         (
                             step,
@@ -742,6 +478,14 @@ class RunPromotionOrchestrator:
                     len(self._pipeline),
                     step.name,
                 )
+                if (
+                    step.execute is _step_validate_inputs
+                    and self._ctx.capsule_snapshot is None
+                ):
+                    self._ctx = replace(
+                        self._ctx,
+                        capsule_snapshot=_capsule_snapshot(self._ctx),
+                    )
                 start = time.monotonic()
                 outcome = step.execute(self._ctx)
                 duration = time.monotonic() - start
