@@ -18,7 +18,9 @@ from pathlib import Path
 import pytest
 
 # Make scripts importable
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "orchestration"))
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent / "scripts" / "orchestration")
+)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "infra"))
 
 from run_task import TaskRunConfig, TaskRunResult, _save_results
@@ -27,6 +29,7 @@ from run_task import TaskRunConfig, TaskRunResult, _save_results
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_task_data(task_id: str = "test-enrich-001") -> dict:
     return {
@@ -72,10 +75,27 @@ def _make_result(task_id: str = "test-enrich-001", **overrides) -> TaskRunResult
         error="",
         image_tag="eb-test-enrich-001",
         container_id="abc123",
-        scores={"task_score": 2.5, "all_passed": True, "checkpoints_passed": 2, "checkpoints_total": 2},
-        timing={"parse": 0.01, "build": 5.0, "setup": 1.2, "agent": 120.5, "scoring": 0.3},
+        scores={
+            "task_score": 2.5,
+            "all_passed": True,
+            "checkpoints_passed": 2,
+            "checkpoints_total": 2,
+        },
+        timing={
+            "parse": 0.01,
+            "build": 5.0,
+            "setup": 1.2,
+            "agent": 120.5,
+            "scoring": 0.3,
+        },
         output_dir="",
-        tool_usage={"total_input_tokens": 1000, "total_output_tokens": 500, "cost_usd": 0.05, "num_turns": 3, "mcp_tool_calls": 0},
+        tool_usage={
+            "total_input_tokens": 1000,
+            "total_output_tokens": 500,
+            "cost_usd": 0.05,
+            "num_turns": 3,
+            "mcp_tool_calls": 0,
+        },
     )
     defaults.update(overrides)
     return TaskRunResult(**defaults)
@@ -84,6 +104,7 @@ def _make_result(task_id: str = "test-enrich-001", **overrides) -> TaskRunResult
 # ---------------------------------------------------------------------------
 # config.json
 # ---------------------------------------------------------------------------
+
 
 class TestConfigJsonSnapshot:
     def test_config_json_created(self, tmp_path: Path) -> None:
@@ -136,7 +157,23 @@ class TestConfigJsonSnapshot:
 # task_metrics.json
 # ---------------------------------------------------------------------------
 
+
 class TestTaskMetricsJson:
+    def test_host_attempt_clock_is_persisted_in_both_receipts(
+        self, tmp_path: Path
+    ) -> None:
+        output_dir = tmp_path / "results"
+        result = _make_result(started_at="2026-07-25T12:00:00+00:00")
+
+        _save_results(result, _make_task_data(), output_dir, _make_config())
+
+        results = json.loads((output_dir / "results.json").read_text())
+        metrics = json.loads((output_dir / "task_metrics.json").read_text())
+        assert results["started_at"] == "2026-07-25T12:00:00+00:00"
+        assert metrics["started_at"] == results["started_at"]
+        assert results["completed_at"] == metrics["completed_at"]
+        assert results["completed_at"] > results["started_at"]
+
     def test_task_metrics_created(self, tmp_path: Path) -> None:
         output_dir = tmp_path / "results"
         config = _make_config()
@@ -163,9 +200,7 @@ class TestTaskMetricsJson:
     def test_task_metrics_contains_tool_usage(self, tmp_path: Path) -> None:
         output_dir = tmp_path / "results"
         config = _make_config()
-        result = _make_result(
-            tool_usage={"total_input_tokens": 2000, "cost_usd": 0.10}
-        )
+        result = _make_result(tool_usage={"total_input_tokens": 2000, "cost_usd": 0.10})
         task_data = _make_task_data()
 
         _save_results(result, task_data, output_dir, config)
@@ -210,6 +245,7 @@ class TestTaskMetricsJson:
 # agent/ subdirectory
 # ---------------------------------------------------------------------------
 
+
 class TestAgentSubdir:
     def test_agent_subdir_created(self, tmp_path: Path) -> None:
         output_dir = tmp_path / "results"
@@ -227,6 +263,7 @@ class TestAgentSubdir:
 # verifier/ subdirectory
 # ---------------------------------------------------------------------------
 
+
 class TestVerifierSubdir:
     def test_verifier_subdir_created(self, tmp_path: Path) -> None:
         output_dir = tmp_path / "results"
@@ -242,7 +279,9 @@ class TestVerifierSubdir:
     def test_verifier_output_json_written(self, tmp_path: Path) -> None:
         output_dir = tmp_path / "results"
         config = _make_config()
-        result = _make_result(scores={"task_score": 1.5, "checkpoints_passed": 1, "checkpoints_total": 2})
+        result = _make_result(
+            scores={"task_score": 1.5, "checkpoints_passed": 1, "checkpoints_total": 2}
+        )
         task_data = _make_task_data()
 
         _save_results(result, task_data, output_dir, config)
@@ -257,6 +296,7 @@ class TestVerifierSubdir:
 # results.json backward compatibility
 # ---------------------------------------------------------------------------
 
+
 class TestResultsJsonBackwardCompat:
     def test_results_json_still_at_top_level(self, tmp_path: Path) -> None:
         output_dir = tmp_path / "results"
@@ -266,7 +306,9 @@ class TestResultsJsonBackwardCompat:
 
         _save_results(result, task_data, output_dir, config)
 
-        assert (output_dir / "results.json").exists(), "results.json must remain at top level"
+        assert (output_dir / "results.json").exists(), (
+            "results.json must remain at top level"
+        )
 
     def test_results_json_still_has_success_field(self, tmp_path: Path) -> None:
         """is_task_completed depends on results.json having 'success' field."""

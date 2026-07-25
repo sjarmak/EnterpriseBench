@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
 import pytest
@@ -26,7 +25,6 @@ from analyze_scores import (
     infer_mode,
     load_all_results,
     load_task_metadata_from_toml,
-    mcp_deltas,
     parse_result,
     per_task_summary,
 )
@@ -175,6 +173,37 @@ class TestDeduplication:
         results = load_all_results([dir1, dir2], benchmarks)
         assert len(results) == 1
         assert results[0].normalized_score == pytest.approx(0.3333)
+
+    def test_host_clock_defeats_agent_forged_trace_order(self, tmp_path: Path):
+        benchmarks = tmp_path / "benchmarks"
+        benchmarks.mkdir()
+        first = _write_attempt(
+            tmp_path / "run1",
+            task_score=0.3333,
+            timestamp="2099-01-01T00:00:00Z",
+        )
+        second = _write_attempt(
+            tmp_path / "run2",
+            task_score=0.9999,
+            timestamp="1970-01-01T00:00:00Z",
+        )
+        first_data = json.loads((first / "results.json").read_text())
+        second_data = json.loads((second / "results.json").read_text())
+        first_data["started_at"] = "2026-01-01T00:00:00Z"
+        second_data["started_at"] = "2026-02-01T00:00:00Z"
+        (first / "results.json").write_text(json.dumps(first_data))
+        (second / "results.json").write_text(json.dumps(second_data))
+
+        results = load_all_results([tmp_path / "run1", tmp_path / "run2"], benchmarks)
+
+        assert results[0].normalized_score == pytest.approx(0.3333)
+        assert results[0].attempt_timestamp_source == "results.started_at"
+        summary = per_task_summary(results)
+        assert summary[0]["attempts"]["baseline"] == {
+            "run_dir": results[0].run_dir,
+            "timestamp": "2026-01-01T00:00:00Z",
+            "timestamp_source": "results.started_at",
+        }
 
     def test_an_invalid_attempt_is_never_selected(self, tmp_path: Path):
         """The resurrection case: run_task marks a run invalid for gates that

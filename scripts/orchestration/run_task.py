@@ -24,7 +24,7 @@ import tempfile
 import time
 from typing import Any, Iterator, Optional
 from collections.abc import MutableMapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
@@ -310,6 +310,11 @@ class TaskRunResult:
     # "" for normal runs; RUN_STATUS_INVALID for runs that must be re-run,
     # never scored (see the MCP pre-flight gate).
     status: str = ""
+    # Host-authored before any agent-controlled process starts. This is the
+    # attempt-selection clock; trace timestamps are telemetry, not authority.
+    started_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
 
 def _load_oauth_token(account: int) -> str:
@@ -792,8 +797,12 @@ def _assert_grading_assets_sealed(container_id: str) -> tuple[bool, str]:
     # renamed or unlinked wholesale regardless of their own mode.
     parent = _docker_exec(
         container_id,
-        ["bash", "-c", f"find {shlex.quote(WORKSPACE_DIR)} -maxdepth 0 "
-                       "\\( ! -user root -o ! -perm -1000 \\) -print"],
+        [
+            "bash",
+            "-c",
+            f"find {shlex.quote(WORKSPACE_DIR)} -maxdepth 0 "
+            "\\( ! -user root -o ! -perm -1000 \\) -print",
+        ],
         user="root",
     )
     if parent.returncode != 0:
@@ -941,7 +950,7 @@ def _reap_agent_processes(container_id: str) -> None:
         '  [ "$1" = 1 ] && return 1; '
         '  [ "$(stat -c %u /proc/$1 2>/dev/null)" = "$auid" ] || return 1; '
         "  st=$(cat /proc/$1/stat 2>/dev/null) || return 1; "
-        '  state=${st##*) }; state=${state%% *}; '
+        "  state=${st##*) }; state=${state%% *}; "
         '  [ "$state" = Z ] && return 1; '
         "  return 0; }; "
         "count_live() { c=0; for d in /proc/[0-9]*; do "
@@ -955,7 +964,9 @@ def _reap_agent_processes(container_id: str) -> None:
         "done; "
         'echo "agent_procs_remaining=$(count_live)"'
     )
-    result = _docker_exec(container_id, ["bash", "-c", script], user="root", workdir="/")
+    result = _docker_exec(
+        container_id, ["bash", "-c", script], user="root", workdir="/"
+    )
     if result.returncode != 0:
         raise RuntimeError(
             "could not reap agent processes before scoring: "
@@ -999,7 +1010,9 @@ def _close_workspace_for_scoring(container_id: str) -> None:
         f"find {shlex.quote(WORKSPACE_DIR)} -mindepth 1 -xdev "
         f"\\( -type d -o -type f \\) -perm /go+w -exec chmod go-w {{}} +"
     )
-    result = _docker_exec(container_id, ["bash", "-c", script], user="root", timeout=300)
+    result = _docker_exec(
+        container_id, ["bash", "-c", script], user="root", timeout=300
+    )
     if result.returncode != 0:
         raise RuntimeError(
             f"failed to close {WORKSPACE_DIR} for scoring: "
@@ -1087,9 +1100,7 @@ def _gate_failed(reason: str) -> tuple[bool, str]:
     return False, f"{reason} — run is INVALID, not a real score"
 
 
-def _apply_mode_gate(
-    container_id: str, task_data: dict, mode: str
-) -> tuple[bool, str]:
+def _apply_mode_gate(container_id: str, task_data: dict, mode: str) -> tuple[bool, str]:
     """Deny the agent local source in gated arms, and PROVE it in both directions.
 
     Returns (ok, error_message). A gate that silently failed to apply would
@@ -1836,7 +1847,9 @@ ANSWER_ARTIFACT_PATH = "/workspace/agent_output/answer.json"
 
 # Matches a /workspace/... artifact path a task's instruction.md tells the agent
 # to write to (e.g. /workspace/BLAST_RADIUS.md, /workspace/analysis/IMPACT_REPORT.md).
-_WORKSPACE_ARTIFACT_RE = re.compile(r"/workspace/[A-Za-z0-9_./-]+\.(?:json|md|txt|ya?ml)")
+_WORKSPACE_ARTIFACT_RE = re.compile(
+    r"/workspace/[A-Za-z0-9_./-]+\.(?:json|md|txt|ya?ml)"
+)
 
 
 def _derive_artifact_candidates(task_dir: Path) -> list[str]:
@@ -2036,6 +2049,7 @@ def _save_results(
 
     # Derived once so the two artifacts below cannot disagree.
     status = _effective_status(result)
+    completed_at = datetime.now(timezone.utc).isoformat()
 
     # --- results.json (backward compatible) ---
     results_path = output_dir / "results.json"
@@ -2046,6 +2060,8 @@ def _save_results(
         "status": status,
         "error": result.error,
         "failure_class": result.failure_class,
+        "started_at": result.started_at,
+        "completed_at": completed_at,
         "image_tag": result.image_tag,
         "scores": result.scores,
         "timing": result.timing,
@@ -2089,6 +2105,8 @@ def _save_results(
         "status": status,
         "error": result.error,
         "failure_class": result.failure_class,
+        "started_at": result.started_at,
+        "completed_at": completed_at,
         "timing": result.timing,
         "tool_usage": result.tool_usage,
     }
@@ -2515,9 +2533,7 @@ def _install_sgx(container_id: str, mode: str) -> bool:
 
     sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
     if not sg_token:
-        logger.warning(
-            "SOURCEGRAPH_ACCESS_TOKEN not set; sgx will not authenticate"
-        )
+        logger.warning("SOURCEGRAPH_ACCESS_TOKEN not set; sgx will not authenticate")
 
     if not SGX_CLI_SRC.exists():
         logger.error("sgx source not found at %s", SGX_CLI_SRC)
@@ -2658,9 +2674,7 @@ def _verify_sgx_endpoint(container_id: str, sg_token: str) -> bool:
     ]
     max_retries = 5
     for attempt in range(1, max_retries + 1):
-        result = subprocess.run(
-            probe_cmd, capture_output=True, text=True, timeout=30
-        )
+        result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             logger.info("sgx auth preflight OK (attempt %d)", attempt)
             return True
@@ -2677,8 +2691,7 @@ def _verify_sgx_endpoint(container_id: str, sg_token: str) -> bool:
             return False
         backoff = min(2**attempt, 10)
         logger.warning(
-            "sgx auth preflight attempt %d/%d failed (rc=%d, err=%s) — "
-            "retrying in %ds",
+            "sgx auth preflight attempt %d/%d failed (rc=%d, err=%s) — retrying in %ds",
             attempt,
             max_retries,
             result.returncode,

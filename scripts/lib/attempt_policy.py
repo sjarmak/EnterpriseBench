@@ -17,25 +17,16 @@ Two independent gates, both fail-closed:
   the verifier and were scored before the integrity or zero-MCP gate fired. A
   reader that consults only ``scores`` resurrects exactly those runs.
 * **Order** — among the valid, scored attempts, the *earliest* one represents
-  the cell. Ascending trace timestamp, then run directory; an attempt with no
-  timestamp at all sorts last, so a trace that could not be dated can never
-  displace one that could.
+  the cell. Current runs use the host-authored ``results.json.started_at``;
+  legacy runs lacking that field fall back to their trace timestamp and disclose
+  that weaker provenance. An undated attempt sorts last.
 
 Both ``analyze_scores`` (which reports the score) and ``cost_tracker`` (which
 bills the cell) import from here. They must collapse a cell to the same attempt
 or every score-vs-cost join pairs one run's score with another run's cost.
 
-**What this rule is not.** Prespecified is not tamper-proof. The order is keyed
-on the trace timestamp, and ``agent_trace.jsonl`` is copied verbatim out of
-``/home/agent/.claude/projects`` — the filesystem run_task's own comment calls
-agent-controlled. An agent with a shell can rewrite its session JSONL before
-teardown and stamp its attempt earliest, which is best-of-N selection re-entered
-through the ordering key. Closing that needs a host-authored attempt clock,
-which results.json does not carry today (``timing`` holds monotonic durations,
-not wall-clock): EnterpriseBench-rryas.23, which blocks the paid run and the
-publication. Until it lands, an arm-to-arm delta rests on the agents not having
-forged their traces, and the published policy block says so rather than
-implying an integrity guarantee this module cannot make.
+The trace fallback exists only for pre-clock historical results. New benchmark
+runs are not allowed to make agent-controlled trace content their ordering key.
 """
 
 from __future__ import annotations
@@ -55,15 +46,18 @@ RUN_STATUS_INVALID = "invalid"
 
 # Published in cost_report.json so a reader never has to infer the policy.
 SELECTION_RULE = (
-    "earliest valid attempt: ascending trace timestamp, then run_dir. The score "
+    "earliest valid attempt: ascending host-authored results.json.started_at "
+    "timestamp, "
+    "then run_dir. A result from the legacy corpus that lacks started_at falls "
+    "back to agent_trace.jsonl and is explicitly labelled legacy_trace. The score "
     "is not an input — a re-run cell is not resolved in favour of its best "
     "outcome. Attempts persisted status=invalid, and attempts the scoring layer "
-    "produced no score for, are never selected. Matches analyze_scores. "
-    "PROVENANCE LIMIT: the timestamp is read from agent_trace.jsonl, which is "
-    "copied from an agent-controlled filesystem and is not corroborated against "
-    "a host clock, so this order is outcome-independent but not tamper-proof "
-    "(EnterpriseBench-rryas.23)."
+    "produced no score for, are never selected. Matches analyze_scores."
 )
+
+ATTEMPT_TIMESTAMP_HOST = "results.started_at"
+ATTEMPT_TIMESTAMP_LEGACY_TRACE = "legacy_trace"
+ATTEMPT_TIMESTAMP_UNDATED = "undated"
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +92,14 @@ class AttemptPolicyError(ValueError):
     for the guard — meant no single ``except`` could wrap an entry point, which
     is the one place a friendly message for this failure belongs.
     """
+
+
+@dataclass(frozen=True)
+class AttemptTimestamp:
+    """An attempt's ordering time and the provenance of that time."""
+
+    value: str
+    source: str
 
 
 @dataclass(frozen=True)
@@ -299,6 +301,40 @@ def read_trace_timestamp(attempt_dir: Path) -> str:
         logger.warning("Cannot date attempt %s: %s", attempt_dir, exc)
         return ""
     return last
+
+
+def read_attempt_timestamp(attempt_dir: Path) -> AttemptTimestamp:
+    """Read the host attempt clock, falling back only for a legacy result.
+
+    Presence of ``started_at`` marks a current result. If that field is invalid,
+    the attempt is undated; an agent-controlled trace must not replace a corrupt
+    host clock. Only a result that genuinely predates the field may use the
+    disclosed legacy trace fallback.
+    """
+
+    results_path = attempt_dir / "results.json"
+    if results_path.is_file():
+        try:
+            payload = json.loads(results_path.read_text())
+        except (OSError, ValueError, RecursionError):
+            return AttemptTimestamp("", ATTEMPT_TIMESTAMP_UNDATED)
+
+        if not isinstance(payload, dict):
+            return AttemptTimestamp("", ATTEMPT_TIMESTAMP_UNDATED)
+
+        if "started_at" in payload:
+            started_at = payload.get("started_at")
+            if isinstance(started_at, str) and instant(started_at)[0] == 0:
+                return AttemptTimestamp(started_at, ATTEMPT_TIMESTAMP_HOST)
+            return AttemptTimestamp("", ATTEMPT_TIMESTAMP_UNDATED)
+
+    trace_timestamp = read_trace_timestamp(attempt_dir)
+    if trace_timestamp and instant(trace_timestamp)[0] == 0:
+        return AttemptTimestamp(
+            trace_timestamp,
+            ATTEMPT_TIMESTAMP_LEGACY_TRACE,
+        )
+    return AttemptTimestamp("", ATTEMPT_TIMESTAMP_UNDATED)
 
 
 def run_dir_label(attempt_dir: Path, root: Path) -> str:

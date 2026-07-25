@@ -17,6 +17,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from lib.attempt_policy import (  # noqa: E402
+    ATTEMPT_TIMESTAMP_HOST,
+    ATTEMPT_TIMESTAMP_LEGACY_TRACE,
+    ATTEMPT_TIMESTAMP_UNDATED,
     RUN_STATUS_INVALID,
     SELECTION_EARLIEST_VALID,
     SELECTION_RULE,
@@ -28,10 +31,13 @@ from lib.attempt_policy import (  # noqa: E402
     is_invalid_status,
     load_attempt_policy,
     newer_timestamp,
+    read_attempt_timestamp,
     read_trace_timestamp,
 )
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "orchestration"))
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent / "scripts" / "orchestration")
+)
 from run_task import RUN_STATUS_INVALID as ORCHESTRATOR_INVALID  # noqa: E402
 
 
@@ -88,6 +94,47 @@ class TestTimestampReading:
         )
 
 
+class TestAttemptTimestamp:
+    def _write_results(self, attempt_dir: Path, **fields: object) -> None:
+        (attempt_dir / "results.json").write_text(json.dumps(fields))
+
+    def _write_trace(self, attempt_dir: Path, timestamp: str) -> None:
+        (attempt_dir / "agent_trace.jsonl").write_text(
+            json.dumps({"timestamp": timestamp}) + "\n"
+        )
+
+    def test_host_started_at_wins_over_forged_trace(self, tmp_path: Path) -> None:
+        self._write_results(tmp_path, started_at="2026-06-01T00:00:00Z")
+        self._write_trace(tmp_path, "1970-01-01T00:00:00Z")
+
+        dated = read_attempt_timestamp(tmp_path)
+
+        assert dated.value == "2026-06-01T00:00:00Z"
+        assert dated.source == ATTEMPT_TIMESTAMP_HOST
+
+    def test_legacy_result_falls_back_to_trace_with_disclosure(
+        self, tmp_path: Path
+    ) -> None:
+        self._write_results(tmp_path, task_id="legacy")
+        self._write_trace(tmp_path, "2025-01-01T00:00:00Z")
+
+        dated = read_attempt_timestamp(tmp_path)
+
+        assert dated.value == "2025-01-01T00:00:00Z"
+        assert dated.source == ATTEMPT_TIMESTAMP_LEGACY_TRACE
+
+    def test_malformed_host_timestamp_never_falls_back_to_trace(
+        self, tmp_path: Path
+    ) -> None:
+        self._write_results(tmp_path, started_at="not-a-time")
+        self._write_trace(tmp_path, "1970-01-01T00:00:00Z")
+
+        dated = read_attempt_timestamp(tmp_path)
+
+        assert dated.value == ""
+        assert dated.source == ATTEMPT_TIMESTAMP_UNDATED
+
+
 class TestFormatDrift:
     """Timestamps are parsed, not compared as text. A study runs for months
     across CLI versions, and raw string order only matches chronological order
@@ -132,14 +179,11 @@ class TestFormatDrift:
         )
 
 
-class TestTheRuleDisclosesItsProvenanceLimit:
-    def test_the_published_rule_says_the_order_is_not_tamper_proof(self) -> None:
-        """The timestamp is read from a file copied out of an agent-controlled
-        filesystem (EnterpriseBench-rryas.23). A reader of the artifact must not
-        take "prespecified" for "tamper-proof"; the sentence is part of the
-        published contract, so deleting it fails here."""
-        assert "PROVENANCE LIMIT" in SELECTION_RULE
-        assert "rryas.23" in SELECTION_RULE
+class TestTheRuleDisclosesTimestampProvenance:
+    def test_the_published_rule_names_host_clock_and_legacy_fallback(self) -> None:
+        assert "host-authored results.json.started_at" in SELECTION_RULE
+        assert "agent_trace.jsonl" in SELECTION_RULE
+        assert "legacy_trace" in SELECTION_RULE
 
 
 class TestAttemptSortKey:
@@ -319,7 +363,9 @@ class TestLoadAttemptPolicy:
     def test_require_implemented_refuses_a_policy_built_in_code(self) -> None:
         """The loader cannot produce such a policy, but a caller can construct
         one; a report must never name a rule its rows were not chosen by."""
-        policy = AttemptPolicy(selection="highest_score", version=1, spec_path="/x.json")
+        policy = AttemptPolicy(
+            selection="highest_score", version=1, spec_path="/x.json"
+        )
         with pytest.raises(ValueError, match="highest_score"):
             policy.require_implemented("some_report")
 

@@ -491,9 +491,7 @@ class TestComputeCost:
             ("claude-opus-4-8", 30.0),  # $5/M + $25/M — not opus-4-6's $90
         ],
     )
-    def test_newly_priced_model_known_values(
-        self, model: str, expected: float
-    ) -> None:
+    def test_newly_priced_model_known_values(self, model: str, expected: float) -> None:
         usage = Usage(
             input_tokens=1_000_000,
             output_tokens=1_000_000,
@@ -666,6 +664,8 @@ def _make_cost(
     run_dir: str | None = None,
     normalized_score: float | None = 1.0,
     trace_timestamp: str = "",
+    attempt_timestamp: str | None = None,
+    attempt_timestamp_source: str | None = None,
 ) -> TaskCost:
     """Build a TaskCost record for aggregate_report tests.
 
@@ -706,6 +706,14 @@ def _make_cost(
         run_dir=run_dir if run_dir is not None else f"results/{task_id}_{mode}",
         normalized_score=normalized_score,
         trace_timestamp=trace_timestamp,
+        attempt_timestamp=(
+            trace_timestamp if attempt_timestamp is None else attempt_timestamp
+        ),
+        attempt_timestamp_source=(
+            ("legacy_trace" if trace_timestamp else "undated")
+            if attempt_timestamp_source is None
+            else attempt_timestamp_source
+        ),
     )
 
 
@@ -809,7 +817,9 @@ class TestUnpricedModelDisclosure:
                 ),
             ]
         )
-        assert report["operational_economics"]["unpriced_models"] == ["claude-unknown-99"]
+        assert report["operational_economics"]["unpriced_models"] == [
+            "claude-unknown-99"
+        ]
 
     def test_unpriced_models_deduped_and_sorted(self) -> None:
         report = aggregate_report(
@@ -825,7 +835,10 @@ class TestUnpricedModelDisclosure:
                 ),
             ]
         )
-        assert report["operational_economics"]["unpriced_models"] == ["claude-unknown-42", "claude-unknown-99"]
+        assert report["operational_economics"]["unpriced_models"] == [
+            "claude-unknown-42",
+            "claude-unknown-99",
+        ]
 
     def test_vendor_priced_model_is_not_flagged_unpriced(self) -> None:
         """A vendor-priced run is billed from costUSD — PRICING never touches it,
@@ -1139,7 +1152,9 @@ class TestReconciliationDisclosure:
         assert rec["trace_derived_cost_usd"] == 4.0
 
     def test_empty_costs_reconcile_without_dividing_by_zero(self) -> None:
-        rec = aggregate_report([])["operational_economics"]["cost_sources"]["reconciliation"]
+        rec = aggregate_report([])["operational_economics"]["cost_sources"][
+            "reconciliation"
+        ]
         assert rec["trace_over_vendor_ratio"] == 0.0
 
     def test_reconciliation_is_published_per_arm(self) -> None:
@@ -1161,7 +1176,10 @@ class TestReconciliationDisclosure:
             ]
         )
         assert (
-            report["operational_economics"]["cost_sources"]["reconciliation"]["trace_over_vendor_ratio"] == 0.5
+            report["operational_economics"]["cost_sources"]["reconciliation"][
+                "trace_over_vendor_ratio"
+            ]
+            == 0.5
         )
         by_mode = report["operational_economics"]["by_mode"]
         assert by_mode["baseline"]["reconciliation"]["trace_over_vendor_ratio"] == 0.25
@@ -1204,9 +1222,7 @@ class TestConsumerContract:
         report = aggregate_report([_make_cost(task_id="t1", mode="hybrid")])
         entry = report["comparison_economics"]["per_cell"][0]
         assert {"task_id", "mode", "cost_usd"} <= entry.keys()
-        assert (
-            "total_cost_usd" in report["comparison_economics"]["by_mode"]["hybrid"]
-        )
+        assert "total_cost_usd" in report["comparison_economics"]["by_mode"]["hybrid"]
 
 
 # Every block parse_model_usage must refuse to bill. The id names the reason, so a
@@ -1473,8 +1489,10 @@ def _write_attempt_at(
                         "score_contract_version": 2,
                         "checkpoints": [],
                     },
-                    "task_metadata": {"suite": "customer_escalation",
-                                      "difficulty": "medium"},
+                    "task_metadata": {
+                        "suite": "customer_escalation",
+                        "difficulty": "medium",
+                    },
                     "config": {"mode": mode},
                 }
                 | ({"status": status} if status is not None else {})
@@ -1553,6 +1571,27 @@ class TestAttemptIdentity:
         (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
         assert cost.trace_timestamp == "2026-03-31T22:14:36.052Z"
 
+    def test_selection_timestamp_comes_from_host_results_not_trace(
+        self, tmp_path: Path
+    ) -> None:
+        task_dir = _write_attempt(
+            tmp_path,
+            "mcp_batch",
+            "t1",
+            "hybrid",
+            timestamp="1970-01-01T00:00:00Z",
+        )
+        results_path = task_dir / "results.json"
+        results = json.loads(results_path.read_text())
+        results["started_at"] = "2026-07-25T12:00:00Z"
+        results_path.write_text(json.dumps(results))
+
+        (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
+
+        assert cost.attempt_timestamp == "2026-07-25T12:00:00Z"
+        assert cost.attempt_timestamp_source == "results.started_at"
+        assert cost.trace_timestamp == "1970-01-01T00:00:00Z"
+
     def test_timestamp_is_the_max_not_the_last_line(self, tmp_path: Path) -> None:
         """Real traces end on a line with no timestamp at all.
 
@@ -1594,7 +1633,9 @@ class TestAttemptIdentity:
         (cost,) = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
         assert cost.trace_timestamp == ""
 
-    def test_malformed_results_json_is_invalid_not_a_crash(self, tmp_path: Path) -> None:
+    def test_malformed_results_json_is_invalid_not_a_crash(
+        self, tmp_path: Path
+    ) -> None:
         """A run that crashed mid-write leaves truncated JSON, not valid JSON."""
         task_dir = _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid", score=None)
         (task_dir / "results.json").write_text('{"task_id": "t1", "scor')
@@ -1708,12 +1749,18 @@ class TestTwoViewsAreNotCollapsed:
         report = aggregate_report(
             [
                 _make_cost(
-                    task_id="t1", mode="hybrid", run_dir="a",
-                    cost_usd=1.0, normalized_score=0.2,
+                    task_id="t1",
+                    mode="hybrid",
+                    run_dir="a",
+                    cost_usd=1.0,
+                    normalized_score=0.2,
                 ),
                 _make_cost(
-                    task_id="t1", mode="hybrid", run_dir="b",
-                    cost_usd=2.0, normalized_score=0.9,
+                    task_id="t1",
+                    mode="hybrid",
+                    run_dir="b",
+                    cost_usd=2.0,
+                    normalized_score=0.9,
                 ),
             ]
         )
@@ -1725,8 +1772,13 @@ class TestTwoViewsAreNotCollapsed:
         """Guards the implementation that returns the attempt total under both names."""
         report = aggregate_report(
             [
-                _make_cost(task_id="t1", mode="hybrid", run_dir=f"r{i}",
-                           cost_usd=1.0, normalized_score=0.5)
+                _make_cost(
+                    task_id="t1",
+                    mode="hybrid",
+                    run_dir=f"r{i}",
+                    cost_usd=1.0,
+                    normalized_score=0.5,
+                )
                 for i in range(3)
             ]
         )
@@ -1822,7 +1874,7 @@ class TestComparisonIsMatchedAcrossArms:
         assert report["operational_economics"]["total_cost_usd"] == 11.0
 
     def test_three_arms_require_presence_in_all_three(self) -> None:
-        """"Matched" means every arm seen, not merely more than one.
+        """ "Matched" means every arm seen, not merely more than one.
 
         Production runs up to four arms. A task in two of three is not paired.
         """
@@ -1885,10 +1937,16 @@ class TestComparisonDenominatorIsTasks:
         return aggregate_report(
             [
                 _make_cost(
-                    task_id=task, mode=mode, suite=suite,
-                    run_dir=f"{task}-{mode}", cost_usd=1.0,
+                    task_id=task,
+                    mode=mode,
+                    suite=suite,
+                    run_dir=f"{task}-{mode}",
+                    cost_usd=1.0,
                 )
-                for task, suite in (("esc1", "customer_escalation"), ("dep1", "dep_traversal"))
+                for task, suite in (
+                    ("esc1", "customer_escalation"),
+                    ("dep1", "dep_traversal"),
+                )
                 for mode in ("baseline", "hybrid")
             ]
         )
@@ -1931,9 +1989,7 @@ class TestComparisonDenominatorIsTasks:
         comp = self._two_arms_two_suites()["comparison_economics"]
         assert len(comp["per_cell"]) == comp["tasks"] * len(comp["modes"])
         assert {(r["task_id"], r["mode"]) for r in comp["per_cell"]} == {
-            (task, mode)
-            for task in ("esc1", "dep1")
-            for mode in ("baseline", "hybrid")
+            (task, mode) for task in ("esc1", "dep1") for mode in ("baseline", "hybrid")
         }
 
 
@@ -1951,13 +2007,23 @@ class TestArmSetSurvivesAnUnscoredArm:
     def _one_arm_scored_nothing() -> dict[str, Any]:
         return aggregate_report(
             [
-                _make_cost(task_id=task, mode="baseline", run_dir=f"{task}-b",
-                           cost_usd=1.0, normalized_score=0.5)
+                _make_cost(
+                    task_id=task,
+                    mode="baseline",
+                    run_dir=f"{task}-b",
+                    cost_usd=1.0,
+                    normalized_score=0.5,
+                )
                 for task in ("t1", "t2")
             ]
             + [
-                _make_cost(task_id=task, mode="mcp_only", run_dir=f"{task}-m",
-                           cost_usd=1.0, normalized_score=None)
+                _make_cost(
+                    task_id=task,
+                    mode="mcp_only",
+                    run_dir=f"{task}-m",
+                    cost_usd=1.0,
+                    normalized_score=None,
+                )
                 for task in ("t1", "t2")
             ]
         )
@@ -1991,8 +2057,13 @@ class TestArmSetSurvivesAnUnscoredArm:
         comp = aggregate_report(
             [
                 _make_cost(task_id="t1", mode="hybrid", run_dir="a", cost_usd=1.0),
-                _make_cost(task_id="t1", mode="unknown", run_dir="b",
-                           cost_usd=5.0, normalized_score=None),
+                _make_cost(
+                    task_id="t1",
+                    mode="unknown",
+                    run_dir="b",
+                    cost_usd=5.0,
+                    normalized_score=None,
+                ),
             ]
         )["comparison_economics"]
         assert comp["modes"] == ["hybrid"]
@@ -2005,10 +2076,20 @@ class TestAttemptsAreFullyEnumerated:
     def test_duplicates_are_listed_with_the_selection_named(self) -> None:
         report = aggregate_report(
             [
-                _make_cost(task_id="t1", mode="hybrid", run_dir="a",
-                           cost_usd=1.0, normalized_score=0.2),
-                _make_cost(task_id="t1", mode="hybrid", run_dir="b",
-                           cost_usd=2.0, normalized_score=0.9),
+                _make_cost(
+                    task_id="t1",
+                    mode="hybrid",
+                    run_dir="a",
+                    cost_usd=1.0,
+                    normalized_score=0.2,
+                ),
+                _make_cost(
+                    task_id="t1",
+                    mode="hybrid",
+                    run_dir="b",
+                    cost_usd=2.0,
+                    normalized_score=0.9,
+                ),
             ]
         )
         (dup,) = report["duplicate_attempts"]
@@ -2027,10 +2108,12 @@ class TestAttemptsAreFullyEnumerated:
         so a passing implementation cannot be relying on either by accident."""
         report = aggregate_report(
             [
-                _make_cost(task_id="t1", run_dir="z-last",
-                           cost_usd=1.0, normalized_score=0.9),
-                _make_cost(task_id="t1", run_dir="a-first",
-                           cost_usd=2.0, normalized_score=0.1),
+                _make_cost(
+                    task_id="t1", run_dir="z-last", cost_usd=1.0, normalized_score=0.9
+                ),
+                _make_cost(
+                    task_id="t1", run_dir="a-first", cost_usd=2.0, normalized_score=0.1
+                ),
             ]
         )
         (dup,) = report["duplicate_attempts"]
@@ -2050,21 +2133,51 @@ class TestEveryDollarIsAccountedFor:
     def _mixed_corpus(self) -> list[TaskCost]:
         return [
             # matched, re-run: one attempt selected, one not
-            _make_cost(task_id="both", mode="hybrid", run_dir="h1",
-                       cost_usd=1.0, normalized_score=0.9),
-            _make_cost(task_id="both", mode="hybrid", run_dir="h2",
-                       cost_usd=2.0, normalized_score=0.1),
-            _make_cost(task_id="both", mode="baseline", run_dir="b1",
-                       cost_usd=4.0, normalized_score=0.5),
+            _make_cost(
+                task_id="both",
+                mode="hybrid",
+                run_dir="h1",
+                cost_usd=1.0,
+                normalized_score=0.9,
+            ),
+            _make_cost(
+                task_id="both",
+                mode="hybrid",
+                run_dir="h2",
+                cost_usd=2.0,
+                normalized_score=0.1,
+            ),
+            _make_cost(
+                task_id="both",
+                mode="baseline",
+                run_dir="b1",
+                cost_usd=4.0,
+                normalized_score=0.5,
+            ),
             # unmatched: present in one arm only
-            _make_cost(task_id="lonely", mode="hybrid", run_dir="l1",
-                       cost_usd=8.0, normalized_score=0.7),
+            _make_cost(
+                task_id="lonely",
+                mode="hybrid",
+                run_dir="l1",
+                cost_usd=8.0,
+                normalized_score=0.7,
+            ),
             # unscored
-            _make_cost(task_id="both", mode="baseline", run_dir="b2",
-                       cost_usd=16.0, normalized_score=None),
+            _make_cost(
+                task_id="both",
+                mode="baseline",
+                run_dir="b2",
+                cost_usd=16.0,
+                normalized_score=None,
+            ),
             # non-arm mode
-            _make_cost(task_id="weird", mode="unknown", run_dir="u1",
-                       cost_usd=32.0, normalized_score=0.4),
+            _make_cost(
+                task_id="weird",
+                mode="unknown",
+                run_dir="u1",
+                cost_usd=32.0,
+                normalized_score=0.4,
+            ),
         ]
 
     def test_per_attempt_is_the_complete_ledger(self) -> None:
@@ -2073,8 +2186,9 @@ class TestEveryDollarIsAccountedFor:
         rows = report["per_attempt"]
         assert len(rows) == len(costs)
         assert {r["run_dir"] for r in rows} == {c.run_dir for c in costs}
-        assert round(sum(r["cost_usd"] for r in rows), 6) == (
-            report["operational_economics"]["total_cost_usd"]
+        assert (
+            round(sum(r["cost_usd"] for r in rows), 6)
+            == (report["operational_economics"]["total_cost_usd"])
         )
 
     def test_the_gap_between_the_views_is_itemizable(self) -> None:
@@ -2083,9 +2197,7 @@ class TestEveryDollarIsAccountedFor:
         comp_total = report["comparison_economics"]["total_cost_usd"]
 
         selected = {r["run_dir"] for r in report["comparison_economics"]["per_cell"]}
-        unselected = [
-            r for r in report["per_attempt"] if r["run_dir"] not in selected
-        ]
+        unselected = [r for r in report["per_attempt"] if r["run_dir"] not in selected]
         assert round(comp_total + sum(r["cost_usd"] for r in unselected), 6) == op_total
 
     def test_comparison_rows_are_a_strict_subset_of_the_ledger(self) -> None:
@@ -2108,8 +2220,13 @@ class TestEveryDollarIsAccountedFor:
         report = aggregate_report(
             [
                 _make_cost(task_id="t1", mode="hybrid", run_dir="ok"),
-                _make_cost(task_id="t2", mode="hybrid", run_dir="bad",
-                           cost_usd=3.0, normalized_score=None),
+                _make_cost(
+                    task_id="t2",
+                    mode="hybrid",
+                    run_dir="bad",
+                    cost_usd=3.0,
+                    normalized_score=None,
+                ),
             ]
         )
         (bad,) = report["invalid_attempts"]
@@ -2121,8 +2238,13 @@ class TestEveryDollarIsAccountedFor:
         report = aggregate_report(
             [
                 _make_cost(task_id="t1", mode="hybrid", run_dir="ok", cost_usd=1.0),
-                _make_cost(task_id="t1", mode="hybrid", run_dir="bad",
-                           cost_usd=3.0, normalized_score=None),
+                _make_cost(
+                    task_id="t1",
+                    mode="hybrid",
+                    run_dir="bad",
+                    cost_usd=3.0,
+                    normalized_score=None,
+                ),
             ]
         )
         assert report["operational_economics"]["total_cost_usd"] == 4.0
@@ -2130,8 +2252,11 @@ class TestEveryDollarIsAccountedFor:
 
     def test_cell_with_only_invalid_attempts_has_no_comparison_row(self) -> None:
         report = aggregate_report(
-            [_make_cost(task_id="t1", mode="hybrid", run_dir="bad",
-                        normalized_score=None)]
+            [
+                _make_cost(
+                    task_id="t1", mode="hybrid", run_dir="bad", normalized_score=None
+                )
+            ]
         )
         assert report["comparison_economics"]["tasks"] == 0
         assert report["operational_economics"]["attempts"] == 1
@@ -2146,8 +2271,11 @@ class TestEveryDollarIsAccountedFor:
         unscored attempt with its run_dir and cost.
         """
         report = aggregate_report(
-            [_make_cost(task_id="t1", mode="hybrid", run_dir="bad",
-                        normalized_score=None)]
+            [
+                _make_cost(
+                    task_id="t1", mode="hybrid", run_dir="bad", normalized_score=None
+                )
+            ]
         )
         assert report["comparison_economics"]["excluded_unmatched_task_ids"] == []
         assert [r["run_dir"] for r in report["invalid_attempts"]] == ["bad"]
@@ -2162,13 +2290,18 @@ class TestEveryDollarIsAccountedFor:
         """
         report = aggregate_report(
             [
-                _make_cost(task_id="real", mode=m, run_dir=f"r-{m}",
-                           normalized_score=0.5)
+                _make_cost(
+                    task_id="real", mode=m, run_dir=f"r-{m}", normalized_score=0.5
+                )
                 for m in ("baseline", "mcp_only")
             ]
             + [
-                _make_cost(task_id="ghost", mode="baseline", run_dir="g-b",
-                           normalized_score=None),
+                _make_cost(
+                    task_id="ghost",
+                    mode="baseline",
+                    run_dir="g-b",
+                    normalized_score=None,
+                ),
             ]
         )
         comp = report["comparison_economics"]
@@ -2222,8 +2355,12 @@ class TestAgreesWithAnalyzeScores:
     def _corpus(self, tmp_path: Path, scores: list[tuple[str, float]]) -> list[Path]:
         for batch, score in scores:
             _write_attempt(
-                tmp_path, batch, "t1", "hybrid",
-                score=score, timestamp=f"2026-0{len(batch) % 9 + 1}-01T00:00:00Z",
+                tmp_path,
+                batch,
+                "t1",
+                "hybrid",
+                score=score,
+                timestamp=f"2026-0{len(batch) % 9 + 1}-01T00:00:00Z",
             )
         return [tmp_path / batch for batch, _ in scores]
 
@@ -2259,12 +2396,21 @@ class TestAgreesWithAnalyzeScores:
         """Both sides fail closed on persisted status, or the score comes from
         the re-run and the cost from the run it replaced."""
         _write_attempt(
-            tmp_path, "mcp_batch", "t1", "hybrid",
-            score=0.9, timestamp="2026-01-01T00:00:00Z", status="invalid",
+            tmp_path,
+            "mcp_batch",
+            "t1",
+            "hybrid",
+            score=0.9,
+            timestamp="2026-01-01T00:00:00Z",
+            status="invalid",
         )
         _write_attempt(
-            tmp_path, "mcp_batch_v2", "t1", "hybrid",
-            score=0.4, timestamp="2026-06-01T00:00:00Z",
+            tmp_path,
+            "mcp_batch_v2",
+            "t1",
+            "hybrid",
+            score=0.4,
+            timestamp="2026-06-01T00:00:00Z",
         )
         dirs = [tmp_path / "mcp_batch", tmp_path / "mcp_batch_v2"]
         bench = tmp_path / "benchmarks"
@@ -2286,12 +2432,20 @@ class TestEndToEndReruns:
         # Directory sort order (mcp_batch < mcp_batch_v2) OPPOSES the intended
         # selection, so a lexical-order or rglob-order fallback fails this test.
         _write_attempt(
-            tmp_path, "mcp_batch", "t1", "hybrid",
-            score=0.9, timestamp="2026-01-01T00:00:00Z",
+            tmp_path,
+            "mcp_batch",
+            "t1",
+            "hybrid",
+            score=0.9,
+            timestamp="2026-01-01T00:00:00Z",
         )
         _write_attempt(
-            tmp_path, "mcp_batch_v2", "t1", "hybrid",
-            score=0.1, timestamp="2026-06-01T00:00:00Z",
+            tmp_path,
+            "mcp_batch_v2",
+            "t1",
+            "hybrid",
+            score=0.1,
+            timestamp="2026-06-01T00:00:00Z",
         )
         costs = scan_results_dirs(
             [tmp_path / "mcp_batch", tmp_path / "mcp_batch_v2"],
@@ -2321,10 +2475,22 @@ class TestEndToEndReruns:
         earliest-valid agreed on it and the assertion discriminated nothing.)
         """
         dirs = [
-            _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid",
-                           score=0.2, timestamp="2026-01-01T00:00:00Z"),
-            _write_attempt(tmp_path, "mcp_batch_v2", "t1", "hybrid",
-                           score=0.8, timestamp="2026-01-01T00:00:00Z"),
+            _write_attempt(
+                tmp_path,
+                "mcp_batch",
+                "t1",
+                "hybrid",
+                score=0.2,
+                timestamp="2026-01-01T00:00:00Z",
+            ),
+            _write_attempt(
+                tmp_path,
+                "mcp_batch_v2",
+                "t1",
+                "hybrid",
+                score=0.8,
+                timestamp="2026-01-01T00:00:00Z",
+            ),
         ]
         for d in dirs:
             for f in d.iterdir():
@@ -2514,7 +2680,9 @@ class TestReportPublishesThePinnedPolicy:
         _write_attempt(tmp_path, "mcp_batch", "t1", "hybrid")
         costs = scan_results_dirs([tmp_path / "mcp_batch"], tmp_path / "benchmarks")
         policy = AttemptPolicy(
-            selection=SELECTION_EARLIEST_VALID, version=99, spec_path="/somewhere/spec.json"
+            selection=SELECTION_EARLIEST_VALID,
+            version=99,
+            spec_path="/somewhere/spec.json",
         )
         report = aggregate_report(costs, policy=policy)
         assert report["attempt_policy"]["version"] == 99
@@ -2533,9 +2701,7 @@ class TestInvalidAttemptReasonsAreDistinct:
     property of the attempt — the scorer_guard distinction applied to cost."""
 
     def _reasons(self, tmp_path: Path, dirs: list[str]) -> dict[str, str]:
-        costs = scan_results_dirs(
-            [tmp_path / d for d in dirs], tmp_path / "benchmarks"
-        )
+        costs = scan_results_dirs([tmp_path / d for d in dirs], tmp_path / "benchmarks")
         report = aggregate_report(costs)
         return {r["run_dir"]: r["reason"] for r in report["invalid_attempts"]}
 

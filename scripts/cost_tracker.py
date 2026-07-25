@@ -78,6 +78,7 @@ from lib.attempt_policy import (
     is_invalid_status,
     load_attempt_policy,
     newer_timestamp,
+    read_attempt_timestamp,
     run_dir_label,
 )
 from lib.shared import (  # noqa: E402
@@ -271,6 +272,8 @@ class TaskCost:
     run_dir: str
     normalized_score: float | None
     trace_timestamp: str = ""
+    attempt_timestamp: str = ""
+    attempt_timestamp_source: str = ""
     # Why there is no score, when there is none. See :class:`AttemptFacts`.
     invalid_reason: str | None = None
 
@@ -759,16 +762,24 @@ def _attempt_facts(
 
     results_path = task_dir / "results.json"
     if not results_path.exists():
-        return AttemptFacts(task_id=None, mode=None, normalized_score=None,
-                            invalid_reason="no_results_json")
+        return AttemptFacts(
+            task_id=None,
+            mode=None,
+            normalized_score=None,
+            invalid_reason="no_results_json",
+        )
 
     try:
         data = json.loads(results_path.read_text())
     except (ValueError, OSError):
         data = None
     if not isinstance(data, dict):
-        return AttemptFacts(task_id=None, mode=None, normalized_score=None,
-                            invalid_reason="unreadable_results_json")
+        return AttemptFacts(
+            task_id=None,
+            mode=None,
+            normalized_score=None,
+            invalid_reason="unreadable_results_json",
+        )
 
     task_id = data.get("task_id") or None
     mode = infer_mode(results_path, data) if task_id else None
@@ -777,15 +788,27 @@ def _attempt_facts(
     # run invalid for gates that fire after the verifier has already written a
     # score, so a scored results.json is not evidence the run is scoreable.
     if is_invalid_status(data.get("status")):
-        return AttemptFacts(task_id=task_id, mode=mode, normalized_score=None,
-                            invalid_reason="status_invalid")
+        return AttemptFacts(
+            task_id=task_id,
+            mode=mode,
+            normalized_score=None,
+            invalid_reason="status_invalid",
+        )
 
     result = parse_result(results_path, benchmarks_root, allow_legacy=allow_legacy)
     if result is None:
-        return AttemptFacts(task_id=task_id, mode=mode, normalized_score=None,
-                            invalid_reason="no_normalized_score")
-    return AttemptFacts(task_id=result.task_id, mode=result.mode,
-                        normalized_score=result.normalized_score, invalid_reason=None)
+        return AttemptFacts(
+            task_id=task_id,
+            mode=mode,
+            normalized_score=None,
+            invalid_reason="no_normalized_score",
+        )
+    return AttemptFacts(
+        task_id=result.task_id,
+        mode=result.mode,
+        normalized_score=result.normalized_score,
+        invalid_reason=None,
+    )
 
 
 def scan_results_dirs(
@@ -833,6 +856,7 @@ def scan_results_dirs(
             # is no vendor block, the reconciliation baseline when there is, and
             # the only source of num_requests either way.
             scan = scan_trace(trace_path)
+            attempt_timestamp = read_attempt_timestamp(task_dir)
             trace_usage = scan.usage
             trace_cost = compute_cost(trace_usage)
 
@@ -868,6 +892,8 @@ def scan_results_dirs(
                     normalized_score=facts.normalized_score,
                     invalid_reason=facts.invalid_reason,
                     trace_timestamp=scan.last_timestamp,
+                    attempt_timestamp=attempt_timestamp.value,
+                    attempt_timestamp_source=attempt_timestamp.source,
                 )
             )
 
@@ -954,7 +980,9 @@ TASKS_ACROSS_ARMS = Denominator(
 )
 
 
-def _bucket(items: list[TaskCost], unit: Denominator, reconcile: bool) -> dict[str, Any]:
+def _bucket(
+    items: list[TaskCost], unit: Denominator, reconcile: bool
+) -> dict[str, Any]:
     """Stats for one slice of a view, denominated per *unit*.
 
     One function rather than one per view keeps the four shared fields from
@@ -1031,7 +1059,10 @@ def select_attempt(attempts: list[TaskCost]) -> TaskCost | None:
     scored = [a for a in attempts if a.normalized_score is not None]
     if not scored:
         return None
-    return min(scored, key=lambda a: attempt_sort_key(a.trace_timestamp, a.run_dir))
+    return min(
+        scored,
+        key=lambda a: attempt_sort_key(a.attempt_timestamp, a.run_dir),
+    )
 
 
 @dataclass(frozen=True)
@@ -1087,8 +1118,11 @@ def comparison_attempts(costs: list[TaskCost]) -> ComparisonSet:
     in_scope = [tc for tc in costs if tc.mode in VALID_MODES]
     cells = _group_by(in_scope, attrgetter("cell"))
 
-    selected = {cell: pick for cell, items in cells.items()
-                if (pick := select_attempt(items)) is not None}
+    selected = {
+        cell: pick
+        for cell, items in cells.items()
+        if (pick := select_attempt(items)) is not None
+    }
 
     modes = {tc.mode for tc in in_scope}
     arms_per_task: dict[str, set[str]] = {}
@@ -1127,6 +1161,8 @@ def _duplicate_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
                         "cost_usd": tc.cost_usd,
                         "normalized_score": tc.normalized_score,
                         "trace_timestamp": tc.trace_timestamp,
+                        "attempt_timestamp": tc.attempt_timestamp,
+                        "attempt_timestamp_source": tc.attempt_timestamp_source,
                         "selected": tc is chosen,
                     }
                     for tc in sorted(items, key=lambda t: t.run_dir)
@@ -1193,6 +1229,8 @@ def _attempt_row(tc: TaskCost) -> dict[str, Any]:
         "run_dir": tc.run_dir,
         "normalized_score": tc.normalized_score,
         "trace_timestamp": tc.trace_timestamp,
+        "attempt_timestamp": tc.attempt_timestamp,
+        "attempt_timestamp_source": tc.attempt_timestamp_source,
         "model": tc.usage.model,
         "models": list(tc.models),
         "input_tokens": tc.usage.input_tokens,
@@ -1301,7 +1339,9 @@ def aggregate_report(
             # array fields are read back as lists by every consumer and test.
             "modes": list(comparison.modes),
             "excluded_unmatched_task_ids": list(comparison.excluded_task_ids),
-            **_buckets(comparison.rows, TASKS_IN_ARM, TASKS_ACROSS_ARMS, reconcile=False),
+            **_buckets(
+                comparison.rows, TASKS_IN_ARM, TASKS_ACROSS_ARMS, reconcile=False
+            ),
             "per_cell": [_attempt_row(tc) for tc in comparison.rows],
         },
         "duplicate_attempts": _duplicate_attempts(costs),
@@ -1385,7 +1425,9 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     benchmarks_root = args.benchmarks_root or (PROJECT_ROOT / "benchmarks")
-    output_path = args.output or (PROJECT_ROOT / "results" / "analysis" / "cost_report.json")
+    output_path = args.output or (
+        PROJECT_ROOT / "results" / "analysis" / "cost_report.json"
+    )
     result_dirs = args.results_dir or _discover_default_dirs(PROJECT_ROOT)
 
     if not result_dirs:

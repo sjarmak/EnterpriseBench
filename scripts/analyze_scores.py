@@ -10,12 +10,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import math
-import re
 import statistics
 import sys
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -32,6 +30,7 @@ from lib.attempt_policy import (  # noqa: E402
     attempt_sort_key,
     is_invalid_status,
     load_attempt_policy,
+    read_attempt_timestamp,
     read_trace_timestamp,
     run_dir_label,
 )
@@ -92,6 +91,8 @@ class TaskResult:
     # and its cost cannot be resolved to two different runs on a timestamp tie.
     trace_timestamp: str = ""
     run_dir: str = ""
+    attempt_timestamp: str = ""
+    attempt_timestamp_source: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +266,7 @@ def parse_result(
 
     agent_time = data.get("timing", {}).get("agent")
 
+    attempt_timestamp = read_attempt_timestamp(result_path.parent)
     return TaskResult(
         task_id=task_id,
         mode=mode,
@@ -283,6 +285,8 @@ def parse_result(
         source_path=str(result_path),
         trace_timestamp=read_trace_timestamp(result_path.parent),
         run_dir=run_dir_label(result_path.parent, PROJECT_ROOT),
+        attempt_timestamp=attempt_timestamp.value,
+        attempt_timestamp_source=attempt_timestamp.source,
     )
 
 
@@ -350,7 +354,10 @@ def load_all_results(
         by_cell[(tr.task_id, tr.mode)].append(tr)
 
     deduped = [
-        min(attempts, key=lambda t: attempt_sort_key(t.trace_timestamp, t.run_dir))
+        min(
+            attempts,
+            key=lambda t: attempt_sort_key(t.attempt_timestamp, t.run_dir),
+        )
         for attempts in by_cell.values()
     ]
     logger.info("Loaded %d results (%d after dedup)", len(all_results), len(deduped))
@@ -569,6 +576,7 @@ def per_task_summary(results: list[TaskResult]) -> list[dict[str, Any]]:
                 "task_type": r.task_type,
                 "scores": {},
                 "checkpoints": {},
+                "attempts": {},
                 "is_calibration": r.task_id.startswith("cal-"),
             }
         entry = tasks[r.task_id]
@@ -576,6 +584,11 @@ def per_task_summary(results: list[TaskResult]) -> list[dict[str, Any]]:
         entry["checkpoints"][r.mode] = {
             "passed": r.checkpoints_passed,
             "total": r.checkpoints_total,
+        }
+        entry["attempts"][r.mode] = {
+            "run_dir": r.run_dir,
+            "timestamp": r.attempt_timestamp,
+            "timestamp_source": r.attempt_timestamp_source,
         }
 
     return sorted(tasks.values(), key=lambda t: t["task_id"])
@@ -600,9 +613,7 @@ def analyze(
     if policy is not None:
         policy.require_implemented("analyze")
 
-    results = load_all_results(
-        results_dirs, benchmarks_root, allow_legacy=allow_legacy
-    )
+    results = load_all_results(results_dirs, benchmarks_root, allow_legacy=allow_legacy)
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -719,7 +730,7 @@ def main(argv: list[str] | None = None) -> None:
     logger.info("Wrote %s", args.output)
 
     # Print summary to stdout
-    print(f"\n=== EnterpriseBench Score Analysis ===")
+    print("\n=== EnterpriseBench Score Analysis ===")
     print(f"Total results: {report['total_results']}")
     print()
     for mode, stats in report["by_mode"].items():
