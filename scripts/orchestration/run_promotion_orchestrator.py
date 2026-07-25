@@ -55,6 +55,9 @@ logger = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_RAW_RUNS_ROOT = REPO_ROOT / "results" / "runs"
 DEFAULT_OFFICIAL_RUNS_ROOT = REPO_ROOT / "results" / "official_runs"
+sys.path.insert(0, str(REPO_ROOT / "lib"))
+
+from eb_study import CapsuleError, StudyCapsule, StudySpec  # noqa: E402
 
 # Maximum failure-class string length retained for forensics; trimming keeps
 # the forensics JSON readable when callers attach long stderr blobs.
@@ -93,7 +96,10 @@ class PromotionContext:
     run_id: str
     target_state: str
     repo_root: Path
+    study_report_path: Path
     raw_run_dir: Path
+    spec_path: Path
+    receipts_path: Path
     staging_dir: Path
     final_dir: Path
     registry_path: Path
@@ -158,22 +164,42 @@ class Step:
 
 
 def _step_validate_inputs(ctx: PromotionContext) -> StepOutcome:
-    """Confirm the raw run directory exists and contains expected artefacts.
+    """Validate the exact named Study Capsule that promotion will consume.
 
-    Read-only. Raises :class:`FileNotFoundError` if the run id is unknown,
-    :class:`ValueError` if the run directory is empty.
+    No directory discovery occurs here or downstream. The spec must name the
+    requested run, every receipt must validate against its hash, and every
+    declared task/arm/repetition slot must have a comparable valid trial.
     """
     if not ctx.raw_run_dir.is_dir():
         raise FileNotFoundError(f"Raw run directory not found: {ctx.raw_run_dir}")
 
-    children = list(ctx.raw_run_dir.iterdir())
-    if not children:
-        raise ValueError(f"Raw run directory is empty: {ctx.raw_run_dir}")
+    try:
+        spec = StudySpec.load(ctx.spec_path)
+    except CapsuleError as exc:
+        raise ValueError(f"invalid study spec: {exc}") from exc
+    if spec.study_id != ctx.run_id:
+        raise ValueError(
+            f"study_id {spec.study_id!r} does not match promoted run {ctx.run_id!r}"
+        )
+
+    try:
+        capsule = StudyCapsule.load(ctx.spec_path, ctx.receipts_path)
+        paired = capsule.paired_valid()
+    except CapsuleError as exc:
+        raise ValueError(f"study capsule is incomplete or invalid: {exc}") from exc
+    if paired.excluded:
+        raise ValueError(
+            f"study capsule is incomplete: {len(paired.excluded)} declared "
+            "task(s) are missing one or more arm/repetition slots"
+        )
 
     return StepOutcome(
         step_name="validate_inputs",
         status="reversible",
-        details=f"raw_run_dir={ctx.raw_run_dir} children={len(children)}",
+        details=(
+            f"study_id={spec.study_id} spec_hash={spec.spec_hash} "
+            f"receipts={len(capsule.receipts)}"
+        ),
     )
 
 
@@ -203,8 +229,7 @@ def _step_validate_tasks_preflight(ctx: PromotionContext) -> StepOutcome:
     rc, _stdout, stderr = _run_subprocess(cmd, ctx.repo_root)
     if rc != 0:
         raise RuntimeError(
-            f"validate_tasks_preflight.py exited {rc}: "
-            f"{stderr[-MAX_ERROR_DETAIL_LEN:]}"
+            f"validate_tasks_preflight.py exited {rc}: {stderr[-MAX_ERROR_DETAIL_LEN:]}"
         )
     return StepOutcome(
         step_name="validate_tasks_preflight",
@@ -255,15 +280,11 @@ def _step_validate_expected_solutions(ctx: PromotionContext) -> StepOutcome:
 
 
 def _step_stage_metrics(ctx: PromotionContext) -> StepOutcome:
-    """Aggregate scores into a staging score_analysis.json.
+    """Build the named capsule's report into staging.
 
-    The analyzer is scoped to the raw run directory validated by
-    :func:`_step_validate_inputs`. Without ``--results-dir`` it defaults to
-    scanning every ``results/runs``, ``mcp_batch*`` and ``smoke_*`` tree, so a
-    promoted artefact could carry scores from unrelated or quarantined runs.
-
-    The stage step always writes into the staging directory; rollback wipes
-    that directory (see :func:`_rollback_staging`).
+    ``study_report.py`` accepts only an explicit spec and receipt log. It has no
+    recursive discovery fallback, so historical, smoke, sibling, and
+    quarantined result directories are outside the input boundary.
     """
     if ctx.dry_run:
         return StepOutcome(
@@ -276,50 +297,75 @@ def _step_stage_metrics(ctx: PromotionContext) -> StepOutcome:
     output_path = ctx.staging_dir / "score_analysis.json"
     cmd = [
         sys.executable,
-        str(ctx.repo_root / "scripts" / "analyze_scores.py"),
-        "--results-dir",
-        str(ctx.raw_run_dir),
+        str(ctx.study_report_path),
+        "--spec",
+        str(ctx.spec_path),
+        "--receipts",
+        str(ctx.receipts_path),
         "--output",
         str(output_path),
     ]
     rc, _stdout, stderr = _run_subprocess(cmd, ctx.repo_root)
     if rc != 0:
         raise RuntimeError(
-            f"analyze_scores.py exited {rc}: {stderr[-MAX_ERROR_DETAIL_LEN:]}"
+            f"study_report.py exited {rc}: {stderr[-MAX_ERROR_DETAIL_LEN:]}"
         )
     if not output_path.is_file():
-        raise RuntimeError(f"analyze_scores.py did not write {output_path}")
+        raise RuntimeError(f"study_report.py did not write {output_path}")
 
-    total_results = _analysis_total_results(output_path)
-    if total_results == 0:
-        raise RuntimeError(
-            f"analyze_scores.py found no results under {ctx.raw_run_dir}; "
-            f"refusing to promote an empty analysis"
-        )
+    paired_tasks = _validate_study_analysis(output_path, ctx)
+    shutil.copy2(ctx.spec_path, ctx.staging_dir / "study_spec.json")
+    shutil.copy2(ctx.receipts_path, ctx.staging_dir / "receipts.jsonl")
 
     return StepOutcome(
         step_name="stage_metrics",
         status="reversible",
-        details=f"wrote {output_path.name} ({total_results} results)",
-        artifacts=(str(output_path),),
+        details=f"wrote {output_path.name} ({paired_tasks} paired tasks)",
+        artifacts=(
+            str(output_path),
+            str(ctx.staging_dir / "study_spec.json"),
+            str(ctx.staging_dir / "receipts.jsonl"),
+        ),
     )
 
 
-def _analysis_total_results(analysis_path: Path) -> int:
-    """Read ``total_results`` from a staged analysis, failing fast on garbage."""
+def _validate_study_analysis(analysis_path: Path, ctx: PromotionContext) -> int:
+    """Verify the staged report still names the exact validated capsule."""
     try:
         analysis = json.loads(analysis_path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"staged analysis is unreadable: {analysis_path}: {exc}")
     if not isinstance(analysis, dict):
         raise RuntimeError(f"staged analysis is unreadable: {analysis_path}")
-    total = analysis.get("total_results")
-    if not isinstance(total, int):
+    provenance = analysis.get("provenance")
+    completeness = analysis.get("completeness")
+    if not isinstance(provenance, dict) or not isinstance(completeness, dict):
         raise RuntimeError(
             f"staged analysis is unreadable: {analysis_path}: "
-            f"total_results={total!r}"
+            "missing provenance/completeness"
         )
-    return total
+    spec = StudySpec.load(ctx.spec_path)
+    if provenance.get("study_id") != spec.study_id:
+        raise RuntimeError(
+            f"staged analysis study_id={provenance.get('study_id')!r}, "
+            f"expected {spec.study_id!r}"
+        )
+    if provenance.get("spec_hash") != spec.spec_hash:
+        raise RuntimeError(
+            f"staged analysis spec_hash={provenance.get('spec_hash')!r}, "
+            f"expected {spec.spec_hash!r}"
+        )
+    paired = completeness.get("paired_tasks")
+    declared = completeness.get("declared_tasks")
+    excluded = completeness.get("excluded_tasks")
+    if not isinstance(paired, int) or paired < 1:
+        raise RuntimeError("staged analysis has no paired tasks")
+    if paired != declared or excluded:
+        raise RuntimeError(
+            "staged analysis is incomplete: paired_tasks must equal "
+            "declared_tasks and excluded_tasks must be empty"
+        )
+    return paired
 
 
 def _step_stage_charts(ctx: PromotionContext) -> StepOutcome:
@@ -336,6 +382,13 @@ def _step_stage_charts(ctx: PromotionContext) -> StepOutcome:
     analysis_path = ctx.staging_dir / "score_analysis.json"
     if not analysis_path.is_file():
         raise RuntimeError(f"stage_charts: prerequisite missing: {analysis_path}")
+    analysis = json.loads(analysis_path.read_text())
+    if isinstance(analysis, dict) and "provenance" in analysis:
+        return StepOutcome(
+            step_name="stage_charts",
+            status="skipped",
+            details="capsule report is promoted as auditable JSON; legacy charts skipped",
+        )
     cmd = [
         sys.executable,
         str(ctx.repo_root / "scripts" / "generate_charts.py"),
@@ -347,7 +400,7 @@ def _step_stage_charts(ctx: PromotionContext) -> StepOutcome:
     rc, _stdout, stderr = _run_subprocess(cmd, ctx.repo_root)
     if rc != 0:
         raise RuntimeError(
-            f"generate_charts.py exited {rc}: " f"{stderr[-MAX_ERROR_DETAIL_LEN:]}"
+            f"generate_charts.py exited {rc}: {stderr[-MAX_ERROR_DETAIL_LEN:]}"
         )
     chart_files = sorted(p.name for p in charts_dir.glob("*.png"))
     return StepOutcome(
@@ -370,8 +423,17 @@ def _step_stage_report(ctx: PromotionContext) -> StepOutcome:
     report_path = ctx.staging_dir / "report.md"
     analysis_path = ctx.staging_dir / "score_analysis.json"
     charts_dir = ctx.staging_dir / "charts"
-    if not analysis_path.is_file() or not charts_dir.is_dir():
-        raise RuntimeError("stage_report: prerequisites missing (analysis or charts)")
+    if not analysis_path.is_file():
+        raise RuntimeError("stage_report: prerequisite missing (analysis)")
+    analysis = json.loads(analysis_path.read_text())
+    if isinstance(analysis, dict) and "provenance" in analysis:
+        return StepOutcome(
+            step_name="stage_report",
+            status="skipped",
+            details="capsule report is promoted as auditable JSON; legacy markdown skipped",
+        )
+    if not charts_dir.is_dir():
+        raise RuntimeError("stage_report: prerequisite missing (charts)")
 
     cmd = [
         sys.executable,
@@ -386,7 +448,7 @@ def _step_stage_report(ctx: PromotionContext) -> StepOutcome:
     rc, _stdout, stderr = _run_subprocess(cmd, ctx.repo_root)
     if rc != 0:
         raise RuntimeError(
-            f"generate_report.py exited {rc}: " f"{stderr[-MAX_ERROR_DETAIL_LEN:]}"
+            f"generate_report.py exited {rc}: {stderr[-MAX_ERROR_DETAIL_LEN:]}"
         )
     if not report_path.is_file():
         raise RuntimeError(f"generate_report.py did not write {report_path}")
@@ -786,19 +848,30 @@ class RunPromotionOrchestrator:
 def build_context(
     run_id: str,
     target_state: str,
-    repo_root: Path = REPO_ROOT,
+    repo_root: Optional[Path] = None,
     dry_run: bool = False,
     resume_from: int = 0,
     raw_runs_root: Optional[Path] = None,
     official_runs_root: Optional[Path] = None,
+    spec_path: Optional[Path] = None,
+    receipts_path: Optional[Path] = None,
+    study_report_path: Optional[Path] = None,
 ) -> PromotionContext:
+    repo_root = repo_root or REPO_ROOT
     raw_root = raw_runs_root or (repo_root / "results" / "runs")
     official_root = official_runs_root or (repo_root / "results" / "official_runs")
+    raw_run_dir = raw_root / run_id
     return PromotionContext(
         run_id=run_id,
         target_state=target_state,
         repo_root=repo_root,
-        raw_run_dir=raw_root / run_id,
+        study_report_path=(
+            study_report_path
+            or (repo_root / "scripts" / "analysis" / "study_report.py")
+        ),
+        raw_run_dir=raw_run_dir,
+        spec_path=spec_path or (raw_run_dir / "study_spec.json"),
+        receipts_path=receipts_path or (raw_run_dir / "receipts.jsonl"),
         staging_dir=official_root / "_staging" / run_id,
         final_dir=official_root / run_id,
         registry_path=official_root / "_registry.json",
@@ -830,6 +903,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--run-id", required=True, help="Identifier of the run to promote"
+    )
+    parser.add_argument(
+        "--spec",
+        type=Path,
+        default=None,
+        help="Exact StudySpec JSON path (default: raw run/study_spec.json)",
+    )
+    parser.add_argument(
+        "--receipts",
+        type=Path,
+        default=None,
+        help="Exact receipt JSONL path (default: raw run/receipts.jsonl)",
     )
     parser.add_argument(
         "--target-state",
@@ -883,6 +968,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         target_state=args.target_state,
         dry_run=args.dry_run,
         resume_from=args.resume_from_step,
+        spec_path=args.spec,
+        receipts_path=args.receipts,
     )
     orchestrator = RunPromotionOrchestrator(ctx)
     report = orchestrator.run(validate_only=args.validate_only)

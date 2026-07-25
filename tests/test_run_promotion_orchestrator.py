@@ -21,6 +21,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "orchestration"))
 
 import run_promotion_orchestrator as rpo  # noqa: E402
+from eb_study import StudySpec  # noqa: E402
+from tests.test_study_capsule import make_receipt, make_spec  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -40,7 +42,17 @@ def workdir(tmp_path: Path) -> Path:
 def _make_run(workdir: Path, run_id: str) -> Path:
     raw_run_dir = workdir / "results" / "runs" / run_id
     raw_run_dir.mkdir(parents=True)
-    (raw_run_dir / "results.json").write_text(json.dumps({"task_id": "t1"}))
+    spec = make_spec(
+        study_id=run_id,
+        task_ids=["t1"],
+        repetitions=1,
+        max_attempts=1,
+    )
+    (raw_run_dir / "study_spec.json").write_text(json.dumps(spec.to_json()))
+    receipts = [make_receipt(spec, "t1", arm, 1) for arm in spec.arm_names]
+    (raw_run_dir / "receipts.jsonl").write_text(
+        "".join(json.dumps(receipt.to_json()) + "\n" for receipt in receipts)
+    )
     return raw_run_dir
 
 
@@ -288,6 +300,80 @@ class TestValidateInputs:
         outcome = rpo._step_validate_inputs(ctx)
         assert outcome.status == "reversible"
 
+    def test_study_id_must_match_the_promoted_run(self, workdir: Path) -> None:
+        run_dir = _make_run(workdir, "good")
+        spec = json.loads((run_dir / "study_spec.json").read_text())
+        spec["study_id"] = "different-study"
+        (run_dir / "study_spec.json").write_text(json.dumps(spec))
+
+        with pytest.raises(ValueError, match="study_id"):
+            rpo._step_validate_inputs(_make_ctx(workdir, "good"))
+
+    def test_missing_declared_arm_fails_closed(self, workdir: Path) -> None:
+        run_dir = _make_run(workdir, "good")
+        receipts_path = run_dir / "receipts.jsonl"
+        receipts = receipts_path.read_text().splitlines()
+        receipts_path.write_text("\n".join(receipts[:-1]) + "\n")
+
+        with pytest.raises(ValueError, match="incomplete"):
+            rpo._step_validate_inputs(_make_ctx(workdir, "good"))
+
+
+class TestReadOnlyValidators:
+    @pytest.mark.parametrize(
+        ("step", "script_name"),
+        [
+            (rpo._step_validate_tasks_preflight, "validate_tasks_preflight.py"),
+            (rpo._step_validate_crnt, "crnt_validator.py"),
+            (
+                rpo._step_validate_expected_solutions,
+                "validate_expected_solutions.py",
+            ),
+        ],
+    )
+    def test_success_is_recorded(
+        self,
+        workdir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        step,
+        script_name: str,
+    ) -> None:
+        calls: list[list[str]] = []
+
+        def succeed(cmd: list[str], _cwd: Path) -> tuple[int, str, str]:
+            calls.append(cmd)
+            return 0, "", ""
+
+        monkeypatch.setattr(rpo, "_run_subprocess", succeed)
+
+        outcome = step(_make_ctx(workdir, "r1"))
+
+        assert outcome.status == "reversible"
+        assert script_name in " ".join(calls[0])
+
+    @pytest.mark.parametrize(
+        "step",
+        [
+            rpo._step_validate_tasks_preflight,
+            rpo._step_validate_crnt,
+            rpo._step_validate_expected_solutions,
+        ],
+    )
+    def test_failure_aborts_with_stderr(
+        self,
+        workdir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        step,
+    ) -> None:
+        monkeypatch.setattr(
+            rpo,
+            "_run_subprocess",
+            lambda _cmd, _cwd: (2, "", "validator exploded"),
+        )
+
+        with pytest.raises(RuntimeError, match="validator exploded"):
+            step(_make_ctx(workdir, "r1"))
+
 
 # ---------------------------------------------------------------------------
 # Stage metrics
@@ -306,10 +392,23 @@ def _fake_analyzer(
         calls.append(cmd)
         output = Path(cmd[cmd.index("--output") + 1])
         output.parent.mkdir(parents=True, exist_ok=True)
+        spec = StudySpec.load(Path(cmd[cmd.index("--spec") + 1]))
         output.write_text(
             payload
             if payload is not None
-            else json.dumps({"total_results": total_results})
+            else json.dumps(
+                {
+                    "provenance": {
+                        "study_id": spec.study_id,
+                        "spec_hash": spec.spec_hash,
+                    },
+                    "completeness": {
+                        "paired_tasks": total_results,
+                        "declared_tasks": total_results,
+                        "excluded_tasks": {},
+                    },
+                }
+            )
         )
         return 0, "", ""
 
@@ -317,7 +416,34 @@ def _fake_analyzer(
 
 
 class TestStageMetrics:
-    def test_analyzer_is_scoped_to_the_validated_run(
+    def test_real_report_ignores_higher_scoring_unrelated_capsule(
+        self, workdir: Path
+    ) -> None:
+        _make_run(workdir, "r1")
+        unrelated = _make_run(workdir, "quarantined")
+        unrelated_receipts = unrelated / "receipts.jsonl"
+        payloads = [
+            json.loads(line) for line in unrelated_receipts.read_text().splitlines()
+        ]
+        for payload in payloads:
+            payload["score"] = 1.0
+        unrelated_receipts.write_text(
+            "".join(json.dumps(payload) + "\n" for payload in payloads)
+        )
+        ctx = replace(
+            _make_ctx(workdir, "r1"),
+            study_report_path=REPO_ROOT / "scripts" / "analysis" / "study_report.py",
+        )
+
+        outcome = rpo._step_stage_metrics(ctx)
+
+        report = json.loads((ctx.staging_dir / "score_analysis.json").read_text())
+        assert outcome.status == "reversible"
+        assert report["provenance"]["study_id"] == "r1"
+        assert report["completeness"]["paired_tasks"] == 1
+        assert report["reward"]["by_arm"]["baseline"]["mean"] == pytest.approx(0.5)
+
+    def test_analyzer_receives_only_the_named_capsule(
         self, workdir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         _make_run(workdir, "r1")
@@ -332,16 +458,20 @@ class TestStageMetrics:
         assert outcome.status == "reversible"
         assert len(calls) == 1
         cmd = calls[0]
-        assert cmd[cmd.index("--results-dir") + 1] == str(ctx.raw_run_dir)
+        assert cmd[1].endswith("scripts/analysis/study_report.py")
+        assert cmd[cmd.index("--spec") + 1] == str(ctx.spec_path)
+        assert cmd[cmd.index("--receipts") + 1] == str(ctx.receipts_path)
+        assert "--results-dir" not in cmd
+        assert "quarantined" not in cmd
 
-    def test_empty_analysis_is_rejected(
+    def test_incomplete_analysis_is_rejected(
         self, workdir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         _make_run(workdir, "r1")
         ctx = _make_ctx(workdir, "r1")
         _fake_analyzer(monkeypatch, [], total_results=0)
 
-        with pytest.raises(RuntimeError, match="no results"):
+        with pytest.raises(RuntimeError, match="no paired tasks"):
             rpo._step_stage_metrics(ctx)
 
     def test_unreadable_analysis_is_rejected(
@@ -353,6 +483,67 @@ class TestStageMetrics:
 
         with pytest.raises(RuntimeError, match="unreadable"):
             rpo._step_stage_metrics(ctx)
+
+    def test_report_for_a_different_study_is_rejected(
+        self, workdir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _make_run(workdir, "r1")
+        ctx = _make_ctx(workdir, "r1")
+        payload = json.dumps(
+            {
+                "provenance": {"study_id": "other", "spec_hash": "sha256:other"},
+                "completeness": {
+                    "paired_tasks": 1,
+                    "declared_tasks": 1,
+                    "excluded_tasks": {},
+                },
+            }
+        )
+        _fake_analyzer(monkeypatch, [], payload=payload)
+
+        with pytest.raises(RuntimeError, match="study_id"):
+            rpo._step_stage_metrics(ctx)
+
+
+class TestNamedStudyPromotionE2E:
+    def test_capsule_is_validated_reported_and_published_atomically(
+        self, workdir: Path
+    ) -> None:
+        _make_run(workdir, "r1")
+        ctx = replace(
+            _make_ctx(workdir, "r1"),
+            study_report_path=REPO_ROOT / "scripts" / "analysis" / "study_report.py",
+        )
+        pipeline = [
+            rpo.Step("validate_inputs", rpo._step_validate_inputs),
+            rpo.Step(
+                "stage_metrics",
+                rpo._step_stage_metrics,
+                rollback=rpo._rollback_staging,
+            ),
+            rpo.Step("stage_charts", rpo._step_stage_charts),
+            rpo.Step("stage_report", rpo._step_stage_report),
+            rpo.Step(
+                "atomic_publish",
+                rpo._step_atomic_publish,
+                rollback=rpo._rollback_atomic_publish,
+            ),
+            rpo.Step(
+                "update_registry",
+                rpo._step_update_registry,
+                rollback=rpo._rollback_registry,
+            ),
+        ]
+
+        report = rpo.RunPromotionOrchestrator(ctx, pipeline).run()
+
+        assert report.succeeded
+        assert ctx.final_dir.is_dir()
+        promoted = json.loads((ctx.final_dir / "score_analysis.json").read_text())
+        assert promoted["provenance"]["study_id"] == "r1"
+        assert (ctx.final_dir / "study_spec.json").is_file()
+        assert (ctx.final_dir / "receipts.jsonl").is_file()
+        assert not ctx.staging_dir.exists()
 
 
 # ---------------------------------------------------------------------------
