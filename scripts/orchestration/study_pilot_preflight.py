@@ -96,14 +96,12 @@ def _task_inputs(
     task_entries = manifest.get("tasks")
     if not isinstance(task_entries, list) or len(task_entries) != 1:
         raise ValueError("pilot manifest must declare exactly one task")
-    curated_entries = curated.get("tasks")
-    if not isinstance(curated_entries, list):
-        raise ValueError("curated manifest must contain a tasks list")
-    curated_ids = {
-        entry.get("task_id")
-        for entry in curated_entries
-        if isinstance(entry, dict) and isinstance(entry.get("task_id"), str)
-    }
+    curated_entries = curated.get("task_ids")
+    if not isinstance(curated_entries, list) or not all(
+        isinstance(task_id, str) and task_id for task_id in curated_entries
+    ):
+        raise ValueError("curated manifest must contain a valid task_ids list")
+    curated_ids = set(curated_entries)
 
     entry = task_entries[0]
     if not isinstance(entry, dict):

@@ -40,7 +40,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
 
     curated = tmp_path / "curated.json"
     curated.write_text(
-        json.dumps({"status": "candidate", "tasks": [{"task_id": task_id}]})
+        json.dumps({"status": "candidate", "task_ids": [task_id]})
     )
     manifest = tmp_path / "pilot_manifest.json"
     manifest.write_text(
@@ -129,7 +129,7 @@ def test_missing_integrity_gate_fails_closed(tmp_path: Path) -> None:
 
 def test_task_must_remain_in_curated_manifest(tmp_path: Path) -> None:
     spec, manifest, curated = _write_fixture(tmp_path)
-    curated.write_text(json.dumps({"status": "candidate", "tasks": []}))
+    curated.write_text(json.dumps({"status": "candidate", "task_ids": []}))
     pilot = json.loads(manifest.read_text())
     pilot["curated_manifest_hash"] = file_hash(curated)
     manifest.write_text(json.dumps(pilot))
