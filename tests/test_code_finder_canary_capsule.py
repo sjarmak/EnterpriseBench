@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 V1_DIR = ROOT / "configs" / "studies" / "rryas_code_finder_canary_v1"
 V2_DIR = ROOT / "configs" / "studies" / "rryas_code_finder_canary_v2"
 CLI_V1_DIR = ROOT / "configs" / "studies" / "rryas_cli_code_finder_canary_v1"
+CLI_V2_DIR = ROOT / "configs" / "studies" / "rryas_cli_code_finder_canary_v2"
 TASK = ROOT / "benchmarks" / "dependency_management" / "dep-traversal-003" / "task.toml"
 FINGERPRINT = (
     "sourcegraph-mcp-code-finder:exactly-once-per-repository:"
@@ -119,9 +120,20 @@ def test_canary_manifest_prespecifies_fail_closed_telemetry_and_cli_scope() -> N
     )
 
 
-def test_cli_canary_capsule_locks_only_the_interface_change() -> None:
+def test_invalid_cli_v1_capsule_remains_frozen_as_historical_evidence() -> None:
     manifest_path = CLI_V1_DIR / "canary_manifest.json"
     spec = StudySpec.load(CLI_V1_DIR / "study_spec.json")
+    manifest = json.loads(manifest_path.read_text())
+
+    assert spec.study_id == "rryas-cli-code-finder-canary-v1"
+    assert spec.task_manifest_hash == file_hash(manifest_path)
+    assert spec.harness == manifest["harness_hash"]
+    assert spec.revision == "6b78f413b59dbaa5bf9a92556ca100eb09c7c8a2"
+
+
+def test_cli_v2_canary_capsule_locks_only_the_parser_fix() -> None:
+    manifest_path = CLI_V2_DIR / "canary_manifest.json"
+    spec = StudySpec.load(CLI_V2_DIR / "study_spec.json")
     manifest = json.loads(manifest_path.read_text())
     provenance = capture_input_provenance(
         task_toml=TASK,
@@ -130,7 +142,7 @@ def test_cli_canary_capsule_locks_only_the_interface_change() -> None:
         repo_root=ROOT,
     )
 
-    assert spec.study_id == "rryas-cli-code-finder-canary-v1"
+    assert spec.study_id == "rryas-cli-code-finder-canary-v2"
     assert spec.task_manifest_hash == file_hash(manifest_path)
     assert spec.task_ids == ("dep-traversal-003",)
     assert [(arm.name, arm.capability_fingerprint) for arm in spec.arms] == [
@@ -147,10 +159,16 @@ def test_cli_canary_capsule_locks_only_the_interface_change() -> None:
     assert manifest["verifier_hashes"]["dep-traversal-003"] == (
         provenance.verifier_hash
     )
+    assert manifest["supersedes"] == {
+        "study_id": "rryas-cli-code-finder-canary-v1",
+        "failure_class": "invalid_arm_contamination",
+        "root_cause": "timeout wrapper hid valid sgx finder calls from parser",
+        "evidence_policy": "preserve the v1 receipt and artifacts unchanged",
+    }
 
 
-def test_cli_canary_manifest_is_matched_and_fails_closed() -> None:
-    manifest = json.loads((CLI_V1_DIR / "canary_manifest.json").read_text())
+def test_cli_v2_canary_manifest_is_matched_and_fails_closed() -> None:
+    manifest = json.loads((CLI_V2_DIR / "canary_manifest.json").read_text())
     treatment = manifest["treatment"]
 
     assert manifest["matched_against"] == {
