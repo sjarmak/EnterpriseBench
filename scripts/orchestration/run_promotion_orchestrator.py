@@ -366,7 +366,12 @@ def build_default_pipeline() -> list[Step]:
     (1-based).
     """
     return [
-        Step("validate_inputs", _step_validate_inputs, _rollback_noop),
+        Step(
+            "validate_inputs",
+            _step_validate_inputs,
+            _rollback_noop,
+            bind_capsule=True,
+        ),
         Step(
             "validate_tasks_preflight",
             _step_validate_tasks_preflight,
@@ -446,17 +451,6 @@ class RunPromotionOrchestrator:
         completed: list[tuple[Step, StepOutcome]] = []
 
         try:
-            if (
-                any(
-                    step.name in {"validate_inputs", "stage_metrics"}
-                    for step in self._pipeline
-                )
-                and self._ctx.capsule_snapshot is None
-            ):
-                self._ctx = replace(
-                    self._ctx,
-                    capsule_snapshot=_capsule_snapshot(self._ctx),
-                )
             for index, step in enumerate(self._pipeline, start=1):
                 if index < self._ctx.resume_from and not step.name.startswith(
                     "validate"
@@ -488,6 +482,11 @@ class RunPromotionOrchestrator:
                     len(self._pipeline),
                     step.name,
                 )
+                if step.bind_capsule and self._ctx.capsule_snapshot is None:
+                    self._ctx = replace(
+                        self._ctx,
+                        capsule_snapshot=_capsule_snapshot(self._ctx),
+                    )
                 start = time.monotonic()
                 outcome = step.execute(self._ctx)
                 duration = time.monotonic() - start

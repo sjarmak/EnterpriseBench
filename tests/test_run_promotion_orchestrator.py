@@ -25,10 +25,6 @@ import run_promotion_orchestrator as rpo  # noqa: E402
 from eb_study import StudySpec  # noqa: E402
 from tests.test_study_capsule import make_receipt, make_spec  # noqa: E402
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture
 def workdir(tmp_path: Path) -> Path:
@@ -109,6 +105,19 @@ class TestContext:
 
         assert result.returncode == 0, result.stderr
 
+    def test_step_name_alone_does_not_trigger_capsule_io(self, workdir: Path) -> None:
+        ctx = _make_ctx(workdir, "missing")
+        pipeline = [
+            rpo.Step(
+                "validate_inputs",
+                lambda _ctx: rpo.StepOutcome("validate_inputs", "reversible"),
+            )
+        ]
+
+        report = rpo.RunPromotionOrchestrator(ctx, pipeline).run()
+
+        assert report.succeeded
+
     def test_invalid_target_state_raises(self, workdir: Path) -> None:
         ctx = _make_ctx(workdir, "r1", target_state="bogus")
         with pytest.raises(ValueError, match="Invalid target_state"):
@@ -181,11 +190,6 @@ class TestValidateOnly:
         assert not ctx.forensics_dir.exists()
 
 
-# ---------------------------------------------------------------------------
-# Atomic publish
-# ---------------------------------------------------------------------------
-
-
 class TestAtomicPublish:
     def test_publish_renames_staging_to_final(self, workdir: Path) -> None:
         _make_run(workdir, "r1")
@@ -217,11 +221,6 @@ class TestAtomicPublish:
         assert outcome.status == "dry_run"
         assert ctx.staging_dir.exists()
         assert not ctx.final_dir.exists()
-
-
-# ---------------------------------------------------------------------------
-# Rollback / atomicity
-# ---------------------------------------------------------------------------
 
 
 class TestRollback:
@@ -551,7 +550,7 @@ class TestStageMetrics:
         report = rpo.RunPromotionOrchestrator(
             ctx,
             [
-                rpo.Step("validate_inputs", wrapped_validate),
+                rpo.Step("validate_inputs", wrapped_validate, bind_capsule=True),
                 rpo.Step("replace_capsule", replace_capsule),
                 rpo.Step("stage_metrics", rpo._step_stage_metrics),
             ],

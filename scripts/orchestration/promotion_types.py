@@ -84,3 +84,4 @@ class Step:
     execute: Callable[[PromotionContext], StepOutcome]
     rollback: Callable[[PromotionContext], None] = field(default=lambda _ctx: None)
     reversible: bool = True
+    bind_capsule: bool = False
