@@ -25,7 +25,7 @@
   "max_attempts": 2,
   "model": "claude-sonnet-5",
   "harness": "sha256:09cce46ae860d6f2a7d65d9bff3a34bc345167dd9032a58308dbf0d5d763a491",
-  "revision": "23a153b3f959264d38bd3bee75fbedb900bea785",
+  "revision": "50613687c80dcfe22d5104d82d04b04b7faf3c7e",
   "token_source": "sdk_model_usage",
   "score_contract": "weighted-mean-v2",
   "promotion_policy": "paired-valid-complete-arms"
