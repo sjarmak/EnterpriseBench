@@ -205,3 +205,20 @@ def test_spec_manifest_hash_drift_fails_closed(tmp_path: Path) -> None:
             revision_validator=lambda _revision, _paths: True,
             provenance_provider=lambda _task_toml: PROVENANCE,
         )
+
+
+def test_repository_pilot_capsule_is_frozen_and_self_consistent() -> None:
+    study_dir = PROJECT_ROOT / "configs" / "studies" / "rryas_pilot_v1"
+
+    evidence = validate_pilot(
+        spec_path=study_dir / "study_spec.json",
+        manifest_path=study_dir / "pilot_manifest.json",
+        curated_manifest_path=(
+            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
+        ),
+        repo_root=PROJECT_ROOT,
+        closed_gates=frozenset(REQUIRED_GATES),
+    )
+
+    assert evidence.study_id == "rryas-pilot-v1"
+    assert len(evidence.slots) == 3

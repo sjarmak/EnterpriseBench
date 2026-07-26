@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "status": "locked-pilot",
+  "study_id": "rryas-pilot-v1",
+  "curated_manifest": "results/rryas_dataset/candidate_manifest.json",
+  "curated_manifest_hash": "sha256:007d332e94d729208cf4a0d3307bc800d12b57c1c09da5703f644812d0d9450d",
+  "selection": {
+    "rule": "minimum declared duration among eligible dual-repo tasks, deterministic task_id tiebreak",
+    "purpose": "integrity pilot only; never publish as a headline",
+    "declared_duration_minutes_per_arm": 25
+  },
+  "tasks": [
+    {
+      "task_id": "dep-traversal-003",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-003/task.toml",
+      "task_hash": "sha256:1661f97c36ea0556a79088b8979bb8e9edabbe985d0204f3522fb221373d4b11"
+    }
+  ],
+  "integrity_gates": [
+    "EnterpriseBench-rryas.11",
+    "EnterpriseBench-rryas.12",
+    "EnterpriseBench-rryas.13",
+    "EnterpriseBench-rryas.14",
+    "EnterpriseBench-xrji0"
+  ],
+  "harness_hash": "sha256:1063a1b85f6b02e23301c79046c055e1a8d696c11430f575cb3043c24c160342",
+  "verifier_hashes": {
+    "dep-traversal-003": "sha256:b2cb93eb960c5131c63703525b1113ec67cbd74d49fa391cf2bf79e51eaa3277"
+  }
+}
