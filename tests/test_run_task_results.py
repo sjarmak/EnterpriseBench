@@ -529,6 +529,41 @@ class TestStudyReceiptIntegration:
                 verifier_inputs=[task_toml],
                 repo_root=tmp_path,
             )
+
+    def test_harness_manifest_hashes_source_but_ignores_bytecode(
+        self, tmp_path: Path
+    ) -> None:
+        task_toml = tmp_path / "task.toml"
+        task_toml.write_text('[task]\nid = "t1"\n')
+        harness = tmp_path / "harness"
+        harness.mkdir()
+        source = harness / "runner.py"
+        source.write_text("VALUE = 1\n")
+        before = capture_input_provenance(
+            task_toml=task_toml,
+            harness_inputs=[harness],
+            verifier_inputs=[task_toml],
+            repo_root=tmp_path,
+        )
+        cache = harness / "__pycache__"
+        cache.mkdir()
+        (cache / "runner.cpython-312.pyc").write_bytes(b"generated")
+        with_cache = capture_input_provenance(
+            task_toml=task_toml,
+            harness_inputs=[harness],
+            verifier_inputs=[task_toml],
+            repo_root=tmp_path,
+        )
+        source.write_text("VALUE = 2\n")
+        changed = capture_input_provenance(
+            task_toml=task_toml,
+            harness_inputs=[harness],
+            verifier_inputs=[task_toml],
+            repo_root=tmp_path,
+        )
+
+        assert with_cache.harness_hash == before.harness_hash
+        assert changed.harness_hash != before.harness_hash
         with pytest.raises(FileNotFoundError, match="does not exist"):
             capture_input_provenance(
                 task_toml=task_toml,
@@ -586,7 +621,7 @@ class TestStudyReceiptIntegration:
             study_id="study-e2e",
             task_ids=[task_id],
             repetitions=1,
-            max_attempts=1,
+            max_attempts=2,
         )
         spec_path = tmp_path / "study_spec.json"
         spec_path.write_text(json.dumps(spec.to_json()))
@@ -662,7 +697,7 @@ class TestStudyReceiptIntegration:
                 output_dir=output_dir,
                 mode="baseline",
                 rep=1,
-                attempt=1,
+                attempt=2,
                 study_spec=spec_path,
                 study_receipts=receipts_path,
             )
@@ -670,6 +705,8 @@ class TestStudyReceiptIntegration:
 
         receipt = read_receipts(receipts_path)[0]
         assert result.success
+        assert Path(result.output_dir).name == "attempt2"
+        assert receipt.trial.attempt == 2
         assert receipt.status == "valid"
         assert receipt.score == pytest.approx(1.0)
         assert receipt.image_digest == "sha256:" + "a" * 64

@@ -529,22 +529,17 @@ def _capture_input_provenance(config: TaskRunConfig, task_dir: Path) -> InputPro
     """Hash the exact task, harness, and verifier inputs used by this run."""
 
     harness_inputs = [
-        Path(__file__),
-        REPO_ROOT / "scripts" / "orchestration" / "mode_gate.py",
-        DOCKERFILE_GENERATOR,
-        TEST_RUNNER_SH,
+        REPO_ROOT / "scripts" / "orchestration",
+        REPO_ROOT / "scripts" / "sandbox",
+        REPO_ROOT / "scripts" / "lib",
+        REPO_ROOT / "scripts" / "infra" / "create_sg_mirrors.py",
+        REPO_ROOT / "scripts" / "cost_tracker.py",
+        REPO_ROOT / "scripts" / "analyze_scores.py",
+        REPO_ROOT / "lib" / "eb_verify",
+        REPO_ROOT / "lib" / "eb_study",
+        REPO_ROOT / "lib" / "pyproject.toml",
+        REPO_ROOT / "agents" / "harnesses" / "claude",
     ]
-    if config.mode in ("mcp_only", "hybrid"):
-        harness_inputs.append(
-            REPO_ROOT / "agents" / "harnesses" / "claude" / "mcp" / "sourcegraph.py"
-        )
-    if config.mode == "cli":
-        harness_inputs.extend(
-            [
-                REPO_ROOT / "agents" / "harnesses" / "claude" / "cli" / "sgx.py",
-                SGX_CLI_SRC,
-            ]
-        )
 
     verifier_inputs = [TEST_RUNNER_SH, EB_VERIFY_LIB]
     for path in (task_dir / "checks", task_dir / "ground_truth.json"):
@@ -3163,6 +3158,8 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 output_dir = base / f"rep{config.rep}"
             else:
                 output_dir = base
+        if config.study_spec is not None:
+            output_dir = output_dir / f"attempt{config.attempt}"
         output_dir.mkdir(parents=True, exist_ok=True)
         result.output_dir = str(output_dir)
 

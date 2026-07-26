@@ -181,7 +181,13 @@ def _manifest_hash(paths: Iterable[Path], repo_root: Path) -> str:
     entries: dict[str, str] = {}
     for source in sorted({Path(path) for path in paths}):
         candidates = (
-            sorted(path for path in source.rglob("*") if path.is_file())
+            sorted(
+                path
+                for path in source.rglob("*")
+                if path.is_file()
+                and "__pycache__" not in path.parts
+                and path.suffix != ".pyc"
+            )
             if source.is_dir()
             else [source]
         )
