@@ -222,7 +222,7 @@ class TestMcpEnvVars:
         ), patch(
             "run_task._docker_start"
         ), patch(
-            "run_task._setup_container"
+            "run_task._setup_container", return_value=None
         ), patch(
             "run_task._run_health_check", return_value=True
         ), patch(
@@ -240,7 +240,8 @@ class TestMcpEnvVars:
         ), patch(
             "run_task._save_results"
         ), patch(
-            "run_task._extract_tool_usage", return_value={}
+            "run_task._extract_tool_usage",
+            return_value={"cache_isolation": {"valid": True}},
         ), patch(
             "run_task._copy_agent_trace", return_value=False
         ), patch(
@@ -342,7 +343,9 @@ class TestMcpPreflightHardFail:
             "run_task._generate_dockerfile", return_value=Path("/fake/Dockerfile")
         ), patch("run_task._docker_build"), patch(
             "run_task._docker_create_container", return_value="fake-container-id"
-        ), patch("run_task._docker_start"), patch("run_task._setup_container"), patch(
+        ), patch("run_task._docker_start"), patch(
+            "run_task._setup_container", return_value=None
+        ), patch(
             "run_task._run_health_check", return_value=True
         ), patch(
             # Simulate a 401 / unreachable endpoint: HTTP pre-flight fails.
@@ -361,7 +364,8 @@ class TestMcpPreflightHardFail:
         ), patch(
             "run_task._run_scoring", return_value={"task_score": 0.0}
         ), patch("run_task._save_results"), patch(
-            "run_task._extract_tool_usage", return_value={}
+            "run_task._extract_tool_usage",
+            return_value={"cache_isolation": {"valid": True}},
         ), patch(
             "run_task._copy_agent_trace", return_value=False
         ), patch(
@@ -414,7 +418,9 @@ class TestMcpPreflightHardFail:
             "run_task._generate_dockerfile", return_value=Path("/fake/Dockerfile")
         ), patch("run_task._docker_build"), patch(
             "run_task._docker_create_container", return_value="fake-container-id"
-        ), patch("run_task._docker_start"), patch("run_task._setup_container"), patch(
+        ), patch("run_task._docker_start"), patch(
+            "run_task._setup_container", return_value=None
+        ), patch(
             "run_task._run_health_check", return_value=True
         ), patch(
             "run_task._verify_mcp_endpoint", side_effect=verify_mock
@@ -490,7 +496,9 @@ class TestPreAgentReadabilityGate:
             "run_task._generate_dockerfile", return_value=Path("/fake/Dockerfile")
         ), patch("run_task._docker_build"), patch(
             "run_task._docker_create_container", return_value="fake-container-id"
-        ), patch("run_task._docker_start"), patch("run_task._setup_container"), patch(
+        ), patch("run_task._docker_start"), patch(
+            "run_task._setup_container", return_value=None
+        ), patch(
             "run_task._run_health_check", return_value=True
         ), patch(
             "run_task._configure_mcp"
@@ -505,7 +513,8 @@ class TestPreAgentReadabilityGate:
         ), patch(
             "run_task._run_scoring", return_value={"task_score": 0.0}
         ), patch("run_task._save_results"), patch(
-            "run_task._extract_tool_usage", return_value={}
+            "run_task._extract_tool_usage",
+            return_value={"cache_isolation": {"valid": True}},
         ), patch(
             "run_task._copy_agent_trace", return_value=False
         ), patch(

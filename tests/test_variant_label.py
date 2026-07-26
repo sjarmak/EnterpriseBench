@@ -142,6 +142,15 @@ def _write_results_json(
     payload = {
         "task_id": task_id,
         "success": True,
+        "tool_usage": {
+            "cache_isolation": {
+                "configured": True,
+                "valid": True,
+                "launcher_scope": "a" * 32,
+                "mechanism": "synthetic-test-isolation",
+                "cross_run_cache_read_tokens": 0,
+            }
+        },
         "scores": {
             "task_score": task_score,
             "score_contract_version": 2,

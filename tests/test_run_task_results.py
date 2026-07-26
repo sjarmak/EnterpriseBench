@@ -673,7 +673,18 @@ class TestStudyReceiptIntegration:
                     "",
                 ),
             ),
-            ("_extract_tool_usage", {}),
+            (
+                "_extract_tool_usage",
+                {
+                    "cache_isolation": {
+                        "configured": True,
+                        "valid": True,
+                        "launcher_scope": "a" * 32,
+                        "mechanism": "synthetic-test-isolation",
+                        "cross_run_cache_read_tokens": 0,
+                    }
+                },
+            ),
             ("_record_agent_trace", None),
             ("_docker_stop_rm", None),
         ):

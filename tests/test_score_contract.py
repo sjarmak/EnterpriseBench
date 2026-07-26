@@ -329,6 +329,15 @@ def _write_result(
                 "task_id": task_id,
                 "success": True,
                 "phase": "complete",
+                "tool_usage": {
+                    "cache_isolation": {
+                        "configured": True,
+                        "valid": True,
+                        "launcher_scope": "a" * 32,
+                        "mechanism": "synthetic-test-isolation",
+                        "cross_run_cache_read_tokens": 0,
+                    }
+                },
                 "scores": scores,
                 "task_metadata": {
                     "suite": "platform_engineering",
