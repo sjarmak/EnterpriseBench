@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 
@@ -15,7 +14,15 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-VALID_MODES = ("baseline", "mcp_only", "hybrid", "cli")
+VALID_MODES = (
+    "baseline",
+    "mcp_only",
+    "mcp_code_finder",
+    "mcp_assisted",
+    "hybrid",
+    "cli",
+    "cli_code_finder",
+)
 # Derived, not hand-listed: three copies of this list existed and every one of
 # them had silently missed "cli" since that arm was wired, so a <task>_cli
 # directory resolved to baseline. Longest-first so a suffix that is a suffix of

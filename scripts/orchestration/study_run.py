@@ -49,6 +49,7 @@ def harness_input_paths(repo_root: Path) -> tuple[Path, ...]:
         repo_root / "lib" / "eb_study",
         repo_root / "lib" / "pyproject.toml",
         repo_root / "agents" / "harnesses" / "claude",
+        repo_root / "agents" / "harnesses" / "mcp_telemetry_proxy.py",
     )
 
 

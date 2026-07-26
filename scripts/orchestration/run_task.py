@@ -72,7 +72,8 @@ _load_env_local(_env_local, os.environ)
 
 # Reuse the TOML parser from create_sg_mirrors
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "infra"))
-from create_sg_mirrors import parse_toml
+from create_sg_mirrors import parse_toml  # noqa: E402
+from mirror_naming import derive_mirror_name  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 from validation import validate_repo_entry
@@ -101,6 +102,7 @@ from agents.harnesses.claude.mcp.sourcegraph import (
 from agents.harnesses.claude.cli.sgx import (
     build_system_prompt as _build_cli_preamble,
 )
+from agents.harnesses.mcp_telemetry_proxy import build_retrieval_telemetry  # noqa: E402
 
 # Scorer trust boundary — single definition of "infra failure vs real score",
 # shared by every scoring entry point in this file and by code_patch.validate.
@@ -138,7 +140,22 @@ HEALTH_CHECK_SH = REPO_ROOT / "scripts" / "sandbox" / "health_check.sh"
 EB_VERIFY_LIB = REPO_ROOT / "lib" / "eb_verify"
 
 
-VALID_MODES = ("baseline", "mcp_only", "hybrid", "cli")
+MCP_FINDER_MODES = frozenset({"mcp_code_finder", "mcp_assisted"})
+CLI_FINDER_MODES = frozenset({"cli_code_finder"})
+FINDER_MODES = frozenset({*MCP_FINDER_MODES, *CLI_FINDER_MODES})
+MCP_MODES = frozenset({"mcp_only", "hybrid", *MCP_FINDER_MODES})
+CLI_MODES = frozenset({"cli", *CLI_FINDER_MODES})
+VALID_MODES = (
+    "baseline",
+    "mcp_only",
+    "mcp_code_finder",
+    "mcp_assisted",
+    "hybrid",
+    "cli",
+    "cli_code_finder",
+)
+CLI_RETRIEVAL_TREATMENT = "direct_sgx_plus_local_source"
+CLI_FINDER_TREATMENT = "code_finder_via_sgx_no_mcp"
 
 _DEFAULT_MCP_URL = "https://demo.sourcegraph.com/.api/mcp/all"
 _raw_mcp_url = os.environ.get("SOURCEGRAPH_MCP_URL", _DEFAULT_MCP_URL)
@@ -156,6 +173,11 @@ SOURCEGRAPH_MCP_ENDPOINT = (
 SGX_ENDPOINT = f"{SOURCEGRAPH_MCP_ENDPOINT.split('/.api/mcp/')[0]}/.api/mcp/v1"
 # The stdlib-only CLI uploaded into the container for the cli arm.
 SGX_CLI_SRC = REPO_ROOT / "agents" / "harnesses" / "claude" / "mcp" / "sg_cli.py"
+MCP_PROXY_SRC = REPO_ROOT / "agents" / "harnesses" / "mcp_telemetry_proxy.py"
+MCP_PROXY_SCRIPT_PATH = "/usr/local/lib/enterprisebench/mcp_telemetry_proxy.py"
+MCP_PROXY_TRACE_PATH = "/var/tmp/enterprisebench-mcp-trace.jsonl"
+MCP_PROXY_ENDPOINT = "http://127.0.0.1:8765/mcp"
+MCP_PROXY_HEALTH_ENDPOINT = "http://127.0.0.1:8765/healthz"
 
 
 @dataclass(frozen=True)
@@ -433,7 +455,9 @@ _MCP_TOOL_PREFIX = "mcp__sourcegraph__"
 # calibrated calls use these forms; broadening the anchor to catch them reintroduces
 # false positives (`echo "sgx"`). Revisit on the first real EB cli calibration
 # (EnterpriseBench follow-up) rather than loosening against an unmeasured form.
-_SGX_COMMAND_RE = re.compile(r"(?:^|[;&|\n(`])\s*(?:/\S{0,256}/)?sgx(?=\s|$)")
+_SGX_SUBCOMMAND_RE = re.compile(
+    r"(?:^|[;&|\n(`])\s*(?:/\S{0,256}/)?sgx\s+([a-z][a-z0-9_-]*)"
+)
 
 
 def _parse_task(toml_path: Path) -> dict:
@@ -608,6 +632,35 @@ def _docker_cp(src: str, dest: str) -> None:
         raise RuntimeError(f"docker cp failed: {result.stderr.strip()}")
 
 
+def _docker_exec_detached(
+    container_id: str,
+    cmd: list[str],
+    *,
+    env: dict[str, str],
+) -> subprocess.CompletedProcess:
+    """Start a root-owned background process with explicit non-secret env."""
+    env_args = [
+        argument for key, value in env.items() for argument in ("-e", f"{key}={value}")
+    ]
+    return subprocess.run(
+        [
+            "docker",
+            "exec",
+            "-d",
+            "-u",
+            "root",
+            *env_args,
+            "-w",
+            "/",
+            container_id,
+            *cmd,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
 def _docker_stop_rm(container_id: str) -> None:
     """Stop and remove a container."""
     subprocess.run(
@@ -632,7 +685,7 @@ def _build_instruction_text(
 ) -> str | None:
     """Build the full instruction text with optional MCP preamble and output appendix.
 
-    For mcp_only/hybrid modes, prepends the Sourcegraph MCP preamble (from
+    For MCP modes, prepends the Sourcegraph MCP preamble (from
     agents.harnesses.claude.mcp.sourcegraph) and any task-specific
     instruction_mcp.md. For baseline mode, uses instruction.md as-is.
 
@@ -649,13 +702,13 @@ def _build_instruction_text(
 
     instruction_text = instruction.read_text()
 
-    # Build the retrieval preamble for non-baseline modes. mcp_only/hybrid get
+    # Build the retrieval preamble for non-baseline modes. MCP modes get
     # the Sourcegraph MCP preamble; the cli arm gets the sgx CLI preamble (same
     # remote reach, exposed as a shell command, no MCP tools). baseline gets
     # none.
     preamble_parts: list[str] = []
-    if mode in ("mcp_only", "hybrid", "cli"):
-        if mode == "cli":
+    if mode in (*MCP_MODES, *CLI_MODES):
+        if mode in CLI_MODES:
             retrieval_preamble = _build_cli_preamble(mode=mode, repos=repos)
         else:
             retrieval_preamble = _build_mcp_preamble(mode=mode, repos=repos)
@@ -1747,6 +1800,86 @@ def _route_zero_mcp_run(result: "TaskRunResult", mode: str) -> None:
     result.error = reason
 
 
+def _route_code_finder_run(result: "TaskRunResult", mode: str) -> None:
+    """Fail closed on Finder contract violations and direct-arm contamination."""
+    breakdown = result.tool_usage.get("mcp_tool_breakdown")
+    finder_calls = breakdown.get("code_finder", 0) if isinstance(breakdown, dict) else 0
+    if mode == "mcp_only":
+        if finder_calls <= 0:
+            return
+        reason = (
+            "mode=mcp_only called code_finder, contaminating the direct MCP "
+            "retrieval treatment"
+        )
+        result.status = RUN_STATUS_INVALID
+        result.phase = "agent_infra_error"
+        result.success = False
+        result.failure_class = "invalid_arm_contamination"
+        result.error = reason
+        logger.error(reason)
+        return
+    sgx_breakdown = result.tool_usage.get("sgx_tool_breakdown")
+    cli_finder_calls = (
+        sgx_breakdown.get("finder", 0) if isinstance(sgx_breakdown, dict) else 0
+    )
+    if mode == "cli":
+        if cli_finder_calls <= 0:
+            return
+        reason = (
+            "mode=cli called sgx finder, contaminating the direct CLI "
+            "retrieval treatment"
+        )
+        result.status = RUN_STATUS_INVALID
+        result.phase = "agent_infra_error"
+        result.success = False
+        result.failure_class = "invalid_arm_contamination"
+        result.error = reason
+        logger.error(reason)
+        return
+    if mode not in FINDER_MODES:
+        return
+
+    result.tool_usage["mcp_used"] = result.tool_usage.get("mcp_tool_calls", 0) > 0
+    if mode in CLI_FINDER_MODES:
+        result.tool_usage["sgx_used"] = result.tool_usage.get("sgx_tool_calls", 0) > 0
+    retrieval = result.tool_usage.get("retrieval")
+    if isinstance(retrieval, dict) and retrieval.get("valid") is True:
+        proxy_calls = retrieval.get("code_finder_calls")
+        interface_calls = cli_finder_calls if mode in CLI_FINDER_MODES else finder_calls
+        if interface_calls != proxy_calls:
+            reason = (
+                f"mode={mode} observed {proxy_calls} proxy Code Finder call(s) "
+                f"but {interface_calls} through the assigned interface"
+            )
+            result.status = RUN_STATUS_INVALID
+            result.phase = "agent_infra_error"
+            result.success = False
+            result.failure_class = "invalid_arm_contamination"
+            result.error = reason
+            logger.error(reason)
+        return
+    if result.failure_class is not None:
+        logger.info(
+            "mode=%s failed the Finder contract after an existing %s failure; "
+            "preserving the more specific root cause",
+            mode,
+            result.failure_class,
+        )
+        return
+    reason = (
+        retrieval.get("invalid_reason", "Code Finder telemetry was not captured")
+        if isinstance(retrieval, dict)
+        else "Code Finder telemetry was not captured"
+    )
+    message = f"mode={mode} failed the Code Finder contract: {reason}"
+    result.status = RUN_STATUS_INVALID
+    result.phase = "agent_infra_error"
+    result.success = False
+    result.failure_class = "infra_code_finder_contract"
+    result.error = message
+    logger.error(message)
+
+
 def _route_zero_sgx_run(result: "TaskRunResult", mode: str) -> None:
     """Record sgx usage for a cli-mode run, and gate ``cli`` on zero calls.
 
@@ -2466,6 +2599,150 @@ def _trust_project_mcp_servers(container_id: str, server_name: str) -> bool:
         os.unlink(tmp)
 
 
+def _mcp_endpoint_for_mode(mode: str) -> str:
+    """Return the MCP URL visible to the agent for one treatment."""
+    return MCP_PROXY_ENDPOINT if mode in MCP_FINDER_MODES else SOURCEGRAPH_MCP_ENDPOINT
+
+
+def _install_mcp_telemetry_proxy(
+    container_id: str,
+    *,
+    upstream_url: str = SOURCEGRAPH_MCP_ENDPOINT,
+) -> bool:
+    """Stage and start the root-owned Finder telemetry proxy."""
+    if not MCP_PROXY_SRC.is_file():
+        logger.error("MCP telemetry proxy source is missing: %s", MCP_PROXY_SRC)
+        return False
+    mkdir = _docker_exec(
+        container_id,
+        ["mkdir", "-p", str(PurePosixPath(MCP_PROXY_SCRIPT_PATH).parent)],
+        user="root",
+    )
+    if mkdir.returncode != 0:
+        logger.error("Could not create MCP proxy directory: %s", mkdir.stderr.strip())
+        return False
+    try:
+        _docker_cp(MCP_PROXY_SRC.as_posix(), f"{container_id}:{MCP_PROXY_SCRIPT_PATH}")
+    except RuntimeError as exc:
+        logger.error("Could not stage MCP telemetry proxy: %s", exc)
+        return False
+    protected = _docker_exec(
+        container_id,
+        ["chmod", "700", MCP_PROXY_SCRIPT_PATH],
+        user="root",
+    )
+    if protected.returncode != 0:
+        logger.error(
+            "Could not protect MCP telemetry proxy: %s", protected.stderr.strip()
+        )
+        return False
+    started = _docker_exec_detached(
+        container_id,
+        ["python3", MCP_PROXY_SCRIPT_PATH],
+        env={
+            "MCP_PROXY_UPSTREAM_URL": upstream_url,
+            "MCP_PROXY_TRACE_PATH": MCP_PROXY_TRACE_PATH,
+        },
+    )
+    if started.returncode != 0:
+        logger.error("Could not start MCP telemetry proxy: %s", started.stderr.strip())
+        return False
+    for _attempt in range(10):
+        health = _docker_exec(
+            container_id,
+            ["curl", "-sf", MCP_PROXY_HEALTH_ENDPOINT],
+            timeout=5,
+            user="root",
+        )
+        if health.returncode == 0:
+            return True
+        time.sleep(0.2)
+    logger.error("MCP telemetry proxy did not become healthy")
+    return False
+
+
+def _verify_cli_finder_inventory(container_id: str, sg_token: str) -> bool:
+    """Verify `/all` exposes Code Finder through the local CLI proxy."""
+    header_path = "/tmp/.cli_finder_auth_header"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".hdr", delete=False) as fh:
+        fh.write(f"Authorization: token {sg_token}\n")
+        tmp_header = fh.name
+    try:
+        try:
+            _docker_cp(tmp_header, f"{container_id}:{header_path}")
+        except RuntimeError as exc:
+            logger.error("Could not stage CLI Finder auth header: %s", exc)
+            return False
+        protected = _docker_exec(
+            container_id,
+            ["chmod", "600", header_path],
+            user="root",
+        )
+        if protected.returncode != 0:
+            return False
+        payload = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list",
+                "params": {},
+            },
+            separators=(",", ":"),
+        )
+        result = _docker_exec(
+            container_id,
+            [
+                "curl",
+                "-sf",
+                "-H",
+                f"@{header_path}",
+                "-H",
+                "Content-Type: application/json",
+                "-H",
+                "Accept: application/json, text/event-stream",
+                "-H",
+                "User-Agent: sg-cli/1.0",
+                "--data-binary",
+                payload,
+                MCP_PROXY_ENDPOINT,
+            ],
+            timeout=30,
+            user="root",
+        )
+        if result.returncode != 0 or '"code_finder"' not in result.stdout:
+            logger.error(
+                "CLI Finder inventory preflight failed: code_finder absent or "
+                "endpoint rejected the request"
+            )
+            return False
+        return True
+    finally:
+        _docker_exec(
+            container_id,
+            ["rm", "-f", header_path],
+            user="root",
+        )
+        os.unlink(tmp_header)
+
+
+def _configure_cli_code_finder(container_id: str, mode: str) -> bool:
+    """Start the `/all` telemetry proxy for Finder-over-sgx without MCP."""
+    if mode not in CLI_FINDER_MODES:
+        return True
+    sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
+    if not sg_token:
+        logger.error("SOURCEGRAPH_ACCESS_TOKEN is required for cli_code_finder")
+        return False
+    if not _verify_mcp_endpoint(container_id, sg_token):
+        return False
+    if not _install_mcp_telemetry_proxy(
+        container_id,
+        upstream_url=SOURCEGRAPH_MCP_ENDPOINT,
+    ):
+        return False
+    return _verify_cli_finder_inventory(container_id, sg_token)
+
+
 def _configure_mcp(container_id: str, mode: str) -> bool:
     """Configure Sourcegraph MCP endpoint with pre-flight verification.
 
@@ -2483,7 +2760,7 @@ def _configure_mcp(container_id: str, mode: str) -> bool:
     False when the pre-flight failed — the caller must treat that as a hard
     gate and route the run to the infra-error re-run channel, never score it.
     """
-    if mode not in ("mcp_only", "hybrid"):
+    if mode not in MCP_MODES:
         return True
 
     sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
@@ -2508,6 +2785,13 @@ def _configure_mcp(container_id: str, mode: str) -> bool:
                 mode,
             )
             return False
+    if mode in MCP_FINDER_MODES and not _install_mcp_telemetry_proxy(container_id):
+        logger.error(
+            "MCP telemetry proxy setup failed (mode=%s); the Finder contract "
+            "cannot be observed",
+            mode,
+        )
+        return False
 
     # Step 2: Write MCP config files (using docker cp to avoid shell escaping)
     mcp_config_json = json.dumps(
@@ -2515,7 +2799,7 @@ def _configure_mcp(container_id: str, mode: str) -> bool:
             "mcpServers": {
                 "sourcegraph": {
                     "type": "http",
-                    "url": SOURCEGRAPH_MCP_ENDPOINT,
+                    "url": _mcp_endpoint_for_mode(mode),
                     "headers": {"Authorization": f"token {sg_token}"},
                 }
             }
@@ -2631,7 +2915,7 @@ def _configure_mcp(container_id: str, mode: str) -> bool:
         )
 
     if handshake_ok:
-        logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
+        logger.info("MCP endpoint configured: %s", _mcp_endpoint_for_mode(mode))
     return handshake_ok
 
 
@@ -2653,7 +2937,7 @@ def _install_sgx(container_id: str, mode: str) -> bool:
     silently-shadowed or missing sgx would run a baseline (local-only) trial
     under a "cli" label and corrupt the arm comparison.
     """
-    if mode != "cli":
+    if mode not in CLI_MODES:
         return True
 
     sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
@@ -2664,7 +2948,8 @@ def _install_sgx(container_id: str, mode: str) -> bool:
         logger.error("sgx source not found at %s", SGX_CLI_SRC)
         return False
 
-    logger.info("Installing sgx CLI (mode=%s, endpoint=%s)", mode, SGX_ENDPOINT)
+    endpoint = MCP_PROXY_ENDPOINT if mode in CLI_FINDER_MODES else SGX_ENDPOINT
+    logger.info("Installing sgx CLI (mode=%s, endpoint=%s)", mode, endpoint)
 
     # Step 1: upload the stdlib-only CLI to /usr/local/lib (root-owned path).
     _docker_cp(str(SGX_CLI_SRC), f"{container_id}:/usr/local/lib/sg_cli.py")
@@ -2692,7 +2977,7 @@ def _install_sgx(container_id: str, mode: str) -> bool:
     # 0600 .mcp.json). sg_cli.py reads the token from the env on every call.
     wrapper = (
         "#!/bin/sh\n"
-        f'export SG_URL="${{SG_URL:-{SGX_ENDPOINT}}}"\n'
+        f'export SG_URL="${{SG_URL:-{endpoint}}}"\n'
         'exec "$(command -v python3 || command -v python)" '
         '/usr/local/lib/sg_cli.py "$@"\n'
     )
@@ -2731,7 +3016,7 @@ def _install_sgx(container_id: str, mode: str) -> bool:
 
     logger.info(
         "sgx CLI installed at /usr/local/bin/sgx (%s); no MCP registered",
-        SGX_ENDPOINT,
+        endpoint,
     )
     return True
 
@@ -2883,31 +3168,35 @@ def _iter_agent_records(content: str) -> Iterator[dict]:
             yield record
 
 
-def _count_mcp_tool_calls(record: dict) -> int:
-    """Count Sourcegraph MCP tool_use blocks in one agent stdout record.
+def _mcp_tool_names(record: dict) -> list[str]:
+    """Return normalized Sourcegraph tool names from one agent stdout record.
 
-    Only a genuine tool_use counts. The name also appears where no call was made —
-    the agent narrating it, a tool_result echoing it back — and this count gates
-    mcp_only invalidation (:func:`_route_zero_mcp_run`).
+    Only a genuine tool_use counts. The name also appears in narration and
+    tool_result echoes, neither of which is evidence of an invocation.
     """
     message = record.get("message")
     blocks = message.get("content") if isinstance(message, dict) else None
     if not isinstance(blocks, list):
-        return 0
-    return sum(
-        1
+        return []
+    return [
+        str(block["name"])[len(_MCP_TOOL_PREFIX) :]
         for block in blocks
         if isinstance(block, dict)
         and block.get("type") == "tool_use"
         and str(block.get("name", "")).startswith(_MCP_TOOL_PREFIX)
-    )
+    ]
 
 
-def _count_sgx_tool_calls(record: dict) -> int:
-    """Count `sgx` invocations in one agent stdout record.
+def _count_mcp_tool_calls(record: dict) -> int:
+    """Count Sourcegraph MCP tool_use blocks in one agent stdout record."""
+    return len(_mcp_tool_names(record))
+
+
+def _sgx_subcommands(record: dict) -> list[str]:
+    """Return `sgx` subcommands invoked in one agent stdout record.
 
     The cli arm retrieves via the `sgx` shell command, so a genuine call is a
-    Bash tool_use whose ``input.command`` invokes `sgx` (see ``_SGX_COMMAND_RE``).
+    Bash tool_use whose ``input.command`` invokes `sgx`.
     A single Bash command can chain several (``sgx search …; sgx read …``), so
     each match counts, not each block. This count gates cli invalidation
     (:func:`_route_zero_sgx_run`). Subagent calls that Claude Code inlines into
@@ -2917,14 +3206,22 @@ def _count_sgx_tool_calls(record: dict) -> int:
     message = record.get("message")
     blocks = message.get("content") if isinstance(message, dict) else None
     if not isinstance(blocks, list):
-        return 0
-    return sum(
-        len(_SGX_COMMAND_RE.findall(str((block.get("input") or {}).get("command", ""))))
+        return []
+    return [
+        subcommand
         for block in blocks
         if isinstance(block, dict)
         and block.get("type") == "tool_use"
         and block.get("name") == "Bash"
-    )
+        for subcommand in _SGX_SUBCOMMAND_RE.findall(
+            str((block.get("input") or {}).get("command", ""))
+        )
+    ]
+
+
+def _count_sgx_tool_calls(record: dict) -> int:
+    """Count `sgx` invocations in one agent stdout record."""
+    return len(_sgx_subcommands(record))
 
 
 def _extract_tool_usage(output_dir: Path) -> dict:
@@ -2940,7 +3237,9 @@ def _extract_tool_usage(output_dir: Path) -> dict:
         "cost_usd": 0.0,
         "num_turns": 0,
         "mcp_tool_calls": 0,
+        "mcp_tool_breakdown": {},
         "sgx_tool_calls": 0,
+        "sgx_tool_breakdown": {},
     }
 
     stdout_log = output_dir / "agent_stdout.log"
@@ -2952,8 +3251,20 @@ def _extract_tool_usage(output_dir: Path) -> dict:
         return usage
 
     for record in _iter_agent_records(content):
-        usage["mcp_tool_calls"] += _count_mcp_tool_calls(record)
-        usage["sgx_tool_calls"] += _count_sgx_tool_calls(record)
+        tool_names = _mcp_tool_names(record)
+        usage["mcp_tool_calls"] += len(tool_names)
+        for tool_name in tool_names:
+            usage["mcp_tool_breakdown"] = {
+                **usage["mcp_tool_breakdown"],
+                tool_name: usage["mcp_tool_breakdown"].get(tool_name, 0) + 1,
+            }
+        sgx_commands = _sgx_subcommands(record)
+        usage["sgx_tool_calls"] += len(sgx_commands)
+        for command in sgx_commands:
+            usage["sgx_tool_breakdown"] = {
+                **usage["sgx_tool_breakdown"],
+                command: usage["sgx_tool_breakdown"].get(command, 0) + 1,
+            }
 
         model_usage = record.get("modelUsage")
         if isinstance(model_usage, dict):
@@ -2968,6 +3279,45 @@ def _extract_tool_usage(output_dir: Path) -> dict:
                 usage["num_turns"] = max(usage["num_turns"], turns)
 
     return usage
+
+
+def _expected_sourcegraph_repositories(repos: list[dict]) -> list[str]:
+    """Return exact Sourcegraph mirror names used to scope Finder calls."""
+    return [
+        f"github.com/{derive_mirror_name(repo['url'], repo.get('rev', ''))}"
+        for repo in repos
+    ]
+
+
+def _capture_mcp_telemetry(
+    result: "TaskRunResult",
+    container_id: str,
+    output_dir: Path,
+    *,
+    mode: str,
+    expected_repo_count: int,
+    expected_repositories: list[str],
+) -> None:
+    """Copy and summarize the root-owned proxy trace for Finder treatments."""
+    if mode not in FINDER_MODES:
+        return
+    trace_path = output_dir / "mcp_telemetry.jsonl"
+    try:
+        _docker_cp(f"{container_id}:{MCP_PROXY_TRACE_PATH}", trace_path.as_posix())
+        result.tool_usage["retrieval"] = build_retrieval_telemetry(
+            trace_path,
+            mode=mode,
+            expected_repo_count=expected_repo_count,
+            expected_repositories=expected_repositories,
+            outer_usage=result.tool_usage,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        logger.error("Could not capture valid Finder telemetry: %s", exc)
+        result.tool_usage["retrieval"] = {
+            "trace_captured": False,
+            "valid": False,
+            "invalid_reason": f"Finder telemetry capture failed: {exc}",
+        }
 
 
 def _effective_status(result: "TaskRunResult") -> str:
@@ -3268,7 +3618,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             logger.warning("Health check reported issues (continuing anyway)")
 
         # --- Configure MCP if needed ---
-        if config.mode in ("mcp_only", "hybrid"):
+        if config.mode in MCP_MODES:
             mcp_handshake_ok = _configure_mcp(container_id, config.mode)
 
             # MCP pre-flight is a HARD gate for the MCP arms. If the endpoint
@@ -3277,7 +3627,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # silently recorded as an MCP measurement — corrupting the MCP arm
             # of any affected comparison. Route it to the infra-error re-run
             # channel instead of proceeding degraded (bead EnterpriseBench-c7wb).
-            # This branch only runs for mcp_only/hybrid; the baseline arm has no
+            # This branch only runs for MCP modes; the baseline arm has no
             # MCP and is unaffected.
             if not mcp_handshake_ok:
                 logger.error(
@@ -3298,13 +3648,28 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 _save_results(result, task_data, output_dir, config)
                 return result
 
+        if config.mode in CLI_FINDER_MODES:
+            cli_finder_ok = _configure_cli_code_finder(container_id, config.mode)
+            if not cli_finder_ok:
+                result.phase = "cli_infra_error"
+                result.status = RUN_STATUS_INVALID
+                result.success = False
+                result.failure_class = "infra_cli_finder_preflight"
+                result.error = (
+                    "CLI Code Finder preflight failed: `/all` did not expose "
+                    "code_finder through the telemetry proxy"
+                )
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
+
         # --- Install sgx CLI if this is the cli arm ---
         # The cli arm installs the sgx retrieval CLI instead of registering MCP.
         # No .mcp.json is written (the lean, no-MCP tool prefix is the point).
         # Like the MCP pre-flight above, a failed install is a HARD gate: a
         # silently-shadowed or missing sgx would run a baseline (local-only)
         # trial under a "cli" label and corrupt the arm comparison.
-        if config.mode == "cli":
+        if config.mode in CLI_MODES:
             if not _install_sgx(container_id, config.mode):
                 logger.error(
                     "sgx install FAILED for mode=cli — routing to infra-error "
@@ -3332,7 +3697,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # mcp_only, which already fails loudly on the same bad token. Make
             # one authenticated sgx call and HARD-gate on rejection, fail-fast
             # before wasting an agent run.
-            if not _verify_sgx_endpoint(
+            if config.mode == "cli" and not _verify_sgx_endpoint(
                 container_id, os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
             ):
                 logger.error(
@@ -3372,7 +3737,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         agent_command = config.agent_command
 
         # Set Sourcegraph access token and TLS bypass for MCP modes
-        if config.mode in ("mcp_only", "hybrid"):
+        if config.mode in MCP_MODES:
             env_extra["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
             sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
             if sg_token:
@@ -3389,7 +3754,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         # deliberately does NOT bake it, to avoid a secret in a world-readable
         # file). No .mcp.json and no --mcp-config are written for this arm — that
         # is deliberate.
-        if config.mode == "cli":
+        if config.mode in CLI_MODES:
             sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
             if sg_token:
                 env_extra["SOURCEGRAPH_ACCESS_TOKEN"] = sg_token
@@ -3398,6 +3763,8 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                     "SOURCEGRAPH_ACCESS_TOKEN not set; sgx will not authenticate "
                     "and will exit non-zero on every call (mode=cli)"
                 )
+            if config.mode in CLI_FINDER_MODES:
+                env_extra["SG_URL"] = MCP_PROXY_ENDPOINT
 
         if config.account is not None:
             try:
@@ -3415,10 +3782,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 agent_command = DEFAULT_OAUTH_AGENT_COMMAND
             # For MCP modes, add --mcp-config flag for explicit config loading
             # (auto-discovery from project dir is less reliable)
-            if (
-                config.mode in ("mcp_only", "hybrid")
-                and "--mcp-config" not in agent_command
-            ):
+            if config.mode in MCP_MODES and "--mcp-config" not in agent_command:
                 agent_command = agent_command + " --mcp-config /home/agent/.mcp.json"
             # Install Claude Code CLI inside the container
             if not _install_claude_cli(container_id):
@@ -3437,7 +3801,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # num_turns=0, task_score=0.0 — a fake 0 that corrupted the
             # MCP-vs-baseline comparison (bead EnterpriseBench-s58f).
             readability_targets = ["/workspace/instruction.md"]
-            if config.mode in ("mcp_only", "hybrid"):
+            if config.mode in MCP_MODES:
                 readability_targets += [
                     "/workspace/.mcp.json",
                     "/home/agent/.mcp.json",
@@ -3507,6 +3871,14 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
 
             # Extract tool-usage metadata from agent output
             result.tool_usage = _extract_tool_usage(output_dir)
+            _capture_mcp_telemetry(
+                result,
+                container_id,
+                output_dir,
+                mode=config.mode,
+                expected_repo_count=len(repos),
+                expected_repositories=_expected_sourcegraph_repositories(repos),
+            )
 
             # An MCP-config parse / EACCES error means the agent never really
             # started: route to the infra-error re-run channel instead of
@@ -3521,6 +3893,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 )
 
             _route_zero_mcp_run(result, config.mode)
+            _route_code_finder_run(result, config.mode)
             _route_zero_sgx_run(result, config.mode)
             _record_agent_trace(result, container_id, output_dir)
         elif should_gate(config.mode):

@@ -46,6 +46,7 @@ Available tools for searching the remote repository:
 | `compare_revisions` | Compare two branches/commits/tags |
 | `deepsearch` | AI-powered deep analysis (async: returns a polling link) |
 | `deepsearch_read` | Read Deep Search results (call 60+ seconds after deepsearch) |
+| `code_finder` | Launch a bounded search agent that returns task-relevant code context |
 
 Note: Sourcegraph indexes the remote repository. Local source files are present \
 in /workspace, but whether you may READ them depends on the access mode.
@@ -94,6 +95,43 @@ latency and waste turns.
 2. **Read locally** — use Read/cat for files in /workspace
 3. **Navigate with MCP** — trace references and definitions across repo boundaries
 4. **Edit locally** — modify /workspace files based on what you learned"""
+
+_FORCED_FINDER_WORKFLOW = """\
+## Required Code Finder Workflow
+
+Use `code_finder` **exactly once per repository** listed below. Give each call \
+a comprehensive description of the task, failure symptoms, and the evidence \
+you need from that repository. Include that repository's exact Sourcegraph \
+mirror name in the task text so invocation scope is auditable.
+
+Do not call any direct Sourcegraph retrieval tool. This prohibition includes \
+`keyword_search`, `nls_search`, `read_file`, `list_files`, `list_repos`, \
+`go_to_definition`, `find_references`, `commit_search`, `diff_search`, \
+`compare_revisions`, `deepsearch`, and `deepsearch_read`. The purpose of this \
+arm is to measure Code Finder as the sole remote retrieval path.
+
+You may use the shell only to reason over already-returned context and to write \
+the required `/workspace/agent_output/answer.json`. Local repository source is \
+filesystem-gated and must not be read."""
+
+_ASSISTED_FINDER_WORKFLOW = """\
+## Required Code Finder Bootstrap
+
+Call `code_finder` at least once before using another Sourcegraph retrieval \
+tool. Give it a comprehensive description of the task and failure symptoms. \
+Use its result as the discovery plan, then make only targeted follow-up calls \
+such as `read_file`, `go_to_definition`, `find_references`, or a narrowly \
+scoped search when the returned context identifies a concrete gap.
+
+Local repository source is filesystem-gated. Use Sourcegraph for code access \
+and the shell only to write the required `/workspace/agent_output/answer.json`."""
+
+_DIRECT_MCP_RULE = """\
+## Direct MCP Arm
+
+Do not call `code_finder`. This arm measures direct Sourcegraph retrieval with \
+the search, navigation, and file-reading tools below; Code Finder is measured \
+separately."""
 
 _TOOL_SELECTION = """\
 ## Tool Selection
@@ -202,7 +240,8 @@ def build_system_prompt(
     """Assemble the full MCP preamble for a given tool-access mode.
 
     Args:
-        mode: One of "mcp_only" or "hybrid". Returns empty string for "baseline".
+        mode: One of "mcp_only", "hybrid", "mcp_code_finder", or
+            "mcp_assisted". Returns empty string for "baseline".
         repos: List of repo dicts from task.toml (each with url, rev, path keys).
 
     Returns:
@@ -213,7 +252,7 @@ def build_system_prompt(
 
     parts: list[str] = []
 
-    if mode == "mcp_only":
+    if mode in {"mcp_only", "mcp_code_finder", "mcp_assisted"}:
         parts.append(_MCP_ONLY_HEADER)
     elif mode == "hybrid":
         parts.append(_HYBRID_HEADER)
@@ -225,6 +264,14 @@ def build_system_prompt(
     repo_scope = _build_repo_scope(repos or [])
     if repo_scope:
         parts.append(repo_scope)
+
+    if mode == "mcp_code_finder":
+        parts.append(_FORCED_FINDER_WORKFLOW)
+        return "\n\n".join(parts)
+    if mode == "mcp_assisted":
+        parts.append(_ASSISTED_FINDER_WORKFLOW)
+    elif mode == "mcp_only":
+        parts.append(_DIRECT_MCP_RULE)
 
     # Common sections for both modes
     parts.append(_TOOL_SELECTION)

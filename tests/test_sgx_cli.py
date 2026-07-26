@@ -23,11 +23,17 @@ from unittest.mock import patch
 import pytest
 
 sys.path.insert(
-    0, str(Path(__file__).resolve().parent.parent / "agents" / "harnesses" / "claude" / "mcp")
+    0,
+    str(
+        Path(__file__).resolve().parent.parent
+        / "agents"
+        / "harnesses"
+        / "claude"
+        / "mcp"
+    ),
 )
 
 import sg_cli  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -174,6 +180,18 @@ class TestDispatch:
         assert seen["payload"]["params"]["name"] == "sg_keyword_search"
         assert seen["payload"]["params"]["arguments"]["query"] == "needle repo:^x$"
 
+    def test_batched_search_fans_out_and_propagates_any_error(self, capsys):
+        results = iter([("first", False), ("second", True)])
+        with patch.object(
+            sg_cli, "call_tool", side_effect=lambda *_args: next(results)
+        ):
+            rc = sg_cli.cmd_search(["one", "-q", "two"])
+
+        output = capsys.readouterr().out
+        assert rc == 1
+        assert "## Query 1: one" in output
+        assert "## Query 2: two" in output
+
     def test_nls_joins_args(self):
         seen = {}
 
@@ -188,6 +206,23 @@ class TestDispatch:
         assert rc == 0
         assert seen["payload"]["params"]["name"] == "sg_nls_search"
         assert seen["payload"]["params"]["arguments"]["query"] == "how does auth work"
+
+    def test_finder_calls_unprefixed_all_endpoint_tool(self):
+        seen = {}
+
+        def fake_http(url, data, headers):
+            import json
+
+            seen["payload"] = json.loads(data)
+            return _mcp_response()
+
+        with patch.object(sg_cli, "_http_post", side_effect=fake_http):
+            rc = sg_cli.main(["finder", "inspect", "github.com/org/repo"])
+        assert rc == 0
+        assert seen["payload"]["params"] == {
+            "name": "code_finder",
+            "arguments": {"task": "inspect github.com/org/repo"},
+        }
 
     def test_def_maps_to_go_to_definition(self):
         seen = {}
@@ -282,6 +317,9 @@ class TestTokenAndUsage:
         with patch.object(sg_cli, "_http_post", side_effect=AssertionError("net")):
             assert sg_cli.main(["read", "repo", "path", "--start"]) == 2
 
+    def test_finder_requires_a_task_description(self):
+        assert sg_cli.main(["finder"]) == 2
+
 
 # ---------------------------------------------------------------------------
 # Exit-code mapping for tool / transport errors
@@ -290,7 +328,9 @@ class TestTokenAndUsage:
 
 class TestExitCodes:
     def test_tool_iserror_exits_1(self):
-        with patch.object(sg_cli, "_http_post", return_value=_mcp_response("boom", is_error=True)):
+        with patch.object(
+            sg_cli, "_http_post", return_value=_mcp_response("boom", is_error=True)
+        ):
             assert sg_cli.main(["search", "x"]) == 1
 
     def test_jsonrpc_error_exits_1(self):
@@ -322,7 +362,9 @@ class TestExitCodes:
 
 class TestSseParsing:
     def test_sse_framed_body(self):
-        body = b'event: message\ndata: {"result": {"content": [{"text": "sse-hit"}]}}\n\n'
+        body = (
+            b'event: message\ndata: {"result": {"content": [{"text": "sse-hit"}]}}\n\n'
+        )
         payloads = list(sg_cli._iter_sse_json(body))
         assert payloads == [{"result": {"content": [{"text": "sse-hit"}]}}]
 

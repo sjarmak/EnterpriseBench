@@ -37,8 +37,8 @@ _HEADER = (
     "# IMPORTANT: Source Code Access — `sgx` command\n\n"
     "There are **NO MCP tools in this environment** — all remote code "
     "retrieval is via the `sgx` shell command (run it in Bash; do not search "
-    "for MCP tools). Use `sgx` to search and read code across repositories via "
-    "Sourcegraph."
+    "for MCP tools). Use only the mode-specific `sgx` workflow below for "
+    "remote code retrieval via Sourcegraph."
 )
 
 _USAGE = """\
@@ -60,6 +60,31 @@ _WORKFLOW = """\
 3. **Navigate** — `sgx def` / `sgx refs` to trace symbols across repo boundaries.
 4. **Then implement** — once you understand the pattern, stop searching and start writing."""
 
+_DIRECT_CLI_RULE = """\
+## Direct CLI Arm
+
+Do not use `sgx finder`. This arm measures direct Sourcegraph retrieval through \
+the search, navigation, and file-reading commands below; the `code_finder` \
+backend is measured separately."""
+
+_FINDER_USAGE = """\
+## Required Code Finder Workflow
+
+Use `sgx finder` **exactly once per repository**, passing the task description \
+as one quoted argument. Give each \
+call a comprehensive description of the task, failure symptoms, and evidence \
+needed from that repository. Include that repository's exact Sourcegraph mirror \
+name in the task text so invocation scope is auditable.
+
+Do not use any other `sgx` retrieval command. This prohibition includes \
+`sgx search`, `sgx nls`, `sgx read`, `sgx def`, `sgx refs`, and `sgx ls`. \
+This arm measures the `code_finder` backend through a Bash-composable CLI without registering \
+any MCP tools.
+
+You may use the shell only to reason over already-returned context and to write \
+the required `/workspace/agent_output/answer.json`. Local repository source is \
+filesystem-gated and must not be read."""
+
 
 # ---------------------------------------------------------------------------
 # Repo scope builder
@@ -78,7 +103,7 @@ def _build_repo_scope(repos: Sequence[dict]) -> str:
     lines = ["## Repository Scoping\n"]
     lines.append(
         "These repos are indexed on Sourcegraph under `sg-evals/` mirrors. "
-        "**Always scope your `sgx` searches to these repos:**\n"
+        "**Use these exact mirror names to scope every `sgx` request:**\n"
     )
 
     for repo in repos:
@@ -119,14 +144,21 @@ def build_system_prompt(
     """Assemble the sgx CLI-arm preamble.
 
     Args:
-        mode: Expected to be "cli". Any other mode returns an empty string.
+        mode: Expected to be "cli" or "cli_code_finder". Any other mode
+            returns an empty string.
         repos: List of repo dicts from task.toml (each with url, rev, path).
 
     Returns:
         The assembled preamble string, or empty string for non-cli modes.
     """
-    if mode != "cli":
-        if mode not in ("baseline", "mcp_only", "hybrid"):
+    if mode not in {"cli", "cli_code_finder"}:
+        if mode not in (
+            "baseline",
+            "mcp_only",
+            "mcp_code_finder",
+            "mcp_assisted",
+            "hybrid",
+        ):
             logger.warning("Unknown mode %r; returning empty sgx preamble", mode)
         return ""
 
@@ -136,7 +168,11 @@ def build_system_prompt(
     if repo_scope:
         parts.append(repo_scope)
 
-    parts.append(_USAGE)
-    parts.append(_WORKFLOW)
+    if mode == "cli_code_finder":
+        parts.append(_FINDER_USAGE)
+    else:
+        parts.append(_DIRECT_CLI_RULE)
+        parts.append(_USAGE)
+        parts.append(_WORKFLOW)
 
     return "\n\n".join(parts)
