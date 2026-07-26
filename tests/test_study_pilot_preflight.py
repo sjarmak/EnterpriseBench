@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from study_pilot_preflight import (  # noqa: E402
     validate_pilot,
 )
 from study_run import InputProvenance  # noqa: E402
+import study_pilot_preflight as preflight_module  # noqa: E402
 
 PROVENANCE = InputProvenance(
     task_hash="sha256:task",
@@ -39,9 +41,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     sg_config.write_text('{"repos": ["example/repo"]}\n')
 
     curated = tmp_path / "curated.json"
-    curated.write_text(
-        json.dumps({"status": "candidate", "task_ids": [task_id]})
-    )
+    curated.write_text(json.dumps({"status": "candidate", "task_ids": [task_id]}))
     manifest = tmp_path / "pilot_manifest.json"
     manifest.write_text(
         json.dumps(
@@ -184,6 +184,49 @@ def test_extra_arm_fails_closed(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("target", "field", "value", "message"),
+    [
+        ("manifest", "schema_version", 2, "schema_version"),
+        ("manifest", "status", "draft", "status"),
+        ("manifest", "study_id", "other", "study_id"),
+        ("manifest", "curated_manifest_hash", "sha256:other", "curated manifest hash"),
+        ("manifest", "integrity_gates", [], "exact integrity gates"),
+        ("spec", "task_ids", ["other"], "task_ids"),
+        ("spec", "model", "other-model", "cheap-pilot contract"),
+        ("manifest", "harness_hash", "sha256:other", "harness_hash"),
+        ("spec", "harness", "sha256:other", "StudySpec harness"),
+        ("manifest", "verifier_hashes", {}, "verifier hash"),
+    ],
+)
+def test_contract_drift_fails_closed(
+    tmp_path: Path,
+    target: str,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    spec_path, manifest_path, curated = _write_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text())
+    spec = json.loads(spec_path.read_text())
+    payload = manifest if target == "manifest" else spec
+    payload[field] = value
+    manifest_path.write_text(json.dumps(manifest))
+    spec["task_manifest_hash"] = file_hash(manifest_path)
+    spec_path.write_text(json.dumps(spec))
+
+    with pytest.raises(ValueError, match=message):
+        validate_pilot(
+            spec_path=spec_path,
+            manifest_path=manifest_path,
+            curated_manifest_path=curated,
+            repo_root=tmp_path,
+            closed_gates=frozenset(REQUIRED_GATES),
+            revision_validator=lambda _revision, _paths: True,
+            provenance_provider=lambda _task_toml: PROVENANCE,
+        )
+
+
 def test_revision_drift_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="revision"):
         _validate(tmp_path, revision_ok=False)
@@ -222,3 +265,50 @@ def test_repository_pilot_capsule_is_frozen_and_self_consistent() -> None:
 
     assert evidence.study_id == "rryas-pilot-v1"
     assert len(evidence.slots) == 3
+
+
+def test_cli_prints_the_locked_evidence(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_dir = PROJECT_ROOT / "configs" / "studies" / "rryas_pilot_v1"
+    monkeypatch.setattr(
+        preflight_module, "_closed_gate_ids", lambda: frozenset(REQUIRED_GATES)
+    )
+
+    assert (
+        preflight_module.main(
+            [
+                "--spec",
+                str(study_dir / "study_spec.json"),
+                "--manifest",
+                str(study_dir / "pilot_manifest.json"),
+                "--curated-manifest",
+                str(
+                    PROJECT_ROOT
+                    / "results"
+                    / "rryas_dataset"
+                    / "candidate_manifest.json"
+                ),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out)["study_id"] == "rryas-pilot-v1"
+
+
+def test_gate_query_accepts_only_closed_issues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    issues = [
+        {"id": REQUIRED_GATES[0], "status": "closed"},
+        {"id": REQUIRED_GATES[1], "status": "open"},
+    ]
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, stdout=json.dumps(issues), stderr=""
+        ),
+    )
+
+    assert preflight_module._closed_gate_ids() == frozenset({REQUIRED_GATES[0]})
