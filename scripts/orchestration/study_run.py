@@ -35,6 +35,36 @@ class InputProvenance:
     verifier_hash: str
 
 
+def harness_input_paths(repo_root: Path) -> tuple[Path, ...]:
+    """Return the complete source set whose bytes define the task harness."""
+
+    return (
+        repo_root / "scripts" / "orchestration",
+        repo_root / "scripts" / "sandbox",
+        repo_root / "scripts" / "lib",
+        repo_root / "scripts" / "infra" / "create_sg_mirrors.py",
+        repo_root / "scripts" / "cost_tracker.py",
+        repo_root / "scripts" / "analyze_scores.py",
+        repo_root / "lib" / "eb_verify",
+        repo_root / "lib" / "eb_study",
+        repo_root / "lib" / "pyproject.toml",
+        repo_root / "agents" / "harnesses" / "claude",
+    )
+
+
+def verifier_input_paths(repo_root: Path, task_dir: Path) -> tuple[Path, ...]:
+    """Return the shared and task-local verifier inputs for one trial."""
+
+    paths = [
+        repo_root / "scripts" / "sandbox" / "test_runner.sh",
+        repo_root / "lib" / "eb_verify",
+    ]
+    for path in (task_dir / "checks", task_dir / "ground_truth.json"):
+        if path.exists():
+            paths.append(path)
+    return tuple(paths)
+
+
 def validate_study_config(
     *,
     study_spec: Path | None,
@@ -210,5 +240,7 @@ __all__ = [
     "docker_container_image_digest",
     "docker_image_digest",
     "emit_study_receipt",
+    "harness_input_paths",
     "validate_study_config",
+    "verifier_input_paths",
 ]

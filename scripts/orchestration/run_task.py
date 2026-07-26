@@ -118,7 +118,9 @@ from study_run import (
     docker_container_image_digest,
     docker_image_digest,
     emit_study_receipt,
+    harness_input_paths,
     validate_study_config,
+    verifier_input_paths,
 )
 
 try:
@@ -528,27 +530,10 @@ def _docker_container_image_digest(container_id: str) -> str:
 def _capture_input_provenance(config: TaskRunConfig, task_dir: Path) -> InputProvenance:
     """Hash the exact task, harness, and verifier inputs used by this run."""
 
-    harness_inputs = [
-        REPO_ROOT / "scripts" / "orchestration",
-        REPO_ROOT / "scripts" / "sandbox",
-        REPO_ROOT / "scripts" / "lib",
-        REPO_ROOT / "scripts" / "infra" / "create_sg_mirrors.py",
-        REPO_ROOT / "scripts" / "cost_tracker.py",
-        REPO_ROOT / "scripts" / "analyze_scores.py",
-        REPO_ROOT / "lib" / "eb_verify",
-        REPO_ROOT / "lib" / "eb_study",
-        REPO_ROOT / "lib" / "pyproject.toml",
-        REPO_ROOT / "agents" / "harnesses" / "claude",
-    ]
-
-    verifier_inputs = [TEST_RUNNER_SH, EB_VERIFY_LIB]
-    for path in (task_dir / "checks", task_dir / "ground_truth.json"):
-        if path.exists():
-            verifier_inputs.append(path)
     return capture_input_provenance(
         task_toml=config.task_toml,
-        harness_inputs=harness_inputs,
-        verifier_inputs=verifier_inputs,
+        harness_inputs=harness_input_paths(REPO_ROOT),
+        verifier_inputs=verifier_input_paths(REPO_ROOT, task_dir),
         repo_root=REPO_ROOT,
     )
 

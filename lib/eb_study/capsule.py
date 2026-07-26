@@ -231,6 +231,11 @@ def _check_belongs(spec: StudySpec, receipt: TrialReceipt) -> None:
             f"receipt {trial.key} was scored under contract {receipt.score_contract!r}, "
             f"but the spec froze {spec.score_contract!r}"
         )
+    if receipt.harness_hash != spec.harness:
+        raise CapsuleIntegrityError(
+            f"receipt {trial.key} used harness {receipt.harness_hash!r}, "
+            f"but the spec froze {spec.harness!r}"
+        )
     if receipt.usage is None or receipt.usage.source != spec.token_source:
         source = receipt.usage.source if receipt.usage else None
         raise CapsuleIntegrityError(

@@ -43,7 +43,7 @@ def spec_payload(**overrides):
         "attempt_policy": "all_valid_repetitions",
         "max_attempts": 3,
         "model": "claude-opus-4-8",
-        "harness": "run_task.py@sha256:harness",
+        "harness": "sha256:harness",
         "revision": "e439534",
         "token_source": "sdk_model_usage",
         "score_contract": "weighted-mean-v2",
@@ -316,6 +316,14 @@ class TestCapsuleIntegrity:
         )
         with pytest.raises(CapsuleIntegrityError, match="score contract|contract"):
             StudyCapsule.build(spec, [legacy])
+
+    def test_receipt_from_another_harness_is_refused(self):
+        spec = make_spec()
+        drifted = make_receipt(
+            spec, "dep-traversal-001", "cli", 1, harness_hash="sha256:other"
+        )
+        with pytest.raises(CapsuleIntegrityError, match="harness"):
+            StudyCapsule.build(spec, [drifted])
 
     def test_receipt_billed_from_the_trace_is_refused(self):
         spec = make_spec()
