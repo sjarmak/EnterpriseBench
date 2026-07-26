@@ -356,13 +356,30 @@ def _result_file_candidates(
     return candidates
 
 
+def _result_file_state(path: Path) -> tuple[int, int, int, int, int] | None:
+    """Return identity and change metadata used to reject stale results."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (
+        stat.st_dev,
+        stat.st_ino,
+        stat.st_size,
+        stat.st_mtime_ns,
+        stat.st_ctime_ns,
+    )
+
+
 def _load_task_result(
     result: TaskResult,
     candidates: Sequence[Path],
+    previous_states: dict[Path, tuple[int, int, int, int, int] | None],
 ) -> None:
-    """Populate score and billed cost from the first readable result file."""
+    """Populate fields from a result created or changed by this invocation."""
     for results_file in candidates:
-        if not results_file.exists():
+        current_state = _result_file_state(results_file)
+        if current_state is None or current_state == previous_states[results_file]:
             continue
         try:
             rdata = json.loads(results_file.read_text())
@@ -423,13 +440,18 @@ def run_task(
         return result
 
     logger.info("[run] %s (session_type=%s)", task.task_id, task.session_type)
+    result_candidates = _result_file_candidates(task, passthrough_args, mode)
+    previous_result_states = {
+        path: _result_file_state(path) for path in result_candidates
+    }
     t0 = time.monotonic()
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         result.duration_seconds = time.monotonic() - t0
         _load_task_result(
             result,
-            _result_file_candidates(task, passthrough_args, mode),
+            result_candidates,
+            previous_result_states,
         )
 
         if proc.returncode != 0:

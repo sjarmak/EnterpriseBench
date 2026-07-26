@@ -467,20 +467,22 @@ class TestExtractCostFromResult:
         output_dir = tmp_path / "results" / "runs" / "task-001" / "mcp_only"
         result_path = output_dir / "rep1" / "attempt2" / "results.json"
         result_path.parent.mkdir(parents=True)
-        result_path.write_text(
-            json.dumps(
-                {
-                    "scores": {"task_score": 0.8},
-                    "tool_usage": {"cost_usd": 1.75},
-                }
+
+        def successful_run(*_args, **_kwargs):
+            result_path.write_text(
+                json.dumps(
+                    {
+                        "scores": {"task_score": 0.8},
+                        "tool_usage": {"cost_usd": 1.75},
+                    }
+                )
             )
-        )
+            return subprocess.CompletedProcess([], 0, stdout="", stderr="")
+
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *_args, **_kwargs: subprocess.CompletedProcess(
-                [], 0, stdout="", stderr=""
-            ),
+            successful_run,
         )
 
         result = run_benchmark.run_task(
@@ -503,7 +505,7 @@ class TestExtractCostFromResult:
         assert result.score == pytest.approx(0.8)
         assert result.cost_usd == pytest.approx(1.75)
 
-    def test_dispatch_accounts_for_cost_when_runner_fails(
+    def test_dispatch_accounts_for_new_cost_when_runner_fails(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import subprocess
@@ -521,15 +523,19 @@ class TestExtractCostFromResult:
         )
         output_dir = tmp_path / "failed-run"
         output_dir.mkdir()
-        (output_dir / "results.json").write_text(
-            json.dumps({"tool_usage": {"cost_usd": 4.25}})
-        )
+
+        def failed_run(*_args, **_kwargs):
+            (output_dir / "results.json").write_text(
+                json.dumps({"tool_usage": {"cost_usd": 4.25}})
+            )
+            return subprocess.CompletedProcess(
+                [], 1, stdout="", stderr="runner failed"
+            )
+
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *_args, **_kwargs: subprocess.CompletedProcess(
-                [], 1, stdout="", stderr="runner failed"
-            ),
+            failed_run,
         )
 
         result = run_benchmark.run_task(
@@ -540,3 +546,38 @@ class TestExtractCostFromResult:
 
         assert result.status == "error"
         assert result.cost_usd == pytest.approx(4.25)
+
+    def test_dispatch_ignores_stale_result_when_runner_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+        import run_benchmark
+
+        task_template = _make_task_info("task-001")
+        output_dir = tmp_path / "failed-run"
+        output_dir.mkdir()
+        (output_dir / "results.json").write_text(
+            json.dumps(
+                {
+                    "scores": {"task_score": 0.9},
+                    "tool_usage": {"cost_usd": 9.5},
+                }
+            )
+        )
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *_args, **_kwargs: subprocess.CompletedProcess(
+                [], 1, stdout="", stderr="runner failed"
+            ),
+        )
+
+        result = run_benchmark.run_task(
+            task_template,
+            passthrough_args=["--output-dir", str(output_dir)],
+            mode="mcp_only",
+        )
+
+        assert result.status == "error"
+        assert result.score is None
+        assert result.cost_usd == 0.0
