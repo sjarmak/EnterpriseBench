@@ -71,7 +71,7 @@
     "dispatch_rule": "one matched CLI Finder validity slot only",
     "headline_eligible": false
   },
-  "harness_hash": "sha256:c97fd1e779d9081515e3dbd2ba10607c21fa4d4c6b7f56f8d998508f008ac9c8",
+  "harness_hash": "sha256:f824a9bc8fef47684a031fe43a5cf56d1590da0d36ef910a028c25c602d27230",
   "verifier_hashes": {
     "dep-traversal-003": "sha256:9e046e38c5a32ee17d591b91174cdaa7af47156de0decc4881407c33dde9f150"
   }

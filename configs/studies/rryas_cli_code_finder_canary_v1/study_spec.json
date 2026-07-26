@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-cli-code-finder-canary-v1",
   "schema_version": 1,
-  "task_manifest_hash": "sha256:2d66b2df059272b4fd79cc123f41a5beb9978ccdc5b8778127df51496c2108ac",
+  "task_manifest_hash": "sha256:98000da3f0074c6aa9f273217e66c85c4ff26be243eaa12e4574fe79011cf9fe",
   "task_ids": [
     "dep-traversal-003"
   ],
@@ -16,8 +16,8 @@
   "attempt_policy": "first_valid_attempt",
   "max_attempts": 1,
   "model": "claude-sonnet-5",
-  "harness": "sha256:c97fd1e779d9081515e3dbd2ba10607c21fa4d4c6b7f56f8d998508f008ac9c8",
-  "revision": "2471d3ca0fc81a5f7b44571379f6ad694a41c1c6",
+  "harness": "sha256:f824a9bc8fef47684a031fe43a5cf56d1590da0d36ef910a028c25c602d27230",
+  "revision": "c549e21953cf6d9a278cba6d9707db1d8133fe14",
   "token_source": "sdk_model_usage",
   "score_contract": "weighted-mean-v2",
   "promotion_policy": "validity-canary-only-no-comparison"
