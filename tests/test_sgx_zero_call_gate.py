@@ -265,6 +265,22 @@ class TestSgxToolCallCounting:
 
         assert usage["sgx_tool_breakdown"] == {"finder": 1}
 
+    def test_timeout_wrapped_finder_from_paid_canary_counts(
+        self, tmp_path: Path
+    ) -> None:
+        """Regression: rryas-cli-code-finder-canary-v1 used this exact shape."""
+        command = (
+            "timeout 280 sgx finder 'inspect github.com/sg-evals/chi--v5.0.8' "
+            "> /tmp/chi_finder.out 2>&1 &\n"
+            "wait\n"
+            "cat /tmp/chi_finder.out"
+        )
+
+        usage = _usage(tmp_path, _assistant(_bash(command)))
+
+        assert usage["sgx_tool_calls"] == 1
+        assert usage["sgx_tool_breakdown"] == {"finder": 1}
+
     def test_direct_cli_rejects_finder_contamination(self) -> None:
         result = _result(1)
         result.tool_usage["sgx_tool_breakdown"] = {"finder": 1}

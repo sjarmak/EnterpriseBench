@@ -461,13 +461,15 @@ _MCP_TOOL_PREFIX = "mcp__sourcegraph__"
 # text parsed synchronously in the orchestrator. No real invocation path is close to
 # 256 chars.
 #
-# KNOWN GAP: a wrapper token with no separator before `sgx` is not seen —
-# `timeout 30 sgx …`, `env X=y sgx …`, `sh -c "sgx …"`, `./sgx …`. Zero of the 728
-# calibrated calls use these forms; broadening the anchor to catch them reintroduces
-# false positives (`echo "sgx"`). Revisit on the first real EB cli calibration
-# (EnterpriseBench follow-up) rather than loosening against an unmeasured form.
+# A measured EB Finder canary used the bounded wrapper form
+# `timeout 280 sgx finder ...`; accept that exact command grammar while retaining
+# the command-position anchor. Broader wrappers (`env X=y`, `sh -c`) remain
+# deliberately unsupported because accepting arbitrary leading tokens would
+# reintroduce false positives such as `echo "sgx"`.
 _SGX_SUBCOMMAND_RE = re.compile(
-    r"(?:^|[;&|\n(`])\s*(?:/\S{0,256}/)?sgx\s+([a-z][a-z0-9_-]*)"
+    r"(?:^|[;&|\n(`])\s*"
+    r"(?:(?:/\S{0,256}/)?timeout\s+\d+(?:\.\d+)?[smhd]?\s+)?"
+    r"(?:/\S{0,256}/)?sgx\s+([a-z][a-z0-9_-]*)"
 )
 
 
