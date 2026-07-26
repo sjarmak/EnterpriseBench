@@ -10,6 +10,7 @@ forensics) rather than the upstream tools' behaviour.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -92,12 +93,22 @@ def _step(name: str, fail: bool = False) -> rpo.Step:
     return rpo.Step(name=name, execute=execute, rollback=rollback)
 
 
-# ---------------------------------------------------------------------------
-# Context validation
-# ---------------------------------------------------------------------------
-
-
 class TestContext:
+    def test_orchestrator_supports_package_style_import(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import scripts.orchestration.run_promotion_orchestrator",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+
     def test_invalid_target_state_raises(self, workdir: Path) -> None:
         ctx = _make_ctx(workdir, "r1", target_state="bogus")
         with pytest.raises(ValueError, match="Invalid target_state"):
@@ -138,11 +149,6 @@ class TestContext:
             "atomic_publish",
             "update_registry",
         ]
-
-
-# ---------------------------------------------------------------------------
-# Validate-only mode
-# ---------------------------------------------------------------------------
 
 
 class TestValidateOnly:
@@ -281,6 +287,7 @@ class TestRollback:
 
 class TestResume:
     def test_resume_never_skips_validation_steps(self, workdir: Path) -> None:
+        _make_run(workdir, "r1")
         executed: list[str] = []
 
         def step(name: str) -> rpo.Step:
@@ -538,10 +545,13 @@ class TestStageMetrics:
             )
             return rpo.StepOutcome("replace_capsule", "reversible")
 
+        def wrapped_validate(ctx: rpo.PromotionContext) -> rpo.StepOutcome:
+            return rpo._step_validate_inputs(ctx)
+
         report = rpo.RunPromotionOrchestrator(
             ctx,
             [
-                rpo.Step("validate_inputs", rpo._step_validate_inputs),
+                rpo.Step("validate_inputs", wrapped_validate),
                 rpo.Step("replace_capsule", replace_capsule),
                 rpo.Step("stage_metrics", rpo._step_stage_metrics),
             ],

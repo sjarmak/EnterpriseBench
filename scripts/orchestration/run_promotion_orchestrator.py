@@ -29,18 +29,27 @@ DEFAULT_RAW_RUNS_ROOT = REPO_ROOT / "results" / "runs"
 DEFAULT_OFFICIAL_RUNS_ROOT = REPO_ROOT / "results" / "official_runs"
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 
-from promotion_capsule import (  # noqa: E402
-    capsule_snapshot as _capsule_snapshot,
-    declared_task_tomls as _declared_task_tomls,
-    stage_metrics as _stage_capsule_metrics,
-    validate_inputs as _step_validate_inputs,
-)
-from promotion_types import (  # noqa: E402
-    PromotionContext,
-    PromotionReport,
-    Step,
-    StepOutcome,
-)
+if __package__:
+    from .promotion_capsule import (
+        capsule_snapshot as _capsule_snapshot,
+        declared_task_tomls as _declared_task_tomls,
+        stage_metrics as _stage_capsule_metrics,
+        validate_inputs as _step_validate_inputs,
+    )
+    from .promotion_types import PromotionContext, PromotionReport, Step, StepOutcome
+else:
+    from promotion_capsule import (  # noqa: E402
+        capsule_snapshot as _capsule_snapshot,
+        declared_task_tomls as _declared_task_tomls,
+        stage_metrics as _stage_capsule_metrics,
+        validate_inputs as _step_validate_inputs,
+    )
+    from promotion_types import (  # noqa: E402
+        PromotionContext,
+        PromotionReport,
+        Step,
+        StepOutcome,
+    )
 
 # Maximum failure-class string length retained for forensics; trimming keeps
 # the forensics JSON readable when callers attach long stderr blobs.
@@ -49,11 +58,6 @@ MAX_ERROR_DETAIL_LEN = 4_000
 VALID_TARGET_STATES = frozenset({"official", "candidate"})
 MAX_SAFE_RESUME_STEP = 5
 RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
-
-
-# ---------------------------------------------------------------------------
-# Step implementations
-# ---------------------------------------------------------------------------
 
 
 def _run_subprocess(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
@@ -354,11 +358,6 @@ def _rollback_registry(ctx: PromotionContext) -> None:
         os.replace(backup, ctx.registry_path)
 
 
-# ---------------------------------------------------------------------------
-# Step pipeline registration
-# ---------------------------------------------------------------------------
-
-
 def build_default_pipeline() -> list[Step]:
     """Return the canonical ordered pipeline.
 
@@ -447,6 +446,17 @@ class RunPromotionOrchestrator:
         completed: list[tuple[Step, StepOutcome]] = []
 
         try:
+            if (
+                any(
+                    step.name in {"validate_inputs", "stage_metrics"}
+                    for step in self._pipeline
+                )
+                and self._ctx.capsule_snapshot is None
+            ):
+                self._ctx = replace(
+                    self._ctx,
+                    capsule_snapshot=_capsule_snapshot(self._ctx),
+                )
             for index, step in enumerate(self._pipeline, start=1):
                 if index < self._ctx.resume_from and not step.name.startswith(
                     "validate"
@@ -478,14 +488,6 @@ class RunPromotionOrchestrator:
                     len(self._pipeline),
                     step.name,
                 )
-                if (
-                    step.execute is _step_validate_inputs
-                    and self._ctx.capsule_snapshot is None
-                ):
-                    self._ctx = replace(
-                        self._ctx,
-                        capsule_snapshot=_capsule_snapshot(self._ctx),
-                    )
                 start = time.monotonic()
                 outcome = step.execute(self._ctx)
                 duration = time.monotonic() - start

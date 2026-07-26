@@ -20,7 +20,11 @@ from eb_study import (
     StudySpec,
     TrialReceipt,
 )
-from promotion_types import CapsuleSnapshot, PromotionContext, StepOutcome
+
+if __package__:
+    from .promotion_types import CapsuleSnapshot, PromotionContext, StepOutcome
+else:
+    from promotion_types import CapsuleSnapshot, PromotionContext, StepOutcome
 
 SubprocessRunner = Callable[[list[str], Path], tuple[int, str, str]]
 
