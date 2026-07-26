@@ -111,6 +111,15 @@ from eb_verify.score_contract import (  # noqa: E402
     weighted_mean,
 )
 from eb_verify.scorer_guard import InfraError, guard_verifier_output
+from study_receipt import RunEvidence
+from study_run import (
+    InputProvenance,
+    capture_input_provenance,
+    docker_container_image_digest,
+    docker_image_digest,
+    emit_study_receipt,
+    validate_study_config,
+)
 
 try:
     from orchestration.runner_cli import assert_accepts_passthrough
@@ -168,6 +177,24 @@ class TaskRunConfig:
     rep: int | None = None
     ablation_variant: str | None = None
     min_disk_gb: float = 10.0
+    study_spec: Path | None = None
+    study_receipts: Path | None = None
+    attempt: int | None = None
+
+    def __post_init__(self) -> None:
+        validate_study_config(
+            study_spec=self.study_spec,
+            study_receipts=self.study_receipts,
+            repetition=self.rep,
+            attempt=self.attempt,
+            dry_run=self.dry_run,
+        )
+        if (
+            self.study_spec is not None
+            and not self.agent_command
+            and self.account is None
+        ):
+            raise ValueError("study runs require an agent command or OAuth account")
 
 
 # Status marker for runs that must not be scored (e.g. MCP pre-flight failure,
@@ -315,6 +342,13 @@ class TaskRunResult:
     started_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+    completed_at: str | None = None
+    image_digest: str | None = None
+    arm_gate_proof: str | None = None
+    task_hash: str | None = None
+    harness_hash: str | None = None
+    verifier_hash: str | None = None
+    receipt_emitted: bool = False
 
 
 def _load_oauth_token(account: int) -> str:
@@ -477,6 +511,51 @@ def _docker_build(dockerfile_path: Path, image_tag: str, timeout: int = 1800) ->
             f"Docker build failed (exit {result.returncode}):\n{result.stderr[-2000:]}"
         )
     logger.info("Docker image built: %s", image_tag)
+
+
+def _docker_image_digest(image_tag: str) -> str:
+    """Capture the immutable ID of the image used by a study trial."""
+
+    return docker_image_digest(image_tag)
+
+
+def _docker_container_image_digest(container_id: str) -> str:
+    """Capture the image ID actually bound to a created study container."""
+
+    return docker_container_image_digest(container_id)
+
+
+def _capture_input_provenance(config: TaskRunConfig, task_dir: Path) -> InputProvenance:
+    """Hash the exact task, harness, and verifier inputs used by this run."""
+
+    harness_inputs = [
+        Path(__file__),
+        REPO_ROOT / "scripts" / "orchestration" / "mode_gate.py",
+        DOCKERFILE_GENERATOR,
+        TEST_RUNNER_SH,
+    ]
+    if config.mode in ("mcp_only", "hybrid"):
+        harness_inputs.append(
+            REPO_ROOT / "agents" / "harnesses" / "claude" / "mcp" / "sourcegraph.py"
+        )
+    if config.mode == "cli":
+        harness_inputs.extend(
+            [
+                REPO_ROOT / "agents" / "harnesses" / "claude" / "cli" / "sgx.py",
+                SGX_CLI_SRC,
+            ]
+        )
+
+    verifier_inputs = [TEST_RUNNER_SH, EB_VERIFY_LIB]
+    for path in (task_dir / "checks", task_dir / "ground_truth.json"):
+        if path.exists():
+            verifier_inputs.append(path)
+    return capture_input_provenance(
+        task_toml=config.task_toml,
+        harness_inputs=harness_inputs,
+        verifier_inputs=verifier_inputs,
+        repo_root=REPO_ROOT,
+    )
 
 
 def _docker_create_container(
@@ -1158,6 +1237,38 @@ def _apply_mode_gate(container_id: str, task_data: dict, mode: str) -> tuple[boo
         SCORING_USER,
     )
     return True, ""
+
+
+def _capture_arm_gate_proof(
+    container_id: str, task_data: dict, mode: str
+) -> tuple[str, str]:
+    """Observe the post-gate access state that defines one study arm."""
+
+    try:
+        dirs = repo_dirs(task_data, WORKSPACE_DIR)
+    except ValueError as exc:
+        return "", f"arm proof cannot resolve repositories: {exc}"
+    if not dirs:
+        return "", "arm proof found no repositories"
+
+    expect_agent_read = not should_gate(mode)
+    for repo_dir in dirs:
+        probe = _gate_probe_file(container_id, repo_dir)
+        if probe is None:
+            return "", f"arm proof found no file under {repo_dir}"
+        agent_can_read = _can_read(container_id, probe, user=AGENT_USER)
+        scorer_can_read = _can_read(container_id, probe, user=SCORING_USER)
+        if agent_can_read != expect_agent_read:
+            expected = "readable" if expect_agent_read else "denied"
+            return "", f"arm proof expected agent access {expected} for {probe}"
+        if not scorer_can_read:
+            return "", f"arm proof found scorer unable to read {probe}"
+
+    agent_state = "agent-readable" if expect_agent_read else "agent-denied"
+    return (
+        f"mode_gate:v1:{mode}:{agent_state},scorer-readable;repos={len(dirs)}",
+        "",
+    )
 
 
 def _scan_mcp_config_error(output_dir: Path) -> bool:
@@ -2049,7 +2160,9 @@ def _save_results(
 
     # Derived once so the two artifacts below cannot disagree.
     status = _effective_status(result)
-    completed_at = datetime.now(timezone.utc).isoformat()
+    if result.completed_at is None:
+        result.completed_at = datetime.now(timezone.utc).isoformat()
+    completed_at = result.completed_at
 
     # --- results.json (backward compatible) ---
     results_path = output_dir / "results.json"
@@ -2066,6 +2179,13 @@ def _save_results(
         "scores": result.scores,
         "timing": result.timing,
         "tool_usage": result.tool_usage,
+        "provenance": {
+            "image_digest": result.image_digest,
+            "arm_gate_proof": result.arm_gate_proof,
+            "task_hash": result.task_hash,
+            "harness_hash": result.harness_hash,
+            "verifier_hash": result.verifier_hash,
+        },
         "config": {
             "source": config.source,
             "agent_command": config.agent_command,
@@ -2124,6 +2244,31 @@ def _save_results(
         (verifier_dir / "output.json").write_text(
             json.dumps(result.scores, indent=2) + "\n"
         )
+
+    if config.study_spec is not None and not result.receipt_emitted:
+        if (
+            config.study_receipts is None
+            or config.rep is None
+            or config.attempt is None
+        ):
+            raise RuntimeError("study trial identity was not validated")
+        emit_study_receipt(
+            spec_path=config.study_spec,
+            receipts_path=config.study_receipts,
+            run_dir=output_dir,
+            repetition=config.rep,
+            attempt=config.attempt,
+            evidence=RunEvidence(
+                image_digest=result.image_digest,
+                arm_gate_proof=result.arm_gate_proof,
+                task_hash=result.task_hash,
+                harness_hash=result.harness_hash,
+                verifier_hash=result.verifier_hash,
+                started_at=result.started_at,
+                ended_at=completed_at,
+            ),
+        )
+        result.receipt_emitted = True
 
     logger.info("Results saved to: %s", results_path)
     return results_path
@@ -2983,6 +3128,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
     """
     timings: dict[str, float] = {}
     result = TaskRunResult(task_id="unknown")
+    expected_image_digest: str | None = None
 
     try:
         # --- Phase 1: Parse ---
@@ -3019,6 +3165,21 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 output_dir = base
         output_dir.mkdir(parents=True, exist_ok=True)
         result.output_dir = str(output_dir)
+
+        if config.study_spec is not None:
+            try:
+                provenance = _capture_input_provenance(config, task_dir)
+                result.task_hash = provenance.task_hash
+                result.harness_hash = provenance.harness_hash
+                result.verifier_hash = provenance.verifier_hash
+            except Exception as exc:
+                result.phase = "input_provenance_failed"
+                result.status = RUN_STATUS_INVALID
+                result.failure_class = "integrity_provenance"
+                result.error = str(exc)
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
 
         # --- Arm eligibility: refuse the task, do not score it near zero ---
         # A code_patch task cannot be solved by an agent forbidden to read the
@@ -3073,10 +3234,22 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 result.failure_class = "infra_build"
                 result.timing = timings
                 _save_results(result, task_data, output_dir, config)
-                raise
+                return result
             timings["build"] = time.monotonic() - t0
         else:
             logger.info("Skipping Docker build (--no-build)")
+
+        if config.study_spec is not None:
+            try:
+                expected_image_digest = _docker_image_digest(image_tag)
+            except Exception as exc:
+                result.phase = "image_provenance_failed"
+                result.status = RUN_STATUS_INVALID
+                result.failure_class = "integrity_provenance"
+                result.error = str(exc)
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
 
         # --- Phase 3: Setup ---
         t0 = time.monotonic()
@@ -3085,6 +3258,14 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 image_tag, container_name, config.memory_mb
             )
             result.container_id = container_id
+            if expected_image_digest is not None:
+                result.image_digest = _docker_container_image_digest(container_id)
+                if result.image_digest != expected_image_digest:
+                    raise RuntimeError(
+                        "created container image ID does not match the inspected "
+                        f"study image: {result.image_digest} != "
+                        f"{expected_image_digest}"
+                    )
             _docker_start(container_id)
             _setup_container(container_id, task_dir, task_data, mode=config.mode)
         except Exception as setup_exc:
@@ -3093,7 +3274,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             result.failure_class = "infra_clone"
             result.timing = timings
             _save_results(result, task_data, output_dir, config)
-            raise
+            return result
 
         healthy = _run_health_check(container_id, repos)
         timings["setup"] = time.monotonic() - t0
@@ -3307,6 +3488,21 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 result.timing = timings
                 _save_results(result, task_data, output_dir, config)
                 return result
+
+            if config.study_spec is not None:
+                proof, proof_err = _capture_arm_gate_proof(
+                    container_id, task_data, config.mode
+                )
+                if proof_err:
+                    result.phase = "mode_gate_proof_failed"
+                    result.status = RUN_STATUS_INVALID
+                    result.success = False
+                    result.failure_class = "infra_perms"
+                    result.error = proof_err
+                    result.timing = timings
+                    _save_results(result, task_data, output_dir, config)
+                    return result
+                result.arm_gate_proof = proof
 
             t0 = time.monotonic()
             agent_exit, agent_duration = _run_agent(
@@ -3546,6 +3742,24 @@ Examples:
         ),
     )
     parser.add_argument(
+        "--study-spec",
+        type=Path,
+        default=None,
+        help="Exact StudySpec JSON for this trial (requires --study-receipts).",
+    )
+    parser.add_argument(
+        "--study-receipts",
+        type=Path,
+        default=None,
+        help="Append-only receipt JSONL for this trial's named study.",
+    )
+    parser.add_argument(
+        "--attempt",
+        type=int,
+        default=None,
+        help="Study attempt index (1-based; requires --study-spec and --rep).",
+    )
+    parser.add_argument(
         "--ablation-variant",
         default=None,
         help=(
@@ -3603,6 +3817,9 @@ def main() -> None:
         account=args.account,
         mode=args.mode,
         rep=args.rep,
+        study_spec=args.study_spec.resolve() if args.study_spec else None,
+        study_receipts=(args.study_receipts.resolve() if args.study_receipts else None),
+        attempt=args.attempt,
         ablation_variant=args.ablation_variant,
         min_disk_gb=args.min_disk_gb,
     )

@@ -39,7 +39,7 @@ class TestProvenance:
         assert prov["study_id"] == "rryas-headline-2026-07"
         assert prov["model"] == "claude-opus-4-8"
         assert prov["revision"] == "e439534"
-        assert prov["score_contract"] == "weighted-checkpoints-v1"
+        assert prov["score_contract"] == "weighted-mean-v2"
         assert prov["attempt_policy"] == "all_valid_repetitions"
         assert prov["token_source"] == "sdk_model_usage"
         assert prov["spec_hash"].startswith("sha256:")

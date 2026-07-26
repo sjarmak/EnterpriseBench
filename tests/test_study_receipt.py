@@ -68,6 +68,7 @@ def write_run(
     phase: str = "complete",
     vendor: dict | None = VENDOR_BLOCK,
     name: str | None = None,
+    score_contract_version: int = 2,
 ) -> Path:
     run_dir = tmp_path / (name or f"{task_id}-{mode}")
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -79,6 +80,7 @@ def write_run(
     scores = (
         {
             "task_score": task_score,
+            "score_contract_version": score_contract_version,
             "checkpoints_total": len(checkpoints),
             "checkpoints_passed": sum(1 for c in checkpoints if c["passed"]),
             "checkpoints": checkpoints,
@@ -130,16 +132,9 @@ class TestValidTrial:
         receipt = emit(write_run(tmp_path, task_score=1.0))
         assert receipt.score == 1.0
 
-    def test_weights_that_do_not_sum_to_one_cannot_claim_the_contract(self, tmp_path):
-        run_dir = write_run(
-            tmp_path,
-            checkpoints=[
-                {"name": f"cp{i}", "weight": 1.0, "score": 1.0, "passed": True}
-                for i in range(4)
-            ],
-            task_score=4.0,
-        )
-        with pytest.raises(ReceiptError, match="weights sum to"):
+    def test_unknown_score_contract_cannot_emit_a_receipt(self, tmp_path):
+        run_dir = write_run(tmp_path, score_contract_version=99)
+        with pytest.raises(ReceiptError, match="score contract"):
             emit(run_dir)
 
     def test_usage_is_billed_from_the_vendor_block(self, tmp_path):

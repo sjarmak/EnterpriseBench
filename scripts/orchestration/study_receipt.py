@@ -50,14 +50,15 @@ from eb_study import (  # noqa: E402
     TrialReceipt,
     file_hash,
 )
+from eb_verify.score_contract import (  # noqa: E402
+    SCORE_CONTRACT_VERSION,
+    ScoreContractError,
+    read_task_score,
+)
 
 #: The score semantics this emitter implements. A spec that froze a different
 #: contract will not accept these receipts — see StudyCapsule._check_belongs.
-SCORE_CONTRACT = "weighted-checkpoints-v1"
-
-#: How far a task's checkpoint weights may drift from 1.0 before ``task_score``
-#: stops being a unit-interval score.
-WEIGHT_TOLERANCE = 1e-6
+SCORE_CONTRACT = "weighted-mean-v2"
 
 #: Files worth content-addressing. Absent ones are simply not listed; the
 #: receipt records what exists rather than asserting paths that do not.
@@ -73,11 +74,11 @@ class RunEvidence:
     gate applied at runtime, and the hashes describe inputs the run consumed.
     """
 
-    image_digest: str
-    arm_gate_proof: str
-    task_hash: str
-    harness_hash: str
-    verifier_hash: str
+    image_digest: str | None
+    arm_gate_proof: str | None
+    task_hash: str | None
+    harness_hash: str | None
+    verifier_hash: str | None
     started_at: str
     ended_at: str
 
@@ -188,19 +189,15 @@ def _invalidity(
 
 
 def _score(scores: dict[str, Any], trial_key: str) -> float:
-    """The scorer's already-normalized weighted score, checked against its contract."""
+    """Read the scorer's normalized value through the normative v2 contract."""
 
-    total_weight = sum(cp.get("weight", 0.0) for cp in scores["checkpoints"])
-    if abs(total_weight - 1.0) > WEIGHT_TOLERANCE:
+    try:
+        return read_task_score(scores, f"receipt {trial_key}")
+    except ScoreContractError as exc:
         raise ReceiptError(
-            f"receipt {trial_key}: checkpoint weights sum to {total_weight!r}, not 1.0, "
-            f"so task_score is not a {SCORE_CONTRACT} score"
-        )
-
-    value = scores.get("task_score")
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        raise ReceiptError(f"receipt {trial_key}: task_score is {value!r}, not a number")
-    return float(value)
+            f"receipt {trial_key}: score contract must be version "
+            f"{SCORE_CONTRACT_VERSION}: {exc}"
+        ) from exc
 
 
 def _usage(spec: StudySpec, vendor: VendorUsage | None) -> dict[str, Any] | None:

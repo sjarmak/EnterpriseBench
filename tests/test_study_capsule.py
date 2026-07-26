@@ -46,7 +46,7 @@ def spec_payload(**overrides):
         "harness": "run_task.py@sha256:harness",
         "revision": "e439534",
         "token_source": "sdk_model_usage",
-        "score_contract": "weighted-checkpoints-v1",
+        "score_contract": "weighted-mean-v2",
         "promotion_policy": "paired-valid-complete-arms",
     }
     payload.update(overrides)

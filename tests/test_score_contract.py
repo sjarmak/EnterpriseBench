@@ -516,26 +516,21 @@ class TestAggregationAcrossShapes:
 
 
 # ---------------------------------------------------------------------------
-# Cost selection: the one place the fix can reorder a published number
+# Cost attempt parsing shares the score contract
 # ---------------------------------------------------------------------------
 
 
 class TestCostAttemptSelection:
-    def test_selection_changes_when_a_cell_has_attempts_of_different_shapes(
+    def test_attempts_of_different_shapes_keep_their_v2_scores(
         self, tmp_path: Path
     ) -> None:
-        """Pinned as a known behaviour change, not asserted to be inert.
+        """The cost path reads v2 scores without legacy checkpoint division.
 
         checkpoints_total is a count of .verifiers/*.sh present in that
         container, so a task whose checkpoint set changed between batches has
-        attempts of the same (task_id, mode) cell with different N — and
-        cost_tracker scans across batches by design. Under the old division,
-        attempt B (0.4 over 1 checkpoint -> 0.4) beat attempt A (0.5 over 2 ->
-        0.25). Under the contract, A's higher weighted score wins, which is the
-        answer the scorer actually produced.
-
-        The pre-existing cost fixtures all hardcode checkpoints_total=1, so the
-        old suite could not see this either way.
+        attempts with different N. Selection is now governed by the
+        prespecified attempt policy, not either score; this test pins only the
+        shared score parsing contract.
         """
         a = _write_result(
             tmp_path / "batch1" / "t", "t", task_score=0.5, n_checkpoints=2
@@ -544,9 +539,12 @@ class TestCostAttemptSelection:
             tmp_path / "batch2" / "t", "t", task_score=0.4, n_checkpoints=1
         )
 
-        score_a = cost_tracker._attempt_score(a.parent, REPO_ROOT / "benchmarks")
-        score_b = cost_tracker._attempt_score(b.parent, REPO_ROOT / "benchmarks")
+        score_a = cost_tracker._attempt_facts(
+            a.parent, REPO_ROOT / "benchmarks"
+        ).normalized_score
+        score_b = cost_tracker._attempt_facts(
+            b.parent, REPO_ROOT / "benchmarks"
+        ).normalized_score
 
         assert score_a == 0.5
         assert score_b == 0.4
-        assert score_a > score_b  # legacy: 0.25 < 0.4, so B was published
