@@ -14,7 +14,8 @@ from scripts.orchestration.study_run import (
 
 
 ROOT = Path(__file__).resolve().parent.parent
-STUDY_DIR = ROOT / "configs" / "studies" / "rryas_code_finder_canary_v1"
+V1_DIR = ROOT / "configs" / "studies" / "rryas_code_finder_canary_v1"
+V2_DIR = ROOT / "configs" / "studies" / "rryas_code_finder_canary_v2"
 TASK = ROOT / "benchmarks" / "dependency_management" / "dep-traversal-003" / "task.toml"
 FINGERPRINT = (
     "sourcegraph-mcp-code-finder:exactly-once-per-repository:"
@@ -23,9 +24,20 @@ FINGERPRINT = (
 )
 
 
-def test_canary_capsule_locks_treatment_and_current_inputs() -> None:
-    manifest_path = STUDY_DIR / "canary_manifest.json"
-    spec = StudySpec.load(STUDY_DIR / "study_spec.json")
+def test_invalid_v1_capsule_remains_frozen_as_historical_evidence() -> None:
+    manifest_path = V1_DIR / "canary_manifest.json"
+    spec = StudySpec.load(V1_DIR / "study_spec.json")
+    manifest = json.loads(manifest_path.read_text())
+
+    assert spec.study_id == "rryas-code-finder-canary-v1"
+    assert spec.task_manifest_hash == file_hash(manifest_path)
+    assert spec.harness == manifest["harness_hash"]
+    assert spec.revision == "264b547b18f0250e2703ca351aba0c6011b9b190"
+
+
+def test_v2_canary_capsule_locks_treatment_and_current_inputs() -> None:
+    manifest_path = V2_DIR / "canary_manifest.json"
+    spec = StudySpec.load(V2_DIR / "study_spec.json")
     manifest = json.loads(manifest_path.read_text())
     provenance = capture_input_provenance(
         task_toml=TASK,
@@ -37,7 +49,7 @@ def test_canary_capsule_locks_treatment_and_current_inputs() -> None:
         harness_input_paths(ROOT)
     )
 
-    assert spec.study_id == "rryas-code-finder-canary-v1"
+    assert spec.study_id == "rryas-code-finder-canary-v2"
     assert spec.task_manifest_hash == file_hash(manifest_path)
     assert spec.task_ids == ("dep-traversal-003",)
     assert [(arm.name, arm.capability_fingerprint) for arm in spec.arms] == [
@@ -45,7 +57,7 @@ def test_canary_capsule_locks_treatment_and_current_inputs() -> None:
     ]
     assert spec.baseline_arm == "mcp_code_finder"
     assert spec.repetitions == 1
-    assert spec.max_attempts == 2
+    assert spec.max_attempts == 1
     assert spec.promotion_policy == "validity-canary-only-no-comparison"
     assert spec.harness == provenance.harness_hash
     assert manifest["tasks"][0]["task_hash"] == provenance.task_hash
@@ -55,7 +67,7 @@ def test_canary_capsule_locks_treatment_and_current_inputs() -> None:
 
 
 def test_canary_manifest_prespecifies_fail_closed_telemetry_and_cli_scope() -> None:
-    manifest = json.loads((STUDY_DIR / "canary_manifest.json").read_text())
+    manifest = json.loads((V2_DIR / "canary_manifest.json").read_text())
     treatment = manifest["treatment"]
 
     assert treatment["mode"] == "mcp_code_finder"
@@ -92,3 +104,14 @@ def test_canary_manifest_prespecifies_fail_closed_telemetry_and_cli_scope() -> N
             "keep the direct cli arm as a separate retrieval treatment"
         ),
     }
+    assert manifest["judge_configuration"] == {
+        "model": "cc:haiku",
+        "account": 1,
+        "executable": "claude-1",
+        "selection": "explicit --judge-account 1",
+        "provenance_required_in_scores": True,
+    }
+    assert manifest["supersedes"]["study_id"] == "rryas-code-finder-canary-v1"
+    assert manifest["supersedes"]["evidence_policy"] == (
+        "preserve the v1 receipt and artifacts unchanged"
+    )
