@@ -32,7 +32,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
@@ -83,6 +83,7 @@ class TaskResult:
     task_id: str
     difficulty: str
     score: float | None = None
+    cost_usd: float = 0.0
     duration_seconds: float = 0.0
     status: str = "pending"
     mode: str = "baseline"
@@ -278,18 +279,115 @@ def extract_task_cost(
             continue
         try:
             data = json.loads(path.read_text())
-            tool_usage = data.get("tool_usage", {})
-            cost = tool_usage.get("cost_usd", 0.0)
-            if cost:
-                return float(cost)
+            if not isinstance(data, dict):
+                continue
+            tool_usage = data.get("tool_usage")
+            cost = (
+                tool_usage.get("cost_usd", 0.0) if isinstance(tool_usage, dict) else 0.0
+            )
+            return float(cost)
         except (json.JSONDecodeError, OSError, TypeError, ValueError):
             continue
-    return 0.0
+
+    mode_dir = results_dir / task_id / mode
+    attempt_paths = sorted(
+        {
+            *mode_dir.glob("rep*/attempt*/results.json"),
+            *mode_dir.glob("attempt*/results.json"),
+        }
+    )
+    total = 0.0
+    for path in attempt_paths:
+        try:
+            data = json.loads(path.read_text())
+            total += float(data.get("tool_usage", {}).get("cost_usd", 0.0))
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            continue
+    return total
 
 
 # ---------------------------------------------------------------------------
 # Execution
 # ---------------------------------------------------------------------------
+
+
+def _passthrough_value(args: Sequence[str], option: str) -> str | None:
+    """Return the last value supplied for an argparse-style option."""
+    value: str | None = None
+    prefix = f"{option}="
+    for index, arg in enumerate(args):
+        if arg.startswith(prefix):
+            value = arg[len(prefix) :]
+        elif arg == option and index + 1 < len(args):
+            value = args[index + 1]
+    return value
+
+
+def _result_file_candidates(
+    task: TaskInfo,
+    passthrough_args: Sequence[str],
+    mode: str,
+) -> list[Path]:
+    """Resolve the result path produced by this invocation before fallbacks."""
+    output_value = _passthrough_value(passthrough_args, "--output-dir")
+    study_spec = _passthrough_value(passthrough_args, "--study-spec")
+
+    if output_value is not None:
+        output_dir = Path(output_value)
+    else:
+        output_dir = PROJECT_ROOT / "results" / "runs" / task.task_id / mode
+
+    if study_spec is not None:
+        rep = _passthrough_value(passthrough_args, "--rep")
+        attempt = _passthrough_value(passthrough_args, "--attempt")
+        if rep is not None and output_dir.name != f"rep{rep}":
+            output_dir = output_dir / f"rep{rep}"
+        if attempt is not None:
+            output_dir = output_dir / f"attempt{attempt}"
+        return [output_dir / "results.json"]
+
+    candidates = [output_dir / "results.json"]
+    if output_value is None:
+        if mode == "baseline":
+            candidates.append(
+                PROJECT_ROOT / "results" / "runs" / task.task_id / "results.json"
+            )
+        candidates.append(task.toml_path.parent / "results.json")
+    return candidates
+
+
+def _load_task_result(
+    result: TaskResult,
+    candidates: Sequence[Path],
+) -> None:
+    """Populate score and billed cost from the first readable result file."""
+    for results_file in candidates:
+        if not results_file.exists():
+            continue
+        try:
+            rdata = json.loads(results_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(rdata, dict):
+            continue
+
+        scores = rdata.get("scores")
+        if isinstance(scores, dict):
+            result.score = scores.get("task_score", rdata.get("score"))
+        else:
+            result.score = rdata.get("score")
+
+        tool_usage = rdata.get("tool_usage")
+        raw_cost = (
+            tool_usage.get("cost_usd", 0.0) if isinstance(tool_usage, dict) else 0.0
+        )
+        if (
+            isinstance(raw_cost, (int, float))
+            and not isinstance(raw_cost, bool)
+            and raw_cost >= 0
+        ):
+            result.cost_usd = float(raw_cost)
+        return
 
 
 def run_task(
@@ -329,6 +427,10 @@ def run_task(
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         result.duration_seconds = time.monotonic() - t0
+        _load_task_result(
+            result,
+            _result_file_candidates(task, passthrough_args, mode),
+        )
 
         if proc.returncode != 0:
             logger.warning(
@@ -340,22 +442,6 @@ def run_task(
             )
             result.status = "error"
             return result
-
-        # Try to read results.json from the run output directory
-        for results_file in [
-            PROJECT_ROOT / "results" / "runs" / task.task_id / mode / "results.json",
-            PROJECT_ROOT / "results" / "runs" / task.task_id / "results.json",
-            task.toml_path.parent / "results.json",
-        ]:
-            if results_file.exists():
-                try:
-                    rdata = json.loads(results_file.read_text())
-                    result.score = rdata.get("scores", {}).get(
-                        "task_score", rdata.get("score")
-                    )
-                    break
-                except (json.JSONDecodeError, OSError):
-                    pass
 
         result.status = "completed"
 
@@ -778,11 +864,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 # Track cost after task completion
                 if not args.dry_run:
-                    task_cost = extract_task_cost(
-                        task.task_id,
-                        results_dir=results_dir,
-                        mode=current_mode,
-                    )
+                    task_cost = result.cost_usd
                     cumulative_cost_usd += task_cost
 
                     if not budget_warned and budget.should_warn(cumulative_cost_usd):
@@ -840,11 +922,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     result_map[task.task_id] = r
 
                     # Track cost from completed parallel task
-                    task_cost = extract_task_cost(
-                        task.task_id,
-                        results_dir=results_dir,
-                        mode=current_mode,
-                    )
+                    task_cost = r.cost_usd
                     cumulative_cost_usd += task_cost
 
                     logger.info(

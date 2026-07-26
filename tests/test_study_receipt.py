@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -167,7 +169,9 @@ class TestInvalidTrial:
         assert receipt.failure_class == "mcp_preflight_failed"
         assert receipt.score is None
 
-    def test_a_run_that_never_completed_is_invalid_even_without_a_status(self, tmp_path):
+    def test_a_run_that_never_completed_is_invalid_even_without_a_status(
+        self, tmp_path
+    ):
         run_dir = write_run(tmp_path, success=False, phase="build_failed")
         receipt = emit(run_dir)
         assert receipt.status == "infra_invalid"
@@ -217,6 +221,35 @@ class TestOutOfStudyRuns:
 
 
 class TestEndToEnd:
+    def test_parallel_duplicate_append_admits_exactly_one_receipt(
+        self, tmp_path, monkeypatch
+    ):
+        import eb_study.receipt as receipt_module
+
+        receipts_path = tmp_path / "receipts.jsonl"
+        receipts_path.touch()
+        receipt = emit(write_run(tmp_path))
+        both_read_empty = threading.Barrier(2)
+
+        def synchronized_empty_read(_path):
+            both_read_empty.wait()
+            return []
+
+        monkeypatch.setattr(receipt_module, "read_receipts", synchronized_empty_read)
+
+        def try_append():
+            try:
+                append_receipt(receipts_path, receipt)
+                return "appended"
+            except ReceiptError:
+                return "duplicate"
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(lambda _index: try_append(), range(2)))
+
+        assert sorted(outcomes) == ["appended", "duplicate"]
+        assert receipts_path.read_text().count("\n") == 1
+
     def test_run_directories_become_a_headline_with_the_score_intact(self, tmp_path):
         spec = make_spec()
         receipts_path = tmp_path / "receipts.jsonl"
@@ -231,9 +264,7 @@ class TestEndToEnd:
                         task_score=1.0 if arm == "cli" else 0.5,
                         name=f"{task_id}-{arm}-rep{rep}",
                     )
-                    append_receipt(
-                        receipts_path, emit(run_dir, spec, repetition=rep)
-                    )
+                    append_receipt(receipts_path, emit(run_dir, spec, repetition=rep))
 
         capsule = StudyCapsule.build(spec, read_receipts(receipts_path))
         report = build_report(capsule)
@@ -241,7 +272,9 @@ class TestEndToEnd:
         assert report["reward"]["by_arm"]["cli"]["mean"] == 1.0
         assert report["reward"]["contrasts"]["cli_vs_baseline"]["mean_delta"] == 0.5
         assert report["completeness"]["paired_tasks"] == 2
-        assert report["economics"]["paired_valid"]["total_cost_usd"] == pytest.approx(18.0)
+        assert report["economics"]["paired_valid"]["total_cost_usd"] == pytest.approx(
+            18.0
+        )
 
     def test_one_arm_failing_infrastructure_fails_the_headline(self, tmp_path):
         spec = make_spec()
@@ -257,9 +290,7 @@ class TestEndToEnd:
                         vendor=None if arm == "cli" else VENDOR_BLOCK,
                         name=f"{task_id}-{arm}-rep{rep}",
                     )
-                    append_receipt(
-                        receipts_path, emit(run_dir, spec, repetition=rep)
-                    )
+                    append_receipt(receipts_path, emit(run_dir, spec, repetition=rep))
 
         capsule = StudyCapsule.build(spec, read_receipts(receipts_path))
         with pytest.raises(CompletenessError, match=r"\['cli'\]"):

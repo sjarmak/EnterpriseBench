@@ -706,6 +706,7 @@ class TestStudyReceiptIntegration:
         receipt = read_receipts(receipts_path)[0]
         assert result.success
         assert Path(result.output_dir).name == "attempt2"
+        assert Path(result.output_dir).parent.name == "rep1"
         assert receipt.trial.attempt == 2
         assert receipt.status == "valid"
         assert receipt.score == pytest.approx(1.0)

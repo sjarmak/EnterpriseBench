@@ -3159,6 +3159,9 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             else:
                 output_dir = base
         if config.study_spec is not None:
+            rep_dir = f"rep{config.rep}"
+            if output_dir.name != rep_dir:
+                output_dir = output_dir / rep_dir
             output_dir = output_dir / f"attempt{config.attempt}"
         output_dir.mkdir(parents=True, exist_ok=True)
         result.output_dir = str(output_dir)

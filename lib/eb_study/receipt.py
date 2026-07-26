@@ -20,10 +20,12 @@ rejected rather than admitted with blanks that read as zeroes downstream.
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from .errors import ReceiptError
 from .spec import TrialID
@@ -137,7 +139,9 @@ class TrialReceipt:
     @classmethod
     def from_json(cls, payload: Any) -> "TrialReceipt":
         if not isinstance(payload, dict):
-            raise ReceiptError(f"receipt must be an object, got {type(payload).__name__}")
+            raise ReceiptError(
+                f"receipt must be an object, got {type(payload).__name__}"
+            )
 
         version = payload.get("schema_version")
         if version != RECEIPT_SCHEMA_VERSION:
@@ -149,7 +153,9 @@ class TrialReceipt:
         trial = _trial_from_json(payload.get("trial"))
         status = payload.get("status")
         if status not in STATUSES:
-            raise ReceiptError(f"receipt {trial.key}: status {status!r} is not one of {STATUSES}")
+            raise ReceiptError(
+                f"receipt {trial.key}: status {status!r} is not one of {STATUSES}"
+            )
 
         receipt = cls(
             trial=trial,
@@ -202,7 +208,9 @@ class TrialReceipt:
             if self.score is None:
                 raise ReceiptError(f"receipt {key}: valid trial carries no score")
             if self.usage is None:
-                raise ReceiptError(f"receipt {key}: valid trial carries no authoritative usage")
+                raise ReceiptError(
+                    f"receipt {key}: valid trial carries no authoritative usage"
+                )
             if self.failure_class:
                 raise ReceiptError(
                     f"receipt {key}: valid trial also names failure_class "
@@ -211,7 +219,9 @@ class TrialReceipt:
             return
 
         if not self.failure_class:
-            raise ReceiptError(f"receipt {key}: {self.status} trial names no failure_class")
+            raise ReceiptError(
+                f"receipt {key}: {self.status} trial names no failure_class"
+            )
         if self.score is not None:
             raise ReceiptError(
                 f"receipt {key}: {self.status} trial carries score {self.score!r}. "
@@ -234,29 +244,30 @@ def append_receipt(path: Path, receipt: TrialReceipt) -> None:
     """
 
     path = Path(path)
-    if path.exists():
-        for existing in read_receipts(path):
-            if existing.trial == receipt.trial:
-                raise ReceiptError(
-                    f"receipt {receipt.trial.key} already exists in {path}. "
-                    "Receipts are append-only; a retry is a new attempt."
-                )
-    else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(receipt.to_json(), sort_keys=True) + "\n")
-
-
-def read_receipts(path: Path) -> list[TrialReceipt]:
-    """Read every receipt in a JSONL log, failing on the first malformed line."""
-
-    path = Path(path)
     try:
-        lines = path.read_text().splitlines()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = path.open("a+", encoding="utf-8")
+        with handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                handle.seek(0)
+                for existing in _parse_receipt_lines(path, handle):
+                    if existing.trial == receipt.trial:
+                        raise ReceiptError(
+                            f"receipt {receipt.trial.key} already exists in {path}. "
+                            "Receipts are append-only; a retry is a new attempt."
+                        )
+                handle.seek(0, os.SEEK_END)
+                handle.write(json.dumps(receipt.to_json(), sort_keys=True) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
     except OSError as exc:
-        raise ReceiptError(f"cannot read receipts {path}: {exc}") from exc
+        raise ReceiptError(f"cannot append receipt to {path}: {exc}") from exc
 
+
+def _parse_receipt_lines(path: Path, lines: Iterable[str]) -> list[TrialReceipt]:
     receipts: list[TrialReceipt] = []
     for lineno, line in enumerate(lines, start=1):
         if not line.strip():
@@ -272,6 +283,24 @@ def read_receipts(path: Path) -> list[TrialReceipt]:
     return receipts
 
 
+def read_receipts(path: Path) -> list[TrialReceipt]:
+    """Read every receipt in a JSONL log, failing on the first malformed line."""
+
+    path = Path(path)
+    try:
+        handle = path.open("r", encoding="utf-8")
+        with handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+            try:
+                lines = list(handle)
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    except OSError as exc:
+        raise ReceiptError(f"cannot read receipts {path}: {exc}") from exc
+
+    return _parse_receipt_lines(path, lines)
+
+
 # ---------------------------------------------------------------------------
 # Field readers
 # ---------------------------------------------------------------------------
@@ -279,8 +308,14 @@ def read_receipts(path: Path) -> list[TrialReceipt]:
 
 def _trial_from_json(payload: Any) -> TrialID:
     if not isinstance(payload, dict):
-        raise ReceiptError(f"receipt.trial must be an object, got {type(payload).__name__}")
-    missing = [f for f in ("study_id", "task_id", "arm", "repetition", "attempt") if f not in payload]
+        raise ReceiptError(
+            f"receipt.trial must be an object, got {type(payload).__name__}"
+        )
+    missing = [
+        f
+        for f in ("study_id", "task_id", "arm", "repetition", "attempt")
+        if f not in payload
+    ]
     if missing:
         raise ReceiptError(f"receipt.trial is missing: {', '.join(missing)}")
     for field in ("study_id", "task_id", "arm"):
@@ -289,7 +324,9 @@ def _trial_from_json(payload: Any) -> TrialID:
     for field in ("repetition", "attempt"):
         value = payload[field]
         if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-            raise ReceiptError(f"receipt.trial.{field} must be an integer >= 1, got {value!r}")
+            raise ReceiptError(
+                f"receipt.trial.{field} must be an integer >= 1, got {value!r}"
+            )
     return TrialID(
         study_id=payload["study_id"],
         task_id=payload["task_id"],
@@ -311,7 +348,9 @@ def _optional_str(payload: dict[str, Any], field: str, trial: TrialID) -> str | 
     if value is None:
         return None
     if not isinstance(value, str) or not value:
-        raise ReceiptError(f"receipt {trial.key}: {field} must be a non-empty string or null")
+        raise ReceiptError(
+            f"receipt {trial.key}: {field} must be a non-empty string or null"
+        )
     return value
 
 
@@ -320,7 +359,9 @@ def _optional_score(payload: dict[str, Any], trial: TrialID) -> float | None:
     if value is None:
         return None
     if not isinstance(value, (int, float)) or isinstance(value, bool):
-        raise ReceiptError(f"receipt {trial.key}: score must be a number or null, got {value!r}")
+        raise ReceiptError(
+            f"receipt {trial.key}: score must be a number or null, got {value!r}"
+        )
     if not 0.0 <= float(value) <= 1.0:
         raise ReceiptError(
             f"receipt {trial.key}: score {value!r} is outside 0..1. The receipt records the "
@@ -329,7 +370,9 @@ def _optional_score(payload: dict[str, Any], trial: TrialID) -> float | None:
     return float(value)
 
 
-def _require_mapping(payload: dict[str, Any], field: str, trial: TrialID) -> dict[str, Any]:
+def _require_mapping(
+    payload: dict[str, Any], field: str, trial: TrialID
+) -> dict[str, Any]:
     value = payload.get(field)
     if not isinstance(value, dict):
         raise ReceiptError(f"receipt {trial.key}: {field} must be an object")
