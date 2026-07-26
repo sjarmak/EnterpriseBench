@@ -489,6 +489,24 @@ def test_build_run_cell_prefers_the_persisted_injected_instruction(
     cell = build_run_cell(run_dir, task_dir)
 
     assert cell["instruction"] == "Exact prompt captured when the run executed."
+    assert cell["instruction_capture"] == "persisted_exact"
+
+
+def test_reconstructed_historical_prompt_is_not_labeled_exact(tmp_path: Path) -> None:
+    task_dir = _make_task(tmp_path)
+    run_dir = _make_run(
+        tmp_path,
+        harness="claude",
+        model="claude-sonnet-5",
+        variant_label="claude-sonnet-5",
+        mode="baseline",
+        records=[],
+    )
+
+    cell = build_run_cell(run_dir, task_dir)
+
+    assert cell["instruction"] == "Investigate the failure."
+    assert cell["instruction_capture"] == "base_only_historical"
 
 
 def test_build_run_cell_keeps_repetitions_and_attempts_distinct(
@@ -794,6 +812,7 @@ def test_console_populates_arm_filter_from_available_modes() -> None:
     ui = ui_path.read_text()
 
     assert 'fillFilter("fmode", uniqueValues("mode"));' in ui
+    assert "instructionCaptureLabel" in ui
 
 
 def test_console_ui_renders_judge_and_lifecycle_telemetry() -> None:

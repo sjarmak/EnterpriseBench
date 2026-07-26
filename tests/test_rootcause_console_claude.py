@@ -171,3 +171,34 @@ def test_incomplete_claude_trace_reports_observed_turns_and_pending_write() -> N
             "content": "{}",
         }
     ]
+
+
+def test_incomplete_claude_turn_count_deduplicates_streamed_message_parts() -> None:
+    records = [
+        {
+            "type": "assistant",
+            "message": {
+                "id": "msg-1",
+                "content": [{"type": "thinking", "thinking": "Inspect first."}],
+            },
+        },
+        {
+            "type": "assistant",
+            "message": {
+                "id": "msg-1",
+                "content": [{"type": "text", "text": "Still the same turn."}],
+            },
+        },
+        {
+            "type": "assistant",
+            "message": {
+                "id": "msg-2",
+                "content": [{"type": "text", "text": "A second turn."}],
+            },
+        },
+    ]
+
+    _, activity, _ = normalize_trace(records)
+
+    assert activity["primary_count"] == 2
+    assert activity["label"] == "2 observed Claude turns (incomplete)"

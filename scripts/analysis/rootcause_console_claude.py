@@ -20,7 +20,14 @@ def consume_claude_record(
     if record_type == "system" and record.get("subtype") == "init":
         _consume_init(record, trace, counts)
     elif record_type == "assistant":
-        counts["claude_observed_turns"] += 1
+        message = record.get("message")
+        message_id = message.get("id") if isinstance(message, dict) else None
+        if isinstance(message_id, str) and message_id:
+            if message_id not in counts["claude_message_ids"]:
+                counts["claude_message_ids"].add(message_id)
+                counts["claude_observed_turns"] += 1
+        else:
+            counts["claude_observed_turns"] += 1
         _consume_assistant(record, trace, writes, counts, pending_tools)
     elif record_type == "user":
         _consume_tool_results(record, trace, writes, pending_tools)

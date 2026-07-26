@@ -151,6 +151,14 @@ class TestValidTrial:
         assert set(receipt.artifacts) == {"results.json", "agent_stdout.log"}
         assert all(d.startswith("sha256:") for d in receipt.artifacts.values())
 
+    def test_injected_instruction_is_content_addressed_when_present(self, tmp_path):
+        run_dir = write_run(tmp_path)
+        (run_dir / "injected_instruction.md").write_text("exact prompt")
+
+        receipt = emit(run_dir)
+
+        assert receipt.artifacts["injected_instruction.md"].startswith("sha256:")
+
     def test_tool_use_is_carried_through(self, tmp_path):
         assert emit(write_run(tmp_path)).tool_use == {"sgx_tool_calls": 7}
 

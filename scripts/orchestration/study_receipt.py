@@ -62,7 +62,12 @@ SCORE_CONTRACT = "weighted-mean-v2"
 
 #: Files worth content-addressing. Absent ones are simply not listed; the
 #: receipt records what exists rather than asserting paths that do not.
-ARTIFACT_NAMES = ("results.json", "agent_stdout.log", "agent_trace.jsonl")
+ARTIFACT_NAMES = (
+    "results.json",
+    "agent_stdout.log",
+    "agent_trace.jsonl",
+    "injected_instruction.md",
+)
 
 
 @dataclass(frozen=True)

@@ -715,6 +715,7 @@ class TestStudyReceiptIntegration:
             Path(result.output_dir, "injected_instruction.md").read_text()
             == "exact injected prompt"
         )
+        assert "injected_instruction.md" in receipt.artifacts
 
 
 # ---------------------------------------------------------------------------

@@ -252,6 +252,7 @@ def _empty_activity_counts() -> dict[str, Any]:
         "opencode_steps": 0,
         "claude_turns": 0,
         "claude_observed_turns": 0,
+        "claude_message_ids": set(),
         "claude_complete": False,
         "work_items": 0,
         "tool_uses": 0,
@@ -687,10 +688,14 @@ def _run_evidence(
         }
     )
     calls = [event for event in trace if event.get("kind") == "tool"]
+    instruction, instruction_capture = _load_injected_instruction(
+        run_dir, task_dir, mode
+    )
     return {
         "tools_exposed": tools,
         "mcp_servers": redact(activity.get("mcp_servers", [])),
-        "instruction": _load_injected_instruction(run_dir, task_dir, mode),
+        "instruction": instruction,
+        "instruction_capture": instruction_capture,
         "trace": trace,
         "calls": calls,
         "writes": writes,
@@ -706,15 +711,17 @@ def _read_optional(path: Path) -> str:
     return redact(path.read_text()) if path.exists() else ""
 
 
-def _load_injected_instruction(run_dir: Path, task_dir: Path, mode: str) -> str:
-    """Reconstruct the exact prompt assembled by the benchmark runner."""
+def _load_injected_instruction(
+    run_dir: Path, task_dir: Path, mode: str
+) -> tuple[str, str]:
+    """Load exact prompt evidence or an explicitly labeled historical fallback."""
     persisted = run_dir / "injected_instruction.md"
     if persisted.exists():
-        return _read_optional(persisted)
+        return _read_optional(persisted), "persisted_exact"
 
     task_toml = task_dir / "task.toml"
     if not task_toml.exists():
-        return _read_optional(task_dir / "instruction.md")
+        return _read_optional(task_dir / "instruction.md"), "base_only_historical"
 
     from scripts.orchestration.run_task import _build_instruction_text, _parse_task
 
@@ -728,7 +735,7 @@ def _load_injected_instruction(run_dir: Path, task_dir: Path, mode: str) -> str:
             ground_truth.get("require_grounded_citations", False)
         ),
     )
-    return redact(instruction or "")
+    return redact(instruction or ""), "reconstructed_current_harness"
 
 
 def _cell_identity(cell: dict[str, Any]) -> tuple[str, ...]:

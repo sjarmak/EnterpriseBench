@@ -39,6 +39,14 @@ const activityLabel = (cell) => {
   const count = Number(cell.turns || 0);
   return `${count} ${providerLabel(cell) === "opencode" ? "OpenCode step" : `${providerLabel(cell)} turn`}${count === 1 ? "" : "s"}`;
 };
+const instructionCaptureLabel = (cell) =>
+  ({
+    persisted_exact: "exact injected prompt (content-addressed run artifact)",
+    reconstructed_current_harness:
+      "current-harness reconstruction; exact historical prompt was not captured",
+    base_only_historical:
+      "base task prompt only; exact historical injected prompt was not captured",
+  })[cell.instruction_capture] || "capture provenance unavailable";
 
 CELLS.forEach((cell) => {
   cell.harness = providerLabel(cell);
@@ -375,7 +383,7 @@ function renderDetail(cell) {
   ${stepRow("gate", "Mode gate", `arm=${esc(cell.mode)} — ${modeGateLabel(cell)}`)}
   ${stepRow("agent", "Agent execution", `${activityDetails(cell)} · agent ${esc(timing.agent ?? "?")}s · scoring ${esc(timing.scoring ?? "?")}s`)}
   <div class="tool-badges">${(mcpTools.concat(sgxTools).length ? mcpTools.concat(sgxTools) : tools).map(toolBadge).join("") || "<span>no named tools captured</span>"}</div>
-  <h3>Injected prompt</h3>
+  <h3>Injected prompt — ${esc(instructionCaptureLabel(cell))}</h3>
   <pre>${esc(cell.instruction || "(not captured)")}</pre>
   <h3>Trace — ${trace.length} events</h3>
   ${(cell.trace_sources || (cell.trace_source ? [cell.trace_source] : [])).length ? `<div class="count">sources: ${(cell.trace_sources || [cell.trace_source]).map(esc).join(" · ")}</div>` : ""}
