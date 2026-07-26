@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "_comment": [
+    "StudySpec: what a study declares about itself before any outcome is read.",
+    "Today it carries only the attempt-selection policy. EnterpriseBench-rryas.11",
+    "extends this document with the rest of the Study Capsule (arms, repetitions,",
+    "model, harness revisions, score-contract version, authoritative usage source);",
+    "it is not a competing spec. Loaders read only the block they own, so a new",
+    "sibling block does not invalidate this file for an older reader.",
+    "",
+    "attempt_policy.selection pins which attempt of a re-run (task_id, mode) cell",
+    "represents that cell. 'earliest_valid' is the only implemented value, and no",
+    "outcome-dependent value exists: selecting the highest-scoring attempt takes a",
+    "maximum over however many times a cell happened to be retried, and arms are",
+    "not retried equally, so the bias does not cancel in an arm-to-arm delta.",
+    "See scripts/lib/attempt_policy.py."
+  ],
+  "attempt_policy": {
+    "selection": "earliest_valid",
+    "version": 1
+  }
+}

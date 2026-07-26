@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
 import pytest
@@ -13,9 +12,12 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+from lib.attempt_policy import SELECTION_EARLIEST_VALID, AttemptPolicy
+
 from analyze_scores import (
     Checkpoint,
     TaskResult,
+    analyze,
     _compute_delta,
     _dist_stats,
     _statistical_tests,
@@ -23,7 +25,6 @@ from analyze_scores import (
     infer_mode,
     load_all_results,
     load_task_metadata_from_toml,
-    mcp_deltas,
     parse_result,
     per_task_summary,
 )
@@ -31,6 +32,18 @@ from analyze_scores import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _valid_cache_tool_usage() -> dict[str, object]:
+    return {
+        "cache_isolation": {
+            "configured": True,
+            "valid": True,
+            "launcher_scope": "a" * 32,
+            "mechanism": "synthetic-test-isolation",
+            "cross_run_cache_read_tokens": 0,
+        }
+    }
 
 
 def _make_result(
@@ -94,6 +107,7 @@ def _write_results_json(path: Path, **overrides: object) -> None:
             ),
         },
         "timing": {"agent": 100.0},
+        "tool_usage": _valid_cache_tool_usage(),
         "task_metadata": {
             "suite": overrides.get("suite", "customer_escalation"),
             "task_type": overrides.get("task_type", "error_provenance"),
@@ -103,8 +117,30 @@ def _write_results_json(path: Path, **overrides: object) -> None:
     }
     if "config" in overrides:
         data["config"] = overrides["config"]
+    if "status" in overrides:
+        data["status"] = overrides["status"]
+    if "tool_usage" in overrides:
+        data["tool_usage"] = overrides["tool_usage"]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data))
+
+
+def _write_attempt(
+    batch_dir: Path, *, timestamp: str | None = None, **overrides: object
+) -> Path:
+    """Write one attempt directory: results.json plus a dated agent_trace.jsonl.
+
+    The trace is what dates the attempt, and the date is what orders a cell's
+    attempts, so a selection test that writes only results.json is testing the
+    run_dir tiebreak rather than the rule.
+    """
+    task_dir = batch_dir / "test-task-001"
+    _write_results_json(task_dir / "results.json", **overrides)
+    if timestamp is not None:
+        (task_dir / "agent_trace.jsonl").write_text(
+            json.dumps({"type": "assistant", "timestamp": timestamp}) + "\n"
+        )
+    return task_dir
 
 
 # ---------------------------------------------------------------------------
@@ -134,19 +170,100 @@ class TestScoreNormalization:
 
 
 class TestDeduplication:
-    def test_keeps_highest_score(self, tmp_path: Path):
-        """When same task_id+mode appears twice, keep the higher score."""
+    def test_keeps_the_earliest_attempt_not_the_best_one(self, tmp_path: Path):
+        """A cell is represented by its first attempt, whatever the re-run scored.
+
+        Keeping the maximum over N attempts made a cell's reported score a
+        function of how often it happened to be retried, and arms are not
+        retried equally — the bias does not cancel between arms.
+        """
         dir1 = tmp_path / "run1"
         dir2 = tmp_path / "run2"
         benchmarks = tmp_path / "benchmarks"
         benchmarks.mkdir()
 
-        _write_results_json(dir1 / "test-task-001" / "results.json", task_score=0.3333)
-        _write_results_json(dir2 / "test-task-001" / "results.json", task_score=0.6667)
+        _write_attempt(dir1, task_score=0.3333, timestamp="2026-01-01T00:00:00Z")
+        _write_attempt(dir2, task_score=0.6667, timestamp="2026-06-01T00:00:00Z")
 
         results = load_all_results([dir1, dir2], benchmarks)
         assert len(results) == 1
-        assert results[0].normalized_score == pytest.approx(0.6667)
+        assert results[0].normalized_score == pytest.approx(0.3333)
+
+    def test_host_clock_defeats_agent_forged_trace_order(self, tmp_path: Path):
+        benchmarks = tmp_path / "benchmarks"
+        benchmarks.mkdir()
+        first = _write_attempt(
+            tmp_path / "run1",
+            task_score=0.3333,
+            timestamp="2099-01-01T00:00:00Z",
+        )
+        second = _write_attempt(
+            tmp_path / "run2",
+            task_score=0.9999,
+            timestamp="1970-01-01T00:00:00Z",
+        )
+        first_data = json.loads((first / "results.json").read_text())
+        second_data = json.loads((second / "results.json").read_text())
+        first_data["started_at"] = "2026-01-01T00:00:00Z"
+        second_data["started_at"] = "2026-02-01T00:00:00Z"
+        (first / "results.json").write_text(json.dumps(first_data))
+        (second / "results.json").write_text(json.dumps(second_data))
+
+        results = load_all_results([tmp_path / "run1", tmp_path / "run2"], benchmarks)
+
+        assert results[0].normalized_score == pytest.approx(0.3333)
+        assert results[0].attempt_timestamp_source == "results.started_at"
+        summary = per_task_summary(results)
+        assert summary[0]["attempts"]["baseline"] == {
+            "run_dir": results[0].run_dir,
+            "timestamp": "2026-01-01T00:00:00Z",
+            "timestamp_source": "results.started_at",
+        }
+
+    def test_an_invalid_attempt_is_never_selected(self, tmp_path: Path):
+        """The resurrection case: run_task marks a run invalid for gates that
+        fire after the verifier already wrote a score, so a scored results.json
+        is not evidence the run is scoreable."""
+        dir1 = tmp_path / "run1"
+        dir2 = tmp_path / "run2"
+        benchmarks = tmp_path / "benchmarks"
+        benchmarks.mkdir()
+
+        _write_attempt(
+            dir1, task_score=1.0, timestamp="2026-01-01T00:00:00Z", status="invalid"
+        )
+        _write_attempt(dir2, task_score=0.3333, timestamp="2026-06-01T00:00:00Z")
+
+        results = load_all_results([dir1, dir2], benchmarks)
+        assert len(results) == 1
+        assert results[0].normalized_score == pytest.approx(0.3333)
+
+    def test_a_cell_whose_every_attempt_is_invalid_drops_out(self, tmp_path: Path):
+        benchmarks = tmp_path / "benchmarks"
+        benchmarks.mkdir()
+        _write_attempt(tmp_path / "run1", status="invalid")
+
+        assert load_all_results([tmp_path / "run1"], benchmarks) == []
+
+    def test_cache_confounded_attempt_is_never_selected(self, tmp_path: Path):
+        benchmarks = tmp_path / "benchmarks"
+        benchmarks.mkdir()
+        _write_attempt(
+            tmp_path / "run1",
+            task_score=1.0,
+            timestamp="2026-01-01T00:00:00Z",
+            tool_usage={},
+        )
+        _write_attempt(
+            tmp_path / "run2",
+            task_score=0.3333,
+            timestamp="2026-02-01T00:00:00Z",
+        )
+
+        results = load_all_results([tmp_path / "run1", tmp_path / "run2"], benchmarks)
+
+        assert len(results) == 1
+        assert results[0].normalized_score == pytest.approx(0.3333)
 
     def test_different_modes_kept(self, tmp_path: Path):
         """Different modes for same task are NOT deduplicated."""
@@ -393,6 +510,7 @@ class TestMetadataFallback:
                 ],
             },
             "timing": {"agent": 50.0},
+            "tool_usage": _valid_cache_tool_usage(),
         }
         (results_dir / "results.json").write_text(json.dumps(data))
 
@@ -478,3 +596,113 @@ class TestPerTaskSummary:
         results2 = [_make_result(task_id="normal-001")]
         summary2 = per_task_summary(results2)
         assert summary2[0]["is_calibration"] is False
+
+
+class TestAnalyzePinsThePolicy:
+    """The reward side's half of "pinned before outcomes". Without these, the
+    guard and the published block in ``analyze`` can both be deleted and the
+    whole suite still passes — verified by mutation during review.
+    """
+
+    def _corpus(self, tmp_path: Path) -> Path:
+        run = tmp_path / "runs" / "task-a"
+        run.mkdir(parents=True)
+        (run / "results.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "task-a",
+                    "scores": {
+                        "checkpoints_total": 2,
+                        "task_score": 1.0,
+                        "score_contract_version": 2,
+                        "checkpoints": [],
+                    },
+                    "task_metadata": {"suite": "s", "difficulty": "medium"},
+                    "config": {"mode": "baseline"},
+                    "tool_usage": _valid_cache_tool_usage(),
+                }
+            )
+        )
+        return tmp_path / "runs"
+
+    def test_the_declared_policy_is_published(self, tmp_path: Path) -> None:
+        policy = AttemptPolicy(
+            selection=SELECTION_EARLIEST_VALID, version=7, spec_path="/spec.json"
+        )
+        report = analyze([self._corpus(tmp_path)], tmp_path / "benchmarks", policy)
+        assert report["attempt_policy"]["version"] == 7
+        assert report["attempt_policy"]["spec_path"] == "/spec.json"
+        assert report["total_results"] == 1
+
+    def test_a_policy_the_code_cannot_apply_is_refused(self, tmp_path: Path) -> None:
+        """A report may not name a rule load_all_results did not apply."""
+        with pytest.raises(ValueError, match="highest_score"):
+            analyze(
+                [self._corpus(tmp_path)],
+                tmp_path / "benchmarks",
+                AttemptPolicy(
+                    selection="highest_score", version=1, spec_path="/spec.json"
+                ),
+            )
+
+    def test_an_unpinned_call_publishes_no_policy(self, tmp_path: Path) -> None:
+        """Absent, not silently defaulted: an artifact that names a policy must
+        have been produced under one."""
+        report = analyze([self._corpus(tmp_path)], tmp_path / "benchmarks")
+        assert report["attempt_policy"] is None
+
+
+class TestParseResultFailsClosedOnJunk:
+    def test_valid_json_that_is_not_an_object_is_skipped_not_a_crash(
+        self, tmp_path: Path
+    ) -> None:
+        """A partial write or a serialization bug produces well-formed JSON of
+        the wrong shape. Before this, data.get raised AttributeError and took
+        down the whole load_all_results scan, not just this attempt."""
+        for payload in ("null", "42", '"a string"', "[1, 2, 3]"):
+            path = tmp_path / "results.json"
+            path.write_text(payload)
+            assert parse_result(path, tmp_path / "benchmarks") is None
+
+    def test_one_junk_attempt_does_not_abort_the_scan(self, tmp_path: Path) -> None:
+        junk = tmp_path / "runs" / "junk"
+        junk.mkdir(parents=True)
+        (junk / "results.json").write_text("[1, 2, 3]")
+
+        good = tmp_path / "runs" / "task-a"
+        good.mkdir(parents=True)
+        (good / "results.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "task-a",
+                    "scores": {
+                        "checkpoints_total": 1,
+                        "task_score": 1.0,
+                        "score_contract_version": 2,
+                        "checkpoints": [],
+                    },
+                    "task_metadata": {"suite": "s", "difficulty": "medium"},
+                    "config": {"mode": "baseline"},
+                    "tool_usage": _valid_cache_tool_usage(),
+                }
+            )
+        )
+
+        results = load_all_results([tmp_path / "runs"], tmp_path / "benchmarks")
+        assert [r.task_id for r in results] == ["task-a"]
+
+
+class TestModeSuffixesCoverEveryArm:
+    """Three copies of the suffix list existed and every one had missed "cli"
+    since that arm was wired, so a <task>_cli directory read as baseline."""
+
+    @pytest.mark.parametrize("mode", ["baseline", "mcp_only", "hybrid", "cli"])
+    def test_a_suffixed_batch_dir_resolves_to_its_arm(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        path = tmp_path / "mcp_batch_v9" / f"task-a_{mode}" / "results.json"
+        assert infer_mode(path, {}) == mode
+
+    def test_config_mode_still_wins_over_the_path(self, tmp_path: Path) -> None:
+        path = tmp_path / "mcp_batch_v9" / "task-a_baseline" / "results.json"
+        assert infer_mode(path, {"config": {"mode": "cli"}}) == "cli"

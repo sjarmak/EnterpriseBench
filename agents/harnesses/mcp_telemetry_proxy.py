@@ -240,6 +240,8 @@ def extract_response_meta(
 
 def _load_trace(trace_path: Path) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
+    if trace_path.stat().st_size > MAX_TRACE_BYTES:
+        raise ValueError(f"{trace_path}: MCP trace exceeds size limit")
     for line_number, line in enumerate(trace_path.read_text().splitlines(), start=1):
         if not line.strip():
             continue
@@ -295,7 +297,7 @@ def _invalid_reason(
     failed_finder_responses: int,
     repository_scope: dict[str, Any],
 ) -> str:
-    if mode == "mcp_code_finder":
+    if mode in {"mcp_code_finder", "cli_code_finder"}:
         if finder_calls != expected_repo_count:
             return (
                 f"expected {expected_repo_count} code_finder call(s), "

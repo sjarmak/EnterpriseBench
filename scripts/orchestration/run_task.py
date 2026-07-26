@@ -73,8 +73,8 @@ _load_env_local(_env_local, os.environ)
 
 # Reuse the TOML parser from create_sg_mirrors
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "infra"))
-from create_sg_mirrors import parse_toml
-from mirror_naming import derive_mirror_name
+from create_sg_mirrors import parse_toml  # noqa: E402
+from mirror_naming import derive_mirror_name  # noqa: E402
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 from validation import validate_repo_entry
@@ -127,6 +127,17 @@ from eb_verify.score_contract import (  # noqa: E402
     weighted_mean,
 )
 from eb_verify.scorer_guard import InfraError, guard_verifier_output
+from study_receipt import RunEvidence
+from study_run import (
+    InputProvenance,
+    capture_input_provenance,
+    docker_container_image_digest,
+    docker_image_digest,
+    emit_study_receipt,
+    harness_input_paths,
+    validate_study_config,
+    verifier_input_paths,
+)
 
 try:
     from orchestration.runner_cli import assert_accepts_passthrough
@@ -143,8 +154,11 @@ HEALTH_CHECK_SH = REPO_ROOT / "scripts" / "sandbox" / "health_check.sh"
 EB_VERIFY_LIB = REPO_ROOT / "lib" / "eb_verify"
 
 
-FINDER_MODES = frozenset({"mcp_code_finder", "mcp_assisted"})
-MCP_MODES = frozenset({"mcp_only", "hybrid", *FINDER_MODES})
+MCP_FINDER_MODES = frozenset({"mcp_code_finder", "mcp_assisted"})
+CLI_FINDER_MODES = frozenset({"cli_code_finder"})
+FINDER_MODES = frozenset({*MCP_FINDER_MODES, *CLI_FINDER_MODES})
+MCP_MODES = frozenset({"mcp_only", "hybrid", *MCP_FINDER_MODES})
+CLI_MODES = frozenset({"cli", *CLI_FINDER_MODES})
 VALID_MODES = (
     "baseline",
     "mcp_only",
@@ -152,7 +166,10 @@ VALID_MODES = (
     "mcp_assisted",
     "hybrid",
     "cli",
+    "cli_code_finder",
 )
+CLI_RETRIEVAL_TREATMENT = "direct_sgx_plus_local_source"
+CLI_FINDER_TREATMENT = "code_finder_via_sgx_no_mcp"
 
 _DEFAULT_MCP_URL = "https://demo.sourcegraph.com/.api/mcp/all"
 _raw_mcp_url = os.environ.get("SOURCEGRAPH_MCP_URL", _DEFAULT_MCP_URL)
@@ -213,6 +230,35 @@ class TaskRunConfig:
     ablation_variant: str | None = None
     min_disk_gb: float = 10.0
     variant_label: str | None = None
+    study_spec: Path | None = None
+    study_receipts: Path | None = None
+    attempt: int | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.judge_account, bool) or (
+            self.judge_account is not None
+            and (not isinstance(self.judge_account, int) or self.judge_account <= 0)
+        ):
+            raise ValueError("judge_account must be a positive integer")
+        validate_study_config(
+            study_spec=self.study_spec,
+            study_receipts=self.study_receipts,
+            repetition=self.rep,
+            attempt=self.attempt,
+            dry_run=self.dry_run,
+        )
+        if (
+            self.study_spec is not None
+            and not self.agent_command
+            and self.account is None
+            and self.harness == "claude"
+        ):
+            raise ValueError("study runs require an agent command or OAuth account")
+
+
+def _resolve_judge_account(config: TaskRunConfig) -> int | None:
+    """Use the explicit judge account, otherwise the completed agent account."""
+    return config.judge_account if config.judge_account is not None else config.account
 
 
 # Status marker for runs that must not be scored (e.g. MCP pre-flight failure,
@@ -356,6 +402,18 @@ class TaskRunResult:
     # "" for normal runs; RUN_STATUS_INVALID for runs that must be re-run,
     # never scored (see the MCP pre-flight gate).
     status: str = ""
+    # Host-authored before any agent-controlled process starts. This is the
+    # attempt-selection clock; trace timestamps are telemetry, not authority.
+    started_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    completed_at: str | None = None
+    image_digest: str | None = None
+    arm_gate_proof: str | None = None
+    task_hash: str | None = None
+    harness_hash: str | None = None
+    verifier_hash: str | None = None
+    receipt_emitted: bool = False
 
 
 _VARIANT_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9]|-(?!-))*[a-z0-9]$|^[a-z0-9]$")
@@ -381,13 +439,18 @@ def _effective_variant_label(config: TaskRunConfig) -> str | None:
 def _resolve_output_dir(config: TaskRunConfig, task_id: str) -> Path:
     """Resolve a collision-safe result directory for one task run."""
     if config.output_dir is not None:
-        return config.output_dir
-    variant_label = _effective_variant_label(config)
-    segment = (
-        f"{config.mode}--{variant_label}" if variant_label else config.mode
-    )
-    base = REPO_ROOT / "results" / "runs" / task_id / segment
-    return base / f"rep{config.rep}" if config.rep is not None else base
+        output_dir = config.output_dir
+    else:
+        variant_label = _effective_variant_label(config)
+        segment = (
+            f"{config.mode}--{variant_label}" if variant_label else config.mode
+        )
+        output_dir = REPO_ROOT / "results" / "runs" / task_id / segment
+    if config.rep is not None and output_dir.name != f"rep{config.rep}":
+        output_dir = output_dir / f"rep{config.rep}"
+    if config.study_spec is not None:
+        output_dir = output_dir / f"attempt{config.attempt}"
+    return output_dir
 
 
 def _load_oauth_token(account: int) -> str:
@@ -465,12 +528,16 @@ _MCP_TOOL_PREFIX = "mcp__sourcegraph__"
 # text parsed synchronously in the orchestrator. No real invocation path is close to
 # 256 chars.
 #
-# KNOWN GAP: a wrapper token with no separator before `sgx` is not seen —
-# `timeout 30 sgx …`, `env X=y sgx …`, `sh -c "sgx …"`, `./sgx …`. Zero of the 728
-# calibrated calls use these forms; broadening the anchor to catch them reintroduces
-# false positives (`echo "sgx"`). Revisit on the first real EB cli calibration
-# (EnterpriseBench follow-up) rather than loosening against an unmeasured form.
-_SGX_COMMAND_RE = re.compile(r"(?:^|[;&|\n(`])\s*(?:/\S{0,256}/)?sgx(?=\s|$)")
+# A measured EB Finder canary used the bounded wrapper form
+# `timeout 280 sgx finder ...`; accept that exact command grammar while retaining
+# the command-position anchor. Broader wrappers (`env X=y`, `sh -c`) remain
+# deliberately unsupported because accepting arbitrary leading tokens would
+# reintroduce false positives such as `echo "sgx"`.
+_SGX_SUBCOMMAND_RE = re.compile(
+    r"(?:^|[;&|\n(`])\s*"
+    r"(?:(?:/\S{0,256}/)?timeout\s+\d+(?:\.\d+)?[smhd]?\s+)?"
+    r"(?:/\S{0,256}/)?sgx\s+([a-z][a-z0-9_-]*)"
+)
 
 
 def _parse_task(toml_path: Path) -> dict:
@@ -550,6 +617,29 @@ def _docker_build(dockerfile_path: Path, image_tag: str, timeout: int = 1800) ->
             f"Docker build failed (exit {result.returncode}):\n{result.stderr[-2000:]}"
         )
     logger.info("Docker image built: %s", image_tag)
+
+
+def _docker_image_digest(image_tag: str) -> str:
+    """Capture the immutable ID of the image used by a study trial."""
+
+    return docker_image_digest(image_tag)
+
+
+def _docker_container_image_digest(container_id: str) -> str:
+    """Capture the image ID actually bound to a created study container."""
+
+    return docker_container_image_digest(container_id)
+
+
+def _capture_input_provenance(config: TaskRunConfig, task_dir: Path) -> InputProvenance:
+    """Hash the exact task, harness, and verifier inputs used by this run."""
+
+    return capture_input_provenance(
+        task_toml=config.task_toml,
+        harness_inputs=harness_input_paths(REPO_ROOT),
+        verifier_inputs=verifier_input_paths(REPO_ROOT, task_dir),
+        repo_root=REPO_ROOT,
+    )
 
 
 def _docker_create_container(
@@ -832,7 +922,7 @@ def _build_instruction_text(
 ) -> str | None:
     """Build the full instruction text with optional MCP preamble and output appendix.
 
-    For mcp_only/hybrid modes, prepends the Sourcegraph MCP preamble (from
+    For MCP modes, prepends the Sourcegraph MCP preamble (from
     agents.harnesses.claude.mcp.sourcegraph) and any task-specific
     instruction_mcp.md. For baseline mode, uses instruction.md as-is.
 
@@ -849,13 +939,13 @@ def _build_instruction_text(
 
     instruction_text = instruction.read_text()
 
-    # Build the retrieval preamble for non-baseline modes. mcp_only/hybrid get
+    # Build the retrieval preamble for non-baseline modes. MCP modes get
     # the Sourcegraph MCP preamble; the cli arm gets the sgx CLI preamble (same
     # remote reach, exposed as a shell command, no MCP tools). baseline gets
     # none.
     preamble_parts: list[str] = []
-    if mode in (*MCP_MODES, "cli"):
-        if mode == "cli":
+    if mode in (*MCP_MODES, *CLI_MODES):
+        if mode in CLI_MODES:
             retrieval_preamble = _build_cli_preamble(mode=mode, repos=repos)
         else:
             retrieval_preamble = _build_mcp_preamble(mode=mode, repos=repos)
@@ -1019,8 +1109,12 @@ def _assert_grading_assets_sealed(container_id: str) -> tuple[bool, str]:
     # renamed or unlinked wholesale regardless of their own mode.
     parent = _docker_exec(
         container_id,
-        ["bash", "-c", f"find {shlex.quote(WORKSPACE_DIR)} -maxdepth 0 "
-                       "\\( ! -user root -o ! -perm -1000 \\) -print"],
+        [
+            "bash",
+            "-c",
+            f"find {shlex.quote(WORKSPACE_DIR)} -maxdepth 0 "
+            "\\( ! -user root -o ! -perm -1000 \\) -print",
+        ],
         user="root",
     )
     if parent.returncode != 0:
@@ -1168,7 +1262,7 @@ def _reap_agent_processes(container_id: str) -> None:
         '  [ "$1" = 1 ] && return 1; '
         '  [ "$(stat -c %u /proc/$1 2>/dev/null)" = "$auid" ] || return 1; '
         "  st=$(cat /proc/$1/stat 2>/dev/null) || return 1; "
-        '  state=${st##*) }; state=${state%% *}; '
+        "  state=${st##*) }; state=${state%% *}; "
         '  [ "$state" = Z ] && return 1; '
         "  return 0; }; "
         "count_live() { c=0; for d in /proc/[0-9]*; do "
@@ -1182,7 +1276,9 @@ def _reap_agent_processes(container_id: str) -> None:
         "done; "
         'echo "agent_procs_remaining=$(count_live)"'
     )
-    result = _docker_exec(container_id, ["bash", "-c", script], user="root", workdir="/")
+    result = _docker_exec(
+        container_id, ["bash", "-c", script], user="root", workdir="/"
+    )
     if result.returncode != 0:
         raise RuntimeError(
             "could not reap agent processes before scoring: "
@@ -1226,7 +1322,9 @@ def _close_workspace_for_scoring(container_id: str) -> None:
         f"find {shlex.quote(WORKSPACE_DIR)} -mindepth 1 -xdev "
         f"\\( -type d -o -type f \\) -perm /go+w -exec chmod go-w {{}} +"
     )
-    result = _docker_exec(container_id, ["bash", "-c", script], user="root", timeout=300)
+    result = _docker_exec(
+        container_id, ["bash", "-c", script], user="root", timeout=300
+    )
     if result.returncode != 0:
         raise RuntimeError(
             f"failed to close {WORKSPACE_DIR} for scoring: "
@@ -1314,9 +1412,7 @@ def _gate_failed(reason: str) -> tuple[bool, str]:
     return False, f"{reason} — run is INVALID, not a real score"
 
 
-def _apply_mode_gate(
-    container_id: str, task_data: dict, mode: str
-) -> tuple[bool, str]:
+def _apply_mode_gate(container_id: str, task_data: dict, mode: str) -> tuple[bool, str]:
     """Deny the agent local source in gated arms, and PROVE it in both directions.
 
     Returns (ok, error_message). A gate that silently failed to apply would
@@ -1374,6 +1470,38 @@ def _apply_mode_gate(
         SCORING_USER,
     )
     return True, ""
+
+
+def _capture_arm_gate_proof(
+    container_id: str, task_data: dict, mode: str
+) -> tuple[str, str]:
+    """Observe the post-gate access state that defines one study arm."""
+
+    try:
+        dirs = repo_dirs(task_data, WORKSPACE_DIR)
+    except ValueError as exc:
+        return "", f"arm proof cannot resolve repositories: {exc}"
+    if not dirs:
+        return "", "arm proof found no repositories"
+
+    expect_agent_read = not should_gate(mode)
+    for repo_dir in dirs:
+        probe = _gate_probe_file(container_id, repo_dir)
+        if probe is None:
+            return "", f"arm proof found no file under {repo_dir}"
+        agent_can_read = _can_read(container_id, probe, user=AGENT_USER)
+        scorer_can_read = _can_read(container_id, probe, user=SCORING_USER)
+        if agent_can_read != expect_agent_read:
+            expected = "readable" if expect_agent_read else "denied"
+            return "", f"arm proof expected agent access {expected} for {probe}"
+        if not scorer_can_read:
+            return "", f"arm proof found scorer unable to read {probe}"
+
+    agent_state = "agent-readable" if expect_agent_read else "agent-denied"
+    return (
+        f"mode_gate:v1:{mode}:{agent_state},scorer-readable;repos={len(dirs)}",
+        "",
+    )
 
 
 def _scan_mcp_config_error(output_dir: Path) -> bool:
@@ -1474,7 +1602,7 @@ def _setup_container(
     task_dir: Path,
     task_data: dict,
     mode: str = "baseline",
-) -> None:
+) -> str | None:
     """Copy task files into the running container.
 
     - instruction.md -> /workspace/instruction.md
@@ -1577,6 +1705,7 @@ def _setup_container(
     # leftovers from a reused container).
     _chown_to_agent(container_id, [AGENT_INSTRUCTION])
     _seal_grading_assets(container_id)
+    return combined
 
 
 def _install_claude_cli(container_id: str) -> bool:
@@ -2101,40 +2230,106 @@ def _route_zero_mcp_run(result: "TaskRunResult", mode: str) -> None:
 
 
 def _route_code_finder_run(result: "TaskRunResult", mode: str) -> None:
-    """Invalidate Finder arms whose captured call/telemetry contract failed."""
-    breakdown = result.tool_usage.get("mcp_tool_breakdown", {})
-    if (
-        mode == "mcp_only"
-        and isinstance(breakdown, dict)
-        and breakdown.get("code_finder", 0) > 0
-    ):
+    """Fail closed on Finder contract violations and direct-arm contamination."""
+    breakdown = result.tool_usage.get("mcp_tool_breakdown")
+    finder_calls = breakdown.get("code_finder", 0) if isinstance(breakdown, dict) else 0
+    if result.failure_class is not None:
+        logger.info(
+            "Skipping Finder classification after existing %s failure",
+            result.failure_class,
+        )
+        return
+    if mode == "mcp_only":
+        if finder_calls <= 0:
+            return
+        reason = (
+            "mode=mcp_only called code_finder, contaminating the direct MCP "
+            "retrieval treatment"
+        )
         result.status = RUN_STATUS_INVALID
         result.phase = "agent_infra_error"
         result.success = False
-        if result.failure_class is None:
-            result.failure_class = "invalid_arm_contamination"
-            result.error = (
-                "invalid mode=mcp_only run: code_finder was used in the direct "
-                "MCP comparison arm"
-            )
+        result.failure_class = "invalid_arm_contamination"
+        result.error = reason
+        logger.error(reason)
+        return
+    sgx_breakdown = result.tool_usage.get("sgx_tool_breakdown")
+    cli_finder_calls = (
+        sgx_breakdown.get("finder", 0) if isinstance(sgx_breakdown, dict) else 0
+    )
+    if mode == "cli":
+        if cli_finder_calls <= 0:
+            return
+        reason = (
+            "mode=cli called sgx finder, contaminating the direct CLI "
+            "retrieval treatment"
+        )
+        result.status = RUN_STATUS_INVALID
+        result.phase = "agent_infra_error"
+        result.success = False
+        result.failure_class = "invalid_arm_contamination"
+        result.error = reason
+        logger.error(reason)
         return
     if mode not in FINDER_MODES:
         return
+
+    result.tool_usage["mcp_used"] = result.tool_usage.get("mcp_tool_calls", 0) > 0
+    if mode in CLI_FINDER_MODES:
+        result.tool_usage["sgx_used"] = result.tool_usage.get("sgx_tool_calls", 0) > 0
+        direct_sgx_calls = (
+            {
+                name: count
+                for name, count in sgx_breakdown.items()
+                if name != "finder" and isinstance(count, int) and count > 0
+            }
+            if isinstance(sgx_breakdown, dict)
+            else {}
+        )
+        if direct_sgx_calls:
+            commands = ", ".join(
+                f"sgx {name} ({count})"
+                for name, count in sorted(direct_sgx_calls.items())
+            )
+            reason = (
+                f"mode={mode} used prohibited direct retrieval command(s): "
+                f"{commands}"
+            )
+            result.status = RUN_STATUS_INVALID
+            result.phase = "agent_infra_error"
+            result.success = False
+            result.failure_class = "invalid_arm_contamination"
+            result.error = reason
+            logger.error(reason)
+            return
     retrieval = result.tool_usage.get("retrieval")
     if isinstance(retrieval, dict) and retrieval.get("valid") is True:
+        proxy_calls = retrieval.get("code_finder_calls")
+        interface_calls = cli_finder_calls if mode in CLI_FINDER_MODES else finder_calls
+        if interface_calls != proxy_calls:
+            reason = (
+                f"mode={mode} observed {proxy_calls} proxy Code Finder call(s) "
+                f"but {interface_calls} through the assigned interface"
+            )
+            result.status = RUN_STATUS_INVALID
+            result.phase = "agent_infra_error"
+            result.success = False
+            result.failure_class = "invalid_arm_contamination"
+            result.error = reason
+            logger.error(reason)
         return
-
     reason = (
         retrieval.get("invalid_reason", "Code Finder telemetry was not captured")
         if isinstance(retrieval, dict)
         else "Code Finder telemetry was not captured"
     )
+    message = f"mode={mode} failed the Code Finder contract: {reason}"
     result.status = RUN_STATUS_INVALID
     result.phase = "agent_infra_error"
     result.success = False
-    if result.failure_class is None:
-        result.failure_class = "infra_code_finder_contract"
-        result.error = f"invalid mode={mode} run: {reason}"
+    result.failure_class = "infra_code_finder_contract"
+    result.error = message
+    logger.error(message)
 
 
 def _route_zero_sgx_run(result: "TaskRunResult", mode: str) -> None:
@@ -2349,7 +2544,9 @@ def _run_scoring(container_id: str, verifier_timeout: int = 600) -> dict:
 
 # Matches a /workspace/... artifact path a task's instruction.md tells the agent
 # to write to (e.g. /workspace/BLAST_RADIUS.md, /workspace/analysis/IMPACT_REPORT.md).
-_WORKSPACE_ARTIFACT_RE = re.compile(r"/workspace/[A-Za-z0-9_./-]+\.(?:json|md|txt|ya?ml)")
+_WORKSPACE_ARTIFACT_RE = re.compile(
+    r"/workspace/[A-Za-z0-9_./-]+\.(?:json|md|txt|ya?ml)"
+)
 
 
 def _derive_artifact_candidates(task_dir: Path) -> list[str]:
@@ -2605,6 +2802,9 @@ def _save_results(
     status = _effective_status(result)
     effective_agent_command = result.agent_command or config.agent_command
     variant_label = _effective_variant_label(config)
+    if result.completed_at is None:
+        result.completed_at = datetime.now(timezone.utc).isoformat()
+    completed_at = result.completed_at
 
     # --- results.json (backward compatible) ---
     results_path = output_dir / "results.json"
@@ -2615,17 +2815,26 @@ def _save_results(
         "status": status,
         "error": result.error,
         "failure_class": result.failure_class,
+        "started_at": result.started_at,
+        "completed_at": completed_at,
         "image_tag": result.image_tag,
         "scores": result.scores,
         "timing": result.timing,
         "tool_usage": result.tool_usage,
+        "provenance": {
+            "image_digest": result.image_digest,
+            "arm_gate_proof": result.arm_gate_proof,
+            "task_hash": result.task_hash,
+            "harness_hash": result.harness_hash,
+            "verifier_hash": result.verifier_hash,
+        },
         "config": {
             "source": config.source,
             "agent_command": effective_agent_command,
             "harness": config.harness,
             "model": config.model,
             "judge_model": config.judge_model,
-            "judge_account": config.judge_account,
+            "judge_account": _resolve_judge_account(config),
             "timeout": config.timeout,
             "dry_run": config.dry_run,
             "mode": config.mode,
@@ -2644,7 +2853,6 @@ def _save_results(
         "harness": config.harness,
         "model": config.model,
         "judge_model": config.judge_model,
-        "judge_account": config.judge_account,
         "timeout": config.timeout,
         "build_timeout": config.build_timeout,
         "verifier_timeout": config.verifier_timeout,
@@ -2653,6 +2861,8 @@ def _save_results(
         "no_build": config.no_build,
         "keep_container": config.keep_container,
         "mode": config.mode,
+        "account": config.account,
+        "judge_account": _resolve_judge_account(config),
     }
     if variant_label is not None:
         payload["config"]["variant_label"] = variant_label
@@ -2668,6 +2878,8 @@ def _save_results(
         "status": status,
         "error": result.error,
         "failure_class": result.failure_class,
+        "started_at": result.started_at,
+        "completed_at": completed_at,
         "timing": result.timing,
         "tool_usage": result.tool_usage,
     }
@@ -2685,6 +2897,31 @@ def _save_results(
         (verifier_dir / "output.json").write_text(
             json.dumps(result.scores, indent=2) + "\n"
         )
+
+    if config.study_spec is not None and not result.receipt_emitted:
+        if (
+            config.study_receipts is None
+            or config.rep is None
+            or config.attempt is None
+        ):
+            raise RuntimeError("study trial identity was not validated")
+        emit_study_receipt(
+            spec_path=config.study_spec,
+            receipts_path=config.study_receipts,
+            run_dir=output_dir,
+            repetition=config.rep,
+            attempt=config.attempt,
+            evidence=RunEvidence(
+                image_digest=result.image_digest,
+                arm_gate_proof=result.arm_gate_proof,
+                task_hash=result.task_hash,
+                harness_hash=result.harness_hash,
+                verifier_hash=result.verifier_hash,
+                started_at=result.started_at,
+                ended_at=completed_at,
+            ),
+        )
+        result.receipt_emitted = True
 
     logger.info("Results saved to: %s", results_path)
     return results_path
@@ -2913,16 +3150,26 @@ def _trust_project_mcp_servers(container_id: str, server_name: str) -> bool:
 
 
 def _mcp_endpoint_for_mode(mode: str) -> str:
-    """Return the client endpoint, adding the capture proxy only for Finder arms."""
-    return MCP_PROXY_ENDPOINT if mode in FINDER_MODES else SOURCEGRAPH_MCP_ENDPOINT
+    """Return the MCP URL visible to the agent for one treatment."""
+    return MCP_PROXY_ENDPOINT if mode in MCP_FINDER_MODES else SOURCEGRAPH_MCP_ENDPOINT
 
 
-def _start_mcp_telemetry_proxy(container_id: str) -> bool:
-    """Stage and health-check the root-owned, local-only telemetry proxy."""
-    install_dir = str(PurePosixPath(MCP_PROXY_SCRIPT_PATH).parent)
-    prepared = _docker_exec(container_id, ["mkdir", "-p", install_dir])
-    if prepared.returncode != 0:
-        logger.error("Could not create MCP proxy install directory")
+def _install_mcp_telemetry_proxy(
+    container_id: str,
+    *,
+    upstream_url: str = SOURCEGRAPH_MCP_ENDPOINT,
+) -> bool:
+    """Stage and start the root-owned Finder telemetry proxy."""
+    if not MCP_PROXY_SRC.is_file():
+        logger.error("MCP telemetry proxy source is missing: %s", MCP_PROXY_SRC)
+        return False
+    mkdir = _docker_exec(
+        container_id,
+        ["mkdir", "-p", str(PurePosixPath(MCP_PROXY_SCRIPT_PATH).parent)],
+        user="root",
+    )
+    if mkdir.returncode != 0:
+        logger.error("Could not create MCP proxy directory: %s", mkdir.stderr.strip())
         return False
     try:
         _docker_cp(MCP_PROXY_SRC.as_posix(), f"{container_id}:{MCP_PROXY_SCRIPT_PATH}")
@@ -2930,30 +3177,29 @@ def _start_mcp_telemetry_proxy(container_id: str) -> bool:
         logger.error("Could not stage MCP telemetry proxy: %s", exc)
         return False
     for argv in (
-        ["chmod", "755", MCP_PROXY_SCRIPT_PATH],
+        ["chmod", "700", MCP_PROXY_SCRIPT_PATH],
         ["install", "-m", "600", "/dev/null", MCP_PROXY_TRACE_PATH],
     ):
         if _docker_exec(container_id, argv, user="root").returncode != 0:
             logger.error("Could not prepare MCP telemetry proxy: %s", shlex.join(argv))
             return False
-
     started = _docker_exec_detached(
         container_id,
         ["python3", MCP_PROXY_SCRIPT_PATH],
         env={
-            "MCP_PROXY_UPSTREAM_URL": SOURCEGRAPH_MCP_ENDPOINT,
+            "MCP_PROXY_UPSTREAM_URL": upstream_url,
             "MCP_PROXY_TRACE_PATH": MCP_PROXY_TRACE_PATH,
         },
     )
     if started.returncode != 0:
         logger.error("Could not start MCP telemetry proxy: %s", started.stderr.strip())
         return False
-
     for _attempt in range(10):
         health = _docker_exec(
             container_id,
             ["curl", "-sf", "--max-time", "1", MCP_PROXY_HEALTH_ENDPOINT],
             timeout=3,
+            user="root",
         )
         if health.returncode == 0:
             return True
@@ -2966,7 +3212,7 @@ def _configure_mcp(container_id: str, mode: str, *, harness: str = "claude") -> 
     """Configure the selected harness's Sourcegraph MCP client."""
     if mode not in MCP_MODES:
         return True
-    if mode in FINDER_MODES and not _start_mcp_telemetry_proxy(container_id):
+    if mode in MCP_FINDER_MODES and not _install_mcp_telemetry_proxy(container_id):
         return False
     if harness == "codex":
         return _configure_codex_mcp(container_id, mode)
@@ -3107,6 +3353,86 @@ def _configure_opencode_mcp(container_id: str, mode: str) -> bool:
             (listed.stderr or listed.stdout).strip()[:200],
         )
     return configured
+def _verify_cli_finder_inventory(container_id: str, sg_token: str) -> bool:
+    """Verify `/all` exposes Code Finder through the local CLI proxy."""
+    header_path = "/tmp/.cli_finder_auth_header"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".hdr", delete=False) as fh:
+        fh.write(f"Authorization: token {sg_token}\n")
+        tmp_header = fh.name
+    try:
+        try:
+            _docker_cp(tmp_header, f"{container_id}:{header_path}")
+        except RuntimeError as exc:
+            logger.error("Could not stage CLI Finder auth header: %s", exc)
+            return False
+        protected = _docker_exec(
+            container_id,
+            ["chmod", "600", header_path],
+            user="root",
+        )
+        if protected.returncode != 0:
+            return False
+        payload = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/list",
+                "params": {},
+            },
+            separators=(",", ":"),
+        )
+        result = _docker_exec(
+            container_id,
+            [
+                "curl",
+                "-sf",
+                "-H",
+                f"@{header_path}",
+                "-H",
+                "Content-Type: application/json",
+                "-H",
+                "Accept: application/json, text/event-stream",
+                "-H",
+                "User-Agent: sg-cli/1.0",
+                "--data-binary",
+                payload,
+                MCP_PROXY_ENDPOINT,
+            ],
+            timeout=30,
+            user="root",
+        )
+        if result.returncode != 0 or '"code_finder"' not in result.stdout:
+            logger.error(
+                "CLI Finder inventory preflight failed: code_finder absent or "
+                "endpoint rejected the request"
+            )
+            return False
+        return True
+    finally:
+        _docker_exec(
+            container_id,
+            ["rm", "-f", header_path],
+            user="root",
+        )
+        os.unlink(tmp_header)
+
+
+def _configure_cli_code_finder(container_id: str, mode: str) -> bool:
+    """Start the `/all` telemetry proxy for Finder-over-sgx without MCP."""
+    if mode not in CLI_FINDER_MODES:
+        return True
+    sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
+    if not sg_token:
+        logger.error("SOURCEGRAPH_ACCESS_TOKEN is required for cli_code_finder")
+        return False
+    if not _verify_mcp_endpoint(container_id, sg_token):
+        return False
+    if not _install_mcp_telemetry_proxy(
+        container_id,
+        upstream_url=SOURCEGRAPH_MCP_ENDPOINT,
+    ):
+        return False
+    return _verify_cli_finder_inventory(container_id, sg_token)
 
 
 def _configure_claude_mcp(container_id: str, mode: str) -> bool:
@@ -3151,7 +3477,6 @@ def _configure_claude_mcp(container_id: str, mode: str) -> bool:
                 mode,
             )
             return False
-
     # Step 2: Write MCP config files (using docker cp to avoid shell escaping)
     mcp_config_json = json.dumps(
         {
@@ -3274,7 +3599,7 @@ def _configure_claude_mcp(container_id: str, mode: str) -> bool:
         )
 
     if handshake_ok:
-        logger.info("MCP endpoint configured: %s", SOURCEGRAPH_MCP_ENDPOINT)
+        logger.info("MCP endpoint configured: %s", _mcp_endpoint_for_mode(mode))
     return handshake_ok
 
 
@@ -3296,20 +3621,19 @@ def _install_sgx(container_id: str, mode: str) -> bool:
     silently-shadowed or missing sgx would run a baseline (local-only) trial
     under a "cli" label and corrupt the arm comparison.
     """
-    if mode != "cli":
+    if mode not in CLI_MODES:
         return True
 
     sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
     if not sg_token:
-        logger.warning(
-            "SOURCEGRAPH_ACCESS_TOKEN not set; sgx will not authenticate"
-        )
+        logger.warning("SOURCEGRAPH_ACCESS_TOKEN not set; sgx will not authenticate")
 
     if not SGX_CLI_SRC.exists():
         logger.error("sgx source not found at %s", SGX_CLI_SRC)
         return False
 
-    logger.info("Installing sgx CLI (mode=%s, endpoint=%s)", mode, SGX_ENDPOINT)
+    endpoint = MCP_PROXY_ENDPOINT if mode in CLI_FINDER_MODES else SGX_ENDPOINT
+    logger.info("Installing sgx CLI (mode=%s, endpoint=%s)", mode, endpoint)
 
     # Step 1: upload the stdlib-only CLI to /usr/local/lib (root-owned path).
     _docker_cp(str(SGX_CLI_SRC), f"{container_id}:/usr/local/lib/sg_cli.py")
@@ -3337,7 +3661,7 @@ def _install_sgx(container_id: str, mode: str) -> bool:
     # 0600 .mcp.json). sg_cli.py reads the token from the env on every call.
     wrapper = (
         "#!/bin/sh\n"
-        f'export SG_URL="${{SG_URL:-{SGX_ENDPOINT}}}"\n'
+        f'export SG_URL="${{SG_URL:-{endpoint}}}"\n'
         'exec "$(command -v python3 || command -v python)" '
         '/usr/local/lib/sg_cli.py "$@"\n'
     )
@@ -3376,7 +3700,7 @@ def _install_sgx(container_id: str, mode: str) -> bool:
 
     logger.info(
         "sgx CLI installed at /usr/local/bin/sgx (%s); no MCP registered",
-        SGX_ENDPOINT,
+        endpoint,
     )
     return True
 
@@ -3444,9 +3768,7 @@ def _verify_sgx_endpoint(container_id: str, sg_token: str) -> bool:
     ]
     max_retries = 5
     for attempt in range(1, max_retries + 1):
-        result = subprocess.run(
-            probe_cmd, capture_output=True, text=True, timeout=30
-        )
+        result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             logger.info("sgx auth preflight OK (attempt %d)", attempt)
             return True
@@ -3463,8 +3785,7 @@ def _verify_sgx_endpoint(container_id: str, sg_token: str) -> bool:
             return False
         backoff = min(2**attempt, 10)
         logger.warning(
-            "sgx auth preflight attempt %d/%d failed (rc=%d, err=%s) — "
-            "retrying in %ds",
+            "sgx auth preflight attempt %d/%d failed (rc=%d, err=%s) — retrying in %ds",
             attempt,
             max_retries,
             result.returncode,
@@ -3531,16 +3852,6 @@ def _iter_agent_records(content: str) -> Iterator[dict]:
             yield record
 
 
-def _count_mcp_tool_calls(record: dict) -> int:
-    """Count Sourcegraph MCP tool_use blocks in one agent stdout record.
-
-    Only a genuine tool_use counts. The name also appears where no call was made —
-    the agent narrating it, a tool_result echoing it back — and this count gates
-    mcp_only invalidation (:func:`_route_zero_mcp_run`).
-    """
-    return len(_mcp_tool_names(record))
-
-
 def _mcp_tool_names(record: dict) -> list[str]:
     """Return Sourcegraph tool names from genuine provider tool-call records."""
     item = record.get("item")
@@ -3574,11 +3885,16 @@ def _mcp_tool_names(record: dict) -> list[str]:
     ]
 
 
-def _count_sgx_tool_calls(record: dict) -> int:
-    """Count `sgx` invocations in one agent stdout record.
+def _count_mcp_tool_calls(record: dict) -> int:
+    """Count Sourcegraph MCP tool_use blocks in one agent stdout record."""
+    return len(_mcp_tool_names(record))
+
+
+def _sgx_subcommands(record: dict) -> list[str]:
+    """Return `sgx` subcommands invoked in one agent stdout record.
 
     The cli arm retrieves via the `sgx` shell command, so a genuine call is a
-    Bash tool_use whose ``input.command`` invokes `sgx` (see ``_SGX_COMMAND_RE``).
+    Bash tool_use whose ``input.command`` invokes `sgx`.
     A single Bash command can chain several (``sgx search …; sgx read …``), so
     each match counts, not each block. This count gates cli invalidation
     (:func:`_route_zero_sgx_run`). Subagent calls that Claude Code inlines into
@@ -3603,7 +3919,7 @@ def _count_sgx_tool_calls(record: dict) -> int:
             and "c" in argv[1][1:]
         ):
             command = argv[2]
-        return len(_SGX_COMMAND_RE.findall(command))
+        return _SGX_SUBCOMMAND_RE.findall(command)
 
     part = record.get("part")
     if (
@@ -3615,19 +3931,27 @@ def _count_sgx_tool_calls(record: dict) -> int:
         state = part.get("state")
         tool_input = state.get("input") if isinstance(state, dict) else None
         command = tool_input.get("command") if isinstance(tool_input, dict) else ""
-        return len(_SGX_COMMAND_RE.findall(str(command)))
+        return _SGX_SUBCOMMAND_RE.findall(str(command))
 
     message = record.get("message")
     blocks = message.get("content") if isinstance(message, dict) else None
     if not isinstance(blocks, list):
-        return 0
-    return sum(
-        len(_SGX_COMMAND_RE.findall(str((block.get("input") or {}).get("command", ""))))
+        return []
+    return [
+        subcommand
         for block in blocks
         if isinstance(block, dict)
         and block.get("type") == "tool_use"
         and block.get("name") == "Bash"
-    )
+        for subcommand in _SGX_SUBCOMMAND_RE.findall(
+            str((block.get("input") or {}).get("command", ""))
+        )
+    ]
+
+
+def _count_sgx_tool_calls(record: dict) -> int:
+    """Count `sgx` invocations in one agent stdout record."""
+    return len(_sgx_subcommands(record))
 
 
 def _extract_tool_usage(
@@ -3657,7 +3981,16 @@ def _extract_tool_usage(
                     for tool in set(mcp_tools)
                 },
             }
-            usage["sgx_tool_calls"] += _count_sgx_tool_calls(record)
+            sgx_tools = _sgx_subcommands(record)
+            usage["sgx_tool_calls"] += len(sgx_tools)
+            usage["sgx_tool_breakdown"] = {
+                **usage["sgx_tool_breakdown"],
+                **{
+                    tool: usage["sgx_tool_breakdown"].get(tool, 0)
+                    + sgx_tools.count(tool)
+                    for tool in set(sgx_tools)
+                },
+            }
             _consume_codex_usage(record, usage, activity_counts, providers)
             _consume_opencode_usage(record, usage, activity_counts, providers)
             _consume_claude_usage(record, usage, activity_counts, providers)
@@ -3780,48 +4113,6 @@ def _extract_opencode_lifecycle(
     return lifecycle
 
 
-def _capture_mcp_telemetry(
-    result: TaskRunResult,
-    container_id: str,
-    output_dir: Path,
-    *,
-    mode: str,
-    expected_repo_count: int,
-    expected_repositories: Sequence[str] = (),
-) -> None:
-    """Copy the root-owned MCP trace and attach Finder aggregate telemetry."""
-    if mode not in FINDER_MODES:
-        return
-    destination = output_dir / "mcp_trace.jsonl"
-    try:
-        _docker_cp(
-            f"{container_id}:{MCP_PROXY_TRACE_PATH}",
-            str(destination),
-        )
-        retrieval = build_retrieval_telemetry(
-            destination,
-            mode=mode,
-            expected_repo_count=expected_repo_count,
-            outer_usage=result.tool_usage,
-            expected_repositories=expected_repositories,
-        )
-    except (OSError, RuntimeError, ValueError) as exc:
-        retrieval = {
-            "trace_captured": False,
-            "valid": False,
-            "invalid_reason": f"MCP telemetry capture failed: {exc}",
-            "code_finder_calls": 0,
-            "direct_retrieval_calls": 0,
-            "raw_meta": [],
-        }
-    result.tool_usage["retrieval"] = {
-        **retrieval,
-        "endpoint": SOURCEGRAPH_MCP_ENDPOINT,
-        "expected_repo_count": expected_repo_count,
-        "trace_file": destination.name,
-    }
-
-
 def _expected_sourcegraph_repositories(
     repos: Sequence[dict[str, Any]],
 ) -> list[str]:
@@ -3841,6 +4132,7 @@ def _empty_tool_usage() -> dict[str, Any]:
         "mcp_tool_calls": 0,
         "mcp_tool_breakdown": {},
         "sgx_tool_calls": 0,
+        "sgx_tool_breakdown": {},
     }
 
 
@@ -3854,7 +4146,6 @@ def _empty_provider_activity_counts() -> dict[str, int]:
         "agent_messages": 0,
         "file_changes": 0,
     }
-
 
 def _token_count(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -3979,6 +4270,46 @@ def _provider_activity(counts: dict[str, int], providers: set[str]) -> dict:
         "tool_uses": counts["tool_uses"],
         "agent_messages": counts["agent_messages"],
         "file_changes": counts["file_changes"],
+    }
+
+
+def _capture_mcp_telemetry(
+    result: TaskRunResult,
+    container_id: str,
+    output_dir: Path,
+    *,
+    mode: str,
+    expected_repo_count: int,
+    expected_repositories: Sequence[str] = (),
+) -> None:
+    """Copy and summarize the root-owned proxy trace for Finder treatments."""
+    if mode not in FINDER_MODES:
+        return
+    trace_path = output_dir / "mcp_telemetry.jsonl"
+    try:
+        _docker_cp(f"{container_id}:{MCP_PROXY_TRACE_PATH}", trace_path.as_posix())
+        retrieval = build_retrieval_telemetry(
+            trace_path,
+            mode=mode,
+            expected_repo_count=expected_repo_count,
+            expected_repositories=expected_repositories,
+            outer_usage=result.tool_usage,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        logger.error("Could not capture valid Finder telemetry: %s", exc)
+        retrieval = {
+            "trace_captured": False,
+            "valid": False,
+            "invalid_reason": f"Finder telemetry capture failed: {exc}",
+            "code_finder_calls": 0,
+            "direct_retrieval_calls": 0,
+            "raw_meta": [],
+        }
+    result.tool_usage["retrieval"] = {
+        **retrieval,
+        "endpoint": SOURCEGRAPH_MCP_ENDPOINT,
+        "expected_repo_count": expected_repo_count,
+        "trace_file": trace_path.name,
     }
 
 
@@ -4125,6 +4456,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
     cache_isolation_env: dict[str, str] = {}
     harness_cli_installed = False
     staged_harness_credentials: dict[str, str] = {}
+    expected_image_digest: str | None = None
 
     try:
         # --- Phase 1: Parse ---
@@ -4175,6 +4507,21 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             _save_results(result, task_data, output_dir, config)
             return result
         result.agent_command = harness_plan.rendered_command
+
+        if config.study_spec is not None:
+            try:
+                provenance = _capture_input_provenance(config, task_dir)
+                result.task_hash = provenance.task_hash
+                result.harness_hash = provenance.harness_hash
+                result.verifier_hash = provenance.verifier_hash
+            except Exception as exc:
+                result.phase = "input_provenance_failed"
+                result.status = RUN_STATUS_INVALID
+                result.failure_class = "integrity_provenance"
+                result.error = str(exc)
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
 
         # --- Arm eligibility: refuse the task, do not score it near zero ---
         # A code_patch task cannot be solved by an agent forbidden to read the
@@ -4229,10 +4576,22 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 result.failure_class = "infra_build"
                 result.timing = timings
                 _save_results(result, task_data, output_dir, config)
-                raise
+                return result
             timings["build"] = time.monotonic() - t0
         else:
             logger.info("Skipping Docker build (--no-build)")
+
+        if config.study_spec is not None:
+            try:
+                expected_image_digest = _docker_image_digest(image_tag)
+            except Exception as exc:
+                result.phase = "image_provenance_failed"
+                result.status = RUN_STATUS_INVALID
+                result.failure_class = "integrity_provenance"
+                result.error = str(exc)
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
 
         # --- Phase 3: Setup ---
         t0 = time.monotonic()
@@ -4241,15 +4600,29 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 image_tag, container_name, config.memory_mb
             )
             result.container_id = container_id
+            if expected_image_digest is not None:
+                result.image_digest = _docker_container_image_digest(container_id)
+                if result.image_digest != expected_image_digest:
+                    raise RuntimeError(
+                        "created container image ID does not match the inspected "
+                        f"study image: {result.image_digest} != "
+                        f"{expected_image_digest}"
+                    )
             _docker_start(container_id)
-            _setup_container(container_id, task_dir, task_data, mode=config.mode)
+            injected_instruction = _setup_container(
+                container_id, task_dir, task_data, mode=config.mode
+            )
+            if injected_instruction is not None:
+                (output_dir / "injected_instruction.md").write_text(
+                    injected_instruction
+                )
         except Exception as setup_exc:
             result.phase = "setup_failed"
             result.error = str(setup_exc)
             result.failure_class = "infra_clone"
             result.timing = timings
             _save_results(result, task_data, output_dir, config)
-            raise
+            return result
 
         healthy = _run_health_check(container_id, repos)
         timings["setup"] = time.monotonic() - t0
@@ -4292,7 +4665,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # silently recorded as an MCP measurement — corrupting the MCP arm
             # of any affected comparison. Route it to the infra-error re-run
             # channel instead of proceeding degraded (bead EnterpriseBench-c7wb).
-            # This branch only runs for mcp_only/hybrid; the baseline arm has no
+            # This branch only runs for MCP modes; the baseline arm has no
             # MCP and is unaffected.
             if not mcp_handshake_ok:
                 logger.error(
@@ -4313,13 +4686,28 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 _save_results(result, task_data, output_dir, config)
                 return result
 
+        if config.mode in CLI_FINDER_MODES:
+            cli_finder_ok = _configure_cli_code_finder(container_id, config.mode)
+            if not cli_finder_ok:
+                result.phase = "cli_infra_error"
+                result.status = RUN_STATUS_INVALID
+                result.success = False
+                result.failure_class = "infra_cli_finder_preflight"
+                result.error = (
+                    "CLI Code Finder preflight failed: `/all` did not expose "
+                    "code_finder through the telemetry proxy"
+                )
+                result.timing = timings
+                _save_results(result, task_data, output_dir, config)
+                return result
+
         # --- Install sgx CLI if this is the cli arm ---
         # The cli arm installs the sgx retrieval CLI instead of registering MCP.
         # No .mcp.json is written (the lean, no-MCP tool prefix is the point).
         # Like the MCP pre-flight above, a failed install is a HARD gate: a
         # silently-shadowed or missing sgx would run a baseline (local-only)
         # trial under a "cli" label and corrupt the arm comparison.
-        if config.mode == "cli":
+        if config.mode in CLI_MODES:
             if not _install_sgx(container_id, config.mode):
                 logger.error(
                     "sgx install FAILED for mode=cli — routing to infra-error "
@@ -4347,7 +4735,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # mcp_only, which already fails loudly on the same bad token. Make
             # one authenticated sgx call and HARD-gate on rejection, fail-fast
             # before wasting an agent run.
-            if not _verify_sgx_endpoint(
+            if config.mode == "cli" and not _verify_sgx_endpoint(
                 container_id, os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
             ):
                 logger.error(
@@ -4445,7 +4833,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         # deliberately does NOT bake it, to avoid a secret in a world-readable
         # file). No .mcp.json and no --mcp-config are written for this arm — that
         # is deliberate.
-        if config.mode == "cli":
+        if config.mode in CLI_MODES:
             sg_token = os.environ.get("SOURCEGRAPH_ACCESS_TOKEN", "")
             if sg_token:
                 env_extra["SOURCEGRAPH_ACCESS_TOKEN"] = sg_token
@@ -4454,6 +4842,8 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                     "SOURCEGRAPH_ACCESS_TOKEN not set; sgx will not authenticate "
                     "and will exit non-zero on every call (mode=cli)"
                 )
+            if config.mode in CLI_FINDER_MODES:
+                env_extra["SG_URL"] = MCP_PROXY_ENDPOINT
 
         if config.account is not None:
             try:
@@ -4549,6 +4939,21 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 result.timing = timings
                 _save_results(result, task_data, output_dir, config)
                 return result
+
+            if config.study_spec is not None:
+                proof, proof_err = _capture_arm_gate_proof(
+                    container_id, task_data, config.mode
+                )
+                if proof_err:
+                    result.phase = "mode_gate_proof_failed"
+                    result.status = RUN_STATUS_INVALID
+                    result.success = False
+                    result.failure_class = "infra_perms"
+                    result.error = proof_err
+                    result.timing = timings
+                    _save_results(result, task_data, output_dir, config)
+                    return result
+                result.arm_gate_proof = proof
 
             t0 = time.monotonic()
             try:
@@ -4671,7 +5076,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 container_id,
                 task_data,
                 judge_model=config.judge_model,
-                judge_account=config.judge_account,
+                judge_account=_resolve_judge_account(config),
             )
             _route_verifier_infra_error(result, scores)
 
@@ -4855,7 +5260,8 @@ Examples:
         default=None,
         help=(
             "Claude account wrapper used only by a cc:* judge "
-            "(for example 1 selects claude-1)."
+            "(for example 1 selects claude-1). Defaults to --account "
+            "after the agent exits."
         ),
     )
     parser.add_argument(
@@ -4888,6 +5294,24 @@ Examples:
             "Repetition index (1-based). When set, output directory includes "
             "rep<N>/ suffix to prevent repeated runs from overwriting results."
         ),
+    )
+    parser.add_argument(
+        "--study-spec",
+        type=Path,
+        default=None,
+        help="Exact StudySpec JSON for this trial (requires --study-receipts).",
+    )
+    parser.add_argument(
+        "--study-receipts",
+        type=Path,
+        default=None,
+        help="Append-only receipt JSONL for this trial's named study.",
+    )
+    parser.add_argument(
+        "--attempt",
+        type=int,
+        default=None,
+        help="Study attempt index (1-based; requires --study-spec and --rep).",
     )
     parser.add_argument(
         "--ablation-variant",
@@ -4960,6 +5384,9 @@ def main() -> None:
         judge_account=args.judge_account,
         mode=args.mode,
         rep=args.rep,
+        study_spec=args.study_spec.resolve() if args.study_spec else None,
+        study_receipts=(args.study_receipts.resolve() if args.study_receipts else None),
+        attempt=args.attempt,
         ablation_variant=args.ablation_variant,
         min_disk_gb=args.min_disk_gb,
         variant_label=args.variant_label,

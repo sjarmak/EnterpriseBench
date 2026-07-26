@@ -34,6 +34,7 @@ except ImportError:
 from orchestration.session import SessionConfig, SessionResult, run_session
 from orchestration.milestone import SessionScore, run_session_milestones
 from orchestration.runner_cli import add_passthrough_args
+from lib.shared import VALID_MODES
 from eb_verify.score_contract import (  # noqa: E402
     SCORE_CONTRACT_KEY,
     SCORE_CONTRACT_VERSION,
@@ -470,7 +471,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=["baseline", "mcp_only", "hybrid"],
+        choices=VALID_MODES,
         default="baseline",
         help="Tool access mode (default: baseline)",
     )

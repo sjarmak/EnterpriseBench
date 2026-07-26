@@ -380,10 +380,7 @@ class TestMcpToolCallCounting:
             "read_file": 1,
         }
 
-    def test_direct_mcp_arm_rejects_code_finder_contamination(
-        self,
-        tmp_path: Path,
-    ) -> None:
+    def test_direct_mcp_arm_rejects_code_finder_contamination(self) -> None:
         result = _result(1)
         result.tool_usage["mcp_tool_breakdown"] = {"code_finder": 1}
 

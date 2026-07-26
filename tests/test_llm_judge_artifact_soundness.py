@@ -34,8 +34,10 @@ sys.path.insert(0, str(_ROOT / "lib"))
 import run_task  # noqa: E402
 from run_task import (  # noqa: E402
     ANSWER_ARTIFACT_PATH,
+    TaskRunConfig,
     _apply_llm_judge,
     _derive_artifact_candidates,
+    _resolve_judge_account,
 )
 
 
@@ -65,6 +67,20 @@ def _write_task(tmp_path: Path, instruction: str, checkpoints_gt: dict) -> Path:
         json.dumps({"task_id": "t1", "checkpoints": checkpoints_gt})
     )
     return tmp_path
+
+
+def test_judge_account_defaults_to_agent_account(tmp_path: Path) -> None:
+    config = TaskRunConfig(task_toml=tmp_path / "task.toml", account=3)
+    assert _resolve_judge_account(config) == 3
+
+
+def test_explicit_judge_account_overrides_agent_account(tmp_path: Path) -> None:
+    config = TaskRunConfig(
+        task_toml=tmp_path / "task.toml",
+        account=3,
+        judge_account=1,
+    )
+    assert _resolve_judge_account(config) == 1
 
 
 # --------------------------------------------------------------------------
@@ -184,16 +200,30 @@ class TestArtifactFoundAtDerivedPathAppliesCap:
         side = _docker_exec_for({"/workspace/BLAST_RADIUS.md": "agent report body"})
 
         fake_judge = MagicMock()
+        fake_judge.provenance = {
+            "backend": "claude_code_cli",
+            "model": "haiku",
+            "account": 3,
+            "executable": "claude-3",
+        }
         fake_judge.evaluate_checkpoint.return_value = MagicMock(
             score=0.5, reasoning="partial"
         )
 
         with patch.object(run_task, "_docker_exec", side_effect=side), patch(
             "eb_verify.judge.LLMJudge", return_value=fake_judge
-        ):
-            out = _apply_llm_judge(scores, task_dir, "cid", {"task": {}})
+        ) as judge_cls:
+            out = _apply_llm_judge(
+                scores,
+                task_dir,
+                "cid",
+                {"task": {}},
+                judge_account=3,
+            )
 
         assert "verifier_infra_error" not in out
+        judge_cls.assert_called_once_with(model="cc:haiku", account=3)
+        assert out["judge_provenance"] == fake_judge.provenance
         cp = out["checkpoints"][0]
         assert cp["judge_score"] == 0.5
         assert cp["grep_score"] == 1.0

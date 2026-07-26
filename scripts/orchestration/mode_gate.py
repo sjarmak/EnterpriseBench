@@ -45,7 +45,9 @@ from validation import validate_repo_entry
 
 #: Arms whose agent is denied local source. ``hybrid`` is MCP *plus* local by
 #: definition, and ``baseline`` is local-only, so neither is gated.
-GATED_MODES = frozenset({"mcp_only", "mcp_code_finder", "mcp_assisted"})
+GATED_MODES = frozenset(
+    {"mcp_only", "mcp_code_finder", "mcp_assisted", "cli_code_finder"}
+)
 
 #: Artifacts the agent can only produce by reading and writing inside a repo
 #: tree. Under the gate that tree is unreadable, so such a task is not merely

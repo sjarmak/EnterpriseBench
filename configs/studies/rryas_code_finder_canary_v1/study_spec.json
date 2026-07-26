@@ -1,0 +1,24 @@
+{
+  "study_id": "rryas-code-finder-canary-v1",
+  "schema_version": 1,
+  "task_manifest_hash": "sha256:d0fc21571ebd90f32dfd6ee767900f83da2eaa29e4a2a0980b582ee271760cba",
+  "task_ids": [
+    "dep-traversal-003"
+  ],
+  "arms": [
+    {
+      "name": "mcp_code_finder",
+      "capability_fingerprint": "sourcegraph-mcp-code-finder:exactly-once-per-repository:local-repos-denied:direct-tools-denied:beta-telemetry-required:proxy-v1:cli-equivalent-sgx-finder:v2"
+    }
+  ],
+  "baseline_arm": "mcp_code_finder",
+  "repetitions": 1,
+  "attempt_policy": "first_valid_attempt",
+  "max_attempts": 2,
+  "model": "claude-sonnet-5",
+  "harness": "sha256:f686385310fe9278b53c8b891a3842a085f717b41f1bb1c8bd731e7be6aa2185",
+  "revision": "264b547b18f0250e2703ca351aba0c6011b9b190",
+  "token_source": "sdk_model_usage",
+  "score_contract": "weighted-mean-v2",
+  "promotion_policy": "validity-canary-only-no-comparison"
+}

@@ -93,7 +93,9 @@ class TestZeroSgxGateCli:
         assert result.status == RUN_STATUS_INVALID
         assert result.tool_usage["sgx_used"] is False
 
-    @pytest.mark.parametrize("root_cause", ["infra_oom", "infra_timeout", "agent_error"])
+    @pytest.mark.parametrize(
+        "root_cause", ["infra_oom", "infra_timeout", "agent_error"]
+    )
     def test_preserves_a_root_cause_that_never_set_status(
         self, root_cause: str
     ) -> None:
@@ -217,21 +219,28 @@ class TestSgxToolCallCounting:
         assert _usage(tmp_path, stream)["sgx_tool_calls"] == 1
 
     def test_sgx_in_command_substitution_counts(self, tmp_path: Path) -> None:
-        stream = _assistant(_bash("echo \"$(sgx refs kubernetes f.go Sym)\""))
+        stream = _assistant(_bash('echo "$(sgx refs kubernetes f.go Sym)"'))
         assert _usage(tmp_path, stream)["sgx_tool_calls"] == 1
 
     def test_a_non_bash_tool_named_like_sgx_does_not_count(
         self, tmp_path: Path
     ) -> None:
         """Only Bash tool_use is inspected; the command text lives there."""
-        block = {"type": "tool_use", "id": "t", "name": "Read", "input": {"file": "sgx.md"}}
+        block = {
+            "type": "tool_use",
+            "id": "t",
+            "name": "Read",
+            "input": {"file": "sgx.md"},
+        }
         assert _usage(tmp_path, _assistant(block))["sgx_tool_calls"] == 0
 
     def test_subagent_inlined_sgx_call_counts(self, tmp_path: Path) -> None:
         """A Task subagent's sgx call is inlined into the parent stream, tagged
         with parent_tool_use_id. Counting all records (not just parent-owned
         ones) is what keeps a compliant subagent run from false-zeroing."""
-        stream = _assistant(_bash("sgx search 'foo'"), parent_tool_use_id="toolu_parent")
+        stream = _assistant(
+            _bash("sgx search 'foo'"), parent_tool_use_id="toolu_parent"
+        )
         assert _usage(tmp_path, stream)["sgx_tool_calls"] == 1
 
     def test_multiple_sgx_calls_across_records_accumulate(self, tmp_path: Path) -> None:
@@ -247,6 +256,39 @@ class TestSgxToolCallCounting:
         """A Bash block that chains several sgx calls counts each, not the block."""
         stream = _assistant(_bash("sgx search 'a' && sgx read r f --start 1 --end 9"))
         assert _usage(tmp_path, stream)["sgx_tool_calls"] == 2
+
+    def test_breakdown_records_finder_subcommand(self, tmp_path: Path) -> None:
+        usage = _usage(
+            tmp_path,
+            _assistant(_bash("sgx finder 'inspect github.com/org/repo'")),
+        )
+
+        assert usage["sgx_tool_breakdown"] == {"finder": 1}
+
+    def test_timeout_wrapped_finder_from_paid_canary_counts(
+        self, tmp_path: Path
+    ) -> None:
+        """Regression: rryas-cli-code-finder-canary-v1 used this exact shape."""
+        command = (
+            "timeout 280 sgx finder 'inspect github.com/sg-evals/chi--v5.0.8' "
+            "> /tmp/chi_finder.out 2>&1 &\n"
+            "wait\n"
+            "cat /tmp/chi_finder.out"
+        )
+
+        usage = _usage(tmp_path, _assistant(_bash(command)))
+
+        assert usage["sgx_tool_calls"] == 1
+        assert usage["sgx_tool_breakdown"] == {"finder": 1}
+
+    def test_direct_cli_rejects_finder_contamination(self) -> None:
+        result = _result(1)
+        result.tool_usage["sgx_tool_breakdown"] = {"finder": 1}
+
+        run_task._route_code_finder_run(result, "cli")
+
+        assert result.status == RUN_STATUS_INVALID
+        assert result.failure_class == "invalid_arm_contamination"
 
     def test_adversarial_command_string_returns_promptly(self, tmp_path: Path) -> None:
         """A slash-heavy command must not drive the matcher quadratic.
@@ -281,13 +323,9 @@ class TestSgxToolCallCounting:
     def test_noisy_interleaved_log_counts_sgx(self, tmp_path: Path) -> None:
         """Container logs interleave plain-text lines with the JSON stream."""
         stream = (
-            "starting agent...\n"
-            + _assistant(_bash("sgx search 'foo'"))
-            + "\n"
+            "starting agent...\n" + _assistant(_bash("sgx search 'foo'")) + "\n"
             "not json at all\n"
-            '{"broken": \n'
-            + json.dumps({"num_turns": 4})
-            + "\n"
+            '{"broken": \n' + json.dumps({"num_turns": 4}) + "\n"
         )
         assert _usage(tmp_path, stream)["sgx_tool_calls"] == 1
 

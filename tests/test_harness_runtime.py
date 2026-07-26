@@ -278,7 +278,7 @@ def test_configure_codex_finder_mode_points_at_telemetry_proxy() -> None:
             {"SOURCEGRAPH_ACCESS_TOKEN": "sourcegraph-secret"},
         ),
         patch.object(run_task, "_verify_mcp_endpoint", return_value=True),
-        patch.object(run_task, "_start_mcp_telemetry_proxy", return_value=True),
+        patch.object(run_task, "_install_mcp_telemetry_proxy", return_value=True),
         patch.object(run_task, "_docker_cp", side_effect=capture_copy),
         patch.object(run_task, "_docker_exec", return_value=_completed()),
         patch.object(
@@ -347,7 +347,7 @@ def test_capture_finder_telemetry_copies_root_trace_and_merges_outer_usage(
 
     docker_cp.assert_called_once_with(
         f"container-1:{run_task.MCP_PROXY_TRACE_PATH}",
-        str(tmp_path / "mcp_trace.jsonl"),
+        str(tmp_path / "mcp_telemetry.jsonl"),
     )
     assert result.tool_usage["retrieval"]["valid"] is True
     assert result.tool_usage["retrieval"]["combined"]["total_tokens"] == 45

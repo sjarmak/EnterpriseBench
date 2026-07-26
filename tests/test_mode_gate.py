@@ -63,8 +63,9 @@ def _task(repos=(("ansible", "ansible"),), required=("answer",), optional=()):
 EXPECTED_GATING = {
     "baseline": False,  # local-only; the control arm.
     "mcp_only": True,  # the ablation: local source denied at the filesystem.
-    "mcp_code_finder": True,  # Code Finder is the sole remote retrieval path.
+    "mcp_code_finder": True,  # Finder is the sole remote retrieval path.
     "mcp_assisted": True,  # Finder bootstrap plus targeted remote follow-up.
+    "cli_code_finder": True,  # Finder via sgx; same local-source denial.
     "hybrid": False,  # MCP *plus* local by design.
     "cli": False,  # baseline + sgx; the manipulation is the tool interface,
     # not readability, so local source stays present.
@@ -145,7 +146,9 @@ def test_lockdown_keeps_group_read_so_the_scorer_is_not_blinded():
     blindness rather than remove it, and every checkpoint would score a tree it
     cannot see.
     """
-    mode = [c[2] for c in lockdown_commands(["/workspace/x"], SCORER) if c[0] == "chmod"][0]
+    mode = [
+        c[2] for c in lockdown_commands(["/workspace/x"], SCORER) if c[0] == "chmod"
+    ][0]
 
     assert "g-r" not in mode, "stripping group read blinds the scorer"
     assert "go-rwx" not in mode
@@ -161,7 +164,9 @@ def test_lockdown_strips_group_write_to_keep_scorer_access_identical_across_arms
     second thing varying between arms, which is the exact failure this gate
     exists to avoid.
     """
-    mode = [c[2] for c in lockdown_commands(["/workspace/x"], SCORER) if c[0] == "chmod"][0]
+    mode = [
+        c[2] for c in lockdown_commands(["/workspace/x"], SCORER) if c[0] == "chmod"
+    ][0]
 
     assert "g-w" in mode, "scorer would gain repo write it does not have in baseline"
 
@@ -257,15 +262,15 @@ class _FakeExec:
         self.scorer_can_read = scorer_can_read
         self.calls: list[tuple[list[str], str | None]] = []
 
-    def __call__(
-        self, container_id, cmd, timeout=120, workdir="/workspace", user=None
-    ):
+    def __call__(self, container_id, cmd, timeout=120, workdir="/workspace", user=None):
         self.calls.append((cmd, user))
         rc, out = 0, ""
         if cmd[0] == "find":
             out = "/workspace/ansible/setup.py"
         elif cmd[:2] == ["test", "-r"]:
-            allowed = self.agent_can_read if user == AGENT_USER else self.scorer_can_read
+            allowed = (
+                self.agent_can_read if user == AGENT_USER else self.scorer_can_read
+            )
             rc = 0 if allowed else 1
         return SimpleNamespace(returncode=rc, stdout=out, stderr="")
 
@@ -459,9 +464,7 @@ def test_gated_mode_without_agent_command_is_invalid_not_complete(
         ("_run_health_check", True),
         ("_configure_mcp", True),
     ):
-        monkeypatch.setattr(
-            run_task, name, (lambda r: (lambda *a, **k: r))(ret)
-        )
+        monkeypatch.setattr(run_task, name, (lambda r: (lambda *a, **k: r))(ret))
 
     result = run_task.run_task(
         run_task.TaskRunConfig(

@@ -21,13 +21,14 @@ VALID_MODES = (
     "mcp_assisted",
     "hybrid",
     "cli",
+    "cli_code_finder",
 )
-MODE_SUFFIXES = (
-    "_mcp_code_finder",
-    "_mcp_assisted",
-    "_hybrid",
-    "_mcp_only",
-    "_baseline",
+# Derived, not hand-listed: three copies of this list existed and every one of
+# them had silently missed "cli" since that arm was wired, so a <task>_cli
+# directory resolved to baseline. Longest-first so a suffix that is a suffix of
+# another cannot shadow it.
+MODE_SUFFIXES = tuple(
+    sorted((f"_{mode}" for mode in VALID_MODES), key=len, reverse=True)
 )
 
 # Separates a mode from a variant label in a run directory name

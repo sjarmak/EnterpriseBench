@@ -9,6 +9,7 @@ import pytest
 
 # Import the module under test
 import sys
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from run_benchmark import (
@@ -19,14 +20,13 @@ from run_benchmark import (
     filter_completed_tasks,
     build_parser,
     write_summary,
-    main,
-    PROJECT_ROOT,
 )
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_task_info(task_id: str = "test-001", difficulty: str = "medium") -> TaskInfo:
     return TaskInfo(
@@ -39,7 +39,9 @@ def _make_task_info(task_id: str = "test-001", difficulty: str = "medium") -> Ta
     )
 
 
-def _write_results(results_dir: Path, task_id: str, success: bool, *, mode: str | None = None) -> Path:
+def _write_results(
+    results_dir: Path, task_id: str, success: bool, *, mode: str | None = None
+) -> Path:
     """Write a results.json file in the expected location."""
     if mode:
         out = results_dir / task_id / mode / "results.json"
@@ -89,45 +91,70 @@ required = []
 # is_task_completed
 # ---------------------------------------------------------------------------
 
+
 class TestIsTaskCompleted:
     def test_returns_true_when_results_exist_with_success(self, tmp_path: Path) -> None:
         results_dir = tmp_path / "results" / "runs"
         _write_results(results_dir, "task-abc", success=True)
-        assert is_task_completed("task-abc", results_dir=results_dir, mode="baseline") is True
+        assert (
+            is_task_completed("task-abc", results_dir=results_dir, mode="baseline")
+            is True
+        )
 
-    def test_returns_false_when_results_exist_with_failure(self, tmp_path: Path) -> None:
+    def test_returns_false_when_results_exist_with_failure(
+        self, tmp_path: Path
+    ) -> None:
         results_dir = tmp_path / "results" / "runs"
         _write_results(results_dir, "task-abc", success=False)
-        assert is_task_completed("task-abc", results_dir=results_dir, mode="baseline") is False
+        assert (
+            is_task_completed("task-abc", results_dir=results_dir, mode="baseline")
+            is False
+        )
 
     def test_returns_false_when_no_results_file(self, tmp_path: Path) -> None:
         results_dir = tmp_path / "results" / "runs"
         results_dir.mkdir(parents=True)
-        assert is_task_completed("task-missing", results_dir=results_dir, mode="baseline") is False
+        assert (
+            is_task_completed("task-missing", results_dir=results_dir, mode="baseline")
+            is False
+        )
 
     def test_returns_false_when_results_dir_absent(self, tmp_path: Path) -> None:
         results_dir = tmp_path / "nonexistent"
-        assert is_task_completed("task-abc", results_dir=results_dir, mode="baseline") is False
+        assert (
+            is_task_completed("task-abc", results_dir=results_dir, mode="baseline")
+            is False
+        )
 
     def test_returns_false_on_malformed_json(self, tmp_path: Path) -> None:
         results_dir = tmp_path / "results" / "runs"
         f = results_dir / "task-bad" / "results.json"
         f.parent.mkdir(parents=True)
         f.write_text("NOT JSON")
-        assert is_task_completed("task-bad", results_dir=results_dir, mode="baseline") is False
+        assert (
+            is_task_completed("task-bad", results_dir=results_dir, mode="baseline")
+            is False
+        )
 
     def test_checks_mode_subdirectory(self, tmp_path: Path) -> None:
         results_dir = tmp_path / "results" / "runs"
         _write_results(results_dir, "task-mode", success=True, mode="mcp_only")
         # Should find it when mode matches
-        assert is_task_completed("task-mode", results_dir=results_dir, mode="mcp_only") is True
+        assert (
+            is_task_completed("task-mode", results_dir=results_dir, mode="mcp_only")
+            is True
+        )
         # Should NOT find it for a different mode (no top-level results.json either)
-        assert is_task_completed("task-mode", results_dir=results_dir, mode="baseline") is False
+        assert (
+            is_task_completed("task-mode", results_dir=results_dir, mode="baseline")
+            is False
+        )
 
 
 # ---------------------------------------------------------------------------
 # filter_completed_tasks
 # ---------------------------------------------------------------------------
+
 
 class TestFilterCompletedTasks:
     def test_removes_completed_tasks(self, tmp_path: Path) -> None:
@@ -172,6 +199,7 @@ class TestFilterCompletedTasks:
 # CLI parser
 # ---------------------------------------------------------------------------
 
+
 class TestCliParser:
     def test_skip_completed_flag_exists(self) -> None:
         parser = build_parser()
@@ -188,17 +216,21 @@ class TestCliParser:
 # Summary includes skipped count
 # ---------------------------------------------------------------------------
 
+
 class TestSummarySkipCount:
     def test_summary_includes_previously_completed(self, tmp_path: Path) -> None:
         """When --skip-completed is used, summary should show previously_completed count."""
         from run_benchmark import write_summary, TaskResult
 
         results = [
-            TaskResult(task_id="t1", difficulty="medium", status="completed", score=1.0),
+            TaskResult(
+                task_id="t1", difficulty="medium", status="completed", score=1.0
+            ),
         ]
         run_id = "test_run"
         # Monkey-patch PROJECT_ROOT temporarily for write_summary
         import run_benchmark
+
         original_root = run_benchmark.PROJECT_ROOT
         run_benchmark.PROJECT_ROOT = tmp_path
         try:
@@ -212,6 +244,7 @@ class TestSummarySkipCount:
 # ---------------------------------------------------------------------------
 # TokenBudget
 # ---------------------------------------------------------------------------
+
 
 class TestTokenBudget:
     def test_no_budget_is_unlimited(self) -> None:
@@ -271,7 +304,9 @@ class TestTokenBudgetCli:
 
     def test_budget_warn_pct_flag(self) -> None:
         parser = build_parser()
-        args = parser.parse_args(["benchmarks/", "--all", "--budget-usd", "10", "--budget-warn-pct", "70"])
+        args = parser.parse_args(
+            ["benchmarks/", "--all", "--budget-usd", "10", "--budget-warn-pct", "70"]
+        )
         assert args.budget_warn_pct == 70
 
     def test_budget_warn_pct_default(self) -> None:
@@ -283,14 +318,18 @@ class TestTokenBudgetCli:
 class TestTokenBudgetInSummary:
     def test_summary_includes_cost_tracking(self, tmp_path: Path) -> None:
         results = [
-            TaskResult(task_id="t1", difficulty="medium", status="completed", score=1.0),
+            TaskResult(
+                task_id="t1", difficulty="medium", status="completed", score=1.0
+            ),
         ]
         import run_benchmark
+
         original_root = run_benchmark.PROJECT_ROOT
         run_benchmark.PROJECT_ROOT = tmp_path
         try:
             summary_path = write_summary(
-                results, "test_run",
+                results,
+                "test_run",
                 previously_completed=0,
                 cumulative_cost_usd=5.25,
                 budget_usd=10.0,
@@ -303,9 +342,12 @@ class TestTokenBudgetInSummary:
 
     def test_summary_omits_budget_when_none(self, tmp_path: Path) -> None:
         results = [
-            TaskResult(task_id="t1", difficulty="medium", status="completed", score=1.0),
+            TaskResult(
+                task_id="t1", difficulty="medium", status="completed", score=1.0
+            ),
         ]
         import run_benchmark
+
         original_root = run_benchmark.PROJECT_ROOT
         run_benchmark.PROJECT_ROOT = tmp_path
         try:
@@ -326,21 +368,30 @@ class TestExtractCostFromResult:
         results_dir = tmp_path / "results" / "runs" / "task-001"
         results_dir.mkdir(parents=True)
         results_file = results_dir / "results.json"
-        results_file.write_text(json.dumps({
-            "task_id": "task-001",
-            "success": True,
-            "tool_usage": {
-                "total_input_tokens": 50000,
-                "total_output_tokens": 10000,
-                "cost_usd": 1.23,
-            },
-        }))
-        assert extract_task_cost("task-001", results_dir=tmp_path / "results" / "runs") == pytest.approx(1.23)
+        results_file.write_text(
+            json.dumps(
+                {
+                    "task_id": "task-001",
+                    "success": True,
+                    "tool_usage": {
+                        "total_input_tokens": 50000,
+                        "total_output_tokens": 10000,
+                        "cost_usd": 1.23,
+                    },
+                }
+            )
+        )
+        assert extract_task_cost(
+            "task-001", results_dir=tmp_path / "results" / "runs"
+        ) == pytest.approx(1.23)
 
     def test_extract_cost_missing_results(self, tmp_path: Path) -> None:
         from run_benchmark import extract_task_cost
 
-        assert extract_task_cost("task-missing", results_dir=tmp_path / "results" / "runs") == 0.0
+        assert (
+            extract_task_cost("task-missing", results_dir=tmp_path / "results" / "runs")
+            == 0.0
+        )
 
     def test_extract_cost_no_tool_usage(self, tmp_path: Path) -> None:
         from run_benchmark import extract_task_cost
@@ -348,11 +399,18 @@ class TestExtractCostFromResult:
         results_dir = tmp_path / "results" / "runs" / "task-001"
         results_dir.mkdir(parents=True)
         results_file = results_dir / "results.json"
-        results_file.write_text(json.dumps({
-            "task_id": "task-001",
-            "success": True,
-        }))
-        assert extract_task_cost("task-001", results_dir=tmp_path / "results" / "runs") == 0.0
+        results_file.write_text(
+            json.dumps(
+                {
+                    "task_id": "task-001",
+                    "success": True,
+                }
+            )
+        )
+        assert (
+            extract_task_cost("task-001", results_dir=tmp_path / "results" / "runs")
+            == 0.0
+        )
 
     def test_extract_cost_with_mode_subdirectory(self, tmp_path: Path) -> None:
         from run_benchmark import extract_task_cost
@@ -360,13 +418,166 @@ class TestExtractCostFromResult:
         results_dir = tmp_path / "results" / "runs" / "task-001" / "mcp_only"
         results_dir.mkdir(parents=True)
         results_file = results_dir / "results.json"
-        results_file.write_text(json.dumps({
-            "task_id": "task-001",
-            "success": True,
-            "tool_usage": {"cost_usd": 2.50},
-        }))
+        results_file.write_text(
+            json.dumps(
+                {
+                    "task_id": "task-001",
+                    "success": True,
+                    "tool_usage": {"cost_usd": 2.50},
+                }
+            )
+        )
         assert extract_task_cost(
             "task-001",
             results_dir=tmp_path / "results" / "runs",
             mode="mcp_only",
         ) == pytest.approx(2.50)
+
+    def test_extract_cost_sums_attempt_subdirectories(self, tmp_path: Path) -> None:
+        from run_benchmark import extract_task_cost
+
+        mode_dir = tmp_path / "results" / "runs" / "task-001" / "mcp_only"
+        for attempt, cost in ((1, 1.25), (2, 2.5)):
+            result_path = mode_dir / "rep1" / f"attempt{attempt}" / "results.json"
+            result_path.parent.mkdir(parents=True)
+            result_path.write_text(json.dumps({"tool_usage": {"cost_usd": cost}}))
+
+        assert extract_task_cost(
+            "task-001",
+            results_dir=tmp_path / "results" / "runs",
+            mode="mcp_only",
+        ) == pytest.approx(3.75)
+
+    def test_dispatch_reads_exact_attempt_score_and_cost(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+        import run_benchmark
+
+        task_toml = _write_task_toml(tmp_path / "task" / "task.toml", "task-001")
+        task = _make_task_info("task-001")
+        task = TaskInfo(
+            task_id=task.task_id,
+            suite=task.suite,
+            difficulty=task.difficulty,
+            session_type=task.session_type,
+            task_type=task.task_type,
+            toml_path=task_toml,
+        )
+        output_dir = tmp_path / "results" / "runs" / "task-001" / "mcp_only"
+        result_path = output_dir / "rep1" / "attempt2" / "results.json"
+        result_path.parent.mkdir(parents=True)
+
+        def successful_run(*_args, **_kwargs):
+            result_path.write_text(
+                json.dumps(
+                    {
+                        "scores": {"task_score": 0.8},
+                        "tool_usage": {"cost_usd": 1.75},
+                    }
+                )
+            )
+            return subprocess.CompletedProcess([], 0, stdout="", stderr="")
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            successful_run,
+        )
+
+        result = run_benchmark.run_task(
+            task,
+            passthrough_args=[
+                "--output-dir",
+                str(output_dir),
+                "--rep",
+                "1",
+                "--study-spec",
+                str(tmp_path / "study_spec.json"),
+                "--study-receipts",
+                str(tmp_path / "receipts.jsonl"),
+                "--attempt",
+                "2",
+            ],
+            mode="mcp_only",
+        )
+
+        assert result.score == pytest.approx(0.8)
+        assert result.cost_usd == pytest.approx(1.75)
+
+    def test_dispatch_accounts_for_new_cost_when_runner_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+        import run_benchmark
+
+        task_toml = _write_task_toml(tmp_path / "task" / "task.toml", "task-001")
+        task_template = _make_task_info("task-001")
+        task = TaskInfo(
+            task_id=task_template.task_id,
+            suite=task_template.suite,
+            difficulty=task_template.difficulty,
+            session_type=task_template.session_type,
+            task_type=task_template.task_type,
+            toml_path=task_toml,
+        )
+        output_dir = tmp_path / "failed-run"
+        output_dir.mkdir()
+
+        def failed_run(*_args, **_kwargs):
+            (output_dir / "results.json").write_text(
+                json.dumps({"tool_usage": {"cost_usd": 4.25}})
+            )
+            return subprocess.CompletedProcess(
+                [], 1, stdout="", stderr="runner failed"
+            )
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            failed_run,
+        )
+
+        result = run_benchmark.run_task(
+            task,
+            passthrough_args=["--output-dir", str(output_dir)],
+            mode="mcp_only",
+        )
+
+        assert result.status == "error"
+        assert result.cost_usd == pytest.approx(4.25)
+
+    def test_dispatch_ignores_stale_result_when_runner_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+        import run_benchmark
+
+        task_template = _make_task_info("task-001")
+        output_dir = tmp_path / "failed-run"
+        output_dir.mkdir()
+        (output_dir / "results.json").write_text(
+            json.dumps(
+                {
+                    "scores": {"task_score": 0.9},
+                    "tool_usage": {"cost_usd": 9.5},
+                }
+            )
+        )
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *_args, **_kwargs: subprocess.CompletedProcess(
+                [], 1, stdout="", stderr="runner failed"
+            ),
+        )
+
+        result = run_benchmark.run_task(
+            task_template,
+            passthrough_args=["--output-dir", str(output_dir)],
+            mode="mcp_only",
+        )
+
+        assert result.status == "error"
+        assert result.score is None
+        assert result.cost_usd == 0.0

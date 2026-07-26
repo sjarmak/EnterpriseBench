@@ -1,6 +1,5 @@
 """Tests for --mode argument in chain_runner."""
 
-import argparse
 import sys
 from unittest.mock import patch
 
@@ -10,56 +9,16 @@ sys.path.insert(
     0, str(__import__("pathlib").Path(__file__).resolve().parent.parent / "scripts")
 )
 
-from orchestration.chain_runner import main, run_chain, parse_chain_task
+from orchestration.chain_runner import build_parser, run_chain
 from orchestration.session import SessionConfig
 
 
 class TestChainRunnerModeArgparse:
     """Verify --mode argument is accepted and parsed correctly."""
 
-    def _parse(self, args: list[str]) -> argparse.Namespace:
-        """Run the chain_runner argparser on *args* and return the namespace."""
-        with patch("orchestration.chain_runner.parse_chain_task") as mock_parse, patch(
-            "orchestration.chain_runner.run_chain"
-        ) as mock_run, patch("builtins.open", create=True), patch("json.dump"), patch(
-            "builtins.print"
-        ):
-            mock_parse.return_value = None
-            mock_run.return_value = type(
-                "R",
-                (),
-                {
-                    "task_id": "t",
-                    "total_score": 0,
-                    "session_results": [],
-                    "summary": lambda self: "",
-                },
-            )()
-            with patch("sys.argv", ["chain_runner", "dummy.toml"] + args):
-                # Import fresh to get the parser
-                from orchestration.chain_runner import main as _main
-
-                # Instead of calling main (which would try to open files),
-                # just test the argparser directly
-                pass
-
-        # Direct argparser test
-        from orchestration.chain_runner import argparse as _ap
-
-        parser = _ap.ArgumentParser(description="Run a session-chain task")
-        parser.add_argument("task_toml")
-        parser.add_argument("--simulate", action="store_true")
-        parser.add_argument(
-            "--mode", choices=["baseline", "mcp_only", "hybrid"], default="baseline"
-        )
-        parser.add_argument("--workspace", default=None)
-        parser.add_argument("--verbose", "-v", action="store_true")
-        parser.add_argument("--source", choices=["mirror", "upstream"])
-        parser.add_argument("--agent", type=str)
-        parser.add_argument("--timeout", type=int)
-        parser.add_argument("--account", type=int)
-        parser.add_argument("--dry-run", action="store_true")
-        return parser.parse_args(["dummy.toml"] + args)
+    def _parse(self, args: list[str]):
+        """Parse arguments through the production parser."""
+        return build_parser().parse_args(["dummy.toml", *args])
 
     def test_mode_default_is_baseline(self):
         ns = self._parse([])
@@ -76,6 +35,14 @@ class TestChainRunnerModeArgparse:
     def test_mode_hybrid(self):
         ns = self._parse(["--mode", "hybrid"])
         assert ns.mode == "hybrid"
+
+    @pytest.mark.parametrize(
+        "mode",
+        ["mcp_code_finder", "mcp_assisted", "cli", "cli_code_finder"],
+    )
+    def test_extended_modes(self, mode: str):
+        ns = self._parse(["--mode", mode])
+        assert ns.mode == mode
 
     def test_mode_invalid_rejected(self):
         with pytest.raises(SystemExit):

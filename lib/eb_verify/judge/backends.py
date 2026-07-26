@@ -52,6 +52,14 @@ class AnthropicBackend:
         self.temperature = temperature
         self.max_tokens = max_tokens
 
+    @property
+    def provenance(self) -> dict[str, object]:
+        return {
+            "backend": "anthropic_api",
+            "provider": "anthropic",
+            "model": self.model,
+        }
+
     def call(self, system_prompt: str, user_prompt: str) -> dict:
         last_err: Exception | None = None
         for attempt in range(self._MAX_RETRIES):
@@ -144,11 +152,50 @@ class ClaudeCodeBackend:
         "claude-opus-4-6": "opus",
     }
 
-    def __init__(self, model: str = "haiku", **_kwargs: object):
+    def __init__(
+        self,
+        model: str = "haiku",
+        *,
+        account: int | None = None,
+        **_kwargs: object,
+    ):
+        if isinstance(account, bool) or (
+            account is not None and (not isinstance(account, int) or account <= 0)
+        ):
+            raise ValueError("Claude judge account must be a positive integer")
         self.model = self._ALIAS_MAP.get(model, model)
-        self._claude_bin = shutil.which("claude")
+        self.account = account
+        self.executable = f"claude-{account}" if account is not None else "claude"
+        self._claude_bin = shutil.which(self.executable)
         if self._claude_bin is None:
-            raise JudgeBackendError("claude CLI not found on PATH")
+            raise JudgeBackendError(f"{self.executable} CLI not found on PATH")
+        self._cli_version = self._read_cli_version()
+
+    def _read_cli_version(self) -> str | None:
+        try:
+            result = subprocess.run(
+                [self._claude_bin, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        version = result.stdout.strip()
+        return version if result.returncode == 0 and version else None
+
+    @property
+    def provenance(self) -> dict[str, object]:
+        provenance: dict[str, object] = {
+            "backend": "claude_code_cli",
+            "provider": "anthropic",
+            "model": self.model,
+            "account": self.account,
+            "executable": self.executable,
+        }
+        if self._cli_version is not None:
+            provenance["cli_version"] = self._cli_version
+        return provenance
 
     def call(self, system_prompt: str, user_prompt: str) -> dict:
         last_err: Exception | None = None
@@ -187,8 +234,9 @@ class ClaudeCodeBackend:
             raise JudgeBackendError("claude CLI timed out after 120s")
 
         if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
             raise JudgeBackendError(
-                f"claude CLI failed (rc={result.returncode}): {result.stderr[:500]}"
+                f"{self.executable} CLI failed (rc={result.returncode}): {detail[:500]}"
             )
         try:
             envelope = json.loads(result.stdout)
@@ -215,13 +263,16 @@ _CLAUDE_CODE_ALIASES = {"claude-code", "cc"}
 
 
 def create_backend(
-    model: str, temperature: float = 0.0, max_tokens: int = 4096
+    model: str,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+    account: int | None = None,
 ) -> AnthropicBackend | ClaudeCodeBackend:
     """Create the appropriate backend based on model identifier."""
     name = model.lower()
     if name in _CLAUDE_CODE_ALIASES or name.startswith("cc:"):
         sub_model = name.split(":", 1)[1] if ":" in name else "haiku"
-        return ClaudeCodeBackend(model=sub_model)
+        return ClaudeCodeBackend(model=sub_model, account=account)
     if name.startswith("claude"):
         return AnthropicBackend(
             model=model, temperature=temperature, max_tokens=max_tokens

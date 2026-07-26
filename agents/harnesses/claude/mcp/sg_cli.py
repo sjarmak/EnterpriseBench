@@ -31,6 +31,7 @@ Subcommands:
     def REPO PATH SYMBOL                   go to definition
     refs REPO PATH SYMBOL                  find references
     ls REPO [DIR]                          list files in a directory
+    finder TASK...                         run Code Finder (requires /all endpoint)
 
 Exit codes: 0 ok, 1 tool error (isError / JSON-RPC error), 2 usage or
 missing-token error, 3 transport failure.
@@ -54,8 +55,7 @@ _RETRY_DELAY = 2  # seconds
 _MAX_WORKERS = 6
 _DEFAULT_READ_LINES = 120
 _READ_NOTE = (
-    "\n(showing lines {start}-{end} — use --start/--end to read a "
-    "specific range)"
+    "\n(showing lines {start}-{end} — use --start/--end to read a " "specific range)"
 )
 
 USAGE = """usage: sgx <command> [args]
@@ -71,12 +71,14 @@ commands:
   def REPO PATH SYMBOL [--rev REV]      go to a symbol's definition
   refs REPO PATH SYMBOL [--rev REV]     find references to a symbol
   ls REPO [DIR] [--rev REV]             list files in a directory
+  finder TASK...                         run Code Finder through the /all endpoint
 
 examples:
   sgx search 'HyperLogLog repo:^github.com/sg-evals/bustub--f5b1b76$'
   sgx search 'repo:^github.com/org/repo$ parseConfig' -q 'repo:^github.com/org/repo$ loadConfig'
   sgx read github.com/org/repo src/main.c --start 100 --end 160
   sgx def github.com/org/repo src/main.c ParseArgs
+  sgx finder 'Trace the failure in github.com/org/repo'
 """
 
 
@@ -114,7 +116,7 @@ def _iter_sse_json(body: bytes):
         if line.startswith("data: "):
             found_sse = True
             try:
-                yield json.loads(line[len("data: "):])
+                yield json.loads(line[len("data: ") :])
             except json.JSONDecodeError:
                 continue
     if not found_sse:
@@ -141,12 +143,14 @@ def call_tool(name: str, arguments: dict) -> tuple:
     transport failures raise (handled by the caller as exit 3).
     """
     url, token = _endpoint()
-    body = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {"name": name, "arguments": arguments},
-    }).encode()
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        }
+    ).encode()
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
@@ -173,6 +177,7 @@ def call_tool(name: str, arguments: dict) -> tuple:
 # ---------------------------------------------------------------------------
 # Argument parsing (manual: query terms and filters may start with '-')
 # ---------------------------------------------------------------------------
+
 
 def _parse_search_args(argv: list) -> list:
     """Return the list of queries: positional terms joined, plus each -q."""
@@ -206,7 +211,7 @@ def _pop_flag(argv: list, *names: str) -> str:
             if idx + 1 >= len(argv):
                 raise ValueError(f"{name} requires a value")
             value = argv[idx + 1]
-            del argv[idx:idx + 2]
+            del argv[idx : idx + 2]
             return value
     return ""
 
@@ -227,9 +232,7 @@ def cmd_search(argv: list, tool: str = "sg_keyword_search") -> int:
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=min(_MAX_WORKERS, len(queries))
     ) as pool:
-        results = list(pool.map(
-            lambda q: call_tool(tool, {"query": q}), queries
-        ))
+        results = list(pool.map(lambda q: call_tool(tool, {"query": q}), queries))
 
     any_error = False
     sections = []
@@ -246,6 +249,12 @@ def cmd_nls(argv: list) -> int:
     if not argv:
         raise ValueError("nls requires a query")
     return _emit(*call_tool("sg_nls_search", {"query": " ".join(argv)}))
+
+
+def cmd_finder(argv: list) -> int:
+    if not argv:
+        raise ValueError("finder requires a task description")
+    return _emit(*call_tool("code_finder", {"task": " ".join(argv)}))
 
 
 def cmd_read(argv: list) -> int:
@@ -308,6 +317,7 @@ def cmd_ls(argv: list) -> int:
 COMMANDS = {
     "search": cmd_search,
     "nls": cmd_nls,
+    "finder": cmd_finder,
     "read": cmd_read,
     "def": lambda argv: _cmd_codenav(argv, "sg_go_to_definition"),
     "refs": lambda argv: _cmd_codenav(argv, "sg_find_references"),
@@ -346,8 +356,10 @@ def main(argv: list = None) -> int:
             detail = (e.read() or b"").decode("utf-8", errors="replace")[:500]
         except Exception:  # noqa: BLE001 - detail is best-effort
             pass
-        print(f"sgx {command}: HTTP {e.code} from {_endpoint()[0]} {detail}",
-              file=sys.stderr)
+        print(
+            f"sgx {command}: HTTP {e.code} from {_endpoint()[0]} {detail}",
+            file=sys.stderr,
+        )
         return 3
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         print(f"sgx {command}: transport error: {e}", file=sys.stderr)

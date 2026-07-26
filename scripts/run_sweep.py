@@ -38,12 +38,13 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from run_benchmark import TaskInfo, discover_tasks  # noqa: E402
+from lib.shared import VALID_MODES  # noqa: E402
 
 logger = logging.getLogger("run_sweep")
 
 PROJECT_ROOT = _SCRIPTS_DIR.parent
 
-ALL_MODES = ("baseline", "mcp_only", "hybrid", "cli")
+ALL_MODES = VALID_MODES
 
 # Modes an UNSCOPED sweep runs by default. `cli` is a real, valid mode (it is in
 # ALL_MODES and accepted by --modes), but it is deliberately excluded from the

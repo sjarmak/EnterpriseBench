@@ -37,6 +37,7 @@ VALID_MODES = frozenset(
         "mcp_assisted",
         "hybrid",
         "cli",
+        "cli_code_finder",
     }
 )
 REQUIRED_FIELDS = frozenset(

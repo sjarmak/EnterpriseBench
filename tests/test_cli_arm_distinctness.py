@@ -43,7 +43,9 @@ class TestSgxInstallRouting:
     def test_cli_installs_sgx(self, monkeypatch):
         monkeypatch.setenv("SOURCEGRAPH_ACCESS_TOKEN", "tok")
         cp_calls = []
-        with patch.object(run_task, "_docker_cp", side_effect=lambda *a: cp_calls.append(a)), patch.object(
+        with patch.object(
+            run_task, "_docker_cp", side_effect=lambda *a: cp_calls.append(a)
+        ), patch.object(
             run_task, "_docker_exec", return_value=_completed("SG_CLI_OK\n")
         ):
             ok = run_task._install_sgx("cid", "cli")
@@ -61,6 +63,13 @@ class TestSgxInstallRouting:
         ):
             ok = run_task._install_sgx("cid", "cli")
         assert ok is False
+
+    def test_cli_code_finder_installs_the_same_composable_sgx(self, monkeypatch):
+        monkeypatch.setenv("SOURCEGRAPH_ACCESS_TOKEN", "tok")
+        with patch.object(run_task, "_docker_cp"), patch.object(
+            run_task, "_docker_exec", return_value=_completed("SG_CLI_OK\n")
+        ):
+            assert run_task._install_sgx("cid", "cli_code_finder") is True
 
     def test_mcp_only_does_not_install_sgx(self):
         def _boom(*a, **k):
@@ -91,19 +100,25 @@ class TestMcpRegistrationRouting:
         def _boom(*a, **k):
             raise AssertionError("cli arm must NOT configure MCP")
 
-        with patch.object(run_task, "_verify_mcp_endpoint", side_effect=_boom), patch.object(
-            run_task, "_docker_cp", side_effect=_boom
-        ):
+        with patch.object(
+            run_task, "_verify_mcp_endpoint", side_effect=_boom
+        ), patch.object(run_task, "_docker_cp", side_effect=_boom):
             assert run_task._configure_mcp("cid", "cli") is True
 
     def test_baseline_registers_no_mcp(self):
         def _boom(*a, **k):
             raise AssertionError("baseline must NOT configure MCP")
 
-        with patch.object(run_task, "_verify_mcp_endpoint", side_effect=_boom), patch.object(
-            run_task, "_docker_cp", side_effect=_boom
-        ):
+        with patch.object(
+            run_task, "_verify_mcp_endpoint", side_effect=_boom
+        ), patch.object(run_task, "_docker_cp", side_effect=_boom):
             assert run_task._configure_mcp("cid", "baseline") is True
+
+    def test_cli_code_finder_registers_no_mcp(self):
+        with patch.object(
+            run_task, "_trust_project_mcp_servers", side_effect=AssertionError("MCP")
+        ):
+            assert run_task._configure_mcp("cid", "cli_code_finder") is True
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +133,9 @@ def _make_task_dir(tmp_path: Path) -> Path:
 
 class TestPreambleDispatch:
     def test_cli_preamble_present_no_mcp_language(self, tmp_path):
-        text = run_task._build_instruction_text(_make_task_dir(tmp_path), "cli", repos=[])
+        text = run_task._build_instruction_text(
+            _make_task_dir(tmp_path), "cli", repos=[]
+        )
         assert "`sgx`" in text
         assert "NO MCP tools" in text
         # The cli arm must not advertise registered mcp tools.
@@ -130,6 +147,14 @@ class TestPreambleDispatch:
         )
         assert "Sourcegraph MCP tools" in text or "keyword_search" in text
         assert "sgx" not in text
+
+    def test_cli_code_finder_preamble_has_finder_but_no_registered_mcp(self, tmp_path):
+        text = run_task._build_instruction_text(
+            _make_task_dir(tmp_path), "cli_code_finder", repos=[]
+        )
+        assert "sgx finder" in text
+        assert "NO MCP tools" in text
+        assert "mcp__sourcegraph__" not in text
 
     def test_baseline_has_no_retrieval_preamble(self, tmp_path):
         text = run_task._build_instruction_text(
@@ -154,12 +179,24 @@ class TestSgxPreambleBuilder:
         assert "NO MCP tools" in out
         assert "sgx search" in out
 
+    def test_cli_code_finder_returns_forced_finder_guidance(self):
+        out = sgx_preamble.build_system_prompt("cli_code_finder", repos=[])
+        assert "sgx finder" in out
+        assert "exactly once per repository" in out
+        assert "sgx search" in out
+
     @pytest.mark.parametrize("mode", ["baseline", "mcp_only", "hybrid", "bogus"])
     def test_non_cli_modes_return_empty(self, mode):
         assert sgx_preamble.build_system_prompt(mode, repos=[]) == ""
 
     def test_repo_scope_included(self):
-        repos = [{"url": "https://github.com/grpc/grpc-go", "rev": "v1.4.0", "path": "grpc-go"}]
+        repos = [
+            {
+                "url": "https://github.com/grpc/grpc-go",
+                "rev": "v1.4.0",
+                "path": "grpc-go",
+            }
+        ]
         out = sgx_preamble.build_system_prompt("cli", repos=repos)
         assert "repo:^github.com/" in out
         assert "grpc-go" in out
@@ -172,6 +209,7 @@ class TestSgxPreambleBuilder:
 
 def test_cli_in_valid_modes():
     assert "cli" in run_task.VALID_MODES
+    assert "cli_code_finder" in run_task.VALID_MODES
     assert "baseline" in run_task.VALID_MODES
     assert "mcp_only" in run_task.VALID_MODES
     assert "hybrid" in run_task.VALID_MODES

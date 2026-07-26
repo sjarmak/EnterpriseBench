@@ -366,6 +366,19 @@ class TestSetupContainerPassesMode:
                 task_dir, "hybrid", repos=[], require_grounded_citations=False
             )
 
+    def test_setup_container_returns_the_exact_instruction_it_copies(
+        self, task_dir: Path
+    ) -> None:
+        with patch(
+            "run_task._build_instruction_text", return_value="injected prompt"
+        ), _patch_docker_exec_ok(), patch("run_task._docker_cp"):
+            from run_task import _setup_container
+
+            assert (
+                _setup_container("fake-container", task_dir, {}, mode="mcp_only")
+                == "injected prompt"
+            )
+
     def test_setup_container_defaults_to_baseline(self, task_dir: Path) -> None:
         with patch(
             "run_task._build_instruction_text", return_value=None

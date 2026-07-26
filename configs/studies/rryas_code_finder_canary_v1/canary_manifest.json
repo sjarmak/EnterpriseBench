@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "status": "locked-canary",
+  "study_id": "rryas-code-finder-canary-v1",
+  "purpose": "Validate the forced Code Finder treatment and telemetry contract before any comparative dispatch.",
+  "tasks": [
+    {
+      "task_id": "dep-traversal-003",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-003/task.toml",
+      "task_hash": "sha256:1661f97c36ea0556a79088b8979bb8e9edabbe985d0204f3522fb221373d4b11",
+      "expected_repositories": [
+        "github.com/sg-evals/chi--v5.0.8",
+        "github.com/sg-evals/hugo--v0.111.0"
+      ]
+    }
+  ],
+  "treatment": {
+    "mode": "mcp_code_finder",
+    "capability_fingerprint": "sourcegraph-mcp-code-finder:exactly-once-per-repository:local-repos-denied:direct-tools-denied:beta-telemetry-required:proxy-v1:cli-equivalent-sgx-finder:v2",
+    "code_finder_calls": "exactly_once_per_repository",
+    "direct_sourcegraph_tools_allowed": false,
+    "local_repository_source_readable": false,
+    "required_telemetry": [
+      "invocation_count",
+      "repository_scope",
+      "sourcegraphToolTelemetry",
+      "tool_inventory_sha256",
+      "code_finder_schema_sha256"
+    ],
+    "invalid_if": [
+      "zero_or_wrong_code_finder_call_count",
+      "ambiguous_or_wrong_repository_scope",
+      "any_direct_sourcegraph_retrieval_call",
+      "failed_code_finder_response",
+      "missing_sourcegraphToolTelemetry",
+      "missing_or_malformed_proxy_trace"
+    ]
+  },
+  "cli_comparability": {
+    "current_cli_arm": "direct_sgx_plus_local_source",
+    "code_finder_equivalent": "cli_code_finder",
+    "equivalent_transport": "code_finder_via_sgx_no_mcp",
+    "equivalent_contract": {
+      "finder_calls": "exactly_once_per_repository",
+      "other_sgx_retrieval_allowed": false,
+      "local_repository_source_readable": false,
+      "same_proxy_telemetry_required": true
+    },
+    "analysis_rule": "compare mcp_code_finder with cli_code_finder for interface effects; keep the direct cli arm as a separate retrieval treatment"
+  },
+  "spend_guard": {
+    "slots": 1,
+    "max_attempts": 2,
+    "dispatch_rule": "Run attempt 2 only when attempt 1 is invalid for an infrastructure or Finder-contract reason.",
+    "headline_eligible": false
+  },
+  "harness_hash": "sha256:f686385310fe9278b53c8b891a3842a085f717b41f1bb1c8bd731e7be6aa2185",
+  "verifier_hashes": {
+    "dep-traversal-003": "sha256:b2cb93eb960c5131c63703525b1113ec67cbd74d49fa391cf2bf79e51eaa3277"
+  }
+}

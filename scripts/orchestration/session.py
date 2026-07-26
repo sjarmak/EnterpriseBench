@@ -38,7 +38,7 @@ class SessionConfig:
     prompt: str
     milestones: list[dict] = field(default_factory=list)
     context: dict = field(default_factory=dict)  # Extra context passed to agent
-    mode: str = "baseline"  # Tool access mode: baseline, mcp_only, hybrid
+    mode: str = "baseline"  # Tool-access arm; validated by the runner.
 
 
 @dataclass

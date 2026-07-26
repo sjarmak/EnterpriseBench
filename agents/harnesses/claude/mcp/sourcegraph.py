@@ -101,7 +101,8 @@ _FORCED_FINDER_WORKFLOW = """\
 
 Use `code_finder` **exactly once per repository** listed below. Give each call \
 a comprehensive description of the task, failure symptoms, and the evidence \
-you need from that repository.
+you need from that repository. Include that repository's exact Sourcegraph \
+mirror name in the task text so invocation scope is auditable.
 
 Do not call any direct Sourcegraph retrieval tool. This prohibition includes \
 `keyword_search`, `nls_search`, `read_file`, `list_files`, `list_repos`, \

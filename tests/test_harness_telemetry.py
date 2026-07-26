@@ -297,6 +297,7 @@ def test_malformed_provider_usage_is_ignored_instead_of_crashing(
         "mcp_tool_calls": 0,
         "mcp_tool_breakdown": {},
         "sgx_tool_calls": 0,
+        "sgx_tool_breakdown": {},
         "opencode_lifecycle": {
             "first_event_at_ms": None,
             "last_event_at_ms": None,

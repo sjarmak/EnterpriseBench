@@ -1,0 +1,32 @@
+{
+  "study_id": "rryas-pilot-v1",
+  "schema_version": 1,
+  "task_manifest_hash": "sha256:f64806893bcca748cafaafb2b222408f0bbf1ea42f08d633548f54832ef90acd",
+  "task_ids": [
+    "dep-traversal-003"
+  ],
+  "arms": [
+    {
+      "name": "baseline",
+      "capability_fingerprint": "local-repos:no-mcp:no-sgx:cache-isolated:v2"
+    },
+    {
+      "name": "mcp_only",
+      "capability_fingerprint": "sourcegraph-mcp:local-repos-denied:cache-isolated:v2"
+    },
+    {
+      "name": "cli",
+      "capability_fingerprint": "sgx-cli:local-repos-readable:usage-required:cache-isolated:v2"
+    }
+  ],
+  "baseline_arm": "baseline",
+  "repetitions": 1,
+  "attempt_policy": "first_valid_attempt",
+  "max_attempts": 2,
+  "model": "claude-sonnet-5",
+  "harness": "sha256:09cce46ae860d6f2a7d65d9bff3a34bc345167dd9032a58308dbf0d5d763a491",
+  "revision": "23a153b3f959264d38bd3bee75fbedb900bea785",
+  "token_source": "sdk_model_usage",
+  "score_contract": "weighted-mean-v2",
+  "promotion_policy": "paired-valid-complete-arms"
+}

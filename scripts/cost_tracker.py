@@ -25,9 +25,18 @@ count, so a four-arm sweep would state its size at four times the truth, in
 report prose and baked into chart titles.
 
 The selecting rule is deliberately the one ``analyze_scores`` already uses to
-collapse (task_id, mode) — highest normalized score. If the two modules chose
-differently, the cost row and the score row of the same cell would describe
-different runs, and every score-vs-cost join would be wrong.
+collapse (task_id, mode) — the earliest valid attempt, declared in
+``configs/study_spec.json`` and implemented in ``scripts/lib/attempt_policy.py``.
+If the two modules chose differently, or filed the same attempt under different
+identities, the cost row and the score row of the same cell would describe
+different runs and every score-vs-cost join would be wrong.
+
+That guarantee has one gap, and it is a gap in enumeration rather than in
+selection: this module finds attempts by ``agent_trace.jsonl`` while
+``analyze_scores`` finds them by ``results.json``. A scored attempt whose trace
+was never written or was deleted is therefore absent from this report entirely
+— not mis-selected, not listed in ``invalid_attempts``, absent — while the
+score side counts it. EnterpriseBench-rryas.20 collapses the two enumerations.
 
 Cost has two sources, in order:
 
@@ -59,8 +68,21 @@ from operator import attrgetter
 from pathlib import Path
 from typing import Any
 
-from analyze_scores import parse_result
-from lib.shared import (
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from analyze_scores import infer_mode, parse_result  # noqa: E402
+from lib.attempt_policy import (
+    SELECTION_RULE,
+    AttemptPolicy,
+    attempt_sort_key,
+    cache_isolation_invalid_reason,
+    is_invalid_status,
+    load_attempt_policy,
+    newer_timestamp,
+    read_attempt_timestamp,
+    run_dir_label,
+)
+from lib.shared import (  # noqa: E402
     VALID_MODES,
     load_task_index,
     split_variant_label,
@@ -90,13 +112,6 @@ logger = logging.getLogger(__name__)
 # ``.get(key, 0)`` and rendering a plausible $0.00 — the failure class
 # lib/eb_verify/scorer_guard.py exists to forbid, applied to the cost artifact.
 SCHEMA_VERSION = 4
-
-# How ``select_attempt`` picks the one attempt that represents a (task_id, mode)
-# cell. Published in the report so a reader never has to infer it.
-SELECTION_RULE = (
-    "highest normalized_score, then latest trace timestamp, then run_dir; "
-    "attempts with no score are never selected. Matches analyze_scores."
-)
 
 # ---------------------------------------------------------------------------
 # Pricing — per million tokens. Tier-2 runs only; tier-1 runs are billed with the
@@ -260,6 +275,10 @@ class TaskCost:
     normalized_score: float | None
     trace_timestamp: str = ""
     variant_label: str | None = None
+    attempt_timestamp: str = ""
+    attempt_timestamp_source: str = ""
+    # Why there is no score, when there is none. See :class:`AttemptFacts`.
+    invalid_reason: str | None = None
 
     @property
     def cell(self) -> tuple[str, str]:
@@ -361,11 +380,20 @@ def scan_trace(trace_path: Path) -> TraceScan:
                 logger.warning("Skipping malformed line in %s", trace_path)
                 continue
 
+            if not isinstance(entry, dict):
+                # Valid JSON, but a list/number/string has no fields to read.
+                # Skipping matches read_trace_timestamp, which drops the same
+                # line; without this the scan aborted on the ``type`` lookup
+                # below and took the whole cost report down with it.
+                logger.warning("Skipping non-object line in %s", trace_path)
+                continue
+
             # Read before the assistant filter: the timestamp rides on every
             # line type, and the earliest lines of a trace are not assistant.
-            stamp = entry.get("timestamp")
-            if isinstance(stamp, str) and stamp > last_timestamp:
-                last_timestamp = stamp
+            # Folded by the shared helper so this pass and analyze_scores'
+            # cannot date the same attempt differently and order a cell's
+            # attempts two ways.
+            last_timestamp = newer_timestamp(entry, last_timestamp)
 
             if entry.get("type") != "assistant":
                 continue
@@ -672,6 +700,10 @@ def _parse_dir_identity(dir_path: Path) -> tuple[str, str, str | None]:
     - results/runs/<task_id>/<mode>/           -> multi-mode layout
     - results/runs/<task_id>/                  -> baseline (legacy)
     - results/mcp_batch*/<id>_<mode>/          -> parse mode from suffix
+
+    A *fallback*, used only for an attempt whose results.json cannot be read.
+    Identity otherwise comes from the results.json itself — see
+    :func:`_attempt_facts` for why the path is not authoritative.
     """
 
     name = dir_path.name
@@ -695,45 +727,112 @@ def _parse_dir_identity(dir_path: Path) -> tuple[str, str, str | None]:
     return task_id, mode, None
 
 
-def _attempt_score(
+@dataclass(frozen=True, kw_only=True)
+class AttemptFacts:
+    """What an attempt's results file declares about identity and validity."""
+
+    task_id: str | None
+    mode: str | None
+    variant_label: str | None
+    normalized_score: float | None
+    invalid_reason: str | None
+
+
+def _attempt_facts(
     task_dir: Path, benchmarks_root: Path, *, allow_legacy: bool = False
-) -> float | None:
-    """Return this attempt's normalized score, or None if it has none.
+) -> AttemptFacts:
+    """Read this attempt's identity and score from its results.json.
 
-    Delegates to ``analyze_scores.parse_result`` rather than reading
-    ``task_score`` locally. The coupling is the point: cost selection has to
-    collapse a (task_id, mode) cell to the same attempt the score pipeline
-    does, and a private read would drift apart silently — including from the
-    contract check that decides what ``task_score`` even means
-    (``eb_verify.score_contract``).
+    Identity comes from the file, not from the directory path, because the two
+    disagree on the live corpus and the path is the side that is wrong:
+    ``results/runs/cal-drift-flask-config-001/`` declares ``config.mode`` of
+    ``mcp_only`` while the legacy-flat-dir rule reads it as baseline, and
+    ``mcp_batch_v4/cal-drift_hybrid/`` holds task ``cal-drift-flask-config-001``
+    while the suffix rule invents the task ``cal-drift``. ``analyze_scores``
+    always used the file, so every such directory billed one arm's cost against
+    another arm's score. The path survives only as the fallback for an attempt
+    with no readable results.json, which has no declared identity to use.
 
-    None means the scoring layer produced nothing for this run — no results.json,
-    no scores block, or zero checkpoints. That is a real distinction, not a zero:
-    the attempt still spent money, it just cannot stand for its cell.
+    The score delegates to ``analyze_scores.parse_result`` rather than
+    re-deriving ``task_score / checkpoints_total`` locally; a private copy of
+    the normalization would drift apart silently.
+
+    A None score is not a zero. The attempt still spent money and stays in the
+    operational view — it just cannot stand for its cell. ``invalid_reason``
+    says which case it was, because the four are not the same claim: a
+    persisted ``status=invalid`` is a run the harness disowned, a missing
+    results.json is a run that never reached the verifier, an unreadable one is
+    a *reader* failure that must not be recorded as a property of the attempt,
+    and a scored-but-unusable one is a verifier that produced nothing to divide.
     """
 
     results_path = task_dir / "results.json"
     if not results_path.exists():
-        return None
-
-    result = parse_result(results_path, benchmarks_root, allow_legacy=allow_legacy)
-    return None if result is None else result.normalized_score
-
-
-def _run_dir_label(task_dir: Path, root: Path) -> str:
-    """Identify an attempt's directory, relative to *root* when it is under it.
-
-    cost_report.json is a tracked artifact, so an absolute path would commit one
-    machine's home directory and make the report non-portable — and ``run_dir``
-    is a tiebreak key, so it has to read the same on every checkout. Falls back
-    to the absolute path for a directory outside *root*, which is still correct,
-    just not portable; there is nothing shorter to say about it.
-    """
+        return AttemptFacts(
+            task_id=None,
+            mode=None,
+            variant_label=None,
+            normalized_score=None,
+            invalid_reason="no_results_json",
+        )
 
     try:
-        return str(task_dir.resolve().relative_to(root.resolve()))
-    except ValueError:
-        return str(task_dir)
+        data = json.loads(results_path.read_text())
+    except (ValueError, OSError):
+        data = None
+    if not isinstance(data, dict):
+        return AttemptFacts(
+            task_id=None,
+            mode=None,
+            variant_label=None,
+            normalized_score=None,
+            invalid_reason="unreadable_results_json",
+        )
+
+    task_id = data.get("task_id") or None
+    mode = infer_mode(results_path, data) if task_id else None
+    parsed = parse_result(
+        results_path,
+        benchmarks_root,
+        allow_legacy=allow_legacy,
+    )
+
+    # Read before the score, for the reason parse_result does: run_task marks a
+    # run invalid for gates that fire after the verifier has already written a
+    # score, so a scored results.json is not evidence the run is scoreable.
+    if is_invalid_status(data.get("status")):
+        return AttemptFacts(
+            task_id=task_id,
+            mode=mode,
+            variant_label=parsed.variant_label if parsed is not None else None,
+            normalized_score=None,
+            invalid_reason="status_invalid",
+        )
+    if cache_isolation_invalid_reason(data) is not None:
+        return AttemptFacts(
+            task_id=task_id,
+            mode=mode,
+            variant_label=parsed.variant_label if parsed is not None else None,
+            normalized_score=None,
+            invalid_reason="cache_isolation_invalid",
+        )
+
+    result = parsed
+    if result is None:
+        return AttemptFacts(
+            task_id=task_id,
+            mode=mode,
+            variant_label=None,
+            normalized_score=None,
+            invalid_reason="no_normalized_score",
+        )
+    return AttemptFacts(
+        task_id=result.task_id,
+        mode=result.mode,
+        variant_label=result.variant_label,
+        normalized_score=result.normalized_score,
+        invalid_reason=None,
+    )
 
 
 def scan_results_dirs(
@@ -765,13 +864,24 @@ def scan_results_dirs(
 
         for trace_path in sorted(root_dir.rglob("agent_trace.jsonl")):
             task_dir = trace_path.parent
-            task_id, mode, variant_label = _parse_dir_identity(task_dir)
+            try:
+                facts = _attempt_facts(
+                    task_dir, benchmarks_root, allow_legacy=allow_legacy
+                )
+            except ScoreContractError:
+                unreadable.append(str(task_dir))
+                continue
+            path_task_id, path_mode, path_variant_label = _parse_dir_identity(task_dir)
+            task_id = facts.task_id or path_task_id
+            mode = facts.mode or path_mode
+            variant_label = facts.variant_label or path_variant_label
             meta = _get_task_meta(task_id, benchmarks_root)
 
             # The trace is parsed unconditionally: it is the tier-2 cost when there
             # is no vendor block, the reconciliation baseline when there is, and
             # the only source of num_requests either way.
             scan = scan_trace(trace_path)
+            attempt_timestamp = read_attempt_timestamp(task_dir)
             trace_usage = scan.usage
             trace_cost = compute_cost(trace_usage)
 
@@ -793,20 +903,6 @@ def scan_results_dirs(
                 except Exception:
                     logger.warning("Failed to read %s", metrics_path)
 
-            # Same fail-closed rule as analyze_scores, and for the same
-            # reason: the two modules must collapse a (task_id, mode) cell to
-            # the SAME attempt, which they cannot do if one of them silently
-            # drops the attempts the other refuses. Collected and raised once
-            # after the scan so the operator learns how much of the corpus is
-            # affected, not just which file came first.
-            try:
-                score = _attempt_score(
-                    task_dir, benchmarks_root, allow_legacy=allow_legacy
-                )
-            except ScoreContractError:
-                unreadable.append(str(task_dir))
-                continue
-
             costs.append(
                 TaskCost(
                     task_id=task_id,
@@ -817,10 +913,13 @@ def scan_results_dirs(
                     trace_cost_usd=trace_cost,
                     vendor=vendor,
                     agent_duration_seconds=duration,
-                    run_dir=_run_dir_label(task_dir, root),
-                    normalized_score=score,
+                    run_dir=run_dir_label(task_dir, root),
+                    normalized_score=facts.normalized_score,
+                    invalid_reason=facts.invalid_reason,
                     trace_timestamp=scan.last_timestamp,
                     variant_label=variant_label,
+                    attempt_timestamp=attempt_timestamp.value,
+                    attempt_timestamp_source=attempt_timestamp.source,
                 )
             )
 
@@ -907,7 +1006,9 @@ TASKS_ACROSS_ARMS = Denominator(
 )
 
 
-def _bucket(items: list[TaskCost], unit: Denominator, reconcile: bool) -> dict[str, Any]:
+def _bucket(
+    items: list[TaskCost], unit: Denominator, reconcile: bool
+) -> dict[str, Any]:
     """Stats for one slice of a view, denominated per *unit*.
 
     One function rather than one per view keeps the four shared fields from
@@ -968,28 +1069,26 @@ def _group_by(items: Sequence[TaskCost], key: Any) -> dict[Any, list[TaskCost]]:
 def select_attempt(attempts: list[TaskCost]) -> TaskCost | None:
     """Pick the one attempt that represents a (task_id, mode) cell.
 
-    Highest normalized score, ties broken by latest trace timestamp and then by
-    ``run_dir``. Returns None when no attempt in the cell was scored.
+    The earliest valid attempt: ascending trace timestamp, then ``run_dir``,
+    with undated attempts last. Returns None when no attempt in the cell was
+    scored — an unscored or invalid-status attempt still spent money and stays
+    in the operational view, it just cannot stand for its cell.
 
-    The primary key is ``analyze_scores``' — that module already collapses
-    (task_id, mode) by highest score, and a different rule here would pair each
-    cell's cost with a *different* run than its score, silently breaking every
-    score-vs-cost join downstream. ``TestAgreesWithAnalyzeScores`` pins that.
-
-    Both tiebreakers are content-derived and total, so the result does not depend
-    on scan order, filesystem order, or mtime. ``analyze_scores`` has no
-    tiebreaker at all — it compares with a strict ``>`` and so keeps whichever
-    equally-scored run ``rglob`` reached first — so on an exact score tie the two
-    modules can still pick different runs. The score is identical either way; the
-    cost need not be. Fixed separately in EnterpriseBench-ye0tp; do not "fix" it
-    here by dropping the tiebreakers, which would make this side non-deterministic
-    too rather than making both sides agree.
+    The order is ``analyze_scores``' order, computed by the same
+    :func:`attempt_sort_key` over the same two content-derived components, so
+    the two modules resolve a cell to the same run and a score-vs-cost join
+    pairs one run's score with that run's cost. ``TestAgreesWithAnalyzeScores``
+    pins it. The score is deliberately not an input: see
+    ``scripts/lib/attempt_policy``.
     """
 
     scored = [a for a in attempts if a.normalized_score is not None]
     if not scored:
         return None
-    return max(scored, key=lambda a: (a.normalized_score, a.trace_timestamp, a.run_dir))
+    return min(
+        scored,
+        key=lambda a: attempt_sort_key(a.attempt_timestamp, a.run_dir),
+    )
 
 
 @dataclass(frozen=True)
@@ -1049,8 +1148,11 @@ def comparison_attempts(costs: list[TaskCost]) -> ComparisonSet:
     ]
     cells = _group_by(in_scope, attrgetter("cell"))
 
-    selected = {cell: pick for cell, items in cells.items()
-                if (pick := select_attempt(items)) is not None}
+    selected = {
+        cell: pick
+        for cell, items in cells.items()
+        if (pick := select_attempt(items)) is not None
+    }
 
     modes = {tc.mode for tc in in_scope}
     arms_per_task: dict[str, set[str]] = {}
@@ -1089,6 +1191,8 @@ def _duplicate_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
                         "cost_usd": tc.cost_usd,
                         "normalized_score": tc.normalized_score,
                         "trace_timestamp": tc.trace_timestamp,
+                        "attempt_timestamp": tc.attempt_timestamp,
+                        "attempt_timestamp_source": tc.attempt_timestamp_source,
                         "selected": tc is chosen,
                     }
                     for tc in sorted(items, key=lambda t: t.run_dir)
@@ -1099,7 +1203,14 @@ def _duplicate_attempts(costs: list[TaskCost]) -> list[dict[str, Any]]:
 
 
 def _invalid_attempts(ordered: list[TaskCost]) -> list[dict[str, Any]]:
-    """Enumerate attempts the scoring layer never scored. They are spend, not zero."""
+    """Enumerate attempts the scoring layer never scored. They are spend, not zero.
+
+    ``reason`` distinguishes the four cases rather than flattening them to
+    "unscored": a run the harness disowned, a run that never reached the
+    verifier, a results.json this reader could not parse, and a verifier that
+    produced nothing to normalize are four different claims, and one of them is
+    about the reader rather than the run.
+    """
 
     return [
         {
@@ -1107,7 +1218,10 @@ def _invalid_attempts(ordered: list[TaskCost]) -> list[dict[str, Any]]:
             "mode": tc.mode,
             "run_dir": tc.run_dir,
             "cost_usd": tc.cost_usd,
-            "reason": "no_normalized_score",
+            # The fallback is insurance for a TaskCost built by hand in a test;
+            # _attempt_facts always sets a specific reason when it returns no
+            # score, so the real pipeline never reaches it.
+            "reason": tc.invalid_reason or "no_normalized_score",
         }
         for tc in ordered
         if tc.normalized_score is None
@@ -1146,6 +1260,8 @@ def _attempt_row(tc: TaskCost) -> dict[str, Any]:
         "run_dir": tc.run_dir,
         "normalized_score": tc.normalized_score,
         "trace_timestamp": tc.trace_timestamp,
+        "attempt_timestamp": tc.attempt_timestamp,
+        "attempt_timestamp_source": tc.attempt_timestamp_source,
         "model": tc.usage.model,
         "models": list(tc.models),
         "input_tokens": tc.usage.input_tokens,
@@ -1179,12 +1295,29 @@ def require_schema(report: dict[str, Any], consumer: str) -> None:
         )
 
 
-def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
+def aggregate_report(
+    costs: list[TaskCost], policy: AttemptPolicy | None = None
+) -> dict[str, Any]:
     """Build the cost report: total spend and matched suite cost, never blended.
 
     See the module docstring for why the two views exist and why neither may be
     published as "the" cost.
+
+    *policy* is the attempt-selection rule the run was made under, published so a
+    reader holding the artifact can tell which pin produced it rather than
+    trusting that the checkout's spec still says what it said at generation
+    time. ``main`` reads the pin once, up front, and passes it here.
+
+    Omitting it publishes no policy and reads no spec, exactly as in
+    :func:`analyze_scores.analyze`. Defaulting to a disk read instead would let a
+    broken ``configs/study_spec.json`` break callers that never asked for a
+    policy, and would hide a read and a possible raise behind what reads as a
+    pure default — for a value the report does not publish anyway.
     """
+
+    if policy is not None:
+        # The report must not publish a rule ``select_attempt`` did not apply.
+        policy.require_implemented("aggregate_report")
 
     comparison = comparison_attempts(costs)
     ordered = sorted(costs, key=lambda c: (c.task_id, c.mode, c.run_dir))
@@ -1224,6 +1357,7 @@ def aggregate_report(costs: list[TaskCost]) -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "selection_rule": SELECTION_RULE,
+        "attempt_policy": (policy.as_dict() if policy else None),
         "operational_economics": {
             "description": (
                 "Total spend across every attempt, re-runs and unscored runs "
@@ -1334,12 +1468,20 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     benchmarks_root = args.benchmarks_root or (PROJECT_ROOT / "benchmarks")
-    output_path = args.output or (PROJECT_ROOT / "results" / "analysis" / "cost_report.json")
+    output_path = args.output or (
+        PROJECT_ROOT / "results" / "analysis" / "cost_report.json"
+    )
     result_dirs = args.results_dir or _discover_default_dirs(PROJECT_ROOT)
 
     if not result_dirs:
         logger.error("No result directories found.")
         return
+
+    # Read the pin before a single attempt is scanned. A spec declaring a
+    # selection this code does not implement stops the run here, rather than
+    # producing an artifact under a rule the study did not declare.
+    policy = load_attempt_policy()
+    logger.info("Attempt policy: %s (%s)", policy.selection, policy.spec_path)
 
     logger.info("Scanning %d result directories...", len(result_dirs))
     try:
@@ -1353,7 +1495,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(f"error: {exc}")
     logger.info("Found %d attempts with trace data.", len(costs))
 
-    report = aggregate_report(costs)
+    report = aggregate_report(costs, policy)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w") as fh:

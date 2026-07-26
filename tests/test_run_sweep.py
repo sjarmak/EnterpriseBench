@@ -14,6 +14,7 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from run_sweep import (
+    ALL_MODES,
     SweepItem,
     build_sweep_matrix,
     check_completion,
@@ -21,6 +22,7 @@ from run_sweep import (
     generate_run_commands,
 )
 from run_benchmark import TaskInfo
+from lib.shared import VALID_MODES
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -50,6 +52,9 @@ def _make_task(
 
 
 class TestBuildSweepMatrix:
+    def test_all_modes_match_shared_registry(self) -> None:
+        assert ALL_MODES == VALID_MODES
+
     def test_default_modes(self) -> None:
         tasks = [_make_task("t1"), _make_task("t2")]
         items = build_sweep_matrix(tasks)
