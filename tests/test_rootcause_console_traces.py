@@ -37,9 +37,10 @@ def _make_run(
     variant_label: str,
     records: list[dict],
     mode: str = "baseline",
+    run_relative: str | None = None,
 ) -> Path:
-    run_dir = tmp_path / f"{mode}--{variant_label}"
-    run_dir.mkdir()
+    run_dir = tmp_path / (run_relative or f"{mode}--{variant_label}")
+    run_dir.mkdir(parents=True)
     result = {
         "task_id": "task-001",
         "phase": "complete",
@@ -426,6 +427,120 @@ def test_build_run_cell_preserves_nested_arm_gate_proof(tmp_path: Path) -> None:
     )
 
 
+def test_build_run_cell_reconstructs_the_exact_cli_finder_instruction(
+    tmp_path: Path,
+) -> None:
+    task_dir = _make_task(tmp_path)
+    (task_dir / "task.toml").write_text(
+        """
+[task]
+id = "task-001"
+suite = "customer_escalation"
+task_type = "error_provenance"
+difficulty = "medium"
+session_type = "single"
+
+[[repos]]
+url = "https://github.com/acme/widget"
+rev = "v1.2.3"
+path = "widget"
+
+[ground_truth]
+tiers = ["deterministic"]
+""".strip()
+        + "\n"
+    )
+    (task_dir / "instruction_mcp.md").write_text("Task-specific remote guidance.")
+    run_dir = _make_run(
+        tmp_path,
+        harness="claude",
+        model="claude-sonnet-5",
+        variant_label="claude-sonnet-5",
+        mode="cli_code_finder",
+        records=[],
+    )
+
+    cell = build_run_cell(run_dir, task_dir)
+
+    assert "## Required Code Finder Workflow" in cell["instruction"]
+    assert "repo:^github.com/sg-evals/widget--v1.2.3$" in cell["instruction"]
+    assert "Task-specific remote guidance." in cell["instruction"]
+    assert "Investigate the failure." in cell["instruction"]
+    assert "## Output Requirements" in cell["instruction"]
+
+
+def test_build_run_cell_prefers_the_persisted_injected_instruction(
+    tmp_path: Path,
+) -> None:
+    task_dir = _make_task(tmp_path)
+    run_dir = _make_run(
+        tmp_path,
+        harness="claude",
+        model="claude-sonnet-5",
+        variant_label="claude-sonnet-5",
+        mode="mcp_only",
+        records=[],
+    )
+    (run_dir / "injected_instruction.md").write_text(
+        "Exact prompt captured when the run executed."
+    )
+    (task_dir / "instruction.md").write_text("Prompt changed after the run.")
+
+    cell = build_run_cell(run_dir, task_dir)
+
+    assert cell["instruction"] == "Exact prompt captured when the run executed."
+
+
+def test_build_run_cell_keeps_repetitions_and_attempts_distinct(
+    tmp_path: Path,
+) -> None:
+    task_dir = _make_task(tmp_path)
+    common = {
+        "harness": "claude",
+        "model": "claude-sonnet-5",
+        "variant_label": "claude-sonnet-5",
+        "mode": "mcp_code_finder",
+        "records": [],
+    }
+    rep1 = build_run_cell(
+        _make_run(
+            tmp_path,
+            **common,
+            run_relative="study/task-001/mcp_code_finder/rep1/attempt1",
+        ),
+        task_dir,
+    )
+    rep2 = build_run_cell(
+        _make_run(
+            tmp_path,
+            **common,
+            run_relative="study/task-001/mcp_code_finder/rep2/attempt1",
+        ),
+        task_dir,
+    )
+
+    assert rep1["run_id"].endswith("/rep1/attempt1")
+    assert rep2["run_id"].endswith("/rep2/attempt1")
+    assert rep1["run_id"] != rep2["run_id"]
+
+    console = tmp_path / "rootcause_console.html"
+    ui = tmp_path / "ui.js"
+    console.write_text(
+        '<script id="data" type="application/json">[]</script>'
+        "<script>oldUi()</script>"
+    )
+    ui.write_text("render()")
+
+    merge_console(console, [rep1, rep2], ui)
+
+    payload = (
+        console.read_text()
+        .split('<script id="data" type="application/json">', maxsplit=1)[1]
+        .split("</script>", maxsplit=1)[0]
+    )
+    assert len(json.loads(payload)) == 2
+
+
 def test_merge_console_is_idempotent_and_inlines_ui(tmp_path: Path) -> None:
     console = tmp_path / "rootcause_console.html"
     ui = tmp_path / "ui.js"
@@ -667,6 +782,18 @@ def test_console_ui_renders_code_finder_telemetry_contract() -> None:
     assert "MCP provenance" in ui
     assert "tool_inventory_sha256" in ui
     assert "code_finder_schema_sha256" in ui
+
+
+def test_console_populates_arm_filter_from_available_modes() -> None:
+    ui_path = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "analysis"
+        / "rootcause_console_ui.js"
+    )
+    ui = ui_path.read_text()
+
+    assert 'fillFilter("fmode", uniqueValues("mode"));' in ui
 
 
 def test_console_ui_renders_judge_and_lifecycle_telemetry() -> None:

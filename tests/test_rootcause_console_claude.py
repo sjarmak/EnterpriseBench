@@ -135,3 +135,39 @@ def test_claude_failed_write_is_not_reported_as_written() -> None:
 
     assert trace[0]["status"] == "error"
     assert writes[0]["status"] == "error"
+
+
+def test_incomplete_claude_trace_reports_observed_turns_and_pending_write() -> None:
+    records = [
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "I am still working."},
+                    {
+                        "type": "tool_use",
+                        "id": "write-1",
+                        "name": "Write",
+                        "input": {
+                            "file_path": "/workspace/agent_output/answer.json",
+                            "content": "{}",
+                        },
+                    },
+                ]
+            },
+        }
+    ]
+
+    trace, activity, writes = normalize_trace(records)
+
+    assert activity["primary_count"] == 1
+    assert activity["complete"] is False
+    assert activity["label"] == "1 observed Claude turn (incomplete)"
+    assert trace[-1]["status"] == "pending"
+    assert writes == [
+        {
+            "path": "/workspace/agent_output/answer.json",
+            "status": "pending",
+            "content": "{}",
+        }
+    ]

@@ -20,6 +20,7 @@ def consume_claude_record(
     if record_type == "system" and record.get("subtype") == "init":
         _consume_init(record, trace, counts)
     elif record_type == "assistant":
+        counts["claude_observed_turns"] += 1
         _consume_assistant(record, trace, writes, counts, pending_tools)
     elif record_type == "user":
         _consume_tool_results(record, trace, writes, pending_tools)
@@ -123,7 +124,7 @@ def _record_write(
     writes.append(
         {
             "path": str(tool_input.get("file_path") or ""),
-            "status": "ok",
+            "status": "pending",
             "content": _display(
                 tool_input.get("content") or tool_input.get("new_string")
             ),
@@ -176,6 +177,7 @@ def _consume_result(
     turns = record.get("num_turns")
     if isinstance(turns, int) and turns >= 0:
         counts["claude_turns"] = turns
+    counts["claude_complete"] = True
     model_usage = record.get("modelUsage")
     if isinstance(model_usage, dict):
         counts["model_usage"] = model_usage

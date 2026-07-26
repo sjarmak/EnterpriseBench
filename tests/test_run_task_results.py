@@ -658,7 +658,7 @@ class TestStudyReceiptIntegration:
             ("_docker_container_image_digest", "sha256:" + "a" * 64),
             ("_docker_create_container", "cid"),
             ("_docker_start", None),
-            ("_setup_container", None),
+            ("_setup_container", "exact injected prompt"),
             ("_run_health_check", True),
             ("_assert_agent_readable", (True, "")),
             ("_apply_mode_gate", (True, "")),
@@ -711,6 +711,10 @@ class TestStudyReceiptIntegration:
         assert receipt.status == "valid"
         assert receipt.score == pytest.approx(1.0)
         assert receipt.image_digest == "sha256:" + "a" * 64
+        assert (
+            Path(result.output_dir, "injected_instruction.md").read_text()
+            == "exact injected prompt"
+        )
 
 
 # ---------------------------------------------------------------------------

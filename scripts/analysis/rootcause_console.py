@@ -7,9 +7,14 @@ import argparse
 import json
 import os
 import re
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Sequence
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 try:
     from scripts.analysis.rootcause_console_claude import consume_claude_record
@@ -246,6 +251,8 @@ def _empty_activity_counts() -> dict[str, Any]:
         "codex_turns": 0,
         "opencode_steps": 0,
         "claude_turns": 0,
+        "claude_observed_turns": 0,
+        "claude_complete": False,
         "work_items": 0,
         "tool_uses": 0,
         "agent_messages": 0,
@@ -406,7 +413,11 @@ def _trace_activity(counts: dict[str, Any], providers: set[str]) -> dict[str, An
     elif providers == {"claude"}:
         provider = "claude"
         unit = "turn"
-        count = counts["claude_turns"]
+        count = (
+            counts["claude_turns"]
+            if counts["claude_complete"]
+            else counts["claude_observed_turns"]
+        )
     elif providers:
         provider = "mixed"
         unit = "provider event"
@@ -425,16 +436,22 @@ def _trace_activity(counts: dict[str, Any], providers: set[str]) -> dict[str, An
         "claude": "Claude",
     }.get(provider, provider)
     plural = "" if count == 1 else "s"
+    if provider == "claude" and not counts["claude_complete"]:
+        label = f"{count} observed Claude {unit}{plural} (incomplete)"
+    else:
+        label = f"{count} {label_provider} {unit}{plural}"
     activity = {
         "provider": provider,
         "primary_unit": unit,
         "primary_count": count,
-        "label": f"{count} {label_provider} {unit}{plural}",
+        "label": label,
         "work_items": counts["work_items"],
         "tool_uses": counts["tool_uses"],
         "agent_messages": counts["agent_messages"],
         "file_changes": counts["file_changes"],
     }
+    if provider == "claude":
+        activity["complete"] = counts["claude_complete"]
     optional = {
         "model_usage": counts["model_usage"],
         "model": counts["model"],
@@ -480,6 +497,7 @@ def build_run_cell(run_dir: Path, task_dir: Path) -> dict[str, Any]:
             writes,
             trace_sources,
             activity,
+            str(config.get("mode", "baseline")),
         ),
     }
 
@@ -548,9 +566,20 @@ def _run_identity(
     variant = str(config.get("variant_label") or f"{harness}-{model}")
     mode = str(config.get("mode", "baseline"))
     metadata = result.get("task_metadata", {})
+    coordinates = _run_coordinates(run_dir, task_id, mode)
+    coordinate_suffix = (
+        f"/{coordinates['study_id']}/{coordinates['rep']}/{coordinates['attempt']}"
+        if coordinates
+        else ""
+    )
     return {
-        "run_id": f"{task_id}/{mode}/{variant}",
-        "run_label": variant,
+        "run_id": f"{task_id}/{mode}/{variant}{coordinate_suffix}",
+        "run_label": (
+            f"{variant} · {coordinates['study_id']} "
+            f"{coordinates['rep']}/{coordinates['attempt']}"
+            if coordinates
+            else variant
+        ),
         "task": task_id,
         "harness": harness,
         "model": model,
@@ -560,7 +589,24 @@ def _run_identity(
         "difficulty": metadata.get("difficulty", ""),
         "image_tag": result.get("image_tag", ""),
         "source": config.get("source", ""),
+        **coordinates,
     }
+
+
+def _run_coordinates(run_dir: Path, task_id: str, mode: str) -> dict[str, str]:
+    """Extract locked-study coordinates from ``.../<study>/<task>/<mode>/rep/attempt``."""
+    parts = run_dir.parts
+    if len(parts) < 5:
+        return {}
+    study_id, path_task, path_mode, rep, attempt = parts[-5:]
+    if (
+        path_task != task_id
+        or path_mode != mode
+        or not re.fullmatch(r"rep\d+", rep)
+        or not re.fullmatch(r"attempt\d+", attempt)
+    ):
+        return {}
+    return {"study_id": study_id, "rep": rep, "attempt": attempt}
 
 
 def _run_measurements(
@@ -622,6 +668,7 @@ def _run_evidence(
     writes: list[dict[str, Any]],
     trace_sources: list[str],
     activity: dict[str, Any],
+    mode: str,
 ) -> dict[str, Any]:
     used_tools = {
         str(event["name"])
@@ -643,7 +690,7 @@ def _run_evidence(
     return {
         "tools_exposed": tools,
         "mcp_servers": redact(activity.get("mcp_servers", [])),
-        "instruction": _read_optional(task_dir / "instruction.md"),
+        "instruction": _load_injected_instruction(run_dir, task_dir, mode),
         "trace": trace,
         "calls": calls,
         "writes": writes,
@@ -659,11 +706,46 @@ def _read_optional(path: Path) -> str:
     return redact(path.read_text()) if path.exists() else ""
 
 
+def _load_injected_instruction(run_dir: Path, task_dir: Path, mode: str) -> str:
+    """Reconstruct the exact prompt assembled by the benchmark runner."""
+    persisted = run_dir / "injected_instruction.md"
+    if persisted.exists():
+        return _read_optional(persisted)
+
+    task_toml = task_dir / "task.toml"
+    if not task_toml.exists():
+        return _read_optional(task_dir / "instruction.md")
+
+    from scripts.orchestration.run_task import _build_instruction_text, _parse_task
+
+    task_data = _parse_task(task_toml)
+    ground_truth = task_data.get("ground_truth") or {}
+    instruction = _build_instruction_text(
+        task_dir,
+        mode,
+        repos=task_data.get("repos", []),
+        require_grounded_citations=bool(
+            ground_truth.get("require_grounded_citations", False)
+        ),
+    )
+    return redact(instruction or "")
+
+
 def _cell_identity(cell: dict[str, Any]) -> tuple[str, ...]:
     semantic_fields = ("task", "mode", "harness", "model")
     if all(cell.get(field) is not None for field in semantic_fields):
-        return tuple(str(cell[field]) for field in semantic_fields)
+        coordinates = tuple(
+            str(cell[field])
+            for field in ("study_id", "rep", "attempt")
+            if cell.get(field)
+        )
+        return (*tuple(str(cell[field]) for field in semantic_fields), *coordinates)
     return ("run_id", str(cell.get("run_id", "")))
+
+
+def _trace_source_identity(cell: dict[str, Any]) -> str:
+    source = cell.get("trace_source")
+    return str(Path(str(source)).resolve()) if source else ""
 
 
 def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> None:
@@ -678,6 +760,11 @@ def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> 
 
     replacements = {str(cell["run_id"]): redact(cell) for cell in new_cells}
     replacement_identities = {_cell_identity(cell) for cell in replacements.values()}
+    replacement_trace_sources = {
+        _trace_source_identity(cell)
+        for cell in replacements.values()
+        if cell.get("trace_source")
+    }
     merged = [
         redact(cell)
         for cell in cells
@@ -686,6 +773,10 @@ def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> 
             or (
                 str(cell["run_id"]) not in replacements
                 and _cell_identity(cell) not in replacement_identities
+                and (
+                    not cell.get("trace_source")
+                    or _trace_source_identity(cell) not in replacement_trace_sources
+                )
             )
         )
     ]

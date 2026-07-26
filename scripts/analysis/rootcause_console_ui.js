@@ -77,6 +77,7 @@ function fillFilter(id, values) {
 }
 
 fillFilter("fharness", uniqueValues("harness"));
+fillFilter("fmode", uniqueValues("mode"));
 fillFilter("fsuite", uniqueValues("suite"));
 fillFilter("fphase", uniqueValues("phase"));
 fillFilter(

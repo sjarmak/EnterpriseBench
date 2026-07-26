@@ -1413,7 +1413,7 @@ def _setup_container(
     task_dir: Path,
     task_data: dict,
     mode: str = "baseline",
-) -> None:
+) -> str | None:
     """Copy task files into the running container.
 
     - instruction.md -> /workspace/instruction.md
@@ -1516,6 +1516,7 @@ def _setup_container(
     # leftovers from a reused container).
     _chown_to_agent(container_id, [AGENT_INSTRUCTION])
     _seal_grading_assets(container_id)
+    return combined
 
 
 def _install_claude_cli(container_id: str) -> bool:
@@ -3643,7 +3644,13 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                         f"{expected_image_digest}"
                     )
             _docker_start(container_id)
-            _setup_container(container_id, task_dir, task_data, mode=config.mode)
+            injected_instruction = _setup_container(
+                container_id, task_dir, task_data, mode=config.mode
+            )
+            if injected_instruction is not None:
+                (output_dir / "injected_instruction.md").write_text(
+                    injected_instruction
+                )
         except Exception as setup_exc:
             result.phase = "setup_failed"
             result.error = str(setup_exc)
