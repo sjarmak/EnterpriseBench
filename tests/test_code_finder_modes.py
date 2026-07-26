@@ -140,6 +140,45 @@ def test_forced_finder_rejects_raw_http_bypass_of_the_assigned_interface(
     assert "interface" in result.error
 
 
+def test_cli_finder_rejects_other_sgx_retrieval_commands() -> None:
+    result = run_task.TaskRunResult(
+        task_id="dep-traversal-003",
+        tool_usage={
+            "sgx_tool_calls": 3,
+            "sgx_tool_breakdown": {"finder": 2, "search": 1},
+            "retrieval": {
+                "valid": True,
+                "code_finder_calls": 2,
+            },
+        },
+    )
+
+    run_task._route_code_finder_run(result, "cli_code_finder")
+
+    assert result.status == run_task.RUN_STATUS_INVALID
+    assert result.failure_class == "invalid_arm_contamination"
+    assert "sgx search" in result.error
+
+
+def test_cli_finder_accepts_only_matching_finder_calls() -> None:
+    result = run_task.TaskRunResult(
+        task_id="dep-traversal-003",
+        tool_usage={
+            "sgx_tool_calls": 2,
+            "sgx_tool_breakdown": {"finder": 2},
+            "retrieval": {
+                "valid": True,
+                "code_finder_calls": 2,
+            },
+        },
+    )
+
+    run_task._route_code_finder_run(result, "cli_code_finder")
+
+    assert result.status == ""
+    assert result.failure_class is None
+
+
 @pytest.mark.parametrize("mode", ["mcp_code_finder", "mcp_assisted"])
 def test_finder_modes_route_mcp_clients_through_local_proxy(mode: str) -> None:
     assert run_task._mcp_endpoint_for_mode(mode) == run_task.MCP_PROXY_ENDPOINT

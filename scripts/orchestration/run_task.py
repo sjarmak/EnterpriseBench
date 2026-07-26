@@ -1853,6 +1853,31 @@ def _route_code_finder_run(result: "TaskRunResult", mode: str) -> None:
     result.tool_usage["mcp_used"] = result.tool_usage.get("mcp_tool_calls", 0) > 0
     if mode in CLI_FINDER_MODES:
         result.tool_usage["sgx_used"] = result.tool_usage.get("sgx_tool_calls", 0) > 0
+        direct_sgx_calls = (
+            {
+                name: count
+                for name, count in sgx_breakdown.items()
+                if name != "finder" and isinstance(count, int) and count > 0
+            }
+            if isinstance(sgx_breakdown, dict)
+            else {}
+        )
+        if direct_sgx_calls:
+            commands = ", ".join(
+                f"sgx {name} ({count})"
+                for name, count in sorted(direct_sgx_calls.items())
+            )
+            reason = (
+                f"mode={mode} used prohibited direct retrieval command(s): "
+                f"{commands}"
+            )
+            result.status = RUN_STATUS_INVALID
+            result.phase = "agent_infra_error"
+            result.success = False
+            result.failure_class = "invalid_arm_contamination"
+            result.error = reason
+            logger.error(reason)
+            return
     retrieval = result.tool_usage.get("retrieval")
     if isinstance(retrieval, dict) and retrieval.get("valid") is True:
         proxy_calls = retrieval.get("code_finder_calls")
