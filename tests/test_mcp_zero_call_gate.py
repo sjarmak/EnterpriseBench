@@ -366,6 +366,33 @@ class TestMcpToolCallCounting:
 
         assert _usage(tmp_path, stream)["mcp_tool_calls"] == 2
 
+    def test_tool_breakdown_records_code_finder_by_name(self, tmp_path: Path) -> None:
+        usage = _usage(
+            tmp_path,
+            _assistant(
+                _tool_use("mcp__sourcegraph__code_finder"),
+                _tool_use("mcp__sourcegraph__read_file"),
+            ),
+        )
+
+        assert usage["mcp_tool_breakdown"] == {
+            "code_finder": 1,
+            "read_file": 1,
+        }
+
+    def test_direct_mcp_arm_rejects_code_finder_contamination(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        result = _result(1)
+        result.tool_usage["mcp_tool_breakdown"] = {"code_finder": 1}
+
+        run_task._route_code_finder_run(result, "mcp_only")
+
+        assert result.status == RUN_STATUS_INVALID
+        assert result.failure_class == "invalid_arm_contamination"
+        assert "mcp_only" in result.error
+
 
 class TestUsageParsingAcrossOutputFormats:
     """Token/turn accounting must survive whatever --output-format was used."""

@@ -63,6 +63,8 @@ def _task(repos=(("ansible", "ansible"),), required=("answer",), optional=()):
 EXPECTED_GATING = {
     "baseline": False,  # local-only; the control arm.
     "mcp_only": True,  # the ablation: local source denied at the filesystem.
+    "mcp_code_finder": True,  # Code Finder is the sole remote retrieval path.
+    "mcp_assisted": True,  # Finder bootstrap plus targeted remote follow-up.
     "hybrid": False,  # MCP *plus* local by design.
     "cli": False,  # baseline + sgx; the manipulation is the tool interface,
     # not readability, so local source stays present.
