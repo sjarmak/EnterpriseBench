@@ -103,6 +103,12 @@ from agents.harnesses.claude.mcp.sourcegraph import (
 from agents.harnesses.claude.cli.sgx import (
     build_system_prompt as _build_cli_preamble,
 )
+from agents.harnesses.cache_isolation import (
+    CacheIsolation,
+    CacheIsolationError,
+    build_cache_isolation,
+    evaluate_cache_isolation,
+)
 from agents.harnesses.registry import (
     HARNESS_NAMES,
     HarnessConfigurationError,
@@ -165,6 +171,16 @@ SGX_ENDPOINT = f"{SOURCEGRAPH_MCP_ENDPOINT.split('/.api/mcp/')[0]}/.api/mcp/v1"
 # The stdlib-only CLI uploaded into the container for the cli arm.
 SGX_CLI_SRC = REPO_ROOT / "agents" / "harnesses" / "claude" / "mcp" / "sg_cli.py"
 MCP_PROXY_SRC = REPO_ROOT / "agents" / "harnesses" / "mcp_telemetry_proxy.py"
+OPENCODE_CACHE_ISOLATION_PLUGIN_SRC = (
+    REPO_ROOT / "agents" / "harnesses" / "opencode" / "cache_isolation.js"
+)
+OPENCODE_CACHE_ISOLATION_PLUGIN_PATH = (
+    "/home/agent/.config/opencode/plugins/enterprisebench-cache-isolation.js"
+)
+OPENCODE_CACHE_ISOLATION_TRACE_PATH = (
+    "/var/tmp/enterprisebench-cache-isolation.jsonl"
+)
+OPENCODE_CACHE_ISOLATION_TRACE_FILE = "cache_isolation.jsonl"
 MCP_PROXY_SCRIPT_PATH = "/usr/local/lib/enterprisebench/mcp_telemetry_proxy.py"
 MCP_PROXY_TRACE_PATH = "/var/tmp/enterprisebench-mcp-trace.jsonl"
 MCP_PROXY_ENDPOINT = "http://127.0.0.1:8765/mcp"
@@ -1759,6 +1775,75 @@ def _cleanup_harness_credentials(
         )
 
 
+def _stage_cache_isolation(
+    container_id: str,
+    plan: HarnessPlan,
+    isolation: CacheIsolation,
+) -> dict[str, str]:
+    """Stage provider-specific isolation controls and return launcher env."""
+
+    if plan.name != isolation.harness:
+        raise RuntimeError(
+            "cache-isolation harness does not match the executable harness"
+        )
+    if plan.name != "opencode":
+        return dict(isolation.environment)
+    if not OPENCODE_CACHE_ISOLATION_PLUGIN_SRC.is_file():
+        raise RuntimeError(
+            "OpenCode cache-isolation plugin is missing: "
+            f"{OPENCODE_CACHE_ISOLATION_PLUGIN_SRC}"
+        )
+
+    plugin_dir = str(PurePosixPath(OPENCODE_CACHE_ISOLATION_PLUGIN_PATH).parent)
+    created = _docker_exec(container_id, ["mkdir", "-p", plugin_dir])
+    if created.returncode != 0:
+        raise RuntimeError(
+            "failed to create OpenCode cache-isolation plugin directory: "
+            f"{created.stderr.strip()}"
+        )
+    _docker_cp(
+        str(OPENCODE_CACHE_ISOLATION_PLUGIN_SRC),
+        f"{container_id}:{OPENCODE_CACHE_ISOLATION_PLUGIN_PATH}",
+    )
+    for argv in (
+        ["chmod", "600", OPENCODE_CACHE_ISOLATION_PLUGIN_PATH],
+        ["chown", "agent:agent", OPENCODE_CACHE_ISOLATION_PLUGIN_PATH],
+    ):
+        secured = _docker_exec(container_id, argv)
+        if secured.returncode != 0:
+            raise RuntimeError(
+                "failed to secure OpenCode cache-isolation plugin: "
+                f"{secured.stderr.strip()}"
+            )
+    return dict(isolation.environment)
+
+
+def _capture_cache_isolation_telemetry(
+    container_id: str,
+    output_dir: Path,
+    isolation: CacheIsolation,
+) -> None:
+    """Copy non-secret OpenCode hook evidence into the run artifact."""
+
+    if isolation.harness != "opencode":
+        return
+    captured = _docker_exec(
+        container_id,
+        ["cat", OPENCODE_CACHE_ISOLATION_TRACE_PATH],
+        timeout=5,
+    )
+    if captured.returncode != 0:
+        logger.warning(
+            "OpenCode cache-isolation hook telemetry is unavailable: %s",
+            captured.stderr.strip(),
+        )
+        return
+    (output_dir / OPENCODE_CACHE_ISOLATION_TRACE_FILE).write_text(
+        captured.stdout,
+        encoding="utf-8",
+    )
+
+
 def _run_health_check(container_id: str, repos: list[dict]) -> bool:
     """Run health_check.sh inside the container. Returns True if healthy."""
     repo_paths = [r["path"] for r in repos if r.get("path")]
@@ -2146,6 +2231,31 @@ def _route_agent_exit(
     else:
         result.failure_class = "agent_error"
         logger.warning("Agent exited with non-zero code: %d", agent_exit)
+
+
+def _route_cache_isolation(result: "TaskRunResult") -> None:
+    """Reject a scored run unless provider telemetry proves cache isolation."""
+
+    if result.status:
+        return
+
+    proof = result.tool_usage.get("cache_isolation")
+    if isinstance(proof, dict) and proof.get("valid") is True:
+        return
+
+    reason = (
+        proof.get("invalid_reason")
+        if isinstance(proof, dict)
+        and isinstance(proof.get("invalid_reason"), str)
+        and proof["invalid_reason"]
+        else "cache-isolation proof is missing"
+    )
+    result.status = RUN_STATUS_INVALID
+    result.phase = "agent_infra_error"
+    result.success = False
+    result.failure_class = "infra_cache_isolation"
+    result.error = reason
+    logger.error("Cache-isolation gate FAILED: %s", reason)
 
 
 def _record_agent_trace(
@@ -3525,11 +3635,13 @@ def _extract_tool_usage(
     *,
     graded_artifact_path: str = ANSWER_ARTIFACT_PATH,
     graded_artifact_exists: bool | None = None,
+    cache_isolation: CacheIsolation | None = None,
 ) -> dict:
     """Parse provider output into usage plus explicitly native activity units."""
     usage = _empty_tool_usage()
     activity_counts = _empty_provider_activity_counts()
     providers: set[str] = set()
+    records: tuple[dict[str, Any], ...] = ()
 
     stdout_log = output_dir / "agent_stdout.log"
     if stdout_log.exists():
@@ -3557,6 +3669,17 @@ def _extract_tool_usage(
         if lifecycle is not None:
             usage["opencode_lifecycle"] = lifecycle
 
+    if cache_isolation is not None:
+        isolation_records: tuple[dict[str, Any], ...] = ()
+        isolation_trace = output_dir / OPENCODE_CACHE_ISOLATION_TRACE_FILE
+        if isolation_trace.exists():
+            isolation_records = tuple(
+                _iter_agent_records(isolation_trace.read_text(encoding="utf-8"))
+            )
+        usage["cache_isolation"] = evaluate_cache_isolation(
+            cache_isolation,
+            (*records, *isolation_records),
+        )
     usage["provider_activity"] = _provider_activity(activity_counts, providers)
     return usage
 
@@ -3998,6 +4121,8 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
     timings: dict[str, float] = {}
     result = TaskRunResult(task_id="unknown")
     harness_plan: HarnessPlan | None = None
+    cache_isolation: CacheIsolation | None = None
+    cache_isolation_env: dict[str, str] = {}
     harness_cli_installed = False
     staged_harness_credentials: dict[str, str] = {}
 
@@ -4034,12 +4159,13 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 mode=config.mode,
                 agent_command=config.agent_command,
             )
+            cache_isolation = build_cache_isolation(harness_plan.name)
             if config.account is not None and harness_plan.name != "claude":
                 raise HarnessConfigurationError(
                     "--account selects a Claude OAuth account and cannot be "
                     f"combined with --harness {harness_plan.name}"
                 )
-        except HarnessConfigurationError as exc:
+        except (HarnessConfigurationError, CacheIsolationError) as exc:
             result.phase = "harness_preflight_failed"
             result.status = RUN_STATUS_INVALID
             result.success = False
@@ -4242,6 +4368,24 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 _save_results(result, task_data, output_dir, config)
                 return result
 
+        if cache_isolation is None:
+            raise RuntimeError("cache isolation was not initialized")
+        try:
+            cache_isolation_env = _stage_cache_isolation(
+                container_id,
+                harness_plan,
+                cache_isolation,
+            )
+        except RuntimeError as isolation_exc:
+            result.phase = "cache_isolation_preflight_failed"
+            result.status = RUN_STATUS_INVALID
+            result.success = False
+            result.failure_class = "infra_cache_isolation"
+            result.error = str(isolation_exc)
+            result.timing = timings
+            _save_results(result, task_data, output_dir, config)
+            return result
+
         # --- Dry run stops here ---
         if config.dry_run:
             result.phase = "dry_run_complete"
@@ -4257,7 +4401,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
 
         # --- Phase 4: Agent ---
         # Resolve OAuth token if --account was specified
-        env_extra: dict[str, str] = {}
+        env_extra = dict(cache_isolation_env)
         agent_command: str | Sequence[str] = harness_plan.command
 
         if harness_plan.name != "claude":
@@ -4430,6 +4574,12 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             # it downstream (EnterpriseBench-rryas.7).
             _route_agent_exit(result, agent_exit, output_dir)
 
+            _capture_cache_isolation_telemetry(
+                container_id,
+                output_dir,
+                cache_isolation,
+            )
+
             # Extract tool-usage metadata from agent output
             graded_artifact_path = _derive_graded_artifact_path(task_dir)
             graded_artifact_exists = None
@@ -4446,7 +4596,9 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 output_dir,
                 graded_artifact_path=graded_artifact_path,
                 graded_artifact_exists=graded_artifact_exists,
+                cache_isolation=cache_isolation,
             )
+            _route_cache_isolation(result)
             _capture_mcp_telemetry(
                 result,
                 container_id,

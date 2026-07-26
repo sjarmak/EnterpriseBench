@@ -129,7 +129,6 @@ def build_harness_plan(
             selected_model,
             "--format",
             "json",
-            "--pure",
             "--auto",
         ),
         binary="opencode",

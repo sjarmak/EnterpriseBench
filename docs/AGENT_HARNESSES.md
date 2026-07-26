@@ -152,9 +152,12 @@ python3 scripts/run_benchmark.py \
 Repeat the same locked task set for each model. Do not mix task filters, task
 revisions, timeouts, or concurrency policies within a comparison.
 
-OpenCode receives the instruction through stdin and runs with `--pure`,
-`--format json`, and `--auto`. `--pure` excludes external plugins; `--auto` is
-required for unattended file and shell actions inside the Docker sandbox.
+OpenCode receives the instruction through stdin and runs with `--format json`
+and `--auto`. The runner does not pass `--pure`, because OpenCode 1.18.4 uses
+that flag to disable the cache-isolation plugin described below. Project-local
+configuration is disabled separately, and the global config directory exists
+only inside the task container. `--auto` is required for unattended file and
+shell actions inside the Docker sandbox.
 
 Run the same model and task through Sourcegraph MCP by changing only the mode:
 
@@ -230,6 +233,37 @@ tracked instead of assuming every task grades `agent_output/answer.json`. This
 separates MCP latency, model synthesis latency, artifact completion, and a CLI
 that continues reasoning after producing the graded deliverable.
 
+## Cross-run prompt-cache isolation
+
+Every measured invocation receives a fresh 128-bit cache-isolation scope.
+Provider-specific controls prevent an earlier arm or repetition from changing
+the later run's input-token accounting:
+
+- Claude Code runs with `DISABLE_PROMPT_CACHING=1`. Its final `modelUsage` must
+  report zero cache-read and cache-creation tokens across every model it used.
+- Codex runs with `--ephemeral`. Codex 0.145.0 uses the fresh thread/session ID
+  as the Responses API `prompt_cache_key`; the JSON trace must contain exactly
+  one thread scope. Later requests in that thread may legitimately report
+  cached input from earlier requests in the same run.
+- OpenCode loads a private EnterpriseBench plugin from the container-only config
+  directory. The plugin prepends the fresh scope to the first system string,
+  sets OpenRouter's session ID to the same scope, and sends
+  `X-OpenRouter-Cache: false`. Project config and project plugins are disabled.
+  The plugin records non-secret evidence that both request hooks executed, and
+  the first provider step must report zero cache-read tokens. Cache reads on
+  later steps are within-run reuse and remain valid.
+
+The proof is saved under `tool_usage.cache_isolation`. Missing telemetry,
+missing OpenCode hook evidence, an ambiguous Codex thread, or any provider
+signal of prior-run reuse marks the run `invalid` with
+`failure_class=infra_cache_isolation`. It is not admitted to score, cost, or
+token comparisons.
+
+Results created before this proof existed remain usable for artifact and
+correctness inspection, but their token and cost comparisons are
+cache-confounded. Rerun every comparison cell under the isolation gate rather
+than mixing legacy and isolated measurements.
+
 ## Result isolation
 
 Generated harnesses derive a lowercase variant label from harness and model, so
@@ -259,7 +293,8 @@ are never averaged into the Claude baseline.
 
 Before consuming a Claude, Codex, or OpenRouter run:
 
-1. Run the harness, output-contract, telemetry, and judge-routing tests.
+1. Run the harness, output-contract, cache-isolation, telemetry, and
+   judge-routing tests.
 2. Run `python3 scripts/validate_tasks_preflight.py --json`; every selected task
    must be ready.
 3. Check the selected agent and judge accounts with

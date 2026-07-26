@@ -69,9 +69,9 @@ def test_opencode_plan_uses_explicit_provider_model_and_auto_permissions() -> No
         "openrouter/deepseek/deepseek-v4-pro",
         "--format",
         "json",
-        "--pure",
         "--auto",
     )
+    assert "--pure" not in plan.command
     assert plan.binary == "opencode"
     assert plan.npm_package == OPENCODE_NPM_PACKAGE
     assert plan.required_env == ("OPENROUTER_API_KEY",)
@@ -91,9 +91,9 @@ def test_opencode_mcp_plan_preserves_noninteractive_cli_contract() -> None:
         "openrouter/moonshotai/kimi-k3",
         "--format",
         "json",
-        "--pure",
         "--auto",
     )
+    assert "--pure" not in plan.command
 
 
 def test_opencode_cli_plan_preserves_noninteractive_cli_contract() -> None:
@@ -110,9 +110,9 @@ def test_opencode_cli_plan_preserves_noninteractive_cli_contract() -> None:
         "openrouter/moonshotai/kimi-k3",
         "--format",
         "json",
-        "--pure",
         "--auto",
     )
+    assert "--pure" not in plan.command
 
 
 @pytest.mark.parametrize("harness", ["codex", "opencode"])

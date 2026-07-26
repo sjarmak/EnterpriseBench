@@ -16,7 +16,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -235,7 +235,7 @@ class TestMcpEnvVars:
             "run_task._scan_mcp_config_error", return_value=False
         ), patch(
             "run_task._run_agent", side_effect=mock_run_agent
-        ) as mock_agent, patch(
+        ), patch(
             "run_task._run_scoring", return_value={"task_score": 0.0}
         ), patch(
             "run_task._save_results"
@@ -427,7 +427,11 @@ class TestMcpPreflightHardFail:
         ), patch(
             "run_task._run_scoring", return_value={"task_score": 1.0}
         ), patch("run_task._save_results"), patch(
-            "run_task._extract_tool_usage", return_value={"num_turns": 5}
+            "run_task._extract_tool_usage",
+            return_value={
+                "num_turns": 5,
+                "cache_isolation": {"valid": True},
+            },
         ), patch(
             "run_task._scan_mcp_config_error", return_value=False
         ), patch(
