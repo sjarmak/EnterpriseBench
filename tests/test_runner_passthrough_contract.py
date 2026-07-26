@@ -41,6 +41,7 @@ def _maximal_namespace() -> argparse.Namespace:
         agent="claude",
         timeout=60,
         account="3",
+        judge_account=1,
         mode="hybrid",
         dry_run=True,
     )

@@ -197,6 +197,7 @@ class TaskRunConfig:
     keep_container: bool = False
     verbose: bool = False
     account: int | None = None
+    judge_account: int | None = None
     mode: str = "baseline"
     rep: int | None = None
     ablation_variant: str | None = None
@@ -206,6 +207,11 @@ class TaskRunConfig:
     attempt: int | None = None
 
     def __post_init__(self) -> None:
+        if isinstance(self.judge_account, bool) or (
+            self.judge_account is not None
+            and (not isinstance(self.judge_account, int) or self.judge_account <= 0)
+        ):
+            raise ValueError("judge_account must be a positive integer")
         validate_study_config(
             study_spec=self.study_spec,
             study_receipts=self.study_receipts,
@@ -219,6 +225,11 @@ class TaskRunConfig:
             and self.account is None
         ):
             raise ValueError("study runs require an agent command or OAuth account")
+
+
+def _resolve_judge_account(config: TaskRunConfig) -> int | None:
+    """Use the explicit judge account, otherwise the completed agent account."""
+    return config.judge_account if config.judge_account is not None else config.account
 
 
 # Status marker for runs that must not be scored (e.g. MCP pre-flight failure,
@@ -2098,6 +2109,8 @@ def _apply_llm_judge(
     task_dir: Path,
     container_id: str,
     task_data: dict,
+    *,
+    judge_account: int | None = None,
 ) -> dict:
     """Apply Tier 2 LLM judge to cap grep-based scores.
 
@@ -2171,7 +2184,8 @@ def _apply_llm_judge(
         sys.path.insert(0, str(REPO_ROOT / "lib"))
         from eb_verify.judge import CheckpointJudgeInput, LLMJudge
 
-        judge = LLMJudge(model="cc:haiku")
+        judge = LLMJudge(model="cc:haiku", account=judge_account)
+        scores["judge_provenance"] = judge.provenance
     except Exception as exc:
         # Judge could not be constructed (import/config/credential failure):
         # the Tier-2 cap cannot be applied. Flag infra error rather than
@@ -2327,6 +2341,8 @@ def _save_results(
         "no_build": config.no_build,
         "keep_container": config.keep_container,
         "mode": config.mode,
+        "account": config.account,
+        "judge_account": _resolve_judge_account(config),
     }
     (output_dir / "config.json").write_text(json.dumps(config_payload, indent=2) + "\n")
 
@@ -3936,7 +3952,13 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             "llm_curator" in verification_modes
             and result.phase not in UNTRUSTED_SCORE_PHASES
         ):
-            scores = _apply_llm_judge(scores, task_dir, container_id, task_data)
+            scores = _apply_llm_judge(
+                scores,
+                task_dir,
+                container_id,
+                task_data,
+                judge_account=_resolve_judge_account(config),
+            )
             _route_verifier_infra_error(result, scores)
 
         result.scores = scores
@@ -4071,6 +4093,15 @@ Examples:
         ),
     )
     parser.add_argument(
+        "--judge-account",
+        type=int,
+        default=None,
+        help=(
+            "Account-specific Claude CLI for Tier-2 judging. Defaults to "
+            "--account after the agent exits."
+        ),
+    )
+    parser.add_argument(
         "--mode",
         choices=list(VALID_MODES),
         default="baseline",
@@ -4173,6 +4204,7 @@ def main() -> None:
         keep_container=args.keep_container,
         verbose=args.verbose,
         account=args.account,
+        judge_account=args.judge_account,
         mode=args.mode,
         rep=args.rep,
         study_spec=args.study_spec.resolve() if args.study_spec else None,

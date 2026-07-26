@@ -627,6 +627,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     runner_group.add_argument(
+        "--judge-account",
+        type=int,
+        default=None,
+        help=(
+            "Account-specific Claude CLI used by the Tier-2 judge "
+            "(for example, 1 selects claude-1). Defaults to the agent account."
+        ),
+    )
+    runner_group.add_argument(
         "--dry-run", action="store_true", help="List tasks without running"
     )
     runner_group.add_argument(
@@ -728,6 +737,9 @@ def collect_passthrough_args(
         accounts = parse_accounts(args.account)
         if len(accounts) == 1:
             result.extend(["--account", str(accounts[0])])
+    judge_account = getattr(args, "judge_account", None)
+    if judge_account is not None:
+        result.extend(["--judge-account", str(judge_account)])
     # Mode passthrough
     mode = mode_override if mode_override is not None else args.mode
     result.extend(["--mode", mode])

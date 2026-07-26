@@ -144,6 +144,25 @@ class TestCreateBackend:
         assert isinstance(backend, ClaudeCodeBackend)
         assert backend.model == "sonnet"
 
+    @patch(
+        "eb_verify.judge.backends.shutil.which",
+        return_value="/usr/local/bin/claude-3",
+    )
+    def test_cc_account_selects_account_specific_executable(self, which):
+        backend = create_backend("cc:haiku", account=3)
+
+        which.assert_called_once_with("claude-3")
+        assert isinstance(backend, ClaudeCodeBackend)
+        assert backend.executable == "claude-3"
+        assert backend.account == 3
+        assert backend.provenance == {
+            "backend": "claude_code_cli",
+            "provider": "anthropic",
+            "model": "haiku",
+            "account": 3,
+            "executable": "claude-3",
+        }
+
     def test_unknown_provider_raises_valueerror(self):
         with pytest.raises(ValueError, match="Cannot determine provider"):
             create_backend("gpt-4o")
@@ -315,6 +334,11 @@ class TestClaudeCodeBackend:
         with pytest.raises(JudgeBackendError, match="claude CLI not found"):
             ClaudeCodeBackend(model="haiku")
 
+    @pytest.mark.parametrize("account", [0, -1, True, "3"])
+    def test_init_rejects_invalid_account(self, account):
+        with pytest.raises(ValueError, match="positive integer"):
+            ClaudeCodeBackend(model="haiku", account=account)
+
     @patch("eb_verify.judge.backends.shutil.which", return_value="/usr/bin/claude")
     def test_init_maps_model_alias(self, _which):
         backend = ClaudeCodeBackend(model="claude-sonnet-4-6")
@@ -331,9 +355,11 @@ class TestClaudeCodeBackend:
     @patch("eb_verify.judge.backends.shutil.which", return_value="/usr/bin/claude")
     def test_raw_call_nonzero_returncode_raises(self, _which):
         backend = ClaudeCodeBackend(model="haiku")
-        completed = subprocess.CompletedProcess([], 1, stdout="", stderr="boom")
+        completed = subprocess.CompletedProcess(
+            [], 1, stdout="account unavailable", stderr=""
+        )
         with patch("eb_verify.judge.backends.subprocess.run", return_value=completed):
-            with pytest.raises(JudgeBackendError, match="claude CLI failed"):
+            with pytest.raises(JudgeBackendError, match="account unavailable"):
                 backend._raw_call("sys", "user")
 
     @patch("eb_verify.judge.backends.shutil.which", return_value="/usr/bin/claude")
