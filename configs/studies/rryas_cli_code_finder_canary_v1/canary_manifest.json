@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "status": "locked-canary",
+  "study_id": "rryas-cli-code-finder-canary-v1",
+  "purpose": "Validate the Bash-composable sgx Finder interface against the same task, model, judge, repository scope, and fail-closed telemetry contract as the valid MCP Code Finder canary.",
+  "matched_against": {
+    "study_id": "rryas-code-finder-canary-v2",
+    "trial": "dep-traversal-003/mcp_code_finder/rep1/attempt1",
+    "task_id": "dep-traversal-003",
+    "model": "claude-sonnet-5",
+    "judge_model": "cc:haiku",
+    "judge_account": 1,
+    "comparison_scope": "interface_effect_only"
+  },
+  "tasks": [
+    {
+      "task_id": "dep-traversal-003",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-003/task.toml",
+      "task_hash": "sha256:1661f97c36ea0556a79088b8979bb8e9edabbe985d0204f3522fb221373d4b11",
+      "expected_repositories": [
+        "github.com/sg-evals/chi--v5.0.8",
+        "github.com/sg-evals/hugo--v0.111.0"
+      ]
+    }
+  ],
+  "treatment": {
+    "mode": "cli_code_finder",
+    "capability_fingerprint": "sourcegraph-cli-code-finder:exactly-once-per-repository:local-repos-denied:direct-tools-denied:beta-telemetry-required:proxy-v1:no-mcp-registration:v1",
+    "interface": "bash_composable_sgx_finder",
+    "mcp_tools_registered": false,
+    "code_finder_calls": "exactly_once_per_repository",
+    "other_sgx_retrieval_allowed": false,
+    "direct_sourcegraph_tools_allowed": false,
+    "local_repository_source_readable": false,
+    "required_telemetry": [
+      "invocation_count",
+      "repository_scope",
+      "sourcegraphToolTelemetry",
+      "tool_inventory_sha256",
+      "code_finder_schema_sha256"
+    ],
+    "invalid_if": [
+      "zero_or_wrong_code_finder_call_count",
+      "interface_and_proxy_call_count_mismatch",
+      "ambiguous_or_wrong_repository_scope",
+      "any_other_sgx_retrieval_call",
+      "any_direct_sourcegraph_retrieval_call",
+      "failed_code_finder_response",
+      "missing_sourcegraphToolTelemetry",
+      "missing_or_malformed_proxy_trace"
+    ]
+  },
+  "judge_configuration": {
+    "model": "cc:haiku",
+    "account": 1,
+    "executable": "claude-1",
+    "selection": "explicit --judge-account 1",
+    "provenance_required_in_scores": true
+  },
+  "execution_configuration": {
+    "agent_account": 3,
+    "timeout_seconds": 600,
+    "build_timeout_seconds": 1800,
+    "verifier_timeout_seconds": 600,
+    "memory_mb": 8192,
+    "no_build": true
+  },
+  "spend_guard": {
+    "slots": 1,
+    "max_attempts": 1,
+    "dispatch_rule": "one matched CLI Finder validity slot only",
+    "headline_eligible": false
+  },
+  "harness_hash": "sha256:c97fd1e779d9081515e3dbd2ba10607c21fa4d4c6b7f56f8d998508f008ac9c8",
+  "verifier_hashes": {
+    "dep-traversal-003": "sha256:9e046e38c5a32ee17d591b91174cdaa7af47156de0decc4881407c33dde9f150"
+  }
+}
