@@ -345,6 +345,50 @@ def test_codex_zero_cost_is_reported_as_unavailable(tmp_path: Path) -> None:
     assert cell["cost_note"] == "not reported by Codex"
 
 
+def test_invalid_run_quarantines_its_raw_score(tmp_path: Path) -> None:
+    task_dir = _make_task(tmp_path)
+    run_dir = _make_run(
+        tmp_path,
+        harness="claude",
+        model="claude-sonnet-5",
+        variant_label="claude-sonnet-5",
+        records=[],
+    )
+    result_path = run_dir / "results.json"
+    result = json.loads(result_path.read_text())
+    result["status"] = "invalid"
+    result["success"] = False
+    result["failure_class"] = "invalid_arm_contamination"
+    _write_json(result_path, result)
+
+    cell = build_run_cell(run_dir, task_dir)
+
+    assert cell["score"] is None
+    assert cell["quarantined_score"] == 0.75
+
+
+def test_legacy_untrusted_phase_quarantines_its_raw_score(tmp_path: Path) -> None:
+    task_dir = _make_task(tmp_path)
+    run_dir = _make_run(
+        tmp_path,
+        harness="claude",
+        model="claude-sonnet-5",
+        variant_label="claude-sonnet-5",
+        records=[],
+    )
+    result_path = run_dir / "results.json"
+    result = json.loads(result_path.read_text())
+    result["phase"] = "verifier_infra_error"
+    result["success"] = False
+    result["failure_class"] = "verifier_infra_error"
+    _write_json(result_path, result)
+
+    cell = build_run_cell(run_dir, task_dir)
+
+    assert cell["score"] is None
+    assert cell["quarantined_score"] == 0.75
+
+
 def test_build_run_cell_includes_judge_and_opencode_lifecycle(
     tmp_path: Path,
 ) -> None:
@@ -565,6 +609,7 @@ def test_merge_console_is_idempotent_and_inlines_ui(tmp_path: Path) -> None:
     console.write_text(
         '<script id="data" type="application/json">'
         '[{"task":"legacy","mode":"baseline",'
+        '"phase":"verifier_infra_error","score":0.25,'
         '"calls":[{"result":"token sgp_1234567890abcdefghijklmnop"}]}]'
         "</script>"
         "<script>oldUi()</script>"
@@ -587,6 +632,8 @@ def test_merge_console_is_idempotent_and_inlines_ui(tmp_path: Path) -> None:
     ].split("</script>", maxsplit=1)[0]
     cells = json.loads(payload)
     assert [item["task"] for item in cells] == ["legacy", "task-001"]
+    assert cells[0]["score"] is None
+    assert cells[0]["quarantined_score"] == 0.25
     assert "sgp_1234567890abcdefghijklmnop" not in html
     assert html.count("task-001/codex-gpt") == 1
     assert "provider-native" in html
@@ -832,6 +879,7 @@ def test_console_ui_renders_judge_and_lifecycle_telemetry() -> None:
     assert "lifecycle.canonical_answer_written" in ui
     assert "Arm gate proof" in ui
     assert "cell.arm_gate_proof" in ui
+    assert "quarantined_score" in ui
 
 
 def test_console_script_runs_directly() -> None:

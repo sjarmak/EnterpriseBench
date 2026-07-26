@@ -361,7 +361,7 @@ function renderDetail(cell) {
   <div class="kv">
     <span class="k">run</span><span>${esc(cell.run_label || cell.run_id || "legacy")}</span>
     <span class="k">model</span><span>${esc(cell.model)}</span>
-    <span class="k">score</span><span class="${scoreClass(cell.score)}">${cell.score == null ? "INVALID" : Number(cell.score).toFixed(3)}</span>
+    <span class="k">score</span><span class="${scoreClass(cell.score)}">${cell.score == null ? (cell.quarantined_score == null ? "INVALID" : `INVALID · raw ${Number(cell.quarantined_score).toFixed(3)} quarantined`) : Number(cell.score).toFixed(3)}</span>
     <span class="k">phase</span><span>${esc(cell.phase)} ${cell.failure_class ? `/ ${esc(cell.failure_class)}` : ""}</span>
     <span class="k">suite/type</span><span>${esc(cell.suite)} / ${esc(cell.type)} (${esc(cell.difficulty)})</span>
     <span class="k">cost / tokens</span><span>${cell.cost == null ? "cost unavailable" : `$${Number(cell.cost).toFixed(3)}`} · provider-reported in ${cell.in_tok || 0} / out ${cell.out_tok || 0}</span>

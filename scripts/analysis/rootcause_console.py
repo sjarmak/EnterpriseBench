@@ -65,6 +65,9 @@ SENSITIVE_KEYS = frozenset(
         "secret",
     }
 )
+UNTRUSTED_SCORE_PHASES = frozenset(
+    {"verifier_infra_error", "integrity_violation"}
+)
 
 
 def redact(value: Any) -> Any:
@@ -626,13 +629,19 @@ def _run_measurements(
         if flag and flag != "invalid"
     ]
     provenance = result.get("provenance")
+    task_score = scores.get("task_score")
+    invalid = (
+        result.get("status") == "invalid"
+        or result.get("phase") in UNTRUSTED_SCORE_PHASES
+    )
     nested_gate_proof = (
         provenance.get("arm_gate_proof") if isinstance(provenance, dict) else None
     )
     return {
         "phase": result.get("phase", ""),
         "success": result.get("success", False),
-        "score": scores.get("task_score"),
+        "score": None if invalid else task_score,
+        "quarantined_score": task_score if invalid else None,
         "failure_class": result.get("failure_class"),
         "infra_detail": result.get("error", ""),
         "cost": cost,
@@ -755,6 +764,17 @@ def _trace_source_identity(cell: dict[str, Any]) -> str:
     return str(Path(str(source)).resolve()) if source else ""
 
 
+def _quarantine_untrusted_score(cell: dict[str, Any]) -> dict[str, Any]:
+    score = cell.get("score")
+    untrusted = (
+        cell.get("status") == "invalid"
+        or cell.get("phase") in UNTRUSTED_SCORE_PHASES
+    )
+    if not untrusted or score is None:
+        return cell
+    return {**cell, "score": None, "quarantined_score": score}
+
+
 def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> None:
     """Idempotently merge cells and inline the current console UI."""
     html = console.read_text()
@@ -788,6 +808,7 @@ def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> 
         )
     ]
     merged.extend(replacements.values())
+    merged = [_quarantine_untrusted_score(cell) for cell in merged]
     payload = json.dumps(merged, ensure_ascii=False, separators=(",", ":")).replace(
         "</", "<\\/"
     )
