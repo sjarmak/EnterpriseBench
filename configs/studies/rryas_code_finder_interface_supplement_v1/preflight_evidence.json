@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-code-finder-interface-supplement-v1",
+  "dispatch_revision": "1c5ac79e6fd1588f622c4e24234901ce11143ac4",
+  "paid_model_calls": 0,
+  "selection_audit": {
+    "candidate_outcomes_inspected": false,
+    "selected_task": "incident-investigation-dual-nerdctl-001",
+    "prior_run_count": 0,
+    "prompt_leakage": "pass",
+    "reason": "First duration/task_id-ordered unrun dual-repo incident candidate after three prompt-leakage rejections."
+  },
+  "artifact_contract": {
+    "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+    "gated_modes_eligible": [
+      "mcp_code_finder",
+      "cli_code_finder"
+    ],
+    "finder_prompt_uses_exact_graded_path": true,
+    "conflicting_answer_json_guidance": false
+  },
+  "sourcegraph_mirror_probe": {
+    "method": "sg_cli.py ls against the configured Sourcegraph endpoint",
+    "passed": true,
+    "repositories": [
+      "github.com/sg-evals/nerdctl--v2.0.0",
+      "github.com/sg-evals/containerd--v1.7.24"
+    ]
+  },
+  "task_preflight": {
+    "build_enabled_dry_runs": [
+      {
+        "task_id": "incident-investigation-dual-nerdctl-001",
+        "mode": "mcp_code_finder",
+        "phase": "dry_run_complete",
+        "success": true
+      },
+      {
+        "task_id": "incident-investigation-dual-nerdctl-001",
+        "mode": "cli_code_finder",
+        "phase": "dry_run_complete",
+        "success": true
+      }
+    ],
+    "no_build_confirmation_runs": [
+      {
+        "task_id": "incident-investigation-dual-nerdctl-001",
+        "mode": "mcp_code_finder",
+        "phase": "dry_run_complete",
+        "prompt_contract": "pass"
+      },
+      {
+        "task_id": "incident-investigation-dual-nerdctl-001",
+        "mode": "cli_code_finder",
+        "phase": "dry_run_complete",
+        "prompt_contract": "pass"
+      }
+    ]
+  },
+  "verifier_discrimination": {
+    "passed": true,
+    "checkpoints_checked": 4,
+    "prompt_only_score": 0.0,
+    "oracle_score": 1.0
+  },
+  "quality_gates": {
+    "affected_tests": {
+      "passed": 213,
+      "failed": 0
+    },
+    "locked_capsule_regression_tests": {
+      "passed": 192,
+      "failed": 0
+    },
+    "supplement_preflight_coverage_percent": 84,
+    "mode_gate_coverage_percent": 98,
+    "full_repository_tests": {
+      "passed": 6334,
+      "failed": 196,
+      "skipped": 4,
+      "expected_failed": 16,
+      "failure_class": "pre-existing missing benchmark fixtures and unrelated verifier assertions",
+      "tracking_issue": "EnterpriseBench-dg2y3"
+    }
+  },
+  "locked_capsule": {
+    "spec_hash": "sha256:c828fcd0773b9a848dfba93cbe690634125cb65e7ee1f58121d785ec03f5bc0c",
+    "task_manifest_hash": "sha256:1638c6ccebd39b34bf31baaa7bfce143a75c76486718733198f1608033edf838",
+    "live_mirror_validation": "pass",
+    "paid_dispatch_authorized": false
+  },
+  "spend_summary": {
+    "paid_slots": 2,
+    "max_attempts_per_slot": 1,
+    "forecast_reported_outer_spend_usd": 3.61,
+    "inner_finder_cost": "unavailable",
+    "paid_dispatch_requires_new_explicit_authorization": true
+  }
+}

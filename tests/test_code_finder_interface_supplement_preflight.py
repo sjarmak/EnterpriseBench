@@ -10,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "lib"))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "orchestration"))
 
+import code_finder_interface_supplement_preflight as preflight_module  # noqa: E402
 from code_finder_interface_pilot_preflight import REQUIRED_ARMS  # noqa: E402
 from code_finder_interface_supplement_preflight import (  # noqa: E402
     REPORT_PATH,
@@ -399,3 +400,70 @@ def test_unavailable_mirror_fails_closed(tmp_path: Path) -> None:
                 "containerd--v1.7.24"
             ),
         )
+
+
+def test_repository_supplement_capsule_is_current_and_spend_gated() -> None:
+    study_dir = (
+        PROJECT_ROOT
+        / "configs"
+        / "studies"
+        / "rryas_code_finder_interface_supplement_v1"
+    )
+
+    evidence = validate_interface_supplement(
+        spec_path=study_dir / "study_spec.json",
+        manifest_path=study_dir / "pilot_manifest.json",
+        curated_manifest_path=(
+            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
+        ),
+        repo_root=PROJECT_ROOT,
+        mirror_probe=lambda _repository: True,
+    )
+
+    assert evidence.task_ids == (TASK_ID,)
+    assert len(evidence.slots) == 2
+    assert evidence.forecast_reported_outer_spend_usd == 3.61
+    assert evidence.paid_dispatch_authorized is False
+
+
+def test_cli_prints_spend_gated_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    spec, manifest, curated = _write_fixture(tmp_path)
+    monkeypatch.setattr(preflight_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        preflight_module, "_default_mirror_probe", lambda _repository: True
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "_default_provenance_provider",
+        lambda _repo_root: (
+            lambda task_toml: InputProvenance(
+                task_hash=file_hash(task_toml),
+                harness_hash=PROVENANCE.harness_hash,
+                verifier_hash=PROVENANCE.verifier_hash,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "_git_revision_matches",
+        lambda _revision, _paths, *, repo_root: True,
+    )
+
+    assert (
+        preflight_module.main(
+            [
+                "--spec",
+                str(spec),
+                "--manifest",
+                str(manifest),
+                "--curated-manifest",
+                str(curated),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out)["paid_dispatch_authorized"] is False

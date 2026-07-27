@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "status": "locked-supplement",
+  "study_id": "rryas-code-finder-interface-supplement-v1",
+  "parent_study_id": "rryas-code-finder-interface-pilot-v1",
+  "purpose": "Replace the structurally invalid incident pair with one outcome-blind, gate-compatible incident task so the descriptive interface pilot has three quality-eligible task pairs.",
+  "curated_manifest": "results/rryas_dataset/candidate_manifest.json",
+  "curated_manifest_hash": "sha256:007d332e94d729208cf4a0d3307bc800d12b57c1c09da5703f644812d0d9450d",
+  "selection": {
+    "rule": "among previously unrun curated dual-repository incident tasks, sort by declared duration then task_id; reject prompt leakage or structural ineligibility; select the first passing task",
+    "candidate_outcomes_inspected": false,
+    "parent_invalidity_trigger": "The Istio pair was excluded only because its required output path was structurally unwritable in both gated arms; its task scores were not used to select the replacement.",
+    "candidate_order": [
+      "incident-investigation-dual-flux-001",
+      "incident-investigation-dual-prometheus-001",
+      "incident-investigation-dual-kafka-001",
+      "incident-investigation-dual-nerdctl-001"
+    ],
+    "rejections": [
+      {
+        "candidate_id": "incident-investigation-dual-flux-001",
+        "reason": "prompt_leakage",
+        "detail": "The instruction supplies the old-condition to reconcile-loop causal chain, making retrieval quality largely irrelevant.",
+        "candidate_outcomes_inspected": false
+      },
+      {
+        "candidate_id": "incident-investigation-dual-prometheus-001",
+        "reason": "prompt_leakage",
+        "detail": "The instruction supplies the dropped-label to perpetual-alert to inhibition causal chain, making retrieval quality largely irrelevant.",
+        "candidate_outcomes_inspected": false
+      },
+      {
+        "candidate_id": "incident-investigation-dual-kafka-001",
+        "reason": "prompt_leakage",
+        "detail": "The instruction names WorkerSinkTask and the JDBC transaction lifecycle and supplies the large-batch to database-timeout to restart-loop chain graded by the verifier.",
+        "candidate_outcomes_inspected": false
+      }
+    ],
+    "selected": {
+      "task_id": "incident-investigation-dual-nerdctl-001",
+      "declared_duration_minutes": 45,
+      "prior_run_count": 0,
+      "prompt_leakage": "pass",
+      "structural_eligibility": "pass after moving the report contract from the gated nerdctl repository to /workspace/agent_output/INCIDENT_REPORT.md",
+      "candidate_outcomes_inspected": false
+    }
+  },
+  "tasks": [
+    {
+      "task_id": "incident-investigation-dual-nerdctl-001",
+      "task_type": "incident_investigation",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-nerdctl-001/task.toml",
+      "task_hash": "sha256:8a9f317afbcefa5919667f0b5e30d2d623973719101a044e516a098ecabcb794",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/nerdctl--v2.0.0",
+        "github.com/sg-evals/containerd--v1.7.24"
+      ]
+    }
+  ],
+  "treatment_contract": {
+    "finder_calls": "exactly_once_per_repository",
+    "other_sgx_retrieval_allowed": false,
+    "direct_sourcegraph_retrieval_allowed": false,
+    "local_repository_source_readable": false,
+    "same_proxy_telemetry_required": true,
+    "required_telemetry": [
+      "invocation_count",
+      "repository_scope",
+      "sourcegraphToolTelemetry",
+      "tool_inventory_sha256",
+      "code_finder_schema_sha256",
+      "interface_call_count",
+      "proxy_call_count",
+      "cache_isolation"
+    ],
+    "invalid_if": [
+      "zero_or_wrong_code_finder_call_count",
+      "interface_and_proxy_call_count_mismatch",
+      "ambiguous_or_wrong_repository_scope",
+      "any_other_sgx_retrieval_call",
+      "any_direct_sourcegraph_retrieval_call",
+      "failed_code_finder_response",
+      "missing_sourcegraphToolTelemetry",
+      "missing_or_malformed_proxy_trace",
+      "missing_or_invalid_cache_isolation_proof",
+      "cross_run_cache_read_tokens_nonzero"
+    ]
+  },
+  "cache_isolation": {
+    "schema_version": 1,
+    "required": true,
+    "comparison_rule": "valid proof and cross_run_cache_read_tokens == 0",
+    "legacy_evidence": "comparison_ineligible"
+  },
+  "judge_configuration": {
+    "model": "cc:haiku",
+    "account": 1,
+    "executable": "claude-1",
+    "selection": "explicit --judge-account 1",
+    "provenance_required_in_scores": true
+  },
+  "execution_configuration": {
+    "agent_account": 3,
+    "timeout_seconds": 600,
+    "build_timeout_seconds": 1800,
+    "verifier_timeout_seconds": 600,
+    "memory_mb": 8192,
+    "no_build": true,
+    "max_attempts": 1,
+    "execution_order": [
+      [
+        "incident-investigation-dual-nerdctl-001",
+        "mcp_code_finder",
+        1
+      ],
+      [
+        "incident-investigation-dual-nerdctl-001",
+        "cli_code_finder",
+        1
+      ]
+    ]
+  },
+  "estimands": {
+    "primary": "paired_task_score_difference_cli_minus_mcp",
+    "secondary": [
+      "reported_outer_cost_usd",
+      "elapsed_seconds",
+      "combined_tokens",
+      "finder_activity"
+    ],
+    "combined_analysis": "append this one paired difference to the two quality-eligible v1 pairs; retain the v1 Istio pair only as invalid operational evidence",
+    "inference": "descriptive_only_n3_after_valid_supplement"
+  },
+  "spend_guard": {
+    "slots": 2,
+    "max_attempts_per_slot": 1,
+    "paid_dispatch_requires_new_explicit_authorization": true,
+    "forecast_reported_outer_spend_usd": 3.61,
+    "forecast_basis": "the two invalid v1 incident attempts; the original calibration underpredicted actual pilot spend by 4.58x",
+    "inner_finder_cost": "unavailable"
+  },
+  "evidence_policy": {
+    "exclude_parent_invalid_pair_from_quality": true,
+    "parent_invalid_task_id": "incident-investigation-dual-istio-001",
+    "promotion": "none"
+  },
+  "harness_hash": "sha256:a1e404e6c6e8264e3deb84da7df971fe84e9f618075056b87f17d8a518705594",
+  "verifier_hashes": {
+    "incident-investigation-dual-nerdctl-001": "sha256:3e972a2aa06fcf8162713a145ce6ce6891d3303d7f9b3c475b02f3116a0ee709"
+  }
+}
