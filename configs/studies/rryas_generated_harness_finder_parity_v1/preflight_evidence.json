@@ -1,0 +1,69 @@
+{
+  "capsule_id": "rryas-generated-harness-finder-parity-v1",
+  "spec_hashes": [
+    [
+      "rryas-codex-finder-parity-v1",
+      "sha256:97743fa644771bef822ca9a2eb975d3d89ca6e3fc3798f21459167a6f022188a"
+    ],
+    [
+      "rryas-opencode-kimi-k3-finder-parity-v1",
+      "sha256:5cd794eb89ad6cd934de24bb58a4d0c7507146daa4080bec9d3da62cf67cddb9"
+    ]
+  ],
+  "task_manifest_hash": "sha256:cd89ce7be2a3568250872a7c02b0ceb2135975cabe180ca170b97789557f66bf",
+  "task_ids": [
+    "incident-investigation-dual-nerdctl-001"
+  ],
+  "slots": [
+    [
+      "codex",
+      "incident-investigation-dual-nerdctl-001",
+      "mcp_code_finder",
+      1,
+      1
+    ],
+    [
+      "codex",
+      "incident-investigation-dual-nerdctl-001",
+      "cli_code_finder",
+      1,
+      1
+    ],
+    [
+      "opencode",
+      "incident-investigation-dual-nerdctl-001",
+      "mcp_code_finder",
+      1,
+      1
+    ],
+    [
+      "opencode",
+      "incident-investigation-dual-nerdctl-001",
+      "cli_code_finder",
+      1,
+      1
+    ]
+  ],
+  "revision": "dfd6f2761f96fb2b2d21cf7115f45fbdf26bd188",
+  "models": [
+    [
+      "codex",
+      "gpt-5.6-sol"
+    ],
+    [
+      "opencode",
+      "openrouter/moonshotai/kimi-k3"
+    ]
+  ],
+  "mirror_repositories": [
+    "github.com/sg-evals/nerdctl--v2.0.0",
+    "github.com/sg-evals/containerd--v1.7.24"
+  ],
+  "output_roots": [
+    "results/studies/rryas_codex_finder_parity_v1",
+    "results/studies/rryas_opencode_kimi_k3_finder_parity_v1"
+  ],
+  "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+  "comparison_label": "harness-model bundles; descriptive only",
+  "paid_dispatch_authorized": false
+}

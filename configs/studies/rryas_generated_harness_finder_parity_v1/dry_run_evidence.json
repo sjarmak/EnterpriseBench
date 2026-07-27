@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "capsule_id": "rryas-generated-harness-finder-parity-v1",
+  "executed_at": "2026-07-27T21:09:48Z",
+  "revision": "dfd6f2761f96fb2b2d21cf7115f45fbdf26bd188",
+  "paid_inference_dispatched": false,
+  "judge_dispatched": false,
+  "result_artifacts_created": [
+    "injected_instruction.md"
+  ],
+  "agent_stdout_created": false,
+  "images": {
+    "mcp_code_finder": "sha256:c520f090f1a831845041cbe5116cb4236161a286d11bf46ff300c9ed8ee95ff5",
+    "cli_code_finder": "sha256:c520f090f1a831845041cbe5116cb4236161a286d11bf46ff300c9ed8ee95ff5"
+  },
+  "harness_packages": {
+    "codex": {
+      "package": "@openai/codex@0.145.0",
+      "installed_version_verified_in_mcp_setup": "codex-cli 0.145.0"
+    },
+    "opencode": {
+      "package": "opencode-ai@1.18.4",
+      "installed_version_verified_in_mcp_setup": "1.18.4"
+    }
+  },
+  "slots": [
+    {
+      "harness": "codex",
+      "model": "gpt-5.6-sol",
+      "mode": "mcp_code_finder",
+      "phase": "dry_run_complete",
+      "success": true,
+      "mcp_endpoint_check": "HTTP 405 expected",
+      "cache_isolation_staged": true
+    },
+    {
+      "harness": "codex",
+      "model": "gpt-5.6-sol",
+      "mode": "cli_code_finder",
+      "phase": "dry_run_complete",
+      "success": true,
+      "sgx_cli_installed": true,
+      "mcp_registered_for_agent": false,
+      "cache_isolation_staged": true
+    },
+    {
+      "harness": "opencode",
+      "model": "openrouter/moonshotai/kimi-k3",
+      "mode": "mcp_code_finder",
+      "phase": "dry_run_complete",
+      "success": true,
+      "mcp_endpoint_check": "HTTP 405 expected",
+      "cache_isolation_staged": true
+    },
+    {
+      "harness": "opencode",
+      "model": "openrouter/moonshotai/kimi-k3",
+      "mode": "cli_code_finder",
+      "phase": "dry_run_complete",
+      "success": true,
+      "sgx_cli_installed": true,
+      "mcp_registered_for_agent": false,
+      "cache_isolation_staged": true
+    }
+  ]
+}
