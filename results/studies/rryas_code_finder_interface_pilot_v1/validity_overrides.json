@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-code-finder-interface-pilot-v1",
+  "policy": {
+    "receipts_are_immutable": true,
+    "overrides_apply_to_quality_analysis_only": true,
+    "excluded_runs_remain_in_operational_spend_and_telemetry_totals": true,
+    "retries_performed": 0
+  },
+  "overrides": [
+    {
+      "task_id": "incident-investigation-dual-istio-001",
+      "arm": "mcp_code_finder",
+      "repetition": 1,
+      "attempt": 1,
+      "recorded_status": "valid",
+      "analysis_status": "invalid",
+      "failure_class": "task_ineligible",
+      "raw_score": 0.0,
+      "reason": "The scorer required /workspace/istio/INCIDENT_REPORT.md, but the gated arm recursively changed /workspace/istio to root:ebscorer with mode 750. The agent could retrieve and compose the report but could not write the required path, so all checkpoints returned INCIDENT_REPORT.md not found.",
+      "fallback_artifact": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "evidence": {
+        "run_dir": "runs/incident-investigation-dual-istio-001/mcp_code_finder/rep1/attempt1",
+        "agent_stdout_sha256": "sha256:a79dc78ccb5525ed88a0756bcd3b1ec0001e53b032335a0fa9cb408d85c1814d",
+        "results_sha256": "sha256:5de8d48f8aea27194c5dd15e2497b5df8756c97e81d61b506571aab51465b345"
+      }
+    },
+    {
+      "task_id": "incident-investigation-dual-istio-001",
+      "arm": "cli_code_finder",
+      "repetition": 1,
+      "attempt": 1,
+      "recorded_status": "valid",
+      "analysis_status": "invalid",
+      "failure_class": "task_ineligible",
+      "raw_score": 0.0,
+      "reason": "The scorer required /workspace/istio/INCIDENT_REPORT.md, but the gated arm recursively changed /workspace/istio to root:ebscorer with mode 750. The agent could retrieve and compose the report but could not write the required path, so all checkpoints returned INCIDENT_REPORT.md not found.",
+      "fallback_artifact": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "evidence": {
+        "run_dir": "runs/incident-investigation-dual-istio-001/cli_code_finder/rep1/attempt1",
+        "agent_stdout_sha256": "sha256:54f9501fb2f63ea240bd4284edfab711fd2518eadfadedbc786aea15fcd34f9c",
+        "results_sha256": "sha256:a4a56f2cfd0348ca7e0fac7a5edba939354542a8280671ab8e6560b05c0649d0"
+      }
+    }
+  ]
+}

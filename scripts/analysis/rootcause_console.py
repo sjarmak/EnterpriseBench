@@ -603,7 +603,16 @@ def _run_coordinates(run_dir: Path, task_id: str, mode: str) -> dict[str, str]:
     parts = run_dir.parts
     if len(parts) < 5:
         return {}
-    study_id, path_task, path_mode, rep, attempt = parts[-5:]
+    if len(parts) >= 6 and parts[-5] == "runs":
+        study_id, path_task, path_mode, rep, attempt = (
+            parts[-6],
+            parts[-4],
+            parts[-3],
+            parts[-2],
+            parts[-1],
+        )
+    else:
+        study_id, path_task, path_mode, rep, attempt = parts[-5:]
     if (
         path_task != task_id
         or path_mode != mode
@@ -805,7 +814,8 @@ def _quarantine_untrusted_score(cell: dict[str, Any]) -> dict[str, Any]:
         cell.get("cache_isolation")
     )
     untrusted = (
-        cell.get("status") == "invalid"
+        cell.get("comparison_eligible") is False
+        or cell.get("status") == "invalid"
         or cell.get("phase") in UNTRUSTED_SCORE_PHASES
         or not cache_valid
     )
@@ -823,7 +833,8 @@ def _quarantine_untrusted_score(cell: dict[str, Any]) -> dict[str, Any]:
         "comparison_ineligible_reason": (
             cache_reason
             if not cache_valid
-            else "run status or phase is not comparison-eligible"
+            else cell.get("comparison_ineligible_reason")
+            or "run status or phase is not comparison-eligible"
             if untrusted
             else None
         ),
@@ -831,6 +842,70 @@ def _quarantine_untrusted_score(cell: dict[str, Any]) -> dict[str, Any]:
         "cache_isolation": cache_isolation,
         "flags": flags,
     }
+
+
+def _override_trace_source(overlay_path: Path, override: dict[str, Any]) -> Path:
+    evidence = override.get("evidence")
+    if not isinstance(evidence, dict) or not isinstance(evidence.get("run_dir"), str):
+        raise ValueError(f"{overlay_path}: override evidence.run_dir must be a string")
+    run_dir = Path(evidence["run_dir"])
+    if run_dir.is_absolute() or ".." in run_dir.parts:
+        raise ValueError(
+            f"{overlay_path}: override evidence.run_dir must stay inside the study"
+        )
+    return (overlay_path.parent / run_dir / "agent_stdout.log").resolve()
+
+
+def _apply_validity_override(
+    cell: dict[str, Any], override: dict[str, Any]
+) -> dict[str, Any]:
+    reason = str(override.get("reason") or "post-run validity override")
+    score = cell.get("score")
+    flags = list(cell.get("flags") or [])
+    if "validity_override" not in flags:
+        flags.append("validity_override")
+    return {
+        **cell,
+        "score": None,
+        "quarantined_score": score if score is not None else override.get("raw_score"),
+        "comparison_eligible": False,
+        "comparison_ineligible_reason": reason,
+        "failure_class": override.get("failure_class"),
+        "infra_detail": reason,
+        "flags": flags,
+        "validity_override": redact(override),
+    }
+
+
+def apply_validity_overrides(
+    cells: Sequence[dict[str, Any]], overlay_path: Path
+) -> list[dict[str, Any]]:
+    """Quarantine immutable run scores using a post-run validity ledger."""
+    ledger = _load_json(overlay_path)
+    overrides = ledger.get("overrides")
+    if not isinstance(overrides, list):
+        raise ValueError(f"{overlay_path}: overrides must be an array")
+    by_source: dict[Path, dict[str, Any]] = {}
+    for override in overrides:
+        if not isinstance(override, dict):
+            raise ValueError(f"{overlay_path}: each override must be an object")
+        if override.get("analysis_status") != "invalid":
+            raise ValueError(
+                f"{overlay_path}: only analysis_status=invalid is supported"
+            )
+        source = _override_trace_source(overlay_path, override)
+        if source in by_source:
+            raise ValueError(f"{overlay_path}: duplicate override for {source}")
+        by_source[source] = override
+
+    corrected: list[dict[str, Any]] = []
+    for cell in cells:
+        source = Path(str(cell.get("trace_source", ""))).resolve()
+        override = by_source.get(source)
+        corrected.append(
+            dict(cell) if override is None else _apply_validity_override(cell, override)
+        )
+    return corrected
 
 
 def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> None:
@@ -910,12 +985,19 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--task-dir", type=Path, required=True)
     parser.add_argument("--run", type=Path, action="append", required=True)
+    parser.add_argument(
+        "--validity-overrides",
+        type=Path,
+        help="post-run validity ledger; immutable run artifacts are not modified",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     cells = [build_run_cell(run_dir, args.task_dir) for run_dir in args.run]
+    if args.validity_overrides is not None:
+        cells = apply_validity_overrides(cells, args.validity_overrides)
     merge_console(args.console, cells, args.ui)
     print(f"Merged {len(cells)} run trace(s) into {args.console}")
     return 0

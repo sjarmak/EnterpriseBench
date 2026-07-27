@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from scripts.analysis.rootcause_console import (
+    apply_validity_overrides,
     build_run_cell,
     merge_console,
     normalize_trace,
@@ -664,6 +665,109 @@ def test_build_run_cell_keeps_repetitions_and_attempts_distinct(
         .split("</script>", maxsplit=1)[0]
     )
     assert len(json.loads(payload)) == 2
+
+
+def test_build_run_cell_extracts_study_before_runs_directory(tmp_path: Path) -> None:
+    task_dir = _make_task(tmp_path)
+    cell = build_run_cell(
+        _make_run(
+            tmp_path,
+            harness="claude",
+            model="claude-sonnet-5",
+            variant_label="claude-sonnet-5",
+            mode="mcp_code_finder",
+            records=[],
+            run_relative=(
+                "pilot_v1/runs/task-001/mcp_code_finder/rep1/attempt1"
+            ),
+        ),
+        task_dir,
+    )
+
+    assert cell["study_id"] == "pilot_v1"
+    assert cell["run_id"].endswith("/pilot_v1/rep1/attempt1")
+
+
+def test_validity_override_quarantines_matching_trace_source(tmp_path: Path) -> None:
+    study_dir = tmp_path / "pilot_v1"
+    run_dir = study_dir / "runs/task-001/mcp_code_finder/rep1/attempt1"
+    trace_source = run_dir / "agent_stdout.log"
+    trace_source.parent.mkdir(parents=True)
+    trace_source.write_text("")
+    overlay = study_dir / "validity_overrides.json"
+    _write_json(
+        overlay,
+        {
+            "schema_version": 1,
+            "overrides": [
+                {
+                    "task_id": "task-001",
+                    "arm": "mcp_code_finder",
+                    "analysis_status": "invalid",
+                    "failure_class": "task_ineligible",
+                    "raw_score": 0.0,
+                    "reason": "graded artifact path is inside the gated repository",
+                    "evidence": {
+                        "run_dir": (
+                            "runs/task-001/mcp_code_finder/rep1/attempt1"
+                        )
+                    },
+                }
+            ],
+        },
+    )
+    cell = {
+        "run_id": "task-001/mcp_code_finder/claude/pilot_v1/rep1/attempt1",
+        "task": "task-001",
+        "mode": "mcp_code_finder",
+        "score": 0.0,
+        "quarantined_score": None,
+        "comparison_eligible": True,
+        "trace_source": str(trace_source),
+        "flags": [],
+        "cache_isolation": {
+            "schema_version": 1,
+            "harness": "claude",
+            "launcher_scope": "a" * 32,
+            "mechanism": "prompt-caching-disabled",
+            "configured": True,
+            "valid": True,
+            "invalid_reason": None,
+            "cross_run_cache_read_tokens": 0,
+            "total_cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "verification": "all cache reads and writes are zero",
+        },
+    }
+
+    corrected = apply_validity_overrides([cell], overlay)
+
+    assert corrected[0]["score"] is None
+    assert corrected[0]["quarantined_score"] == 0.0
+    assert corrected[0]["comparison_eligible"] is False
+    assert corrected[0]["failure_class"] == "task_ineligible"
+    assert corrected[0]["comparison_ineligible_reason"] == (
+        "graded artifact path is inside the gated repository"
+    )
+    assert corrected[0]["validity_override"]["analysis_status"] == "invalid"
+
+    console = tmp_path / "rootcause_console.html"
+    ui = tmp_path / "ui.js"
+    console.write_text(
+        '<script id="data" type="application/json">[]</script>'
+        "<script>oldUi()</script>"
+    )
+    ui.write_text("render()")
+    merge_console(console, corrected, ui)
+    payload = (
+        console.read_text()
+        .split('<script id="data" type="application/json">', maxsplit=1)[1]
+        .split("</script>", maxsplit=1)[0]
+    )
+    merged = json.loads(payload)[0]
+    assert merged["score"] is None
+    assert merged["quarantined_score"] == 0.0
+    assert merged["comparison_eligible"] is False
 
 
 def test_merge_console_is_idempotent_and_inlines_ui(tmp_path: Path) -> None:

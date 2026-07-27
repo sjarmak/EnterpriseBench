@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-27T00:58:03.865873+00:00",
+  "provenance": {
+    "study_id": "rryas-code-finder-interface-pilot-v1",
+    "spec_hash": "sha256:77d98481d287c045cc8526d19c244846c679de5676a7d9ca60898534981386a3",
+    "task_manifest_hash": "sha256:ee5fbbc8cafc6d85752b7b344b641c11576ee72bc06b577dbe10dd969ad32e2e",
+    "arms": [
+      {
+        "name": "mcp_code_finder",
+        "capability_fingerprint": "sourcegraph-mcp-code-finder:exactly-once-per-repository:local-repos-denied:direct-tools-denied:beta-telemetry-required:proxy-v1:cache-isolated:v2"
+      },
+      {
+        "name": "cli_code_finder",
+        "capability_fingerprint": "sourcegraph-cli-code-finder:exactly-once-per-repository:local-repos-denied:direct-tools-denied:beta-telemetry-required:proxy-v1:no-mcp-registration:cache-isolated:v2"
+      }
+    ],
+    "baseline_arm": "mcp_code_finder",
+    "repetitions": 1,
+    "attempt_policy": "first_valid_attempt",
+    "model": "claude-sonnet-5",
+    "harness": "sha256:8b46f41db9ef27c58bfb9281b79fd4611cd16d8a6b5b2b4b600070b54211f7b4",
+    "revision": "0fcf82a38134ee26146fef996368c27348003595",
+    "token_source": "sdk_model_usage",
+    "score_contract": "weighted-mean-v2",
+    "promotion_policy": "descriptive-interface-pilot-no-promotion"
+  },
+  "completeness": {
+    "declared_tasks": 3,
+    "paired_tasks": 3,
+    "paired_trials": 6,
+    "declared_slots": 6,
+    "excluded_tasks": {},
+    "receipts_by_status": {
+      "valid": 6
+    }
+  },
+  "reward": {
+    "by_arm": {
+      "mcp_code_finder": {
+        "n": 3,
+        "mean": 0.5697,
+        "median": 0.709,
+        "std": 0.5144,
+        "min": 0.0,
+        "max": 1.0
+      },
+      "cli_code_finder": {
+        "n": 3,
+        "mean": 0.503,
+        "median": 0.709,
+        "std": 0.438,
+        "min": 0.0,
+        "max": 0.8
+      }
+    },
+    "contrasts": {
+      "cli_code_finder_vs_mcp_code_finder": {
+        "n_paired": 3,
+        "mean_delta": -0.0667,
+        "median_delta": 0.0,
+        "pct_improved": 0.0,
+        "pct_degraded": 0.3333,
+        "pct_unchanged": 0.6667,
+        "cohens_d": -0.5774,
+        "wilcoxon_p": null,
+        "significant": false,
+        "note": "Too few pairs (3) for Wilcoxon test"
+      }
+    },
+    "per_task": {
+      "dep-graph-dual-junit-mockito-001": {
+        "mcp_code_finder": 1.0,
+        "cli_code_finder": 0.8
+      },
+      "error-prov-dual-otel-jaeger-001": {
+        "mcp_code_finder": 0.709,
+        "cli_code_finder": 0.709
+      },
+      "incident-investigation-dual-istio-001": {
+        "mcp_code_finder": 0.0,
+        "cli_code_finder": 0.0
+      }
+    }
+  },
+  "economics": {
+    "paired_valid": {
+      "population": "prespecified comparable trials, complete in every declared arm",
+      "total_cost_usd": 6.289727,
+      "by_arm_usd": {
+        "cli_code_finder": 3.228957,
+        "mcp_code_finder": 3.06077
+      },
+      "trials": 6
+    },
+    "all_attempts": {
+      "population": "every receipt the study emitted, valid or not",
+      "total_cost_usd": 6.289727,
+      "by_arm_usd": {
+        "cli_code_finder": 3.228957,
+        "mcp_code_finder": 3.06077
+      },
+      "receipts": 6
+    }
+  }
+}

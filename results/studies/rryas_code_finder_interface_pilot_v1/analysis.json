@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-code-finder-interface-pilot-v1",
+  "provenance": {
+    "spec_hash": "sha256:77d98481d287c045cc8526d19c244846c679de5676a7d9ca60898534981386a3",
+    "task_manifest_hash": "sha256:ee5fbbc8cafc6d85752b7b344b641c11576ee72bc06b577dbe10dd969ad32e2e",
+    "dispatch_revision": "0fcf82a38134ee26146fef996368c27348003595",
+    "harness_hash": "sha256:8b46f41db9ef27c58bfb9281b79fd4611cd16d8a6b5b2b4b600070b54211f7b4",
+    "receipts": "receipts.jsonl",
+    "raw_report": "raw_capsule_report.json",
+    "validity_overrides": "validity_overrides.json"
+  },
+  "interpretation": {
+    "promotion": "none",
+    "inference": "descriptive_only",
+    "declared_pairs": 3,
+    "quality_eligible_pairs": 2,
+    "excluded_quality_pairs": 1,
+    "note": "The sample is too small for a model or interface ranking. The incident pair is retained only as operational spend and telemetry evidence."
+  },
+  "quality_eligible": {
+    "tasks": [
+      {
+        "task_id": "dep-graph-dual-junit-mockito-001",
+        "mcp_score": 1.0,
+        "cli_score": 0.8,
+        "cli_minus_mcp": -0.2
+      },
+      {
+        "task_id": "error-prov-dual-otel-jaeger-001",
+        "mcp_score": 0.709,
+        "cli_score": 0.709,
+        "cli_minus_mcp": 0.0
+      }
+    ],
+    "score": {
+      "n_paired": 2,
+      "mcp_mean": 0.8545,
+      "cli_mean": 0.7545,
+      "cli_minus_mcp_mean": -0.1,
+      "cli_minus_mcp_median": -0.1
+    },
+    "reported_outer_cost_usd": {
+      "mcp_total": 1.545716,
+      "cli_total": 1.134167,
+      "total": 2.679883,
+      "cli_minus_mcp": -0.411549,
+      "cli_percent_lower_than_mcp": 26.6251
+    },
+    "elapsed_seconds": {
+      "mcp_total": 358.2749,
+      "cli_total": 360.337103,
+      "cli_minus_mcp": 2.062203
+    },
+    "combined_tokens": {
+      "mcp_total": 636345,
+      "cli_total": 480189,
+      "total": 1116534,
+      "cli_minus_mcp": -156156,
+      "cli_percent_lower_than_mcp": 24.5395
+    },
+    "outer_turns": {
+      "mcp_total": 12,
+      "cli_total": 9
+    }
+  },
+  "excluded_operational_evidence": {
+    "task_id": "incident-investigation-dual-istio-001",
+    "reason": "required output path was inside the gated repository and therefore unwritable",
+    "mcp": {
+      "raw_score": 0.0,
+      "reported_outer_cost_usd": 1.515054,
+      "elapsed_seconds": 308.112102,
+      "combined_tokens": 542359,
+      "outer_turns": 9
+    },
+    "cli": {
+      "raw_score": 0.0,
+      "reported_outer_cost_usd": 2.09479,
+      "elapsed_seconds": 298.444112,
+      "combined_tokens": 711684,
+      "outer_turns": 12
+    },
+    "total_reported_outer_cost_usd": 3.609844,
+    "total_combined_tokens": 1254043
+  },
+  "all_attempts": {
+    "slots": 6,
+    "attempts": 6,
+    "retries": 0,
+    "reported_outer_cost_usd": 6.289727,
+    "sonnet_cost_usd": 6.27969,
+    "judge_cost_usd": 0.010037,
+    "combined_tokens": 2370577,
+    "finder_calls": 12,
+    "direct_retrieval_calls": 0,
+    "unique_cache_scopes": 6,
+    "cross_run_cache_read_tokens": 0
+  },
+  "spend_calibration": {
+    "forecast_reported_outer_cost_usd": 1.374762,
+    "actual_reported_outer_cost_usd": 6.289727,
+    "overrun_usd": 4.914965,
+    "actual_to_forecast_ratio": 4.575139,
+    "percent_over_forecast": 357.5139,
+    "explanation": "The calibration canary was not representative of the selected tasks. Outer-model context and output dominated reported cost; the two incident attempts alone consumed 1254043 combined tokens and $3.609844. Judge cost was only $0.010037 across all six attempts. Cache telemetry rules out cross-run token influence, and Sourcegraph does not expose Finder subagent cost in MCP metadata."
+  }
+}
