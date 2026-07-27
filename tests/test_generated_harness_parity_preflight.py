@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -341,3 +342,24 @@ def test_cli_prints_no_spend_evidence(
     payload = json.loads(capsys.readouterr().out)
     assert payload["paid_dispatch_authorized"] is False
     assert len(payload["slots"]) == 4
+
+
+def test_cli_entrypoint_imports_from_outside_the_repository(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(
+                PROJECT_ROOT
+                / "scripts"
+                / "orchestration"
+                / "generated_harness_parity_preflight.py"
+            ),
+            "--help",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr

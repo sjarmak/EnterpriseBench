@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-for import_path in (REPO_ROOT / "lib", REPO_ROOT / "scripts" / "infra"):
+for import_path in (
+    REPO_ROOT,
+    REPO_ROOT / "lib",
+    REPO_ROOT / "scripts" / "infra",
+):
     if str(import_path) not in sys.path:
         sys.path.insert(0, str(import_path))
 
