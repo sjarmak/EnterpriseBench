@@ -528,7 +528,7 @@ def task_dir_with_checks(task_dir: Path) -> Path:
 
 
 def _docker_cp_meta_capture():
-    """A _docker_cp side_effect that captures .meta content by filename.
+    """A _docker_cp side effect that captures staged verifier assets.
 
     .meta files are written via a tempfile + _docker_cp (same pattern as
     instruction.md), and the tempfile is unlinked immediately after the cp
@@ -538,7 +538,7 @@ def _docker_cp_meta_capture():
     writes: dict[str, str] = {}
 
     def _cp(src: str, dest: str) -> None:
-        if dest.endswith(".meta"):
+        if dest.endswith((".meta", ".sh")):
             writes[dest.rsplit("/", 1)[-1]] = Path(src).read_text()
 
     return _cp, writes
@@ -576,14 +576,18 @@ class TestSetupContainerWritesVerifierMeta:
 
             _setup_container("fake-container", task_dir_with_checks, task_data)
 
-        # Meta filename matches the .verifiers/<name>.sh naming (check_ stripped).
-        assert "api_migration.meta" in writes
-        assert "tests.meta" in writes
-        assert "weight=0.65" in writes["api_migration.meta"]
-        assert "timeout=90" in writes["api_migration.meta"]
+        # Runtime names are the canonical task.toml checkpoint names. They must
+        # also match expected_solution.json keys; verifier basenames are only
+        # implementation paths and may differ.
+        assert "update_apis.sh" in writes
+        assert "tests_pass.sh" in writes
+        assert "update_apis.meta" in writes
+        assert "tests_pass.meta" in writes
+        assert "weight=0.65" in writes["update_apis.meta"]
+        assert "timeout=90" in writes["update_apis.meta"]
         # Missing timeout_seconds falls back to the runner default (120).
-        assert "weight=0.35" in writes["tests.meta"]
-        assert "timeout=120" in writes["tests.meta"]
+        assert "weight=0.35" in writes["tests_pass.meta"]
+        assert "timeout=120" in writes["tests_pass.meta"]
 
     def test_no_meta_written_without_checkpoints(
         self, task_dir_with_checks: Path
@@ -597,4 +601,4 @@ class TestSetupContainerWritesVerifierMeta:
             _setup_container("fake-container", task_dir_with_checks, {"repos": []})
 
         # No checkpoint metadata → no .meta files (runner falls back to 1.0).
-        assert writes == {}
+        assert not any(name.endswith(".meta") for name in writes)

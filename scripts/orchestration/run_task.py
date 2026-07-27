@@ -1585,25 +1585,73 @@ def _checkpoint_verifier_name(verifier_path: str | Path) -> str:
     return name
 
 
-def _verifier_meta_by_name(checkpoints: list[dict]) -> dict[str, tuple[float, int]]:
-    """Map .verifiers/<name> -> (weight, timeout) from task toml checkpoints.
+def _verifier_specs_by_name(
+    checkpoints: list[dict],
+) -> dict[str, tuple[Path, float, int]]:
+    """Map canonical checkpoint names to verifier paths and runtime metadata."""
 
-    The key is derived the same way _setup_container names the copied verifier
-    (see _checkpoint_verifier_name). Weights come straight from the toml
-    (schema bounds each to [0, 1]; a separate offline audit enforces they sum
-    to 1.0); timeout falls back to test_runner.sh's 120s default when
-    unspecified.
-    """
-    meta: dict[str, tuple[float, int]] = {}
+    specs: dict[str, tuple[Path, float, int]] = {}
     for cp in checkpoints:
+        name = cp.get("name")
         verifier = cp.get("verifier")
-        if not verifier:
+        if not isinstance(name, str) or not name or not verifier:
             continue
-        name = _checkpoint_verifier_name(verifier)
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            raise ValueError(f"unsafe checkpoint name for verifier staging: {name!r}")
+        if name in specs:
+            raise ValueError(f"duplicate checkpoint name for verifier staging: {name!r}")
         weight = float(cp.get("weight", 1.0))
         timeout = int(cp.get("timeout_seconds", 120))
-        meta[name] = (weight, timeout)
-    return meta
+        specs[name] = (Path(verifier), weight, timeout)
+    return specs
+
+
+def _stage_checkpoint_verifiers(
+    container_id: str,
+    task_dir: Path,
+    checkpoints: list[dict],
+) -> int:
+    """Stage declared verifier scripts under canonical checkpoint names."""
+
+    specs = _verifier_specs_by_name(checkpoints)
+    task_root = task_dir.resolve()
+    for name, (relative_verifier, weight, timeout) in specs.items():
+        check_script = (task_root / relative_verifier).resolve()
+        try:
+            check_script.relative_to(task_root)
+        except ValueError as exc:
+            raise ValueError(
+                f"checkpoint {name!r} verifier escapes task directory"
+            ) from exc
+        if not check_script.is_file():
+            raise FileNotFoundError(
+                f"checkpoint {name!r} verifier does not exist: {check_script}"
+            )
+        destination = f"/workspace/.verifiers/{name}"
+        _docker_cp(str(check_script), f"{container_id}:{destination}.sh")
+        _docker_exec(container_id, ["chmod", "+x", f"{destination}.sh"])
+        _write_content_to_container(
+            container_id,
+            f"weight={weight}\ntimeout={timeout}\n",
+            f"{destination}.meta",
+            suffix=".meta",
+        )
+    return len(specs)
+
+
+def _stage_legacy_verifiers(container_id: str, task_dir: Path) -> int:
+    """Stage basename-derived verifiers only for tasks without declarations."""
+
+    checks_dir = task_dir / "checks"
+    if not checks_dir.is_dir():
+        return 0
+    check_scripts = sorted(checks_dir.glob("*.sh"))
+    for check_script in check_scripts:
+        name = _checkpoint_verifier_name(check_script)
+        destination = f"/workspace/.verifiers/{name}.sh"
+        _docker_cp(str(check_script), f"{container_id}:{destination}")
+        _docker_exec(container_id, ["chmod", "+x", destination])
+    return len(check_scripts)
 
 
 def _setup_container(
@@ -1642,43 +1690,29 @@ def _setup_container(
     # Create .verifiers directory and copy check scripts
     _docker_exec(container_id, ["mkdir", "-p", "/workspace/.verifiers"])
 
-    # Map checkpoint verifier name -> (weight, timeout) from the task toml so
-    # test_runner.sh can read real weights from .verifiers/<name>.meta. Keyed by
-    # the same name the .sh file is copied under (verifier basename, "check_"
-    # prefix stripped). Without this, every checkpoint defaults to weight 1.0,
-    # so task_score becomes the UNWEIGHTED mean of the checkpoints instead of
-    # the toml-weighted one — still in [0,1] since the scorer divides by total
-    # weight (eb_verify.score_contract v2), but no longer the number the task
-    # author specified. Before that contract it was worse: an unbounded 0-N sum.
-    checkpoint_meta = _verifier_meta_by_name(task_data.get("checkpoints", []))
-
-    checks_dir = task_dir / "checks"
-    if checks_dir.is_dir():
-        check_scripts = sorted(checks_dir.glob("*.sh"))
-        for check_script in check_scripts:
-            # Rename to just <name>.sh for test_runner.sh compatibility
-            name = _checkpoint_verifier_name(check_script)
-            dest = f"{container_id}:/workspace/.verifiers/{name}.sh"
-            _docker_cp(str(check_script), dest)
-            _docker_exec(
-                container_id, ["chmod", "+x", f"/workspace/.verifiers/{name}.sh"]
-            )
-            meta = checkpoint_meta.get(name)
-            if meta is not None:
-                weight, timeout = meta
-                _write_content_to_container(
-                    container_id,
-                    f"weight={weight}\ntimeout={timeout}\n",
-                    f"/workspace/.verifiers/{name}.meta",
-                    suffix=".meta",
-                )
+    # task.toml checkpoint names are the canonical runtime identity shared with
+    # expected_solution.json. Verifier basenames are implementation paths and
+    # must not silently rename scored checkpoints.
+    checkpoints = task_data.get("checkpoints", [])
+    if checkpoints:
+        staged_count = _stage_checkpoint_verifiers(
+            container_id, task_dir, checkpoints
+        )
         logger.info(
             "Copied %d check scripts into .verifiers/ (%d with weight metadata)",
-            len(check_scripts),
-            len(checkpoint_meta),
+            staged_count,
+            staged_count,
         )
     else:
-        logger.warning("No checks/ directory found in %s", task_dir)
+        staged_count = _stage_legacy_verifiers(container_id, task_dir)
+        if staged_count:
+            logger.warning(
+                "Copied %d basename-derived verifier scripts without checkpoint "
+                "metadata",
+                staged_count,
+            )
+        else:
+            logger.warning("No checks/ directory found in %s", task_dir)
 
     # Copy test_runner.sh as /workspace/test.sh
     if TEST_RUNNER_SH.exists():

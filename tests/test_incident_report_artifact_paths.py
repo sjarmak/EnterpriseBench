@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,56 @@ def test_nerdctl_report_contract_is_gate_compatible() -> None:
         OLD_REPORT_PATH not in source.read_text()
         for source in [*prompt_sources, *check_sources]
     )
+
+
+def test_nerdctl_runtime_checkpoint_names_reach_judge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task_data = run_task._parse_task(TASK_DIR / "task.toml")
+    specs = run_task._verifier_specs_by_name(task_data["checkpoints"])
+    expected = json.loads((TASK_DIR / "expected_solution.json").read_text())
+    assert set(specs) == set(expected["checkpoints"])
+
+    class FakeJudge:
+        provenance = {"backend": "test"}
+
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def evaluate_checkpoint(
+            self, *_args: object, **_kwargs: object
+        ) -> SimpleNamespace:
+            return SimpleNamespace(score=1.0, reasoning="test judge")
+
+    from eb_verify import judge as judge_module
+
+    monkeypatch.setattr(judge_module, "LLMJudge", FakeJudge)
+    monkeypatch.setattr(
+        run_task,
+        "_docker_exec",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, stdout="grounded incident report", stderr=""
+        ),
+    )
+    scores = {
+        "checkpoints": [
+            {
+                "name": name,
+                "weight": weight,
+                "score": 1.0,
+                "passed": True,
+            }
+            for name, (_verifier, weight, _timeout) in specs.items()
+        ]
+    }
+
+    judged = run_task._apply_llm_judge(
+        scores, TASK_DIR, "container", task_data
+    )
+
+    assert "verifier_infra_error" not in judged
+    assert judged["task_score"] == 1.0
+    assert all(checkpoint["judge_score"] == 1.0 for checkpoint in judged["checkpoints"])
 
 
 @pytest.mark.parametrize(

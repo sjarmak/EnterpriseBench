@@ -59,7 +59,12 @@ def verifier_input_paths(repo_root: Path, task_dir: Path) -> tuple[Path, ...]:
         repo_root / "scripts" / "sandbox" / "test_runner.sh",
         repo_root / "lib" / "eb_verify",
     ]
-    for path in (task_dir / "checks", task_dir / "ground_truth.json"):
+    for path in (
+        task_dir / "checks",
+        task_dir / "ground_truth.json",
+        task_dir / "expected_solution.json",
+        task_dir / "instruction.md",
+    ):
         if path.exists():
             paths.append(path)
     return tuple(paths)

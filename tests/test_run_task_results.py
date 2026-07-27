@@ -521,6 +521,24 @@ class TestStudyReceiptIntegration:
         assert before.harness_hash.startswith("sha256:")
         assert before.verifier_hash != after.verifier_hash
 
+    def test_input_provenance_changes_with_expected_solution_bytes(
+        self, tmp_path: Path
+    ) -> None:
+        task_toml = tmp_path / "task.toml"
+        task_toml.write_text('[task]\nid = "t1"\n')
+        checks = tmp_path / "checks"
+        checks.mkdir()
+        (checks / "check_one.sh").write_text("#!/bin/sh\nexit 0\n")
+        expected = tmp_path / "expected_solution.json"
+        expected.write_text('{"checkpoints":{"one":{"expected_solution":"a"}}}')
+        config = _make_config(task_toml=task_toml)
+
+        before = _capture_input_provenance(config, tmp_path)
+        expected.write_text('{"checkpoints":{"one":{"expected_solution":"b"}}}')
+        after = _capture_input_provenance(config, tmp_path)
+
+        assert before.verifier_hash != after.verifier_hash
+
     def test_empty_or_missing_provenance_inputs_fail_closed(
         self, tmp_path: Path
     ) -> None:

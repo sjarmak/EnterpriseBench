@@ -37,10 +37,20 @@ from code_finder_interface_pilot_preflight import (  # noqa: E402
 )
 from eb_study import StudySpec, file_hash  # noqa: E402
 from mode_gate import IneligibleTask, check_eligibility  # noqa: E402
-from run_task import WORKSPACE_DIR, _derive_graded_artifact_path  # noqa: E402
+from run_task import (  # noqa: E402
+    WORKSPACE_DIR,
+    _derive_graded_artifact_path,
+    _verifier_specs_by_name,
+)
 
-STUDY_ID = "rryas-code-finder-interface-supplement-v1"
-PARENT_STUDY_ID = "rryas-code-finder-interface-pilot-v1"
+STUDY_PARENTS = {
+    "rryas-code-finder-interface-supplement-v1": (
+        "rryas-code-finder-interface-pilot-v1"
+    ),
+    "rryas-code-finder-interface-supplement-v2": (
+        "rryas-code-finder-interface-supplement-v1"
+    ),
+}
 TASK_ID = "incident-investigation-dual-nerdctl-001"
 REPORT_PATH = "/workspace/agent_output/INCIDENT_REPORT.md"
 REQUIRED_PROMOTION_POLICY = "descriptive-interface-supplement-no-promotion"
@@ -215,6 +225,20 @@ def _load_supplement_task(
     )
 
     task_dir = task_toml.parent
+    expected = _load_object(
+        task_dir / "expected_solution.json", "expected solution"
+    )
+    expected_checkpoints = expected.get("checkpoints")
+    runtime_names = set(
+        _verifier_specs_by_name(task_data.get("checkpoints", []))
+    )
+    if (
+        not isinstance(expected_checkpoints, dict)
+        or runtime_names != set(expected_checkpoints)
+    ):
+        raise ValueError(
+            "supplement runtime checkpoint names do not match expected_solution"
+        )
     artifact_path = _derive_graded_artifact_path(task_dir)
     try:
         for arm, _fingerprint in REQUIRED_ARMS:
@@ -278,13 +302,14 @@ def validate_interface_supplement(
     spec = StudySpec.load(spec_path)
     manifest = _load_object(manifest_path, "supplement manifest")
     curated = _load_object(curated_manifest_path, "curated manifest")
+    study_id = manifest.get("study_id")
 
     if (
         manifest.get("schema_version") != 1
         or manifest.get("status") != "locked-supplement"
-        or manifest.get("study_id") != STUDY_ID
-        or manifest.get("parent_study_id") != PARENT_STUDY_ID
-        or spec.study_id != STUDY_ID
+        or study_id not in STUDY_PARENTS
+        or manifest.get("parent_study_id") != STUDY_PARENTS.get(study_id)
+        or spec.study_id != study_id
     ):
         raise ValueError("supplement manifest identity/status is not locked")
     if spec.task_manifest_hash != file_hash(manifest_path):

@@ -73,6 +73,19 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         '#!/usr/bin/env bash\nREPORT="${WORKSPACE:-/workspace}'
         '/agent_output/INCIDENT_REPORT.md"\n'
     )
+    (task_dir / "expected_solution.json").write_text(
+        json.dumps(
+            {
+                "task_id": TASK_ID,
+                "checkpoints": {
+                    "root_cause": {
+                        "expected_solution": "Identify the cross-repo root cause.",
+                        "evaluation_criteria": ["Cite repo one", "Cite repo two"],
+                    }
+                },
+            }
+        )
+    )
 
     curated = tmp_path / "candidate_manifest.json"
     curated.write_text(json.dumps({"status": "candidate", "task_ids": [TASK_ID]}))
@@ -280,6 +293,38 @@ def test_locked_supplement_compiles_two_spend_gated_slots(tmp_path: Path) -> Non
     assert evidence.paid_dispatch_authorized is False
 
 
+def test_corrected_v2_identity_preserves_the_same_locked_slots(
+    tmp_path: Path,
+) -> None:
+    spec_path, manifest_path, curated = _write_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["study_id"] = "rryas-code-finder-interface-supplement-v2"
+    manifest["parent_study_id"] = "rryas-code-finder-interface-supplement-v1"
+    manifest_path.write_text(json.dumps(manifest))
+    spec = json.loads(spec_path.read_text())
+    spec["study_id"] = manifest["study_id"]
+    spec["task_manifest_hash"] = file_hash(manifest_path)
+    spec_path.write_text(json.dumps(spec))
+
+    evidence = validate_interface_supplement(
+        spec_path=spec_path,
+        manifest_path=manifest_path,
+        curated_manifest_path=curated,
+        repo_root=tmp_path,
+        revision_validator=lambda _revision, _paths: True,
+        provenance_provider=lambda task_toml: InputProvenance(
+            task_hash=file_hash(task_toml),
+            harness_hash=PROVENANCE.harness_hash,
+            verifier_hash=PROVENANCE.verifier_hash,
+        ),
+        mirror_probe=lambda _repository: True,
+    )
+
+    assert evidence.study_id == manifest["study_id"]
+    assert len(evidence.slots) == 2
+    assert evidence.paid_dispatch_authorized is False
+
+
 @pytest.mark.parametrize(
     ("target", "field", "value", "message"),
     [
@@ -381,6 +426,39 @@ def test_delivered_instruction_cannot_conflict_with_report_path(
         )
 
 
+def test_runtime_checkpoint_names_must_match_expected_solution(
+    tmp_path: Path,
+) -> None:
+    spec, manifest, curated = _write_fixture(tmp_path)
+    expected = (
+        tmp_path
+        / "benchmarks"
+        / "incident_response"
+        / TASK_ID
+        / "expected_solution.json"
+    )
+    payload = json.loads(expected.read_text())
+    payload["checkpoints"] = {
+        "check_root_cause": payload["checkpoints"]["root_cause"]
+    }
+    expected.write_text(json.dumps(payload))
+
+    with pytest.raises(ValueError, match="runtime checkpoint names"):
+        validate_interface_supplement(
+            spec_path=spec,
+            manifest_path=manifest,
+            curated_manifest_path=curated,
+            repo_root=tmp_path,
+            revision_validator=lambda _revision, _paths: True,
+            provenance_provider=lambda task_toml: InputProvenance(
+                task_hash=file_hash(task_toml),
+                harness_hash=PROVENANCE.harness_hash,
+                verifier_hash=PROVENANCE.verifier_hash,
+            ),
+            mirror_probe=lambda _repository: True,
+        )
+
+
 def test_unavailable_mirror_fails_closed(tmp_path: Path) -> None:
     spec, manifest, curated = _write_fixture(tmp_path)
 
@@ -402,28 +480,49 @@ def test_unavailable_mirror_fails_closed(tmp_path: Path) -> None:
         )
 
 
-def test_repository_supplement_capsule_is_current_and_spend_gated() -> None:
+def test_invalid_v1_supplement_is_frozen_as_historical_evidence() -> None:
     study_dir = (
         PROJECT_ROOT
         / "configs"
         / "studies"
         / "rryas_code_finder_interface_supplement_v1"
     )
-
-    evidence = validate_interface_supplement(
-        spec_path=study_dir / "study_spec.json",
-        manifest_path=study_dir / "pilot_manifest.json",
-        curated_manifest_path=(
-            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
-        ),
-        repo_root=PROJECT_ROOT,
-        mirror_probe=lambda _repository: True,
+    results_dir = (
+        PROJECT_ROOT
+        / "results"
+        / "studies"
+        / "rryas_code_finder_interface_supplement_v1"
     )
 
-    assert evidence.task_ids == (TASK_ID,)
-    assert len(evidence.slots) == 2
-    assert evidence.forecast_reported_outer_spend_usd == 3.61
-    assert evidence.paid_dispatch_authorized is False
+    with pytest.raises(ValueError, match="current harness"):
+        validate_interface_supplement(
+            spec_path=study_dir / "study_spec.json",
+            manifest_path=study_dir / "pilot_manifest.json",
+            curated_manifest_path=(
+                PROJECT_ROOT
+                / "results"
+                / "rryas_dataset"
+                / "candidate_manifest.json"
+            ),
+            repo_root=PROJECT_ROOT,
+            mirror_probe=lambda _repository: True,
+        )
+
+    receipts = [
+        json.loads(line)
+        for line in (results_dir / "receipts.jsonl").read_text().splitlines()
+    ]
+    assert len(receipts) == 1
+    assert receipts[0]["trial"] == {
+        "study_id": "rryas-code-finder-interface-supplement-v1",
+        "task_id": TASK_ID,
+        "arm": "mcp_code_finder",
+        "repetition": 1,
+        "attempt": 1,
+    }
+    assert receipts[0]["status"] == "infra_invalid"
+    assert receipts[0]["failure_class"] == "verifier_infra_error"
+    assert receipts[0]["score"] is None
 
 
 def test_cli_prints_spend_gated_evidence(
