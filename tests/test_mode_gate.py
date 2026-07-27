@@ -231,6 +231,54 @@ def test_code_patch_is_eligible_in_ungated_arms():
     check_eligibility(task, "hybrid")  # must not raise
 
 
+@pytest.mark.parametrize("mode", sorted(GATED_MODES))
+def test_repo_local_graded_artifact_is_ineligible_for_gated_arm(mode):
+    with pytest.raises(IneligibleTask, match="/workspace/ansible/REPORT.md"):
+        check_eligibility(
+            _task(),
+            mode,
+            graded_artifact_path="/workspace/ansible/REPORT.md",
+            workspace=WORKSPACE,
+        )
+
+
+def test_agent_output_graded_artifact_is_eligible_for_gated_arm():
+    check_eligibility(
+        _task(),
+        "mcp_code_finder",
+        graded_artifact_path="/workspace/agent_output/answer.json",
+        workspace=WORKSPACE,
+    )
+
+
+def test_repo_local_graded_artifact_is_eligible_for_ungated_arm():
+    check_eligibility(
+        _task(),
+        "baseline",
+        graded_artifact_path="/workspace/ansible/REPORT.md",
+        workspace=WORKSPACE,
+    )
+
+
+def test_repo_path_prefix_collision_does_not_make_artifact_ineligible():
+    check_eligibility(
+        _task(),
+        "mcp_code_finder",
+        graded_artifact_path="/workspace/ansible-extra/REPORT.md",
+        workspace=WORKSPACE,
+    )
+
+
+def test_relative_graded_artifact_path_fails_closed():
+    with pytest.raises(ValueError, match="inside workspace"):
+        check_eligibility(
+            _task(),
+            "mcp_code_finder",
+            graded_artifact_path="ansible/REPORT.md",
+            workspace=WORKSPACE,
+        )
+
+
 def test_ineligible_task_records_an_invalid_run(tmp_path):
     """The ineligible exit must produce a saved INVALID record, not a crash."""
     toml = tmp_path / "task.toml"
@@ -249,6 +297,46 @@ def test_ineligible_task_records_an_invalid_run(tmp_path):
     assert result.failure_class == "task_ineligible"
     assert "code_patch" in result.error
     assert (out / "results.json").exists(), "INVALID run was never recorded"
+
+
+def test_repo_local_graded_artifact_exits_before_inference(tmp_path):
+    """A report inside a gated repo must be refused before any paid work."""
+    task_dir = tmp_path / "task"
+    checks_dir = task_dir / "checks"
+    checks_dir.mkdir(parents=True)
+    (task_dir / "task.toml").write_text(
+        (
+            '[task]\nid = "t-repo-report"\n'
+            'suite = "incident_response"\n'
+            'task_type = "incident_investigation"\n'
+            'difficulty = "medium"\n'
+            'session_type = "single"\n\n'
+            '[[repos]]\nurl = "https://github.com/acme/ansible"\n'
+            'rev = "main"\npath = "ansible"\n\n'
+            '[artifacts]\nrequired = ["answer"]\n'
+        ),
+        encoding="utf-8",
+    )
+    (checks_dir / "report.sh").write_text(
+        'REPORT=/workspace/ansible/REPORT.md\n',
+        encoding="utf-8",
+    )
+    out = tmp_path / "out"
+
+    result = run_task.run_task(
+        run_task.TaskRunConfig(
+            task_toml=task_dir / "task.toml",
+            mode="mcp_code_finder",
+            output_dir=out,
+        )
+    )
+
+    assert result.status == run_task.RUN_STATUS_INVALID
+    assert result.phase == "ineligible_for_mode"
+    assert result.failure_class == "task_ineligible"
+    assert "/workspace/ansible/REPORT.md" in result.error
+    assert result.agent_command is not None
+    assert result.timing.keys() == {"parse"}
 
 
 # --- wiring into run_task: the gate must be enforced, not merely attempted ---

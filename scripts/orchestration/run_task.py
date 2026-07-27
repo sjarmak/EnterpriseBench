@@ -4523,6 +4523,8 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 _save_results(result, task_data, output_dir, config)
                 return result
 
+        graded_artifact_path = _derive_graded_artifact_path(task_dir)
+
         # --- Arm eligibility: refuse the task, do not score it near zero ---
         # A code_patch task cannot be solved by an agent forbidden to read the
         # source it must patch. Scoring it anyway would drag the arm's mean down
@@ -4535,7 +4537,12 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
         # arm can run is a separate, still-open question: the reported run set
         # predates this check (EnterpriseBench-yxu3k).
         try:
-            check_eligibility(task_data, config.mode)
+            check_eligibility(
+                task_data,
+                config.mode,
+                graded_artifact_path=graded_artifact_path,
+                workspace=WORKSPACE_DIR,
+            )
         except IneligibleTask as exc:
             logger.error(
                 "Task %s is ineligible for mode=%s: %s", task_id, config.mode, exc
@@ -4986,7 +4993,6 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
             )
 
             # Extract tool-usage metadata from agent output
-            graded_artifact_path = _derive_graded_artifact_path(task_dir)
             graded_artifact_exists = None
             if harness_plan.name == "opencode":
                 graded_artifact_exists = (

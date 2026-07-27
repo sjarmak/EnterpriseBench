@@ -38,7 +38,7 @@ being reinterpreted as syntax.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from validation import validate_repo_entry
@@ -131,12 +131,42 @@ def lockdown_commands(dirs: list[str], scoring_group: str) -> list[list[str]]:
     ]
 
 
-def check_eligibility(task_data: dict, mode: str) -> None:
+def _gated_repo_for_artifact(
+    task_data: dict, graded_artifact_path: str, workspace: str
+) -> str | None:
+    artifact = PurePosixPath(graded_artifact_path)
+    workspace_path = PurePosixPath(workspace)
+    try:
+        artifact.relative_to(workspace_path)
+    except ValueError as exc:
+        raise ValueError(
+            f"graded artifact path must be inside workspace {workspace}: "
+            f"{graded_artifact_path}"
+        ) from exc
+    for repo_dir in repo_dirs(task_data, workspace):
+        repo = PurePosixPath(repo_dir)
+        try:
+            artifact.relative_to(repo)
+        except ValueError:
+            continue
+        return repo_dir
+    return None
+
+
+def check_eligibility(
+    task_data: dict,
+    mode: str,
+    *,
+    graded_artifact_path: str | None = None,
+    workspace: str | None = None,
+) -> None:
     """Raise :class:`IneligibleTask` if *task_data* cannot run in *mode*.
 
     Only ``required`` artifacts are consulted. ``required=["answer"],
     optional=["code_patch"]`` is a common and perfectly gate-able shape: the
-    answer is deliverable without ever opening the repo tree.
+    answer is deliverable without ever opening the repo tree. A concrete graded
+    artifact path is also checked when supplied because a task can call its
+    artifact ``answer`` while requiring that answer inside a gated repository.
     """
     if not should_gate(mode):
         return
@@ -148,4 +178,17 @@ def check_eligibility(task_data: dict, mode: str) -> None:
             f"task requires artifact(s) {blocked} that can only be produced by "
             f"reading and writing local source, which mode={mode!r} denies. "
             "Exclude this task from the arm rather than scoring it."
+        )
+    if graded_artifact_path is None:
+        return
+    if workspace is None:
+        raise ValueError("workspace is required with graded_artifact_path")
+    gated_repo = _gated_repo_for_artifact(
+        task_data, graded_artifact_path, workspace
+    )
+    if gated_repo is not None:
+        raise IneligibleTask(
+            f"task requires graded artifact {graded_artifact_path} inside gated "
+            f"repository {gated_repo}, which mode={mode!r} makes non-writable. "
+            "Exclude this task before inference rather than scoring a missing file."
         )

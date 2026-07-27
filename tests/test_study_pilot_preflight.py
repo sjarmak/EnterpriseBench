@@ -253,21 +253,25 @@ def test_spec_manifest_hash_drift_fails_closed(tmp_path: Path) -> None:
         )
 
 
-def test_repository_pilot_capsule_is_frozen_and_self_consistent() -> None:
+def test_superseded_repository_pilot_capsule_is_frozen_historically() -> None:
     study_dir = PROJECT_ROOT / "configs" / "studies" / "rryas_pilot_v1"
 
-    evidence = validate_pilot(
-        spec_path=study_dir / "study_spec.json",
-        manifest_path=study_dir / "pilot_manifest.json",
-        curated_manifest_path=(
-            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
-        ),
-        repo_root=PROJECT_ROOT,
-        closed_gates=frozenset(REQUIRED_GATES),
-    )
+    with pytest.raises(ValueError, match="does not match current harness"):
+        validate_pilot(
+            spec_path=study_dir / "study_spec.json",
+            manifest_path=study_dir / "pilot_manifest.json",
+            curated_manifest_path=(
+                PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
+            ),
+            repo_root=PROJECT_ROOT,
+            closed_gates=frozenset(REQUIRED_GATES),
+        )
 
-    assert evidence.study_id == "rryas-pilot-v1"
-    assert len(evidence.slots) == 3
+    spec = StudySpec.load(study_dir / "study_spec.json")
+    manifest = json.loads((study_dir / "pilot_manifest.json").read_text())
+    assert spec.study_id == "rryas-pilot-v1"
+    assert spec.task_manifest_hash == file_hash(study_dir / "pilot_manifest.json")
+    assert manifest["harness_hash"] == spec.harness
 
 
 def test_cli_prints_the_locked_evidence(
@@ -276,6 +280,22 @@ def test_cli_prints_the_locked_evidence(
     study_dir = PROJECT_ROOT / "configs" / "studies" / "rryas_pilot_v1"
     monkeypatch.setattr(
         preflight_module, "_closed_gate_ids", lambda: frozenset(REQUIRED_GATES)
+    )
+    manifest = json.loads((study_dir / "pilot_manifest.json").read_text())
+    task = manifest["tasks"][0]
+    monkeypatch.setattr(
+        preflight_module,
+        "_default_provenance_provider",
+        lambda _repo_root: lambda _task_toml: InputProvenance(
+            task_hash=task["task_hash"],
+            harness_hash=manifest["harness_hash"],
+            verifier_hash=manifest["verifier_hashes"][task["task_id"]],
+        ),
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "_git_revision_matches",
+        lambda _revision, _paths, *, repo_root: True,
     )
 
     assert (

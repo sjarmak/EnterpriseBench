@@ -18,7 +18,7 @@ from code_finder_interface_pilot_preflight import (  # noqa: E402
     validate_interface_pilot,
 )
 import code_finder_interface_pilot_preflight as preflight_module  # noqa: E402
-from eb_study import file_hash  # noqa: E402
+from eb_study import StudySpec, file_hash  # noqa: E402
 from study_run import InputProvenance  # noqa: E402
 
 PROVENANCE = InputProvenance(
@@ -308,24 +308,39 @@ def test_prior_run_or_failed_audit_fails_closed(tmp_path: Path) -> None:
         )
 
 
-def test_repository_capsule_is_frozen_and_self_consistent() -> None:
+def test_completed_repository_capsule_is_frozen_as_historical_evidence() -> None:
     study_dir = (
         PROJECT_ROOT / "configs" / "studies" / "rryas_code_finder_interface_pilot_v1"
     )
-
-    evidence = validate_interface_pilot(
-        spec_path=study_dir / "study_spec.json",
-        manifest_path=study_dir / "pilot_manifest.json",
-        curated_manifest_path=(
-            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
-        ),
-        repo_root=PROJECT_ROOT,
-        mirror_probe=lambda _repository: True,
+    results_dir = (
+        PROJECT_ROOT / "results" / "studies" / "rryas_code_finder_interface_pilot_v1"
     )
 
-    assert evidence.study_id == "rryas-code-finder-interface-pilot-v1"
-    assert len(evidence.task_ids) == 3
-    assert len(evidence.slots) == 6
+    with pytest.raises(ValueError, match="does not match current harness"):
+        validate_interface_pilot(
+            spec_path=study_dir / "study_spec.json",
+            manifest_path=study_dir / "pilot_manifest.json",
+            curated_manifest_path=(
+                PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
+            ),
+            repo_root=PROJECT_ROOT,
+            mirror_probe=lambda _repository: True,
+        )
+
+    receipts = [
+        json.loads(line)
+        for line in (results_dir / "receipts.jsonl").read_text().splitlines()
+    ]
+    analysis = json.loads((results_dir / "analysis.json").read_text())
+    spec_hash = StudySpec.load(study_dir / "study_spec.json").spec_hash
+    manifest_hash = file_hash(study_dir / "pilot_manifest.json")
+    assert len(receipts) == 6
+    assert {receipt["spec_hash"] for receipt in receipts} == {spec_hash}
+    assert {receipt["task_manifest_hash"] for receipt in receipts} == {
+        manifest_hash
+    }
+    assert analysis["provenance"]["spec_hash"] == spec_hash
+    assert analysis["provenance"]["task_manifest_hash"] == manifest_hash
 
 
 def test_cli_prints_locked_evidence(
@@ -337,6 +352,27 @@ def test_cli_prints_locked_evidence(
     )
     monkeypatch.setattr(
         preflight_module, "_default_mirror_probe", lambda _repository: True
+    )
+    manifest = json.loads((study_dir / "pilot_manifest.json").read_text())
+    by_task = {task["task_id"]: task for task in manifest["tasks"]}
+
+    def archived_provenance(task_toml: Path) -> InputProvenance:
+        task_id = task_toml.parent.name
+        return InputProvenance(
+            task_hash=by_task[task_id]["task_hash"],
+            harness_hash=manifest["harness_hash"],
+            verifier_hash=manifest["verifier_hashes"][task_id],
+        )
+
+    monkeypatch.setattr(
+        preflight_module,
+        "_default_provenance_provider",
+        lambda _repo_root: archived_provenance,
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "_git_revision_matches",
+        lambda _revision, _paths, *, repo_root: True,
     )
 
     assert (
