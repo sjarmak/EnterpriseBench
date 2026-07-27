@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-code-finder-interface-supplement-v2",
+  "status": "complete",
+  "comparison_eligible": true,
+  "provenance": {
+    "spec_hash": "sha256:e7ef6bb1c177f13b3d1c03230d4b463b5f83966b0cb25de119eea4e507875f2d",
+    "task_manifest_hash": "sha256:c97edda988acab3630d0e7085ed56db9182cc1dccd4ec6ab6a1a6df68327ce6a",
+    "dispatch_revision": "d29f5b403d4c403db782456432328c508185d484",
+    "harness_hash": "sha256:2209a38426a96e8e008fb540b0b909aef96523ee77aa492c38ff193c49fb1fee",
+    "verifier_hash": "sha256:6d2580ac3e77875f170ff127dfacec9b47e691674255d4b3b66155c71cf6088d",
+    "receipt_file_hash": "sha256:3157e0f6fce073e873bf3c88cfc6e4d0b92d8a34445ded1fbe5c2f281a5f1609",
+    "receipts": "receipts.jsonl"
+  },
+  "interpretation": {
+    "promotion": "none",
+    "inference": "descriptive_only_n3_after_valid_supplement",
+    "supplement_pairs": 1,
+    "combined_quality_eligible_pairs": 3,
+    "note": "The supplement repairs the incident-task coverage gap but remains too small for an interface ranking. The invalid v1 attempt is operational evidence only and is not carried into any comparison."
+  },
+  "supplement_pair": {
+    "task_id": "incident-investigation-dual-nerdctl-001",
+    "mcp": {
+      "score": 0.575,
+      "reported_outer_cost_usd": 0.815832,
+      "outer_tokens": 219848,
+      "combined_tokens": 325846,
+      "elapsed_seconds": 286.068624,
+      "outer_turns": 6,
+      "inner_turns": 8,
+      "inner_tool_calls": 26
+    },
+    "cli": {
+      "score": 0.575,
+      "reported_outer_cost_usd": 0.628063,
+      "outer_tokens": 165745,
+      "combined_tokens": 267932,
+      "elapsed_seconds": 278.649071,
+      "outer_turns": 5,
+      "inner_turns": 6,
+      "inner_tool_calls": 19
+    },
+    "cli_minus_mcp": {
+      "score": 0.0,
+      "reported_outer_cost_usd": -0.187769,
+      "outer_tokens": -54103,
+      "combined_tokens": -57914,
+      "elapsed_seconds": -7.419553
+    },
+    "cli_percent_lower_than_mcp": {
+      "reported_outer_cost_usd": 23.0156,
+      "outer_tokens": 24.6093,
+      "combined_tokens": 17.7734
+    }
+  },
+  "retrieval_and_isolation": {
+    "finder_calls": 4,
+    "finder_calls_per_arm": 2,
+    "finder_calls_per_expected_repository_per_arm": 1,
+    "direct_retrieval_calls": 0,
+    "unique_cache_scopes": 2,
+    "cross_run_cache_read_tokens": 0,
+    "all_receipts_valid": true,
+    "judge": {
+      "backend": "claude_code_cli",
+      "provider": "anthropic",
+      "model": "haiku",
+      "account": 1,
+      "executable": "claude-1"
+    }
+  },
+  "combined_quality_eligible": {
+    "tasks": [
+      {
+        "task_id": "dep-graph-dual-junit-mockito-001",
+        "source_study": "rryas-code-finder-interface-pilot-v1",
+        "mcp_score": 1.0,
+        "cli_score": 0.8,
+        "cli_minus_mcp": -0.2
+      },
+      {
+        "task_id": "error-prov-dual-otel-jaeger-001",
+        "source_study": "rryas-code-finder-interface-pilot-v1",
+        "mcp_score": 0.709,
+        "cli_score": 0.709,
+        "cli_minus_mcp": 0.0
+      },
+      {
+        "task_id": "incident-investigation-dual-nerdctl-001",
+        "source_study": "rryas-code-finder-interface-supplement-v2",
+        "mcp_score": 0.575,
+        "cli_score": 0.575,
+        "cli_minus_mcp": 0.0
+      }
+    ],
+    "score": {
+      "n_paired": 3,
+      "mcp_mean": 0.761333,
+      "cli_mean": 0.694667,
+      "cli_minus_mcp_mean": -0.066667,
+      "cli_minus_mcp_median": 0.0
+    },
+    "reported_outer_cost_usd": {
+      "mcp_total": 2.361548,
+      "cli_total": 1.76223,
+      "total": 4.123778,
+      "cli_minus_mcp": -0.599318,
+      "cli_percent_lower_than_mcp": 25.3782
+    },
+    "combined_tokens": {
+      "mcp_total": 962191,
+      "cli_total": 748121,
+      "total": 1710312,
+      "cli_minus_mcp": -214070,
+      "cli_percent_lower_than_mcp": 22.2482
+    },
+    "outer_turns": {
+      "mcp_total": 18,
+      "cli_total": 14
+    }
+  },
+  "supplement_spend": {
+    "forecast_reported_outer_cost_usd": 3.61,
+    "actual_reported_outer_cost_usd": 1.443895,
+    "under_forecast_usd": 2.166105,
+    "actual_to_forecast_ratio": 0.399971,
+    "percent_below_forecast": 60.0029,
+    "inner_finder_cost_available": false
+  },
+  "excluded_operational_evidence": {
+    "study_id": "rryas-code-finder-interface-supplement-v1",
+    "attempts_carried_forward": 0,
+    "reason": "runtime checkpoint-name mismatch caused verifier infrastructure invalidity before a score was recorded"
+  }
+}
