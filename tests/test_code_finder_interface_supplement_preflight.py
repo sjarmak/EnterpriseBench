@@ -243,9 +243,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 },
                 "evidence_policy": {
                     "exclude_parent_invalid_pair_from_quality": True,
-                    "parent_invalid_task_id": (
-                        "incident-investigation-dual-istio-001"
-                    ),
+                    "parent_invalid_task_id": ("incident-investigation-dual-istio-001"),
                     "promotion": "none",
                 },
                 "harness_hash": PROVENANCE.harness_hash,
@@ -484,9 +482,7 @@ def test_runtime_checkpoint_names_must_match_expected_solution(
         / "expected_solution.json"
     )
     payload = json.loads(expected.read_text())
-    payload["checkpoints"] = {
-        "check_root_cause": payload["checkpoints"]["root_cause"]
-    }
+    payload["checkpoints"] = {"check_root_cause": payload["checkpoints"]["root_cause"]}
     expected.write_text(json.dumps(payload))
 
     with pytest.raises(ValueError, match="runtime checkpoint names"):
@@ -520,8 +516,8 @@ def test_unavailable_mirror_fails_closed(tmp_path: Path) -> None:
                 harness_hash=PROVENANCE.harness_hash,
                 verifier_hash=PROVENANCE.verifier_hash,
             ),
-            mirror_probe=lambda repository: not repository.endswith(
-                "containerd--v1.7.24"
+            mirror_probe=lambda repository: (
+                not repository.endswith("containerd--v1.7.24")
             ),
         )
 
@@ -545,10 +541,7 @@ def test_invalid_v1_supplement_is_frozen_as_historical_evidence() -> None:
             spec_path=study_dir / "study_spec.json",
             manifest_path=study_dir / "pilot_manifest.json",
             curated_manifest_path=(
-                PROJECT_ROOT
-                / "results"
-                / "rryas_dataset"
-                / "candidate_manifest.json"
+                PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
             ),
             repo_root=PROJECT_ROOT,
             mirror_probe=lambda _repository: True,
@@ -571,29 +564,49 @@ def test_invalid_v1_supplement_is_frozen_as_historical_evidence() -> None:
     assert receipts[0]["score"] is None
 
 
-def test_repository_v2_supplement_is_current_and_spend_gated() -> None:
+def test_repository_v2_supplement_is_frozen_as_historical_evidence() -> None:
     study_dir = (
         PROJECT_ROOT
         / "configs"
         / "studies"
         / "rryas_code_finder_interface_supplement_v2"
     )
-
-    evidence = validate_interface_supplement(
-        spec_path=study_dir / "study_spec.json",
-        manifest_path=study_dir / "pilot_manifest.json",
-        curated_manifest_path=(
-            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
-        ),
-        repo_root=PROJECT_ROOT,
-        mirror_probe=lambda _repository: True,
+    results_dir = (
+        PROJECT_ROOT
+        / "results"
+        / "studies"
+        / "rryas_code_finder_interface_supplement_v2"
     )
 
-    assert evidence.study_id == "rryas-code-finder-interface-supplement-v2"
-    assert evidence.task_ids == (TASK_ID,)
-    assert len(evidence.slots) == 2
-    assert evidence.forecast_reported_outer_spend_usd == 3.61
-    assert evidence.paid_dispatch_authorized is False
+    with pytest.raises(ValueError, match="current harness"):
+        validate_interface_supplement(
+            spec_path=study_dir / "study_spec.json",
+            manifest_path=study_dir / "pilot_manifest.json",
+            curated_manifest_path=(
+                PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
+            ),
+            repo_root=PROJECT_ROOT,
+            mirror_probe=lambda _repository: True,
+        )
+
+    receipts = [
+        json.loads(line)
+        for line in (results_dir / "receipts.jsonl").read_text().splitlines()
+    ]
+    assert len(receipts) == 2
+    assert {receipt["trial"]["arm"] for receipt in receipts} == {
+        "mcp_code_finder",
+        "cli_code_finder",
+    }
+    assert {receipt["status"] for receipt in receipts} == {"valid"}
+    assert {receipt["score"] for receipt in receipts} == {0.575}
+    assert all(
+        receipt["tool_use"]["cache_isolation"]["valid"] is True
+        and receipt["tool_use"]["cache_isolation"]["cross_run_cache_read_tokens"] == 0
+        and receipt["tool_use"]["retrieval"]["code_finder_calls"] == 2
+        and receipt["tool_use"]["retrieval"]["direct_retrieval_calls"] == 0
+        for receipt in receipts
+    )
 
 
 def test_cli_prints_spend_gated_evidence(
