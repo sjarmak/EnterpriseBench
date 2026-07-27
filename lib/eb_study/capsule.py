@@ -45,8 +45,11 @@ class PairedValid:
     excluded: Mapping[str, tuple[str, ...]]
 
     @property
-    def cost_usd(self) -> float:
-        return round(sum(t.usage.cost_usd for t in self.trials if t.usage), 6)
+    def cost_usd(self) -> float | None:
+        costs = [t.usage.cost_usd for t in self.trials if t.usage is not None]
+        if len(costs) != len(self.trials) or any(cost is None for cost in costs):
+            return None
+        return round(sum(cost for cost in costs if cost is not None), 6)
 
     def mean_score(self, task_id: str, arm: str) -> float:
         """Mean score across the declared repetitions of one task/arm cell.
@@ -75,8 +78,15 @@ class AllAttempts:
     receipts: tuple[TrialReceipt, ...]
 
     @property
-    def cost_usd(self) -> float:
-        return round(sum(r.usage.cost_usd for r in self.receipts if r.usage), 6)
+    def cost_usd(self) -> float | None:
+        costs = [
+            receipt.usage.cost_usd
+            for receipt in self.receipts
+            if receipt.usage is not None
+        ]
+        if len(costs) != len(self.receipts) or any(cost is None for cost in costs):
+            return None
+        return round(sum(cost for cost in costs if cost is not None), 6)
 
     @property
     def count_by_status(self) -> dict[str, int]:
@@ -112,7 +122,9 @@ class StudyCapsule:
         for r in receipts:
             _check_belongs(spec, r)
             if r.trial.key in seen:
-                raise CapsuleIntegrityError(f"duplicate receipt for trial {r.trial.key}")
+                raise CapsuleIntegrityError(
+                    f"duplicate receipt for trial {r.trial.key}"
+                )
             seen.add(r.trial.key)
 
         return cls(spec=spec, receipts=tuple(receipts))

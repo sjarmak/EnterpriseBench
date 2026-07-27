@@ -25,9 +25,7 @@ REPOS = [
 
 
 @pytest.mark.parametrize("harness", ["codex", "opencode"])
-@pytest.mark.parametrize(
-    "mode", ["mcp_code_finder", "mcp_assisted", "cli_code_finder"]
-)
+@pytest.mark.parametrize("mode", ["mcp_code_finder", "mcp_assisted", "cli_code_finder"])
 def test_generated_harnesses_support_finder_modes(harness: str, mode: str) -> None:
     model = "gpt-5.6-sol" if harness == "codex" else "openrouter/moonshotai/kimi-k3"
 
@@ -243,6 +241,8 @@ def test_expected_sourcegraph_repositories_use_exact_mirror_names() -> None:
         "github.com/sg-evals/flask--2.3.3",
         "github.com/sg-evals/werkzeug--2.3.7",
     ]
+
+
 def test_cli_is_explicitly_a_separate_direct_retrieval_treatment() -> None:
     assert run_task.CLI_RETRIEVAL_TREATMENT == "direct_sgx_plus_local_source"
     assert run_task.CLI_FINDER_TREATMENT == "code_finder_via_sgx_no_mcp"

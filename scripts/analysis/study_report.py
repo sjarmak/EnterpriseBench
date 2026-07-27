@@ -82,7 +82,9 @@ def completeness(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
         "paired_tasks": len(paired.task_ids),
         "paired_trials": len(paired.trials),
         "declared_slots": len(capsule.spec.slots()),
-        "excluded_tasks": {tid: list(slots) for tid, slots in sorted(paired.excluded.items())},
+        "excluded_tasks": {
+            tid: list(slots) for tid, slots in sorted(paired.excluded.items())
+        },
         "receipts_by_status": capsule.all_attempts().count_by_status,
     }
 
@@ -117,27 +119,22 @@ def reward(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
 def economics(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
     """Both spend views, from the same receipts."""
 
-    paired_by_arm: dict[str, float] = {arm: 0.0 for arm in paired.arms}
-    for trial in paired.trials:
-        if trial.usage:
-            paired_by_arm[trial.trial.arm] += trial.usage.cost_usd
-
-    all_by_arm: dict[str, float] = {arm: 0.0 for arm in capsule.spec.arm_names}
-    for receipt in capsule.receipts:
-        if receipt.usage:
-            all_by_arm[receipt.trial.arm] += receipt.usage.cost_usd
+    paired_costs = _costs_by_arm(paired.trials, paired.arms)
+    all_costs = _costs_by_arm(capsule.receipts, capsule.spec.arm_names)
 
     return {
         "paired_valid": {
             "population": "prespecified comparable trials, complete in every declared arm",
             "total_cost_usd": paired.cost_usd,
-            "by_arm_usd": {arm: round(v, 6) for arm, v in sorted(paired_by_arm.items())},
+            "by_arm_usd": paired_costs["by_arm_usd"],
+            "cost_coverage": paired_costs["cost_coverage"],
             "trials": len(paired.trials),
         },
         "all_attempts": {
             "population": "every receipt the study emitted, valid or not",
             "total_cost_usd": capsule.all_attempts().cost_usd,
-            "by_arm_usd": {arm: round(v, 6) for arm, v in sorted(all_by_arm.items())},
+            "by_arm_usd": all_costs["by_arm_usd"],
+            "cost_coverage": all_costs["cost_coverage"],
             "receipts": len(capsule.receipts),
         },
     }
@@ -158,6 +155,35 @@ def build_report(capsule: StudyCapsule) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
+
+
+def _costs_by_arm(
+    receipts: tuple[Any, ...],
+    arms: tuple[str, ...],
+) -> dict[str, Any]:
+    known: dict[str, float] = {arm: 0.0 for arm in arms}
+    missing: dict[str, int] = {arm: 0 for arm in arms}
+    costed = 0
+    for receipt in receipts:
+        usage = receipt.usage
+        if usage is None or usage.cost_usd is None:
+            missing[receipt.trial.arm] += 1
+            continue
+        known[receipt.trial.arm] += usage.cost_usd
+        costed += 1
+    return {
+        "by_arm_usd": {
+            arm: None if missing[arm] else round(known[arm], 6) for arm in sorted(arms)
+        },
+        "cost_coverage": {
+            "costed_trials": costed,
+            "missing_cost_trials": len(receipts) - costed,
+        },
+    }
+
+
+def _format_cost(cost_usd: float | None) -> str:
+    return "unavailable" if cost_usd is None else f"${cost_usd:.2f}"
 
 
 def _distribution(scores: list[float]) -> dict[str, Any]:
@@ -258,8 +284,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     econ = report["economics"]
     print(
-        f"  paired-valid ${econ['paired_valid']['total_cost_usd']:.2f} · "
-        f"all-attempts ${econ['all_attempts']['total_cost_usd']:.2f}",
+        "  paired-valid "
+        f"{_format_cost(econ['paired_valid']['total_cost_usd'])} · "
+        "all-attempts "
+        f"{_format_cost(econ['all_attempts']['total_cost_usd'])}",
         file=sys.stderr,
     )
     return 0

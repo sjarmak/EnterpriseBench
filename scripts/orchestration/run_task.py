@@ -4171,6 +4171,7 @@ def _empty_tool_usage() -> dict[str, Any]:
         "total_input_tokens": 0,
         "total_output_tokens": 0,
         "cost_usd": 0.0,
+        "cost_usd_observed": False,
         "num_turns": 0,
         "mcp_tool_calls": 0,
         "mcp_tool_breakdown": {},
@@ -4254,6 +4255,7 @@ def _consume_opencode_usage(
         cost = part.get("cost")
         if _valid_cost(cost):
             usage["cost_usd"] += float(cost)
+            usage["cost_usd_observed"] = True
         usage["num_turns"] += 1
         counts["opencode_steps"] += 1
 

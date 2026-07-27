@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,7 +60,7 @@ class TrialUsage:
     """
 
     source: str
-    cost_usd: float
+    cost_usd: float | None
     model_usage: Mapping[str, Any]
 
     @classmethod
@@ -70,12 +71,21 @@ class TrialUsage:
         if not isinstance(source, str) or not source:
             raise ReceiptError("usage.source must be a non-empty string")
         cost = payload.get("cost_usd")
-        if not isinstance(cost, (int, float)) or isinstance(cost, bool) or cost < 0:
+        if cost is not None and (
+            not isinstance(cost, (int, float))
+            or isinstance(cost, bool)
+            or not math.isfinite(cost)
+            or cost < 0
+        ):
             raise ReceiptError(f"usage.cost_usd must be a number >= 0, got {cost!r}")
         model_usage = payload.get("model_usage")
         if not isinstance(model_usage, dict) or not model_usage:
             raise ReceiptError("usage.model_usage must be a non-empty object")
-        return cls(source=source, cost_usd=float(cost), model_usage=model_usage)
+        return cls(
+            source=source,
+            cost_usd=float(cost) if cost is not None else None,
+            model_usage=model_usage,
+        )
 
     def to_json(self) -> dict[str, Any]:
         return {

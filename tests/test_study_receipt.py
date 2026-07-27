@@ -162,6 +162,134 @@ class TestValidTrial:
     def test_tool_use_is_carried_through(self, tmp_path):
         assert emit(write_run(tmp_path)).tool_use == {"sgx_tool_calls": 7}
 
+    @pytest.mark.parametrize(
+        ("harness", "model", "cost"),
+        [
+            ("codex", "gpt-5.6-sol", None),
+            ("opencode", "openrouter/moonshotai/kimi-k3", 0.4211058),
+        ],
+    )
+    def test_provider_native_usage_emits_valid_generated_harness_receipt(
+        self, tmp_path, harness, model, cost
+    ):
+        run_dir = write_run(tmp_path, vendor=None)
+        results_path = run_dir / "results.json"
+        results = json.loads(results_path.read_text())
+        results["config"].update({"harness": harness, "model": model})
+        results["tool_usage"] = {
+            "total_input_tokens": 1200,
+            "total_output_tokens": 350,
+            "cost_usd": 0.0 if cost is None else cost,
+            "cost_usd_observed": harness == "opencode",
+            "provider_activity": {
+                "provider": harness,
+                "primary_unit": "turn" if harness == "codex" else "step",
+                "primary_count": 2,
+            },
+            "cache_isolation": {
+                "valid": True,
+                "cross_run_cache_read_tokens": 0,
+                "cache_write_tokens": 0,
+                "total_cache_read_tokens": 0,
+            },
+        }
+        results_path.write_text(json.dumps(results))
+        spec = make_spec(model=model, token_source="provider_native_usage")
+
+        receipt = emit(run_dir, spec)
+
+        assert receipt.status == "valid"
+        assert receipt.usage is not None
+        assert receipt.usage.source == "provider_native_usage"
+        assert receipt.usage.cost_usd == (
+            None if cost is None else pytest.approx(cost, abs=0.000001)
+        )
+        assert receipt.usage.model_usage[model] == {
+            "input_tokens": 1200,
+            "output_tokens": 350,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
+            "cost_usd": None if cost is None else pytest.approx(cost, abs=0.000001),
+        }
+
+    def test_opencode_native_usage_requires_observed_cost(self, tmp_path):
+        run_dir = write_run(tmp_path, vendor=None)
+        results_path = run_dir / "results.json"
+        results = json.loads(results_path.read_text())
+        results["config"].update(
+            {
+                "harness": "opencode",
+                "model": "openrouter/moonshotai/kimi-k3",
+            }
+        )
+        results["tool_usage"] = {
+            "total_input_tokens": 1200,
+            "total_output_tokens": 350,
+            "cost_usd": 0.0,
+            "cost_usd_observed": False,
+            "provider_activity": {"provider": "opencode"},
+            "cache_isolation": {
+                "valid": True,
+                "cross_run_cache_read_tokens": 0,
+                "cache_write_tokens": 0,
+                "total_cache_read_tokens": 0,
+            },
+        }
+        results_path.write_text(json.dumps(results))
+        spec = make_spec(
+            model="openrouter/moonshotai/kimi-k3",
+            token_source="provider_native_usage",
+        )
+
+        receipt = emit(run_dir, spec)
+
+        assert receipt.status == "infra_invalid"
+        assert receipt.failure_class == "authoritative_usage_missing"
+        assert receipt.usage is None
+
+    def test_provider_native_usage_requires_valid_cache_isolation(self, tmp_path):
+        run_dir = write_run(tmp_path, vendor=None)
+        results_path = run_dir / "results.json"
+        results = json.loads(results_path.read_text())
+        results["config"].update({"harness": "codex", "model": "gpt-5.6-sol"})
+        results["tool_usage"] = {
+            "total_input_tokens": 1200,
+            "total_output_tokens": 350,
+            "provider_activity": {"provider": "codex"},
+            "cache_isolation": {
+                "valid": False,
+                "cross_run_cache_read_tokens": 12,
+                "cache_write_tokens": 0,
+                "total_cache_read_tokens": 12,
+            },
+        }
+        results_path.write_text(json.dumps(results))
+        spec = make_spec(model="gpt-5.6-sol", token_source="provider_native_usage")
+
+        receipt = emit(run_dir, spec)
+
+        assert receipt.status == "infra_invalid"
+        assert receipt.failure_class == "authoritative_usage_missing"
+        assert receipt.usage is None
+
+    def test_provider_native_usage_rejects_model_drift(self, tmp_path):
+        run_dir = write_run(tmp_path, vendor=None)
+        results_path = run_dir / "results.json"
+        results = json.loads(results_path.read_text())
+        results["config"].update({"harness": "codex", "model": "unexpected-model"})
+        results["tool_usage"].update(
+            {
+                "total_input_tokens": 10,
+                "total_output_tokens": 20,
+                "provider_activity": {"provider": "codex"},
+            }
+        )
+        results_path.write_text(json.dumps(results))
+        spec = make_spec(model="gpt-5.6-sol", token_source="provider_native_usage")
+
+        with pytest.raises(ReceiptError, match="model"):
+            emit(run_dir, spec)
+
 
 class TestInvalidTrial:
     def test_an_invalid_status_produces_no_score(self, tmp_path):

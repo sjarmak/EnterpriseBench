@@ -31,6 +31,7 @@ comparison and is recorded as infrastructure-invalid instead.
 from __future__ import annotations
 
 import json
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -111,7 +112,7 @@ def build_receipt(
 
     trial = spec.trial_id(task_id, mode, repetition, attempt)
     vendor = parse_model_usage(run_dir / "agent_stdout.log")
-    usage = _usage(spec, vendor)
+    usage = _usage(spec, vendor, results)
     artifacts = {
         name: file_hash(run_dir / name)
         for name in ARTIFACT_NAMES
@@ -205,9 +206,15 @@ def _score(scores: dict[str, Any], trial_key: str) -> float:
         ) from exc
 
 
-def _usage(spec: StudySpec, vendor: VendorUsage | None) -> dict[str, Any] | None:
+def _usage(
+    spec: StudySpec,
+    vendor: VendorUsage | None,
+    results: dict[str, Any],
+) -> dict[str, Any] | None:
     """The vendor's per-model split, kept whole rather than collapsed to a total."""
 
+    if spec.token_source == "provider_native_usage":
+        return _provider_native_usage(spec, results)
     if vendor is None:
         return None
     return {
@@ -224,6 +231,103 @@ def _usage(spec: StudySpec, vendor: VendorUsage | None) -> dict[str, Any] | None
             for m in vendor.models
         },
     }
+
+
+def _provider_native_usage(
+    spec: StudySpec,
+    results: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Normalize Codex/OpenCode's native usage without inventing dollar cost."""
+
+    harness = _provider_harness(spec, results)
+    tool_usage = results.get("tool_usage")
+    if not isinstance(tool_usage, dict):
+        return None
+    activity = tool_usage.get("provider_activity")
+    if not isinstance(activity, dict) or activity.get("provider") != harness:
+        return None
+
+    tokens = _provider_tokens(tool_usage)
+    if tokens is None:
+        return None
+    input_tokens, output_tokens, cache_write, cache_read = tokens
+    cost = _provider_cost(harness, tool_usage)
+    if harness == "opencode" and cost is None:
+        return None
+
+    return {
+        "source": spec.token_source,
+        "cost_usd": round(cost, 6) if cost is not None else None,
+        "model_usage": {
+            spec.model: {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cache_write_tokens": cache_write,
+                "cache_read_tokens": cache_read,
+                "cost_usd": round(cost, 6) if cost is not None else None,
+            }
+        },
+    }
+
+
+def _provider_harness(spec: StudySpec, results: dict[str, Any]) -> str:
+    config = results.get("config")
+    if not isinstance(config, dict):
+        raise ReceiptError("provider_native_usage run has no config")
+    model = config.get("model")
+    if model != spec.model:
+        raise ReceiptError(
+            f"run model {model!r} does not match study model {spec.model!r}"
+        )
+    harness = config.get("harness")
+    if harness not in {"codex", "opencode"}:
+        raise ReceiptError(
+            "provider_native_usage requires harness 'codex' or 'opencode', "
+            f"got {harness!r}"
+        )
+    return harness
+
+
+def _provider_tokens(
+    tool_usage: dict[str, Any],
+) -> tuple[int, int, int, int] | None:
+    input_tokens = _nonnegative_int(tool_usage.get("total_input_tokens"))
+    output_tokens = _nonnegative_int(tool_usage.get("total_output_tokens"))
+    isolation = tool_usage.get("cache_isolation")
+    if input_tokens is None or output_tokens is None or not isinstance(isolation, dict):
+        return None
+    if (
+        isolation.get("valid") is not True
+        or _nonnegative_int(isolation.get("cross_run_cache_read_tokens")) != 0
+    ):
+        return None
+    cache_write = _nonnegative_int(isolation.get("cache_write_tokens"))
+    cache_read = _nonnegative_int(isolation.get("total_cache_read_tokens"))
+    if input_tokens + output_tokens == 0 or cache_write is None or cache_read is None:
+        return None
+    return input_tokens, output_tokens, cache_write, cache_read
+
+
+def _provider_cost(harness: str, tool_usage: dict[str, Any]) -> float | None:
+    if harness == "codex":
+        return None
+    if tool_usage.get("cost_usd_observed") is not True:
+        return None
+    cost = tool_usage.get("cost_usd")
+    if (
+        isinstance(cost, (int, float))
+        and not isinstance(cost, bool)
+        and math.isfinite(cost)
+        and cost >= 0
+    ):
+        return float(cost)
+    return None
+
+
+def _nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 
 def _read_results(run_dir: Path) -> dict[str, Any]:

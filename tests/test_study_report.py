@@ -29,7 +29,9 @@ from tests.test_study_capsule import (  # noqa: E402
 
 def capsule(spec=None, receipts=None) -> StudyCapsule:
     spec = spec or make_spec()
-    return StudyCapsule.build(spec, receipts if receipts is not None else full_receipts(spec))
+    return StudyCapsule.build(
+        spec, receipts if receipts is not None else full_receipts(spec)
+    )
 
 
 class TestProvenance:
@@ -74,9 +76,12 @@ class TestReward:
             if not (r.trial.task_id == "dep-traversal-001" and r.trial.arm == "cli")
         ]
         receipts += [
-            make_receipt(spec, "dep-traversal-001", "cli", rep, score=0.9) for rep in (1, 2)
+            make_receipt(spec, "dep-traversal-001", "cli", rep, score=0.9)
+            for rep in (1, 2)
         ]
-        contrast = build_report(capsule(spec, receipts))["reward"]["contrasts"]["cli_vs_baseline"]
+        contrast = build_report(capsule(spec, receipts))["reward"]["contrasts"][
+            "cli_vs_baseline"
+        ]
         assert contrast["n_paired"] == 2
         assert contrast["mean_delta"] == pytest.approx(0.2)
         assert contrast["pct_improved"] == 0.5
@@ -121,6 +126,43 @@ class TestEconomics:
         econ = build_report(capsule())["economics"]
         assert set(econ) == {"paired_valid", "all_attempts"}
 
+    def test_missing_provider_cost_is_disclosed_instead_of_counted_as_zero(self):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = next(
+            receipt
+            for receipt in receipts
+            if receipt.trial.task_id == "dep-traversal-001"
+            and receipt.trial.arm == "cli"
+            and receipt.trial.repetition == 1
+        )
+        receipts[receipts.index(target)] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": None,
+                "model_usage": {
+                    "gpt-5.6-sol": {
+                        "input_tokens": 10,
+                        "output_tokens": 20,
+                        "cost_usd": None,
+                    }
+                },
+            },
+        )
+
+        econ = build_report(capsule(spec, receipts))["economics"]
+
+        assert econ["paired_valid"]["total_cost_usd"] is None
+        assert econ["paired_valid"]["by_arm_usd"]["cli"] is None
+        assert econ["paired_valid"]["cost_coverage"] == {
+            "costed_trials": 11,
+            "missing_cost_trials": 1,
+        }
+
 
 class TestCli:
     def _write(self, tmp_path, spec, receipts):
@@ -136,23 +178,107 @@ class TestCli:
         spec = make_spec()
         spec_path, receipts_path = self._write(tmp_path, spec, full_receipts(spec))
         out = tmp_path / "report.json"
-        assert main(["--spec", str(spec_path), "--receipts", str(receipts_path), "--output", str(out)]) == 0
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 0
+        )
         assert json.loads(out.read_text())["completeness"]["paired_tasks"] == 2
+
+    def test_writes_a_report_when_provider_cost_is_unavailable(
+        self, tmp_path, capsys
+    ):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = receipts[0]
+        receipts[0] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": None,
+                "model_usage": {
+                    spec.model: {
+                        "input_tokens": 10,
+                        "output_tokens": 20,
+                        "cost_usd": None,
+                    }
+                },
+            },
+        )
+        spec_path, receipts_path = self._write(tmp_path, spec, receipts)
+        out = tmp_path / "report.json"
+
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 0
+        )
+        assert json.loads(out.read_text())["economics"]["paired_valid"][
+            "total_cost_usd"
+        ] is None
+        assert "paired-valid unavailable" in capsys.readouterr().err
 
     def test_a_missing_arm_fails_closed_and_writes_nothing(self, tmp_path):
         spec = make_spec()
         receipts = [r for r in full_receipts(spec) if r.trial.arm != "cli"]
         spec_path, receipts_path = self._write(tmp_path, spec, receipts)
         out = tmp_path / "report.json"
-        assert main(["--spec", str(spec_path), "--receipts", str(receipts_path), "--output", str(out)]) == 2
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 2
+        )
         assert not out.exists()
 
     def test_a_foreign_receipt_fails_closed(self, tmp_path):
         """The historical failure: unrelated runs joining the promoted artifact."""
 
         spec = make_spec()
-        foreign = make_receipt(make_spec(study_id="smoke-run"), "dep-traversal-001", "cli", 1)
-        spec_path, receipts_path = self._write(tmp_path, spec, full_receipts(spec) + [foreign])
+        foreign = make_receipt(
+            make_spec(study_id="smoke-run"), "dep-traversal-001", "cli", 1
+        )
+        spec_path, receipts_path = self._write(
+            tmp_path, spec, full_receipts(spec) + [foreign]
+        )
         out = tmp_path / "report.json"
-        assert main(["--spec", str(spec_path), "--receipts", str(receipts_path), "--output", str(out)]) == 2
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 2
+        )
         assert not out.exists()

@@ -144,6 +144,7 @@ def test_sums_opencode_step_finish_usage_and_cost(tmp_path: Path) -> None:
     assert usage["total_input_tokens"] == 1600
     assert usage["total_output_tokens"] == 500
     assert usage["cost_usd"] == 0.03
+    assert usage["cost_usd_observed"] is True
     assert usage["num_turns"] == 2
     assert usage["mcp_tool_calls"] == 1
     assert usage["mcp_tool_breakdown"] == {"keyword_search": 1}
@@ -156,6 +157,26 @@ def test_sums_opencode_step_finish_usage_and_cost(tmp_path: Path) -> None:
         "agent_messages": 1,
         "file_changes": 1,
     }
+
+
+def test_opencode_missing_cost_is_not_reported_as_zero_cost(tmp_path: Path) -> None:
+    output_dir = _write_log(
+        tmp_path,
+        [
+            {
+                "type": "step_finish",
+                "part": {
+                    "type": "step-finish",
+                    "tokens": {"input": 1000, "output": 200},
+                },
+            }
+        ],
+    )
+
+    usage = _extract_tool_usage(output_dir)
+
+    assert usage["cost_usd"] == 0.0
+    assert usage["cost_usd_observed"] is False
 
 
 def test_opencode_lifecycle_distinguishes_canonical_write_from_unfinished_step(
@@ -293,6 +314,7 @@ def test_malformed_provider_usage_is_ignored_instead_of_crashing(
         "total_input_tokens": 0,
         "total_output_tokens": 0,
         "cost_usd": 0.0,
+        "cost_usd_observed": False,
         "num_turns": 2,
         "mcp_tool_calls": 0,
         "mcp_tool_breakdown": {},

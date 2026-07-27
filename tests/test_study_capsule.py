@@ -133,6 +133,11 @@ class TestStudySpec:
         with pytest.raises(SpecError, match="token_source"):
             StudySpec.from_json(spec_payload(token_source="trace"))
 
+    def test_provider_native_usage_is_an_explicit_token_source(self):
+        spec = make_spec(token_source="provider_native_usage")
+
+        assert spec.token_source == "provider_native_usage"
+
     def test_baseline_must_be_a_declared_arm(self):
         with pytest.raises(SpecError, match="baseline_arm"):
             StudySpec.from_json(spec_payload(baseline_arm="hybrid"))
@@ -229,6 +234,49 @@ class TestTrialReceipt:
         assert receipt.usage is not None
         assert receipt.usage.cost_usd == 1.25
 
+    def test_unknown_dollar_cost_is_not_coerced_to_zero(self):
+        receipt = make_receipt(
+            make_spec(),
+            "dep-traversal-001",
+            "baseline",
+            1,
+            usage={
+                "source": "provider_native_usage",
+                "cost_usd": None,
+                "model_usage": {
+                    "gpt-5.6-sol": {
+                        "input_tokens": 10,
+                        "output_tokens": 20,
+                        "cost_usd": None,
+                    }
+                },
+            },
+        )
+
+        assert receipt.usage is not None
+        assert receipt.usage.cost_usd is None
+
+    @pytest.mark.parametrize("cost", [float("nan"), float("inf"), float("-inf")])
+    def test_nonfinite_dollar_cost_is_refused(self, cost):
+        with pytest.raises(ReceiptError, match="cost_usd"):
+            make_receipt(
+                make_spec(),
+                "dep-traversal-001",
+                "baseline",
+                1,
+                usage={
+                    "source": "provider_native_usage",
+                    "cost_usd": cost,
+                    "model_usage": {
+                        "gpt-5.6-sol": {
+                            "input_tokens": 10,
+                            "output_tokens": 20,
+                            "cost_usd": cost,
+                        }
+                    },
+                },
+            )
+
     def test_score_outside_the_unit_interval_is_refused(self):
         """A weighted score re-divided by checkpoint count lands here."""
 
@@ -258,7 +306,9 @@ class TestAppendOnlyLog:
         receipt = make_receipt(spec, "dep-traversal-001", "cli", 1)
         append_receipt(path, receipt)
         with pytest.raises(ReceiptError, match="append-only"):
-            append_receipt(path, make_receipt(spec, "dep-traversal-001", "cli", 1, score=0.9))
+            append_receipt(
+                path, make_receipt(spec, "dep-traversal-001", "cli", 1, score=0.9)
+            )
 
     def test_a_malformed_line_fails_the_whole_log(self, tmp_path):
         path = tmp_path / "receipts.jsonl"
@@ -286,11 +336,15 @@ class TestCapsuleIntegrity:
         spec = make_spec()
         other = make_spec(study_id="smoke-run")
         with pytest.raises(CapsuleIntegrityError, match="belongs to study"):
-            StudyCapsule.build(spec, [make_receipt(other, "dep-traversal-001", "cli", 1)])
+            StudyCapsule.build(
+                spec, [make_receipt(other, "dep-traversal-001", "cli", 1)]
+            )
 
     def test_receipt_from_an_edited_spec_is_refused(self):
         spec = make_spec()
-        stale = make_receipt(spec, "dep-traversal-001", "cli", 1, spec_hash="sha256:stale")
+        stale = make_receipt(
+            spec, "dep-traversal-001", "cli", 1, spec_hash="sha256:stale"
+        )
         with pytest.raises(CapsuleIntegrityError, match="spec hash"):
             StudyCapsule.build(spec, [stale])
 
@@ -400,7 +454,11 @@ class TestPairedValid:
         receipts = [
             r
             for r in full_receipts(spec)
-            if not (r.trial.task_id == "dep-traversal-002" and r.trial.arm == "cli" and r.trial.repetition == 2)
+            if not (
+                r.trial.task_id == "dep-traversal-002"
+                and r.trial.arm == "cli"
+                and r.trial.repetition == 2
+            )
         ]
         paired = StudyCapsule.build(spec, receipts).paired_valid()
         assert paired.task_ids == ("dep-traversal-001",)
@@ -450,7 +508,9 @@ class TestAttemptPolicy:
         spec = make_spec()
         receipts = full_receipts(spec)
         receipts.append(
-            make_receipt(spec, "dep-traversal-001", "cli", 1, score=0.99, trial={"attempt": 2})
+            make_receipt(
+                spec, "dep-traversal-001", "cli", 1, score=0.99, trial={"attempt": 2}
+            )
         )
         with pytest.raises(CapsuleIntegrityError, match="valid attempts"):
             StudyCapsule.build(spec, receipts).paired_valid()
@@ -459,7 +519,9 @@ class TestAttemptPolicy:
         spec = make_spec(attempt_policy="first_valid_attempt")
         receipts = full_receipts(spec)
         receipts.append(
-            make_receipt(spec, "dep-traversal-001", "cli", 1, score=0.99, trial={"attempt": 2})
+            make_receipt(
+                spec, "dep-traversal-001", "cli", 1, score=0.99, trial={"attempt": 2}
+            )
         )
         paired = StudyCapsule.build(spec, receipts).paired_valid()
         admitted = [
@@ -477,7 +539,11 @@ class TestAttemptPolicy:
         receipts = [
             r
             for r in full_receipts(spec)
-            if not (r.trial.task_id == "dep-traversal-001" and r.trial.arm == "cli" and r.trial.repetition == 1)
+            if not (
+                r.trial.task_id == "dep-traversal-001"
+                and r.trial.arm == "cli"
+                and r.trial.repetition == 1
+            )
         ]
         receipts.append(
             make_receipt(
@@ -491,7 +557,9 @@ class TestAttemptPolicy:
             )
         )
         receipts.append(
-            make_receipt(spec, "dep-traversal-001", "cli", 1, score=0.4, trial={"attempt": 2})
+            make_receipt(
+                spec, "dep-traversal-001", "cli", 1, score=0.4, trial={"attempt": 2}
+            )
         )
         paired = StudyCapsule.build(spec, receipts).paired_valid()
         assert paired.task_ids == spec.task_ids

@@ -42,7 +42,7 @@ ATTEMPT_POLICIES = ("all_valid_repetitions", "first_valid_attempt")
 #: The only token source a paired comparison may be billed from. The trace
 #: re-derivation records one model per run and no sub-agent usage, so it cannot
 #: price a multi-model run however carefully it is summed.
-TOKEN_SOURCES = ("sdk_model_usage",)
+TOKEN_SOURCES = ("sdk_model_usage", "provider_native_usage")
 
 _REQUIRED_FIELDS = (
     "study_id",
@@ -78,17 +78,24 @@ class Arm:
     @classmethod
     def from_json(cls, payload: Any) -> "Arm":
         if not isinstance(payload, dict):
-            raise SpecError(f"arm entry must be an object, got {type(payload).__name__}")
+            raise SpecError(
+                f"arm entry must be an object, got {type(payload).__name__}"
+            )
         name = payload.get("name")
         fingerprint = payload.get("capability_fingerprint")
         if not isinstance(name, str) or not name:
             raise SpecError("arm.name must be a non-empty string")
         if not isinstance(fingerprint, str) or not fingerprint:
-            raise SpecError(f"arm {name!r}: capability_fingerprint must be a non-empty string")
+            raise SpecError(
+                f"arm {name!r}: capability_fingerprint must be a non-empty string"
+            )
         return cls(name=name, capability_fingerprint=fingerprint)
 
     def to_json(self) -> dict[str, str]:
-        return {"name": self.name, "capability_fingerprint": self.capability_fingerprint}
+        return {
+            "name": self.name,
+            "capability_fingerprint": self.capability_fingerprint,
+        }
 
 
 @dataclass(frozen=True)
@@ -172,7 +179,9 @@ class StudySpec:
 
         baseline = payload["baseline_arm"]
         if baseline not in arm_names:
-            raise SpecError(f"baseline_arm {baseline!r} is not one of the declared arms {arm_names}")
+            raise SpecError(
+                f"baseline_arm {baseline!r} is not one of the declared arms {arm_names}"
+            )
 
         task_ids = tuple(_require_list(payload, "task_ids"))
         if not task_ids:
@@ -181,7 +190,9 @@ class StudySpec:
             raise SpecError("spec declares duplicate task_ids")
         for tid in task_ids:
             if not isinstance(tid, str) or not tid:
-                raise SpecError(f"task_ids entry must be a non-empty string, got {tid!r}")
+                raise SpecError(
+                    f"task_ids entry must be a non-empty string, got {tid!r}"
+                )
 
         policy = payload["attempt_policy"]
         if policy not in ATTEMPT_POLICIES:
@@ -192,7 +203,9 @@ class StudySpec:
 
         token_source = payload["token_source"]
         if token_source not in TOKEN_SOURCES:
-            raise SpecError(f"token_source {token_source!r} is not one of {TOKEN_SOURCES}")
+            raise SpecError(
+                f"token_source {token_source!r} is not one of {TOKEN_SOURCES}"
+            )
 
         return cls(
             study_id=_require_str(payload, "study_id"),
@@ -281,7 +294,9 @@ class StudySpec:
             for rep in range(1, self.repetitions + 1)
         )
 
-    def trial_id(self, task_id: str, arm: str, repetition: int, attempt: int) -> TrialID:
+    def trial_id(
+        self, task_id: str, arm: str, repetition: int, attempt: int
+    ) -> TrialID:
         """Compile one trial ID, refusing coordinates the spec never declared."""
 
         if task_id not in self.task_ids:
