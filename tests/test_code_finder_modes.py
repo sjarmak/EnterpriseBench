@@ -25,14 +25,16 @@ REPOS = [
 
 
 @pytest.mark.parametrize("harness", ["codex", "opencode"])
-@pytest.mark.parametrize("mode", ["mcp_code_finder", "mcp_assisted"])
+@pytest.mark.parametrize(
+    "mode", ["mcp_code_finder", "mcp_assisted", "cli_code_finder"]
+)
 def test_generated_harnesses_support_finder_modes(harness: str, mode: str) -> None:
     model = "gpt-5.6-sol" if harness == "codex" else "openrouter/moonshotai/kimi-k3"
 
     plan = build_harness_plan(harness, model=model, mode=mode)
 
     if harness == "codex":
-        assert "--ignore-user-config" not in plan.command
+        assert ("--ignore-user-config" in plan.command) == (mode == "cli_code_finder")
     assert plan.model == model
 
 

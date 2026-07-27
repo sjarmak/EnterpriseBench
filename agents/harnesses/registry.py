@@ -13,9 +13,10 @@ OPENCODE_NPM_PACKAGE = "opencode-ai@1.18.4"
 HARNESS_NAMES = ("claude", "codex", "opencode")
 _BASELINE_MODE = "baseline"
 _MCP_MODES = frozenset({"mcp_only", "mcp_code_finder", "mcp_assisted"})
+_CLI_MODES = frozenset({"cli", "cli_code_finder"})
 _SUPPORTED_MODES = {
-    "codex": frozenset({_BASELINE_MODE, *_MCP_MODES, "cli"}),
-    "opencode": frozenset({_BASELINE_MODE, *_MCP_MODES, "cli"}),
+    "codex": frozenset({_BASELINE_MODE, *_MCP_MODES, *_CLI_MODES}),
+    "opencode": frozenset({_BASELINE_MODE, *_MCP_MODES, *_CLI_MODES}),
 }
 _SAFE_LABEL_CHARS = re.compile(r"[^a-z0-9]+")
 
