@@ -938,6 +938,7 @@ def _build_instruction_text(
         return None
 
     instruction_text = instruction.read_text()
+    graded_artifact_path = _derive_graded_artifact_path(task_dir)
 
     # Build the retrieval preamble for non-baseline modes. MCP modes get
     # the Sourcegraph MCP preamble; the cli arm gets the sgx CLI preamble (same
@@ -946,9 +947,17 @@ def _build_instruction_text(
     preamble_parts: list[str] = []
     if mode in (*MCP_MODES, *CLI_MODES):
         if mode in CLI_MODES:
-            retrieval_preamble = _build_cli_preamble(mode=mode, repos=repos)
+            retrieval_preamble = _build_cli_preamble(
+                mode=mode,
+                repos=repos,
+                artifact_path=graded_artifact_path,
+            )
         else:
-            retrieval_preamble = _build_mcp_preamble(mode=mode, repos=repos)
+            retrieval_preamble = _build_mcp_preamble(
+                mode=mode,
+                repos=repos,
+                artifact_path=graded_artifact_path,
+            )
         if retrieval_preamble:
             preamble_parts.append(retrieval_preamble)
 
@@ -959,7 +968,7 @@ def _build_instruction_text(
             preamble_parts.append(instruction_mcp.read_text())
 
     output_appendix = _build_output_appendix(
-        _derive_graded_artifact_path(task_dir),
+        graded_artifact_path,
         require_grounded_citations,
     )
 

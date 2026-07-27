@@ -60,7 +60,7 @@ Your task:
    client.Pull -> containerd Unpacker.Unpack -> empty platforms -> error
    -> surfaced as `nerdctl pull` failure.
 
-Write your incident report to `/workspace/nerdctl/INCIDENT_REPORT.md` with:
+Write your incident report to `/workspace/agent_output/INCIDENT_REPORT.md` with:
 - Root cause (file and function in each repo)
 - Full pull-and-unpack chain with the exact branching point
 - Affected components

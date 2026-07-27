@@ -61,6 +61,16 @@ def test_assisted_finder_prompt_requires_bootstrap_then_allows_follow_up() -> No
     assert "`read_file`" in prompt
 
 
+@pytest.mark.parametrize("mode", ["mcp_code_finder", "mcp_assisted"])
+def test_mcp_finder_prompt_uses_the_graded_artifact_path(mode: str) -> None:
+    report = "/workspace/agent_output/INCIDENT_REPORT.md"
+
+    prompt = build_system_prompt(mode, REPOS, artifact_path=report)
+
+    assert report in prompt
+    assert "/workspace/agent_output/answer.json" not in prompt
+
+
 def test_cli_finder_prompt_requires_same_retrieval_contract_without_mcp() -> None:
     prompt = run_task._build_cli_preamble("cli_code_finder", REPOS)
 
@@ -70,6 +80,17 @@ def test_cli_finder_prompt_requires_same_retrieval_contract_without_mcp() -> Non
     assert "Do not use any other `sgx` retrieval command" in prompt
     assert "Use `sgx` to search and read code" not in prompt
     assert "repo:^github.com/sg-evals/flask--3.1.0$" in prompt
+
+
+def test_cli_finder_prompt_uses_the_graded_artifact_path() -> None:
+    report = "/workspace/agent_output/INCIDENT_REPORT.md"
+
+    prompt = run_task._build_cli_preamble(
+        "cli_code_finder", REPOS, artifact_path=report
+    )
+
+    assert report in prompt
+    assert "/workspace/agent_output/answer.json" not in prompt
 
 
 def test_direct_mcp_prompt_prohibits_code_finder_to_keep_arms_distinct() -> None:

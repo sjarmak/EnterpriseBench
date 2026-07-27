@@ -24,6 +24,7 @@ sys.path.insert(0, str(_REPO_ROOT / "scripts" / "infra"))
 from mirror_naming import derive_mirror_name  # noqa: E402
 
 logger = logging.getLogger(__name__)
+DEFAULT_ARTIFACT_PATH = "/workspace/agent_output/answer.json"
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +141,7 @@ def _build_repo_scope(repos: Sequence[dict]) -> str:
 def build_system_prompt(
     mode: str,
     repos: Sequence[dict] | None = None,
+    artifact_path: str = DEFAULT_ARTIFACT_PATH,
 ) -> str:
     """Assemble the sgx CLI-arm preamble.
 
@@ -147,6 +149,7 @@ def build_system_prompt(
         mode: Expected to be "cli" or "cli_code_finder". Any other mode
             returns an empty string.
         repos: List of repo dicts from task.toml (each with url, rev, path).
+        artifact_path: Exact file path consumed by the task's verifier.
 
     Returns:
         The assembled preamble string, or empty string for non-cli modes.
@@ -169,7 +172,7 @@ def build_system_prompt(
         parts.append(repo_scope)
 
     if mode == "cli_code_finder":
-        parts.append(_FINDER_USAGE)
+        parts.append(_FINDER_USAGE.replace(DEFAULT_ARTIFACT_PATH, artifact_path))
     else:
         parts.append(_DIRECT_CLI_RULE)
         parts.append(_USAGE)

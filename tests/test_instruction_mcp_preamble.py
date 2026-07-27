@@ -142,6 +142,23 @@ class TestBaselineMode:
         assert "/workspace/agent_output/answer.json" not in result
         assert "```json" not in result
 
+    @pytest.mark.parametrize("mode", ["mcp_code_finder", "cli_code_finder"])
+    def test_bespoke_markdown_path_reaches_finder_preamble(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        (tmp_path / "instruction.md").write_text("Investigate the incident.")
+        checks = tmp_path / "checks"
+        checks.mkdir()
+        (checks / "check_report.sh").write_text(
+            'REPORT="$WORKSPACE/agent_output/INCIDENT_REPORT.md"\n'
+        )
+
+        result = _build_instruction_text(tmp_path, mode, repos=[])
+
+        assert result is not None
+        assert "/workspace/agent_output/INCIDENT_REPORT.md" in result
+        assert "/workspace/agent_output/answer.json" not in result
+
     def test_bespoke_json_checker_path_does_not_impose_answer_schema(
         self, tmp_path: Path
     ) -> None:

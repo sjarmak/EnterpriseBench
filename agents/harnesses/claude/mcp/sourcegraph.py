@@ -21,6 +21,7 @@ sys.path.insert(0, str(_REPO_ROOT / "scripts" / "infra"))
 from mirror_naming import derive_mirror_name  # noqa: E402
 
 logger = logging.getLogger(__name__)
+DEFAULT_ARTIFACT_PATH = "/workspace/agent_output/answer.json"
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +237,7 @@ def _build_repo_scope(repos: Sequence[dict]) -> str:
 def build_system_prompt(
     mode: str,
     repos: Sequence[dict] | None = None,
+    artifact_path: str = DEFAULT_ARTIFACT_PATH,
 ) -> str:
     """Assemble the full MCP preamble for a given tool-access mode.
 
@@ -243,6 +245,7 @@ def build_system_prompt(
         mode: One of "mcp_only", "hybrid", "mcp_code_finder", or
             "mcp_assisted". Returns empty string for "baseline".
         repos: List of repo dicts from task.toml (each with url, rev, path keys).
+        artifact_path: Exact file path consumed by the task's verifier.
 
     Returns:
         The assembled preamble string, or empty string for baseline mode.
@@ -266,10 +269,14 @@ def build_system_prompt(
         parts.append(repo_scope)
 
     if mode == "mcp_code_finder":
-        parts.append(_FORCED_FINDER_WORKFLOW)
+        parts.append(
+            _FORCED_FINDER_WORKFLOW.replace(DEFAULT_ARTIFACT_PATH, artifact_path)
+        )
         return "\n\n".join(parts)
     if mode == "mcp_assisted":
-        parts.append(_ASSISTED_FINDER_WORKFLOW)
+        parts.append(
+            _ASSISTED_FINDER_WORKFLOW.replace(DEFAULT_ARTIFACT_PATH, artifact_path)
+        )
     elif mode == "mcp_only":
         parts.append(_DIRECT_MCP_RULE)
 
