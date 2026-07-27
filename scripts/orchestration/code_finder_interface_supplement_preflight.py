@@ -51,6 +51,23 @@ STUDY_PARENTS = {
         "rryas-code-finder-interface-supplement-v1"
     ),
 }
+V2_STUDY_ID = "rryas-code-finder-interface-supplement-v2"
+REQUIRED_V2_CORRECTION = {
+    "trigger_study_id": "rryas-code-finder-interface-supplement-v1",
+    "trigger_arm": "mcp_code_finder",
+    "trigger_attempt": 1,
+    "failure_class": "verifier_infra_error",
+    "failure_reason": "runtime_checkpoint_name_mismatch",
+    "correction_scope": [
+        "stage verifier scripts under task.toml checkpoint names",
+        "hash expected_solution.json and instruction.md as verifier inputs",
+        "validate runtime checkpoint names against expected_solution.json",
+    ],
+    "agent_prompt_changed": False,
+    "task_selection_changed": False,
+    "agent_output_or_score_used_to_choose_correction": False,
+    "paid_attempts_carried_forward": 0,
+}
 TASK_ID = "incident-investigation-dual-nerdctl-001"
 REPORT_PATH = "/workspace/agent_output/INCIDENT_REPORT.md"
 REQUIRED_PROMOTION_POLICY = "descriptive-interface-supplement-no-promotion"
@@ -312,6 +329,13 @@ def validate_interface_supplement(
         or spec.study_id != study_id
     ):
         raise ValueError("supplement manifest identity/status is not locked")
+    if (
+        study_id == V2_STUDY_ID
+        and manifest.get("infrastructure_correction") != REQUIRED_V2_CORRECTION
+    ):
+        raise ValueError(
+            "v2 supplement infrastructure correction does not match locked ledger"
+        )
     if spec.task_manifest_hash != file_hash(manifest_path):
         raise ValueError("StudySpec task_manifest_hash does not match supplement manifest")
     if manifest.get("curated_manifest_hash") != file_hash(curated_manifest_path):

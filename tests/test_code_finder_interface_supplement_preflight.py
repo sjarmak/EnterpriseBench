@@ -25,6 +25,22 @@ PROVENANCE = InputProvenance(
     verifier_hash="sha256:verifier",
 )
 TASK_ID = "incident-investigation-dual-nerdctl-001"
+V2_CORRECTION = {
+    "trigger_study_id": "rryas-code-finder-interface-supplement-v1",
+    "trigger_arm": "mcp_code_finder",
+    "trigger_attempt": 1,
+    "failure_class": "verifier_infra_error",
+    "failure_reason": "runtime_checkpoint_name_mismatch",
+    "correction_scope": [
+        "stage verifier scripts under task.toml checkpoint names",
+        "hash expected_solution.json and instruction.md as verifier inputs",
+        "validate runtime checkpoint names against expected_solution.json",
+    ],
+    "agent_prompt_changed": False,
+    "task_selection_changed": False,
+    "agent_output_or_score_used_to_choose_correction": False,
+    "paid_attempts_carried_forward": 0,
+}
 
 
 def _task_toml() -> str:
@@ -300,6 +316,7 @@ def test_corrected_v2_identity_preserves_the_same_locked_slots(
     manifest = json.loads(manifest_path.read_text())
     manifest["study_id"] = "rryas-code-finder-interface-supplement-v2"
     manifest["parent_study_id"] = "rryas-code-finder-interface-supplement-v1"
+    manifest["infrastructure_correction"] = V2_CORRECTION
     manifest_path.write_text(json.dumps(manifest))
     spec = json.loads(spec_path.read_text())
     spec["study_id"] = manifest["study_id"]
@@ -323,6 +340,35 @@ def test_corrected_v2_identity_preserves_the_same_locked_slots(
     assert evidence.study_id == manifest["study_id"]
     assert len(evidence.slots) == 2
     assert evidence.paid_dispatch_authorized is False
+
+
+def test_corrected_v2_requires_the_outcome_independent_fix_ledger(
+    tmp_path: Path,
+) -> None:
+    spec_path, manifest_path, curated = _write_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["study_id"] = "rryas-code-finder-interface-supplement-v2"
+    manifest["parent_study_id"] = "rryas-code-finder-interface-supplement-v1"
+    manifest_path.write_text(json.dumps(manifest))
+    spec = json.loads(spec_path.read_text())
+    spec["study_id"] = manifest["study_id"]
+    spec["task_manifest_hash"] = file_hash(manifest_path)
+    spec_path.write_text(json.dumps(spec))
+
+    with pytest.raises(ValueError, match="infrastructure correction"):
+        validate_interface_supplement(
+            spec_path=spec_path,
+            manifest_path=manifest_path,
+            curated_manifest_path=curated,
+            repo_root=tmp_path,
+            revision_validator=lambda _revision, _paths: True,
+            provenance_provider=lambda task_toml: InputProvenance(
+                task_hash=file_hash(task_toml),
+                harness_hash=PROVENANCE.harness_hash,
+                verifier_hash=PROVENANCE.verifier_hash,
+            ),
+            mirror_probe=lambda _repository: True,
+        )
 
 
 @pytest.mark.parametrize(
