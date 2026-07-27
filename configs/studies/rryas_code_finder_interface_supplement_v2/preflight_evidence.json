@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-code-finder-interface-supplement-v2",
+  "dispatch_revision": "d29f5b403d4c403db782456432328c508185d484",
+  "paid_model_calls": 0,
+  "superseded_v1_attempt": {
+    "study_id": "rryas-code-finder-interface-supplement-v1",
+    "arm": "mcp_code_finder",
+    "attempt": 1,
+    "status": "infra_invalid",
+    "failure_class": "verifier_infra_error",
+    "failure_reason": "runtime_checkpoint_name_mismatch",
+    "score": null,
+    "reported_outer_cost_usd": 0.678396,
+    "code_finder_calls": 2,
+    "cross_run_cache_read_tokens": 0,
+    "receipt_file_hash": "sha256:3cabe493628aca84c9bb74f7c94028d9a591430bb179170d89dad82f64ae57ce",
+    "carried_forward_to_v2": false,
+    "cli_v1_dispatched": false
+  },
+  "infrastructure_correction": {
+    "runtime_staging": "verifier scripts and metadata now use task.toml checkpoint names rather than verifier-file stems",
+    "provenance": "expected_solution.json and instruction.md now contribute to verifier_hash",
+    "preflight": "runtime checkpoint names must exactly equal expected_solution.json keys",
+    "agent_prompt_changed": false,
+    "task_selection_changed": false,
+    "agent_output_or_score_used_to_choose_correction": false
+  },
+  "selection_audit": {
+    "candidate_selection_locked_before_v1_agent_output": true,
+    "selected_task": "incident-investigation-dual-nerdctl-001",
+    "prior_run_count_at_selection": 0,
+    "prompt_leakage": "pass",
+    "v1_agent_output_exists_at_v2_lock": true
+  },
+  "artifact_contract": {
+    "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+    "gated_modes_eligible": [
+      "mcp_code_finder",
+      "cli_code_finder"
+    ],
+    "finder_prompt_uses_exact_graded_path": true,
+    "conflicting_answer_json_guidance": false
+  },
+  "sourcegraph_mirror_probe": {
+    "method": "sg_cli.py ls against the configured Sourcegraph endpoint",
+    "passed": true,
+    "repositories": [
+      "github.com/sg-evals/nerdctl--v2.0.0",
+      "github.com/sg-evals/containerd--v1.7.24"
+    ]
+  },
+  "task_preflight": {
+    "no_build_dry_runs": [
+      {
+        "task_id": "incident-investigation-dual-nerdctl-001",
+        "mode": "mcp_code_finder",
+        "phase": "dry_run_complete",
+        "success": true,
+        "report_path_occurrences": 3,
+        "conflicting_answer_json_occurrences": 0
+      },
+      {
+        "task_id": "incident-investigation-dual-nerdctl-001",
+        "mode": "cli_code_finder",
+        "phase": "dry_run_complete",
+        "success": true,
+        "report_path_occurrences": 3,
+        "conflicting_answer_json_occurrences": 0
+      }
+    ],
+    "runtime_checkpoint_contract": {
+      "passed": true,
+      "canonical_names": [
+        "root_cause_identification",
+        "error_chain_trace",
+        "affected_components",
+        "remediation_proposal"
+      ],
+      "judge_setup_test": "pass"
+    }
+  },
+  "verifier_discrimination": {
+    "passed": true,
+    "checkpoints_checked": 4,
+    "prompt_only_score": 0.0,
+    "oracle_score": 1.0
+  },
+  "quality_gates": {
+    "focused_tests": {
+      "passed": 232,
+      "failed": 0
+    },
+    "supplement_preflight_coverage_percent": 85,
+    "full_repository_tests": {
+      "passed": 6355,
+      "failed": 196,
+      "skipped": 4,
+      "expected_failed": 16,
+      "failure_class": "same pre-existing missing benchmark fixtures and unrelated verifier assertions",
+      "tracking_issue": "EnterpriseBench-dg2y3"
+    }
+  },
+  "locked_capsule": {
+    "spec_hash": "sha256:e7ef6bb1c177f13b3d1c03230d4b463b5f83966b0cb25de119eea4e507875f2d",
+    "task_manifest_hash": "sha256:c97edda988acab3630d0e7085ed56db9182cc1dccd4ec6ab6a1a6df68327ce6a",
+    "harness_hash": "sha256:2209a38426a96e8e008fb540b0b909aef96523ee77aa492c38ff193c49fb1fee",
+    "verifier_hash": "sha256:6d2580ac3e77875f170ff127dfacec9b47e691674255d4b3b66155c71cf6088d",
+    "live_mirror_validation": "pass",
+    "paid_dispatch_authorized": false
+  },
+  "spend_summary": {
+    "paid_slots": 2,
+    "max_attempts_per_slot": 1,
+    "forecast_reported_outer_spend_usd": 3.61,
+    "prior_invalid_operational_spend_usd": 0.678396,
+    "inner_finder_cost": "unavailable",
+    "paid_dispatch_requires_new_explicit_authorization": true
+  }
+}

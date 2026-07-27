@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-code-finder-interface-supplement-v1",
+  "status": "superseded_after_infrastructure_invalid_attempt",
+  "comparison_eligible": false,
+  "attempts": [
+    {
+      "task_id": "incident-investigation-dual-nerdctl-001",
+      "arm": "mcp_code_finder",
+      "repetition": 1,
+      "attempt": 1,
+      "status": "infra_invalid",
+      "failure_class": "verifier_infra_error",
+      "failure_reason": "runtime_checkpoint_name_mismatch",
+      "score": null,
+      "reported_outer_cost_usd": 0.678396,
+      "outer_tokens": 174896,
+      "combined_tokens": 317725,
+      "outer_turns": 6,
+      "code_finder_calls": 2,
+      "direct_retrieval_calls": 0,
+      "cross_run_cache_read_tokens": 0,
+      "repository_scope_valid": true
+    }
+  ],
+  "cli_attempt_dispatched": false,
+  "receipt_file_hash": "sha256:3cabe493628aca84c9bb74f7c94028d9a591430bb179170d89dad82f64ae57ce",
+  "invalidity": {
+    "detail": "run_task staged verifier scripts under basename-derived names while task.toml and expected_solution.json used canonical checkpoint names",
+    "missing_expected_solution_mappings": [
+      "root_cause",
+      "error_chain",
+      "remediation"
+    ],
+    "agent_prompt_changed_by_fix": false,
+    "task_selection_changed_by_fix": false,
+    "agent_output_or_score_used_to_choose_fix": false
+  },
+  "superseded_by": "rryas-code-finder-interface-supplement-v2",
+  "quality_policy": "The immutable v1 receipt and trace are operational evidence only. No score, arm comparison, retry, or paid attempt is carried into v2."
+}

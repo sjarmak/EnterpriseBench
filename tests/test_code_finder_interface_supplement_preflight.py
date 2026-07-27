@@ -571,6 +571,31 @@ def test_invalid_v1_supplement_is_frozen_as_historical_evidence() -> None:
     assert receipts[0]["score"] is None
 
 
+def test_repository_v2_supplement_is_current_and_spend_gated() -> None:
+    study_dir = (
+        PROJECT_ROOT
+        / "configs"
+        / "studies"
+        / "rryas_code_finder_interface_supplement_v2"
+    )
+
+    evidence = validate_interface_supplement(
+        spec_path=study_dir / "study_spec.json",
+        manifest_path=study_dir / "pilot_manifest.json",
+        curated_manifest_path=(
+            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
+        ),
+        repo_root=PROJECT_ROOT,
+        mirror_probe=lambda _repository: True,
+    )
+
+    assert evidence.study_id == "rryas-code-finder-interface-supplement-v2"
+    assert evidence.task_ids == (TASK_ID,)
+    assert len(evidence.slots) == 2
+    assert evidence.forecast_reported_outer_spend_usd == 3.61
+    assert evidence.paid_dispatch_authorized is False
+
+
 def test_cli_prints_spend_gated_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
