@@ -30,7 +30,7 @@
     "comparison_rule": "valid proof and cross_run_cache_read_tokens == 0",
     "legacy_evidence": "comparison_ineligible"
   },
-  "harness_hash": "sha256:09cce46ae860d6f2a7d65d9bff3a34bc345167dd9032a58308dbf0d5d763a491",
+  "harness_hash": "sha256:8b46f41db9ef27c58bfb9281b79fd4611cd16d8a6b5b2b4b600070b54211f7b4",
   "verifier_hashes": {
     "dep-traversal-003": "sha256:9e046e38c5a32ee17d591b91174cdaa7af47156de0decc4881407c33dde9f150"
   }

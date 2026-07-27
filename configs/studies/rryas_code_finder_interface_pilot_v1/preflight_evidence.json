@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-code-finder-interface-pilot-v1",
+  "dispatch_revision": "0fcf82a38134ee26146fef996368c27348003595",
+  "paid_model_calls": 0,
+  "capsule_validation": {
+    "passed": true,
+    "spec_hash": "sha256:77d98481d287c045cc8526d19c244846c679de5676a7d9ca60898534981386a3",
+    "manifest_hash": "sha256:ee5fbbc8cafc6d85752b7b344b641c11576ee72bc06b577dbe10dd969ad32e2e",
+    "slots": 6
+  },
+  "sourcegraph_mirror_probe": {
+    "method": "sgx ls against the configured Sourcegraph endpoint",
+    "passed": true,
+    "repositories": [
+      "github.com/sg-evals/junit5--r5.10.0",
+      "github.com/sg-evals/mockito--v5.5.0",
+      "github.com/sg-evals/opentelemetry-go--v1.21.0",
+      "github.com/sg-evals/jaeger--v1.51.0",
+      "github.com/sg-evals/istio--1.20.0",
+      "github.com/sg-evals/envoy--v1.28.0"
+    ]
+  },
+  "task_preflight": {
+    "initial_negative_control": {
+      "task_id": "dep-graph-dual-junit-mockito-001",
+      "mode": "mcp_code_finder",
+      "configuration": "dry-run with --no-build",
+      "expected_result": "setup_failed because the mode-specific image did not exist",
+      "paid_model_calls": 0
+    },
+    "build_enabled_dry_runs": [
+      {
+        "task_id": "dep-graph-dual-junit-mockito-001",
+        "mode": "mcp_code_finder",
+        "phase": "dry_run_complete",
+        "success": true
+      },
+      {
+        "task_id": "dep-graph-dual-junit-mockito-001",
+        "mode": "cli_code_finder",
+        "phase": "dry_run_complete",
+        "success": true
+      },
+      {
+        "task_id": "error-prov-dual-otel-jaeger-001",
+        "mode": "mcp_code_finder",
+        "phase": "dry_run_complete",
+        "success": true
+      },
+      {
+        "task_id": "error-prov-dual-otel-jaeger-001",
+        "mode": "cli_code_finder",
+        "phase": "dry_run_complete",
+        "success": true
+      },
+      {
+        "task_id": "incident-investigation-dual-istio-001",
+        "mode": "mcp_code_finder",
+        "phase": "dry_run_complete",
+        "success": true
+      },
+      {
+        "task_id": "incident-investigation-dual-istio-001",
+        "mode": "cli_code_finder",
+        "phase": "dry_run_complete",
+        "success": true
+      }
+    ]
+  },
+  "task_specific_prompt_contract": {
+    "passed": true,
+    "cells_checked": 6,
+    "requirements": {
+      "all_expected_mirrors_present": true,
+      "exactly_once_per_repository": true,
+      "local_source_denied": true,
+      "direct_retrieval_denied": true,
+      "interface_correct": true
+    }
+  },
+  "verifier_discrimination": {
+    "passed": true,
+    "tasks_checked": 3,
+    "checkpoints_checked": 10,
+    "prompt_only_checkpoint_scores": {
+      "minimum": 0.0,
+      "maximum": 0.0
+    },
+    "oracle_checkpoint_scores": {
+      "minimum": 1.0,
+      "maximum": 1.0
+    }
+  },
+  "quality_gates": {
+    "interface_preflight_tests": {
+      "passed": 12,
+      "failed": 0,
+      "coverage_percent": 80
+    },
+    "affected_regression_tests": {
+      "passed": 242,
+      "failed": 0
+    },
+    "full_repository_tests": {
+      "passed": 6323,
+      "failed": 196,
+      "skipped": 4,
+      "expected_failed": 16,
+      "failure_class": "pre-existing missing benchmark fixtures and unrelated verifier assertions",
+      "tracking_issue": "EnterpriseBench-dg2y3"
+    }
+  },
+  "spend_summary": {
+    "paid_slots": 6,
+    "max_attempts_per_slot": 1,
+    "calibrated_reported_outer_spend_usd": 1.38,
+    "calibration_exact_usd": 1.374762,
+    "inner_finder_cost": "unavailable",
+    "paid_dispatch_requires_separate_explicit_authorization": true
+  }
+}

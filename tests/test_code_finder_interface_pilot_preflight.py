@@ -17,6 +17,7 @@ from code_finder_interface_pilot_preflight import (  # noqa: E402
     REQUIRED_TREATMENT_CONTRACT,
     validate_interface_pilot,
 )
+import code_finder_interface_pilot_preflight as preflight_module  # noqa: E402
 from eb_study import file_hash  # noqa: E402
 from study_run import InputProvenance  # noqa: E402
 
@@ -305,3 +306,62 @@ def test_prior_run_or_failed_audit_fails_closed(tmp_path: Path) -> None:
             provenance_provider=_provenance,
             mirror_probe=lambda _repository: True,
         )
+
+
+def test_repository_capsule_is_frozen_and_self_consistent() -> None:
+    study_dir = (
+        PROJECT_ROOT / "configs" / "studies" / "rryas_code_finder_interface_pilot_v1"
+    )
+
+    evidence = validate_interface_pilot(
+        spec_path=study_dir / "study_spec.json",
+        manifest_path=study_dir / "pilot_manifest.json",
+        curated_manifest_path=(
+            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
+        ),
+        repo_root=PROJECT_ROOT,
+        mirror_probe=lambda _repository: True,
+    )
+
+    assert evidence.study_id == "rryas-code-finder-interface-pilot-v1"
+    assert len(evidence.task_ids) == 3
+    assert len(evidence.slots) == 6
+
+
+def test_cli_prints_locked_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    study_dir = (
+        PROJECT_ROOT / "configs" / "studies" / "rryas_code_finder_interface_pilot_v1"
+    )
+    monkeypatch.setattr(
+        preflight_module, "_default_mirror_probe", lambda _repository: True
+    )
+
+    assert (
+        preflight_module.main(
+            [
+                "--spec",
+                str(study_dir / "study_spec.json"),
+                "--manifest",
+                str(study_dir / "pilot_manifest.json"),
+                "--curated-manifest",
+                str(
+                    PROJECT_ROOT
+                    / "results"
+                    / "rryas_dataset"
+                    / "candidate_manifest.json"
+                ),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out)["slots"] == [
+        ["dep-graph-dual-junit-mockito-001", "mcp_code_finder", 1],
+        ["dep-graph-dual-junit-mockito-001", "cli_code_finder", 1],
+        ["error-prov-dual-otel-jaeger-001", "mcp_code_finder", 1],
+        ["error-prov-dual-otel-jaeger-001", "cli_code_finder", 1],
+        ["incident-investigation-dual-istio-001", "mcp_code_finder", 1],
+        ["incident-investigation-dual-istio-001", "cli_code_finder", 1],
+    ]

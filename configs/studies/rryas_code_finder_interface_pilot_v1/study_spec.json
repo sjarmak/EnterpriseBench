@@ -1,0 +1,30 @@
+{
+  "study_id": "rryas-code-finder-interface-pilot-v1",
+  "schema_version": 1,
+  "task_manifest_hash": "sha256:ee5fbbc8cafc6d85752b7b344b641c11576ee72bc06b577dbe10dd969ad32e2e",
+  "task_ids": [
+    "dep-graph-dual-junit-mockito-001",
+    "error-prov-dual-otel-jaeger-001",
+    "incident-investigation-dual-istio-001"
+  ],
+  "arms": [
+    {
+      "name": "mcp_code_finder",
+      "capability_fingerprint": "sourcegraph-mcp-code-finder:exactly-once-per-repository:local-repos-denied:direct-tools-denied:beta-telemetry-required:proxy-v1:cache-isolated:v2"
+    },
+    {
+      "name": "cli_code_finder",
+      "capability_fingerprint": "sourcegraph-cli-code-finder:exactly-once-per-repository:local-repos-denied:direct-tools-denied:beta-telemetry-required:proxy-v1:no-mcp-registration:cache-isolated:v2"
+    }
+  ],
+  "baseline_arm": "mcp_code_finder",
+  "repetitions": 1,
+  "attempt_policy": "first_valid_attempt",
+  "max_attempts": 1,
+  "model": "claude-sonnet-5",
+  "harness": "sha256:8b46f41db9ef27c58bfb9281b79fd4611cd16d8a6b5b2b4b600070b54211f7b4",
+  "revision": "0fcf82a38134ee26146fef996368c27348003595",
+  "token_source": "sdk_model_usage",
+  "score_contract": "weighted-mean-v2",
+  "promotion_policy": "descriptive-interface-pilot-no-promotion"
+}
