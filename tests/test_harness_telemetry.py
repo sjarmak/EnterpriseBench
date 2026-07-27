@@ -59,8 +59,8 @@ def test_extracts_codex_turn_completed_usage(tmp_path: Path) -> None:
 
     usage = _extract_tool_usage(output_dir)
 
-    assert usage["total_input_tokens"] == 1200
-    assert usage["total_output_tokens"] == 350
+    assert usage["total_input_tokens"] == 1000
+    assert usage["total_output_tokens"] == 450
     assert usage["num_turns"] == 1
     assert usage["mcp_tool_calls"] == 1
     assert usage["mcp_tool_breakdown"] == {"keyword_search": 1}
@@ -142,7 +142,7 @@ def test_sums_opencode_step_finish_usage_and_cost(tmp_path: Path) -> None:
     usage = _extract_tool_usage(output_dir)
 
     assert usage["total_input_tokens"] == 1600
-    assert usage["total_output_tokens"] == 500
+    assert usage["total_output_tokens"] == 700
     assert usage["cost_usd"] == 0.03
     assert usage["cost_usd_observed"] is True
     assert usage["num_turns"] == 2
@@ -176,6 +176,36 @@ def test_opencode_missing_cost_is_not_reported_as_zero_cost(tmp_path: Path) -> N
     usage = _extract_tool_usage(output_dir)
 
     assert usage["cost_usd"] == 0.0
+    assert usage["cost_usd_observed"] is False
+
+
+def test_opencode_partial_step_cost_is_not_reported_as_complete(
+    tmp_path: Path,
+) -> None:
+    output_dir = _write_log(
+        tmp_path,
+        [
+            {
+                "type": "step_finish",
+                "part": {
+                    "type": "step-finish",
+                    "cost": 0.01,
+                    "tokens": {"input": 1000, "output": 200},
+                },
+            },
+            {
+                "type": "step_finish",
+                "part": {
+                    "type": "step-finish",
+                    "tokens": {"input": 600, "output": 300},
+                },
+            },
+        ],
+    )
+
+    usage = _extract_tool_usage(output_dir)
+
+    assert usage["cost_usd"] == 0.01
     assert usage["cost_usd_observed"] is False
 
 
@@ -261,9 +291,7 @@ def test_opencode_lifecycle_probes_artifact_created_by_shell(tmp_path: Path) -> 
                     "tool": "bash",
                     "state": {
                         "status": "completed",
-                        "input": {
-                            "command": "printf report > /workspace/REPORT.md"
-                        },
+                        "input": {"command": "printf report > /workspace/REPORT.md"},
                     },
                 },
             },

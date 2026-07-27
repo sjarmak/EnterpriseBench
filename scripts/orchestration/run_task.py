@@ -4045,6 +4045,11 @@ def _extract_tool_usage(
         if lifecycle is not None:
             usage["opencode_lifecycle"] = lifecycle
 
+    usage["cost_usd_observed"] = (
+        activity_counts["opencode_steps"] > 0
+        and activity_counts["opencode_costed_steps"]
+        == activity_counts["opencode_steps"]
+    )
     if cache_isolation is not None:
         isolation_records: tuple[dict[str, Any], ...] = ()
         isolation_trace = output_dir / OPENCODE_CACHE_ISOLATION_TRACE_FILE
@@ -4184,6 +4189,7 @@ def _empty_provider_activity_counts() -> dict[str, int]:
     return {
         "codex_turns": 0,
         "opencode_steps": 0,
+        "opencode_costed_steps": 0,
         "claude_turns": 0,
         "work_items": 0,
         "tool_uses": 0,
@@ -4222,8 +4228,12 @@ def _consume_codex_usage(
         if not isinstance(event_usage, dict):
             return
         providers.add("codex")
-        usage["total_input_tokens"] += _token_count(event_usage.get("input_tokens"))
-        usage["total_output_tokens"] += _token_count(event_usage.get("output_tokens"))
+        input_tokens = _token_count(event_usage.get("input_tokens"))
+        cached_input = _token_count(event_usage.get("cached_input_tokens"))
+        usage["total_input_tokens"] += max(0, input_tokens - cached_input)
+        usage["total_output_tokens"] += _token_count(
+            event_usage.get("output_tokens")
+        ) + _token_count(event_usage.get("reasoning_output_tokens"))
         usage["num_turns"] += 1
         counts["codex_turns"] += 1
 
@@ -4251,11 +4261,13 @@ def _consume_opencode_usage(
         tokens = part.get("tokens")
         if isinstance(tokens, dict):
             usage["total_input_tokens"] += _token_count(tokens.get("input"))
-            usage["total_output_tokens"] += _token_count(tokens.get("output"))
+            usage["total_output_tokens"] += _token_count(
+                tokens.get("output")
+            ) + _token_count(tokens.get("reasoning"))
         cost = part.get("cost")
         if _valid_cost(cost):
             usage["cost_usd"] += float(cost)
-            usage["cost_usd_observed"] = True
+            counts["opencode_costed_steps"] += 1
         usage["num_turns"] += 1
         counts["opencode_steps"] += 1
 
