@@ -239,7 +239,7 @@ def _default_auth_probe(credential: str) -> bool:
     command = (
         [executable, "login", "status"]
         if credential == "codex"
-        else [executable, "--version"]
+        else [executable, "auth", "status", "--json"]
     )
     result = subprocess.run(
         command,
@@ -248,7 +248,15 @@ def _default_auth_probe(credential: str) -> bool:
         timeout=30,
         check=False,
     )
-    return result.returncode == 0
+    if result.returncode != 0:
+        return False
+    if credential == "codex":
+        return True
+    try:
+        status = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(status, dict) and status.get("loggedIn") is True
 
 
 def _validate_auth(auth_probe: AuthProbe) -> None:

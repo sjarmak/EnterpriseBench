@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -296,6 +298,22 @@ def test_missing_credential_fails_closed_without_reading_a_secret(
         )
 
 
+def test_default_judge_auth_requires_a_logged_in_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(preflight_module.shutil, "which", lambda _executable: "/bin/x")
+    monkeypatch.setattr(
+        preflight_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout='{"loggedIn": false}',
+        ),
+    )
+
+    assert preflight_module._default_auth_probe("judge") is False
+
+
 def test_cli_prints_no_spend_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -363,3 +381,43 @@ def test_cli_entrypoint_imports_from_outside_the_repository(tmp_path: Path) -> N
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_repository_capsule_is_current_clean_and_spend_gated() -> None:
+    study_dir = (
+        PROJECT_ROOT
+        / "configs"
+        / "studies"
+        / "rryas_generated_harness_finder_parity_v1"
+    )
+
+    evidence = validate_generated_harness_parity(
+        manifest_path=study_dir / "parity_manifest.json",
+        codex_spec_path=study_dir / "codex_study_spec.json",
+        opencode_spec_path=study_dir / "opencode_study_spec.json",
+        repo_root=PROJECT_ROOT,
+        mirror_probe=lambda _repository: True,
+        auth_probe=lambda _credential: True,
+    )
+
+    assert len(evidence.slots) == 4
+    assert evidence.paid_dispatch_authorized is False
+    assert json.loads(
+        (study_dir / "preflight_evidence.json").read_text()
+    ) == json.loads(json.dumps(asdict(evidence)))
+    dry_run = json.loads((study_dir / "dry_run_evidence.json").read_text())
+    assert dry_run["paid_inference_dispatched"] is False
+    assert dry_run["judge_dispatched"] is False
+    assert dry_run["agent_stdout_created"] is False
+    assert [
+        (
+            slot["harness"],
+            TASK_ID,
+            slot["mode"],
+            1,
+            1,
+        )
+        for slot in dry_run["slots"]
+    ] == list(evidence.slots)
+    assert all(slot["phase"] == "dry_run_complete" for slot in dry_run["slots"])
+    assert all(slot["success"] is True for slot in dry_run["slots"])
