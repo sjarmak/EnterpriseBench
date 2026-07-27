@@ -194,9 +194,7 @@ OPENCODE_CACHE_ISOLATION_PLUGIN_SRC = (
 OPENCODE_CACHE_ISOLATION_PLUGIN_PATH = (
     "/home/agent/.config/opencode/plugins/enterprisebench-cache-isolation.js"
 )
-OPENCODE_CACHE_ISOLATION_TRACE_PATH = (
-    "/var/tmp/enterprisebench-cache-isolation.jsonl"
-)
+OPENCODE_CACHE_ISOLATION_TRACE_PATH = "/var/tmp/enterprisebench-cache-isolation.jsonl"
 OPENCODE_CACHE_ISOLATION_TRACE_FILE = "cache_isolation.jsonl"
 MCP_PROXY_SCRIPT_PATH = "/usr/local/lib/enterprisebench/mcp_telemetry_proxy.py"
 MCP_PROXY_TRACE_PATH = "/var/tmp/enterprisebench-mcp-trace.jsonl"
@@ -442,9 +440,7 @@ def _resolve_output_dir(config: TaskRunConfig, task_id: str) -> Path:
         output_dir = config.output_dir
     else:
         variant_label = _effective_variant_label(config)
-        segment = (
-            f"{config.mode}--{variant_label}" if variant_label else config.mode
-        )
+        segment = f"{config.mode}--{variant_label}" if variant_label else config.mode
         output_dir = REPO_ROOT / "results" / "runs" / task_id / segment
     if config.rep is not None and output_dir.name != f"rep{config.rep}":
         output_dir = output_dir / f"rep{config.rep}"
@@ -864,23 +860,17 @@ def _canonical_json_schema(require_grounded_citations: bool) -> str:
         '  "ownership": "subsystem description",\n'
         '  "severity": {"level": "high", "rationale": "..."},\n'
         '  "related_issues": ["/workspace/<repo>/path/to/related/file.go", '
-        '"description of related component"]'
-        + citations
-        + "}\n```\n"
-        + closing
+        '"description of related component"]' + citations + "}\n```\n" + closing
     )
 
 
-def _build_output_appendix(
-    artifact_path: str, require_grounded_citations: bool
-) -> str:
+def _build_output_appendix(artifact_path: str, require_grounded_citations: bool) -> str:
     artifact = Path(artifact_path)
     parent = str(artifact.parent)
     if artifact_path == ANSWER_ARTIFACT_PATH:
         format_requirements = (
             "Write your findings as JSON and ensure the file parses before "
-            "finishing.\n\n"
-            + _canonical_json_schema(require_grounded_citations)
+            "finishing.\n\n" + _canonical_json_schema(require_grounded_citations)
         )
     elif artifact.suffix.lower() == ".json":
         format_requirements = (
@@ -1599,7 +1589,9 @@ def _verifier_specs_by_name(
         if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
             raise ValueError(f"unsafe checkpoint name for verifier staging: {name!r}")
         if name in specs:
-            raise ValueError(f"duplicate checkpoint name for verifier staging: {name!r}")
+            raise ValueError(
+                f"duplicate checkpoint name for verifier staging: {name!r}"
+            )
         weight = float(cp.get("weight", 1.0))
         timeout = int(cp.get("timeout_seconds", 120))
         specs[name] = (Path(verifier), weight, timeout)
@@ -1695,9 +1687,7 @@ def _setup_container(
     # must not silently rename scored checkpoints.
     checkpoints = task_data.get("checkpoints", [])
     if checkpoints:
-        staged_count = _stage_checkpoint_verifiers(
-            container_id, task_dir, checkpoints
-        )
+        staged_count = _stage_checkpoint_verifiers(container_id, task_dir, checkpoints)
         logger.info(
             "Copied %d check scripts into .verifiers/ (%d with weight metadata)",
             staged_count,
@@ -1827,8 +1817,7 @@ def _install_harness_cli(container_id: str, plan: HarnessPlan) -> bool:
 
     def is_pinned(result: subprocess.CompletedProcess[str]) -> bool:
         return (
-            result.returncode == 0
-            and expected_version in result.stdout.strip().split()
+            result.returncode == 0 and expected_version in result.stdout.strip().split()
         )
 
     version = _docker_exec(container_id, [plan.binary, "--version"])
@@ -1905,15 +1894,12 @@ def _prepare_harness_credentials(
             result = _docker_exec(container_id, argv)
             if result.returncode != 0:
                 raise RuntimeError(
-                    f"failed to secure Codex auth in container: "
-                    f"{result.stderr.strip()}"
+                    f"failed to secure Codex auth in container: {result.stderr.strip()}"
                 )
         return {"CODEX_HOME": container_home}
 
     credentials = {
-        name: source_env[name]
-        for name in plan.required_env
-        if source_env.get(name)
+        name: source_env[name] for name in plan.required_env if source_env.get(name)
     }
     missing = [name for name in plan.required_env if name not in credentials]
     if missing:
@@ -2062,11 +2048,12 @@ def _run_agent(
     else:
         command_args = list(agent_command)
         if not command_args or any(not arg or "\0" in arg for arg in command_args):
-            raise ValueError("generated agent command contains an empty or NUL argument")
+            raise ValueError(
+                "generated agent command contains an empty or NUL argument"
+            )
         command_display = shlex.join(command_args)
         shell_script = (
-            'mkdir -p /workspace/agent_output && '
-            'exec "$@" < /workspace/instruction.md'
+            'mkdir -p /workspace/agent_output && exec "$@" < /workspace/instruction.md'
         )
 
     logger.info("Running agent: %s (timeout=%ds)", command_display, timeout)
@@ -2335,8 +2322,7 @@ def _route_code_finder_run(result: "TaskRunResult", mode: str) -> None:
                 for name, count in sorted(direct_sgx_calls.items())
             )
             reason = (
-                f"mode={mode} used prohibited direct retrieval command(s): "
-                f"{commands}"
+                f"mode={mode} used prohibited direct retrieval command(s): {commands}"
             )
             result.status = RUN_STATUS_INVALID
             result.phase = "agent_infra_error"
@@ -2658,7 +2644,9 @@ def _apply_llm_judge(
         if isinstance(cp, dict) and isinstance(cp.get("name"), str)
     }
     missing_checkpoints = sorted(
-        name for name in scored_names if not isinstance(checkpoints_gt, dict) or name not in checkpoints_gt
+        name
+        for name in scored_names
+        if not isinstance(checkpoints_gt, dict) or name not in checkpoints_gt
     )
     invalid_checkpoints: list[str] = []
     if isinstance(checkpoints_gt, dict):
@@ -3339,9 +3327,7 @@ def _opencode_mcp_config(endpoint: str = SOURCEGRAPH_MCP_ENDPOINT) -> str:
                         "enabled": True,
                         "oauth": False,
                         "headers": {
-                            "Authorization": (
-                                "token {env:SOURCEGRAPH_ACCESS_TOKEN}"
-                            ),
+                            "Authorization": ("token {env:SOURCEGRAPH_ACCESS_TOKEN}"),
                         },
                     },
                 },
@@ -3396,6 +3382,8 @@ def _configure_opencode_mcp(container_id: str, mode: str) -> bool:
             (listed.stderr or listed.stdout).strip()[:200],
         )
     return configured
+
+
 def _verify_cli_finder_inventory(container_id: str, sg_token: str) -> bool:
     """Verify `/all` exposes Code Finder through the local CLI proxy."""
     header_path = "/tmp/.cli_finder_auth_header"
@@ -4076,9 +4064,7 @@ def _extract_opencode_lifecycle(
         record
         for record in records
         if isinstance(record.get("part"), dict)
-        and (
-            record.get("type") in {"step_start", "step_finish", "tool_use", "text"}
-        )
+        and (record.get("type") in {"step_start", "step_finish", "tool_use", "text"})
     )
     if not opencode_records:
         return None
@@ -4197,6 +4183,7 @@ def _empty_provider_activity_counts() -> dict[str, int]:
         "file_changes": 0,
     }
 
+
 def _token_count(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         return 0
@@ -4313,9 +4300,7 @@ def _provider_activity(counts: dict[str, int], providers: set[str]) -> dict:
     elif providers:
         provider, unit = "mixed", "provider event"
         count = (
-            counts["codex_turns"]
-            + counts["opencode_steps"]
-            + counts["claude_turns"]
+            counts["codex_turns"] + counts["opencode_steps"] + counts["claude_turns"]
         )
     else:
         provider, unit, count = "unknown", "provider event", 0

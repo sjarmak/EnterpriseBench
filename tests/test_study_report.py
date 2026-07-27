@@ -193,9 +193,7 @@ class TestCli:
         )
         assert json.loads(out.read_text())["completeness"]["paired_tasks"] == 2
 
-    def test_writes_a_report_when_provider_cost_is_unavailable(
-        self, tmp_path, capsys
-    ):
+    def test_writes_a_report_when_provider_cost_is_unavailable(self, tmp_path, capsys):
         spec = make_spec()
         receipts = full_receipts(spec)
         target = receipts[0]
@@ -232,9 +230,10 @@ class TestCli:
             )
             == 0
         )
-        assert json.loads(out.read_text())["economics"]["paired_valid"][
-            "total_cost_usd"
-        ] is None
+        assert (
+            json.loads(out.read_text())["economics"]["paired_valid"]["total_cost_usd"]
+            is None
+        )
         assert "paired-valid unavailable" in capsys.readouterr().err
 
     def test_a_missing_arm_fails_closed_and_writes_nothing(self, tmp_path):
