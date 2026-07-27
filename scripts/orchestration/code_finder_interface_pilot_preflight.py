@@ -48,9 +48,32 @@ REQUIRED_TASK_TYPES = (
 )
 REQUIRED_TREATMENT_CONTRACT = {
     "finder_calls": "exactly_once_per_repository",
+    "other_sgx_retrieval_allowed": False,
     "direct_sourcegraph_retrieval_allowed": False,
     "local_repository_source_readable": False,
     "same_proxy_telemetry_required": True,
+    "required_telemetry": [
+        "invocation_count",
+        "repository_scope",
+        "sourcegraphToolTelemetry",
+        "tool_inventory_sha256",
+        "code_finder_schema_sha256",
+        "interface_call_count",
+        "proxy_call_count",
+        "cache_isolation",
+    ],
+    "invalid_if": [
+        "zero_or_wrong_code_finder_call_count",
+        "interface_and_proxy_call_count_mismatch",
+        "ambiguous_or_wrong_repository_scope",
+        "any_other_sgx_retrieval_call",
+        "any_direct_sourcegraph_retrieval_call",
+        "failed_code_finder_response",
+        "missing_sourcegraphToolTelemetry",
+        "missing_or_malformed_proxy_trace",
+        "missing_or_invalid_cache_isolation_proof",
+        "cross_run_cache_read_tokens_nonzero",
+    ],
 }
 REQUIRED_CACHE_ISOLATION = {
     "schema_version": 1,
@@ -62,10 +85,16 @@ REQUIRED_JUDGE = {
     "model": "cc:haiku",
     "account": 1,
     "executable": "claude-1",
+    "selection": "explicit --judge-account 1",
+    "provenance_required_in_scores": True,
 }
 REQUIRED_EXECUTION = {
     "agent_account": 3,
     "timeout_seconds": 600,
+    "build_timeout_seconds": 1800,
+    "verifier_timeout_seconds": 600,
+    "memory_mb": 8192,
+    "no_build": True,
     "max_attempts": 1,
 }
 REQUIRED_ESTIMANDS = {

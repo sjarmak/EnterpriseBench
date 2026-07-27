@@ -12,6 +12,9 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "orchestration"))
 
 from code_finder_interface_pilot_preflight import (  # noqa: E402
     REQUIRED_ARMS,
+    REQUIRED_EXECUTION,
+    REQUIRED_JUDGE,
+    REQUIRED_TREATMENT_CONTRACT,
     validate_interface_pilot,
 )
 from eb_study import file_hash  # noqa: E402
@@ -112,28 +115,15 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                     "rejections": [],
                 },
                 "tasks": task_entries,
-                "treatment_contract": {
-                    "finder_calls": "exactly_once_per_repository",
-                    "direct_sourcegraph_retrieval_allowed": False,
-                    "local_repository_source_readable": False,
-                    "same_proxy_telemetry_required": True,
-                },
+                "treatment_contract": REQUIRED_TREATMENT_CONTRACT,
                 "cache_isolation": {
                     "schema_version": 1,
                     "required": True,
                     "comparison_rule": "valid proof and cross_run_cache_read_tokens == 0",
                     "legacy_evidence": "comparison_ineligible",
                 },
-                "judge_configuration": {
-                    "model": "cc:haiku",
-                    "account": 1,
-                    "executable": "claude-1",
-                },
-                "execution_configuration": {
-                    "agent_account": 3,
-                    "timeout_seconds": 600,
-                    "max_attempts": 1,
-                },
+                "judge_configuration": REQUIRED_JUDGE,
+                "execution_configuration": REQUIRED_EXECUTION,
                 "estimands": {
                     "primary": "paired_task_score_difference_cli_minus_mcp",
                     "secondary": [
