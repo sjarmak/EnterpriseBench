@@ -314,6 +314,36 @@ def test_v2_protocol_excludes_all_exposed_tasks_and_compiles_120_slots() -> None
     )
 
 
+def test_v3_protocol_excludes_every_v1_v2_exposure_and_compiles_96_slots() -> None:
+    protocol = preflight_module.HEADLINE_PROTOCOLS["rryas-headline-v3"]
+    tasks = [
+        {"candidate_id": f"candidate-{index:02d}", "task_id": f"task-{index:02d}"}
+        for index in range(protocol.task_count)
+    ]
+
+    rows = preflight_module.compile_execution_order(tasks, study_id=protocol.study_id)
+
+    assert protocol.task_count == 32
+    assert protocol.slot_count == 96
+    assert protocol.arms == preflight_module.V2_PROTOCOL.arms
+    assert set(protocol.post_lock_exposures) == {
+        *preflight_module.V2_PROTOCOL.post_lock_exposures,
+        "api-contract-dual-hyper-reqwest-001",
+        "api-contract-dual-jackson-spring-001",
+        "api-contract-dual-sqlalchemy-alembic-001",
+        "config-drift-dual-setuptools-pip-001",
+        "dep-graph-dual-cryptography-paramiko-001",
+        "dep-graph-dual-spring-hibernate-001",
+        "dep-graph-dual-tokio-hyper-001",
+        "dep-graph-tri-boto3-urllib3-requests-001",
+    }
+    assert len(rows) == 96
+    assert all(
+        row["output_dir"].startswith("results/studies/rryas-headline-v3/")
+        for row in rows
+    )
+
+
 def test_execution_order_rotates_arms_and_has_unique_outputs(tmp_path: Path) -> None:
     spec, manifest_path, candidate, analysis, provenances = _write_fixture(tmp_path)
     manifest = json.loads(manifest_path.read_text())
@@ -560,8 +590,27 @@ def test_repository_aborted_capsule_remains_bound_and_spend_gated() -> None:
         assert all(candidate_id in (PROJECT_ROOT / path).read_text() for path in paths)
 
 
-def test_repository_v2_capsule_is_current_complete_and_spend_gated() -> None:
+def test_repository_v2_capsule_remains_valid_after_terminal_attempt() -> None:
     study_dir = PROJECT_ROOT / "configs" / "studies" / "rryas-headline-v2"
+    manifest_path = study_dir / "final_manifest.json"
+    analysis_path = study_dir / "analysis_plan.json"
+    evidence_path = study_dir / "preflight_evidence.json"
+    spec = StudySpec.load(study_dir / "study_spec.json")
+    manifest = json.loads(manifest_path.read_text())
+    plan = json.loads((study_dir / "dispatch_plan.json").read_text())
+
+    assert spec.study_id == "rryas-headline-v2"
+    assert spec.task_manifest_hash == file_hash(manifest_path)
+    assert manifest["analysis_plan_hash"] == file_hash(analysis_path)
+    assert plan["final_manifest_hash"] == file_hash(manifest_path)
+    assert plan["preflight_evidence_hash"] == file_hash(evidence_path)
+    assert len(spec.task_ids) == 40
+    assert len(spec.slots()) == 120
+    assert plan["authorization"]["paid_dispatch_authorized"] is False
+
+
+def test_repository_v3_capsule_is_complete_and_spend_gated() -> None:
+    study_dir = PROJECT_ROOT / "configs" / "studies" / "rryas-headline-v3"
 
     evidence = validate_headline_study(
         spec_path=study_dir / "study_spec.json",
@@ -571,12 +620,14 @@ def test_repository_v2_capsule_is_current_complete_and_spend_gated() -> None:
         ),
         analysis_plan_path=study_dir / "analysis_plan.json",
         repo_root=PROJECT_ROOT,
+        revision_validator=lambda _revision, _paths: True,
         mirror_probe=lambda _repository: True,
         auth_probe=lambda _credential: True,
     )
 
-    assert len(evidence.task_ids) == 40
-    assert len(evidence.slots) == 120
+    assert evidence.study_id == "rryas-headline-v3"
+    assert len(evidence.task_ids) == 32
+    assert len(evidence.slots) == 96
     assert evidence.paid_dispatch_authorized is False
     assert json.loads(
         (study_dir / "preflight_evidence.json").read_text()

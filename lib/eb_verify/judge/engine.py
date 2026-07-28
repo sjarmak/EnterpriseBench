@@ -27,6 +27,7 @@ class LLMJudge:
         temperature: float = 0.0,
         pass_threshold: float = 0.5,
         account: int | None = None,
+        max_budget_usd: float | None = None,
     ):
         self.model = model
         self.temperature = temperature
@@ -35,6 +36,7 @@ class LLMJudge:
             model=model,
             temperature=temperature,
             account=account,
+            max_budget_usd=max_budget_usd,
         )
 
     @property

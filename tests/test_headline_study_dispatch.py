@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import fcntl
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +19,7 @@ for import_path in (
 from eb_study import StudySpec, TrialReceipt, file_hash, read_receipts  # noqa: E402
 from headline_study_dispatch import (  # noqa: E402
     DispatchError,
+    authorization_batch_hash,
     compile_run_command,
     dispatch_headline_study,
     load_dispatch_plan,
@@ -76,6 +79,8 @@ def _write_fixture(
     tmp_path: Path,
     *,
     authorized: bool = False,
+    capacity_confirmed: bool = False,
+    authorized_completed_prefix: int | None = None,
     ceiling: float = 20.0,
     per_slot_envelope: float = 2.0,
     study_id: str = "rryas-headline-v1",
@@ -148,10 +153,9 @@ def _write_fixture(
         + "\n"
     )
 
-    plan_path = tmp_path / "dispatch_plan.json"
-    plan_path.write_text(
-        json.dumps(
-            {
+    if study_id == "rryas-headline-v3" and ceiling == 20.0:
+        ceiling = 60.0
+    plan_payload = {
                 "schema_version": 1,
                 "study_id": study_id,
                 "status": "LOCKED-NO-SPEND",
@@ -180,15 +184,77 @@ def _write_fixture(
                     "uncovered_costs": ["fixture-uncovered"],
                 },
                 "authorization": {
-                    "paid_dispatch_authorized": authorized,
-                    "authorization_reference": (
-                        "test-authorization" if authorized else None
-                    ),
+                    "paid_dispatch_authorized": False,
+                    "authorization_reference": None,
                 },
-            },
-            sort_keys=True,
+            }
+    if study_id == "rryas-headline-v3":
+        plan_payload.update(
+            {
+                "batch_policy": {
+                    "max_slots_per_dispatch": 12,
+                    "complete_task_triplets": True,
+                    "score_independent_boundaries": True,
+                    "agent_max_budget_usd_per_slot": 9.1,
+                    "judge_max_budget_usd_per_call": 0.01,
+                    "max_judge_calls_per_slot": 5,
+                    "max_judge_attempts_per_call": 3,
+                    "outer_spend_hard_cap_per_slot_usd": 9.25,
+                },
+                "provider_capacity": {
+                    "confirmed": False,
+                    "capacity_reference": None,
+                    "confirmed_completed_prefix": None,
+                    "confirmed_max_slots": None,
+                },
+            }
         )
-    )
+        plan_payload["authorization"].update(
+            {
+                "authorized_completed_prefix": None,
+                "authorized_end_prefix": None,
+                "authorized_batch_hash": None,
+                "authorized_outer_spend_ceiling_usd": None,
+            }
+        )
+    plan_path = tmp_path / "dispatch_plan.json"
+    plan_path.write_text(json.dumps(plan_payload, sort_keys=True))
+    if study_id == "rryas-headline-v3" and (authorized or capacity_confirmed):
+        prefix = authorized_completed_prefix if authorized_completed_prefix is not None else 0
+        if capacity_confirmed:
+            plan_payload["provider_capacity"] = {
+                "confirmed": True,
+                "capacity_reference": "test-capacity",
+                "confirmed_completed_prefix": prefix,
+                "confirmed_max_slots": 12,
+            }
+        if authorized:
+            preview_plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
+            end_prefix = min(prefix + 12, len(preview_plan.slots))
+            commands = tuple(
+                compile_run_command(slot, plan=preview_plan, repo_root=tmp_path)
+                for slot in preview_plan.slots[prefix:end_prefix]
+            )
+            plan_payload["authorization"] = {
+                "paid_dispatch_authorized": True,
+                "authorization_reference": "test-authorization",
+                "authorized_completed_prefix": prefix,
+                "authorized_end_prefix": end_prefix,
+                "authorized_batch_hash": authorization_batch_hash(
+                    preview_plan,
+                    commands,
+                    start_prefix=prefix,
+                    end_prefix=end_prefix,
+                ),
+                "authorized_outer_spend_ceiling_usd": ceiling,
+            }
+        plan_path.write_text(json.dumps(plan_payload, sort_keys=True))
+    elif authorized:
+        plan_payload["authorization"] = {
+            "paid_dispatch_authorized": True,
+            "authorization_reference": "test-authorization",
+        }
+        plan_path.write_text(json.dumps(plan_payload, sort_keys=True))
     return plan_path, spec_path, manifest_path, evidence_path, receipts_path
 
 
@@ -462,6 +528,19 @@ def test_dispatch_plan_must_live_inside_repo_root(tmp_path: Path) -> None:
         outside.unlink()
 
 
+def test_dispatch_plan_must_share_the_frozen_capsule_directory(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(tmp_path)
+    copied_dir = tmp_path / "copied"
+    copied_dir.mkdir()
+    copied_plan = copied_dir / "dispatch_plan.json"
+    copied_plan.write_text(plan_path.read_text())
+
+    with pytest.raises(DispatchError, match="capsule directory"):
+        load_dispatch_plan(copied_plan, repo_root=tmp_path)
+
+
 def test_dispatcher_loads_a_supported_v2_plan(tmp_path: Path) -> None:
     plan_path, *_ = _write_fixture(tmp_path, study_id="rryas-headline-v2")
 
@@ -469,6 +548,340 @@ def test_dispatcher_loads_a_supported_v2_plan(tmp_path: Path) -> None:
 
     assert plan.spec.study_id == "rryas-headline-v2"
     assert all("rryas-headline-v2" in str(slot.output_dir) for slot in plan.slots)
+
+
+def test_v3_preview_is_limited_to_one_complete_task_triplet(tmp_path: Path) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+    )
+
+    summary = dispatch_headline_study(
+        plan_path=plan_path,
+        repo_root=tmp_path,
+        execute=False,
+        preflight=lambda **_kwargs: object(),
+    )
+
+    assert summary.planned_slots == 6
+    assert summary.completed_slots == 0
+    assert len(summary.commands) == 6
+
+
+def test_v3_rejects_a_batch_limit_above_the_frozen_twelve_slots(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(tmp_path, study_id="rryas-headline-v3")
+    payload = json.loads(plan_path.read_text())
+    payload["batch_policy"]["max_slots_per_dispatch"] = 15
+    plan_path.write_text(json.dumps(payload))
+
+    with pytest.raises(DispatchError, match="exactly 12 slots"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("max_slots_per_dispatch", 12.0),
+        ("max_judge_calls_per_slot", 5.0),
+        ("max_judge_attempts_per_call", 3.0),
+    ),
+)
+def test_v3_rejects_float_values_for_integer_batch_controls(
+    tmp_path: Path,
+    field: str,
+    value: float,
+) -> None:
+    plan_path, *_ = _write_fixture(tmp_path, study_id="rryas-headline-v3")
+    payload = json.loads(plan_path.read_text())
+    payload["batch_policy"][field] = value
+    plan_path.write_text(json.dumps(payload))
+
+    with pytest.raises(DispatchError, match="provider-side budget caps"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_v3_rejects_a_float_capacity_slot_count(tmp_path: Path) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        capacity_confirmed=True,
+    )
+    payload = json.loads(plan_path.read_text())
+    payload["provider_capacity"]["confirmed_max_slots"] = 12.0
+    plan_path.write_text(json.dumps(payload))
+
+    with pytest.raises(DispatchError, match="capacity state/reference"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_v3_commands_apply_native_agent_and_judge_budget_caps(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(tmp_path, study_id="rryas-headline-v3")
+    plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+    command = compile_run_command(plan.slots[0], plan=plan, repo_root=tmp_path)
+
+    agent_command = command[command.index("--agent") + 1]
+    assert "--max-budget-usd 9.1" in agent_command
+    assert command[command.index("--judge-max-budget-usd") + 1] == "0.01"
+
+
+def test_v3_execution_refuses_a_concurrent_dispatcher(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+    runner_called = False
+
+    def forbidden_runner(*_args: object, **_kwargs: object) -> None:
+        nonlocal runner_called
+        runner_called = True
+
+    with plan_path.open("rb") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(DispatchError, match="dispatch is already active"):
+            dispatch_headline_study(
+                plan_path=plan_path,
+                repo_root=tmp_path,
+                execute=True,
+                runner=forbidden_runner,
+                preflight=lambda **_kwargs: object(),
+            )
+
+    assert runner_called is False
+
+
+def test_v3_authorization_binds_the_outer_spend_ceiling(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+    payload = json.loads(plan_path.read_text())
+    payload["cost_forecast"]["authorization_outer_spend_ceiling_usd"] = 1e9
+    plan_path.write_text(json.dumps(payload))
+
+    with pytest.raises(DispatchError, match="authorized spend ceiling"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_v3_authorization_hash_binds_the_exact_pending_commands(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+    payload = json.loads(plan_path.read_text())
+    payload["authorization"]["authorized_batch_hash"] = "sha256:" + "0" * 64
+    plan_path.write_text(json.dumps(payload))
+
+    with pytest.raises(DispatchError, match="exact pending command batch"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=lambda *_args, **_kwargs: pytest.fail("must not dispatch"),
+            preflight=lambda **_kwargs: object(),
+        )
+
+
+def test_v3_paid_authorization_plan_must_be_committed_and_clean(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "eval@example.com"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Eval Test"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "test fixture"],
+        cwd=tmp_path,
+        check=True,
+    )
+    plan_path.write_text(plan_path.read_text() + "\n")
+
+    with pytest.raises(DispatchError, match="committed and clean"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=lambda *_args, **_kwargs: pytest.fail("must not dispatch"),
+            preflight=lambda **_kwargs: object(),
+        )
+
+
+def test_v3_rejects_an_agent_receipt_above_the_native_agent_cap(
+    tmp_path: Path,
+) -> None:
+    plan_path, spec_path, *_rest, receipts_path = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+    spec = StudySpec.load(spec_path)
+
+    def runner(_command: tuple[str, ...], **_kwargs: object) -> object:
+        _append(
+            receipts_path,
+            _receipt(spec, task_id="task-a", arm="baseline", cost=9.2),
+        )
+        return type("Completed", (), {"returncode": 0})()
+
+    with pytest.raises(DispatchError, match="exceeded the native agent cap"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=runner,
+            preflight=lambda **_kwargs: object(),
+        )
+
+
+def test_v3_rejects_blank_capacity_and_authorization_references(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+    payload = json.loads(plan_path.read_text())
+    payload["authorization"]["authorization_reference"] = "   "
+    payload["provider_capacity"]["capacity_reference"] = "\t"
+    plan_path.write_text(json.dumps(payload))
+
+    with pytest.raises(DispatchError, match="authorization state/reference"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_dispatch_plan_rejects_boolean_schema_and_sample_counts(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(tmp_path)
+    payload = json.loads(plan_path.read_text())
+    payload["schema_version"] = True
+    plan_path.write_text(json.dumps(payload))
+    with pytest.raises(DispatchError, match="identity/status"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+    payload["schema_version"] = 1
+    payload["cost_forecast"]["sample_attempts"] = True
+    plan_path.write_text(json.dumps(payload))
+    with pytest.raises(DispatchError, match="sample_attempts"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_v3_paid_batch_requires_provider_capacity_confirmation(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        authorized_completed_prefix=0,
+    )
+    runner_called = False
+
+    def forbidden_runner(*args: object, **kwargs: object) -> None:
+        nonlocal runner_called
+        runner_called = True
+
+    with pytest.raises(DispatchError, match="provider capacity is not confirmed"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=forbidden_runner,
+            preflight=lambda **_kwargs: object(),
+        )
+
+    assert runner_called is False
+
+
+def test_v3_authorization_is_bound_to_one_completed_prefix(
+    tmp_path: Path,
+) -> None:
+    plan_path, spec_path, *_rest, receipts_path = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+    spec = StudySpec.load(spec_path)
+    slots = iter(
+        (
+            ("task-a", "baseline"),
+            ("task-a", "mcp_only"),
+            ("task-a", "cli"),
+            ("task-b", "mcp_only"),
+            ("task-b", "cli"),
+            ("task-b", "baseline"),
+        )
+    )
+    calls = 0
+
+    def runner(_command: tuple[str, ...], **_kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        task_id, arm = next(slots)
+        _append(receipts_path, _receipt(spec, task_id=task_id, arm=arm, cost=0.5))
+        return type("Completed", (), {"returncode": 0})()
+
+    summary = dispatch_headline_study(
+        plan_path=plan_path,
+        repo_root=tmp_path,
+        execute=True,
+        runner=runner,
+        preflight=lambda **_kwargs: object(),
+    )
+
+    assert calls == 6
+    assert summary.completed_slots == 6
+    assert summary.executed_slots == 6
+
+    with pytest.raises(DispatchError, match="completed-prefix authorization"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=lambda *_args, **_kwargs: pytest.fail("must not replay"),
+            preflight=lambda **_kwargs: object(),
+        )
 
 
 def test_repository_dispatch_plan_is_current_and_spend_gated() -> None:

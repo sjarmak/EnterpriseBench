@@ -223,6 +223,7 @@ class TaskRunConfig:
     account: int | None = None
     judge_model: str = "cc:haiku"
     judge_account: int | None = None
+    judge_max_budget_usd: float | None = None
     mode: str = "baseline"
     rep: int | None = None
     ablation_variant: str | None = None
@@ -238,6 +239,13 @@ class TaskRunConfig:
             and (not isinstance(self.judge_account, int) or self.judge_account <= 0)
         ):
             raise ValueError("judge_account must be a positive integer")
+        if self.judge_max_budget_usd is not None and (
+            not isinstance(self.judge_max_budget_usd, (int, float))
+            or isinstance(self.judge_max_budget_usd, bool)
+            or not math.isfinite(self.judge_max_budget_usd)
+            or self.judge_max_budget_usd <= 0
+        ):
+            raise ValueError("judge_max_budget_usd must be a finite number > 0")
         validate_study_config(
             study_spec=self.study_spec,
             study_receipts=self.study_receipts,
@@ -2608,6 +2616,7 @@ def _apply_llm_judge(
     *,
     judge_model: str = "cc:haiku",
     judge_account: int | None = None,
+    judge_max_budget_usd: float | None = None,
 ) -> dict:
     """Apply Tier 2 LLM judge to cap grep-based scores.
 
@@ -2734,7 +2743,11 @@ def _apply_llm_judge(
         sys.path.insert(0, str(REPO_ROOT / "lib"))
         from eb_verify.judge import CheckpointJudgeInput, LLMJudge
 
-        judge = LLMJudge(model=judge_model, account=judge_account)
+        judge = LLMJudge(
+            model=judge_model,
+            account=judge_account,
+            max_budget_usd=judge_max_budget_usd,
+        )
         scores["judge_provenance"] = judge.provenance
     except Exception as exc:
         # Judge could not be constructed (import/config/credential failure):
@@ -2877,6 +2890,7 @@ def _save_results(
             "model": config.model,
             "judge_model": config.judge_model,
             "judge_account": _resolve_judge_account(config),
+            "judge_max_budget_usd": config.judge_max_budget_usd,
             "timeout": config.timeout,
             "dry_run": config.dry_run,
             "mode": config.mode,
@@ -2905,6 +2919,7 @@ def _save_results(
         "mode": config.mode,
         "account": config.account,
         "judge_account": _resolve_judge_account(config),
+        "judge_max_budget_usd": config.judge_max_budget_usd,
     }
     if variant_label is not None:
         payload["config"]["variant_label"] = variant_label
@@ -5136,6 +5151,7 @@ def run_task(config: TaskRunConfig) -> TaskRunResult:
                 task_data,
                 judge_model=config.judge_model,
                 judge_account=_resolve_judge_account(config),
+                judge_max_budget_usd=config.judge_max_budget_usd,
             )
             _route_verifier_infra_error(result, scores)
 
@@ -5324,6 +5340,12 @@ Examples:
         ),
     )
     parser.add_argument(
+        "--judge-max-budget-usd",
+        type=float,
+        default=None,
+        help="Native per-call Claude judge spend cap (print mode only).",
+    )
+    parser.add_argument(
         "--mode",
         choices=list(VALID_MODES),
         default="baseline",
@@ -5441,6 +5463,7 @@ def main() -> None:
         account=args.account,
         judge_model=args.judge_model,
         judge_account=args.judge_account,
+        judge_max_budget_usd=args.judge_max_budget_usd,
         mode=args.mode,
         rep=args.rep,
         study_spec=args.study_spec.resolve() if args.study_spec else None,

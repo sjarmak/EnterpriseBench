@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -33,41 +34,21 @@ from headline_study_preflight import (  # noqa: E402
     STUDY_ID,
     validate_headline_study,
 )
+from headline_dispatch_policy import (  # noqa: E402
+    DispatchPolicyError,
+    authorization_batch_hash,
+    exclusive_dispatch_lock,
+    nonblank,
+    strict_non_negative_int,
+    validate_committed_authorization,
+    validate_v3_dispatch_controls,
+)
+from headline_dispatch_models import DispatchPlan, DispatchSlot  # noqa: E402
+from run_task import DEFAULT_OAUTH_AGENT_COMMAND  # noqa: E402
 
 
 class DispatchError(RuntimeError):
     """The dispatcher cannot safely start or continue the frozen study."""
-
-
-@dataclass(frozen=True)
-class DispatchSlot:
-    task_id: str
-    arm: str
-    repetition: int
-    attempt: int
-    agent_account: int
-    judge_account: int
-    task_toml: Path
-    output_dir: Path
-
-
-@dataclass(frozen=True)
-class DispatchPlan:
-    path: Path
-    spec_path: Path
-    manifest_path: Path
-    preflight_evidence_path: Path
-    receipts_path: Path
-    spec: StudySpec
-    slots: tuple[DispatchSlot, ...]
-    execution: Mapping[str, Any]
-    sample_attempts: int
-    forecast_outer_spend_usd: float
-    empirical_envelope_usd: float
-    per_slot_envelope_usd: float
-    authorization_ceiling_usd: float
-    paid_dispatch_authorized: bool
-    authorization_reference: str | None
 
 
 @dataclass(frozen=True)
@@ -194,7 +175,10 @@ def _validate_cost_forecast(
         raise DispatchError("dispatch plan cost_forecast must be an object")
     costs = _sample_costs(payload.get("sample_receipts"), repo_root=repo_root)
     sample_attempts = payload.get("sample_attempts")
-    if sample_attempts != len(costs):
+    if (
+        not strict_non_negative_int(sample_attempts)
+        or sample_attempts != len(costs)
+    ):
         raise DispatchError("cost_forecast.sample_attempts does not match evidence")
 
     sample_spend = _required_number(payload, "sample_outer_spend_usd")
@@ -300,8 +284,11 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
         raise DispatchError("dispatch plan must live inside the repository") from exc
     plan = _load_object(plan_path, "dispatch plan")
     study_id = plan.get("study_id")
+    schema_version = plan.get("schema_version")
     if (
-        plan.get("schema_version") != 1
+        not isinstance(schema_version, int)
+        or isinstance(schema_version, bool)
+        or schema_version != 1
         or study_id not in HEADLINE_PROTOCOLS
         or plan.get("status") != "LOCKED-NO-SPEND"
     ):
@@ -312,6 +299,15 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
     evidence_path = _repo_path(
         repo_root, plan.get("preflight_evidence"), "preflight_evidence"
     )
+    if {
+        plan_path.parent,
+        spec_path.parent,
+        manifest_path.parent,
+        evidence_path.parent,
+    } != {plan_path.parent}:
+        raise DispatchError(
+            "dispatch plan and frozen inputs must share one capsule directory"
+        )
     _validate_file_hash(plan, field="study_spec_file_hash", path=spec_path)
     _validate_file_hash(plan, field="final_manifest_hash", path=manifest_path)
     _validate_file_hash(plan, field="preflight_evidence_hash", path=evidence_path)
@@ -342,10 +338,34 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
     reference = authorization.get("authorization_reference")
     if (
         not isinstance(authorized, bool)
-        or (authorized and (not isinstance(reference, str) or not reference))
+        or (authorized and not nonblank(reference))
         or (not authorized and reference is not None)
     ):
         raise DispatchError("dispatch authorization state/reference is inconsistent")
+    controls = None
+    if study_id == "rryas-headline-v3":
+        try:
+            controls = validate_v3_dispatch_controls(
+                authorized=authorized,
+                authorization=authorization,
+                batch_policy=plan.get("batch_policy"),
+                provider_capacity=plan.get("provider_capacity"),
+                task_paths=tuple(slot.task_toml for slot in slots),
+                slot_count=len(slots),
+                ceiling=ceiling,
+            )
+        except DispatchPolicyError as exc:
+            raise DispatchError(str(exc)) from exc
+    elif any(
+        authorization.get(field) is not None
+        for field in (
+            "authorized_completed_prefix",
+            "authorized_end_prefix",
+            "authorized_batch_hash",
+            "authorized_outer_spend_ceiling_usd",
+        )
+    ):
+        raise DispatchError("completed-prefix authorization is only valid for v3")
 
     return DispatchPlan(
         path=plan_path,
@@ -363,6 +383,7 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
         authorization_ceiling_usd=ceiling,
         paid_dispatch_authorized=authorized,
         authorization_reference=reference,
+        v3_controls=controls,
     )
 
 
@@ -421,6 +442,19 @@ def compile_run_command(
         "--attempt",
         str(slot.attempt),
     ]
+    if plan.v3_controls is not None:
+        agent_args = shlex.split(DEFAULT_OAUTH_AGENT_COMMAND)
+        agent_args[-1:-1] = [
+            "--max-budget-usd",
+            str(plan.v3_controls.agent_max_budget_usd_per_slot),
+        ]
+        command.extend(("--agent", shlex.join(agent_args)))
+        command.extend(
+            (
+                "--judge-max-budget-usd",
+                str(plan.v3_controls.judge_max_budget_usd_per_call),
+            )
+        )
     if execution.get("no_build") is True:
         command.append("--no-build")
     return tuple(command)
@@ -442,6 +476,52 @@ def _validate_cache_isolation(receipt: TrialReceipt) -> None:
     ):
         raise DispatchError(
             f"receipt {receipt.trial.key} lacks zero-cache isolation proof"
+        )
+
+
+def _validate_provider_budgets(
+    receipt: TrialReceipt,
+    *,
+    plan: DispatchPlan,
+) -> None:
+    controls = plan.v3_controls
+    if controls is None or receipt.usage is None:
+        return
+    model_costs: dict[str, float] = {}
+    for model, usage in receipt.usage.model_usage.items():
+        cost = usage.get("cost_usd") if isinstance(usage, dict) else None
+        if (
+            not isinstance(model, str)
+            or not isinstance(cost, (int, float))
+            or isinstance(cost, bool)
+            or not math.isfinite(cost)
+            or cost < 0
+        ):
+            raise DispatchError(
+                f"receipt {receipt.trial.key} has invalid per-model cost evidence"
+            )
+        model_costs[model] = float(cost)
+    agent_cost = model_costs.get(plan.spec.model)
+    if agent_cost is None:
+        raise DispatchError(
+            f"receipt {receipt.trial.key} lacks the frozen agent-model cost"
+        )
+    judge_cost = sum(model_costs.values()) - agent_cost
+    if not _close(sum(model_costs.values()), _receipt_cost(receipt)):
+        raise DispatchError(
+            f"receipt {receipt.trial.key} outer and per-model costs disagree"
+        )
+    if agent_cost > controls.agent_max_budget_usd_per_slot:
+        raise DispatchError(
+            f"provider exceeded the native agent cap for {receipt.trial.key}"
+        )
+    judge_cap = (
+        controls.outer_spend_hard_cap_per_slot_usd
+        - controls.agent_max_budget_usd_per_slot
+    )
+    if judge_cost > judge_cap:
+        raise DispatchError(
+            f"provider exceeded the aggregate judge cap for {receipt.trial.key}"
         )
 
 
@@ -468,6 +548,7 @@ def _existing_receipts(plan: DispatchPlan) -> tuple[list[TrialReceipt], float]:
         if not slot.output_dir.is_dir():
             raise DispatchError(f"completed slot output is missing: {slot.output_dir}")
         _validate_cache_isolation(receipt)
+        _validate_provider_budgets(receipt, plan=plan)
         spend += _receipt_cost(receipt)
     return receipts, spend
 
@@ -491,7 +572,7 @@ def _run_preflight(
     )
 
 
-def dispatch_headline_study(
+def _dispatch_headline_study(
     *,
     plan_path: Path,
     repo_root: Path,
@@ -499,14 +580,35 @@ def dispatch_headline_study(
     runner: Runner = subprocess.run,
     preflight: Preflight = validate_headline_study,
 ) -> DispatchSummary:
-    """Validate, preview, or sequentially execute the remaining frozen slots."""
+    """Execute after any required paid-dispatch lock has been acquired."""
 
-    repo_root = repo_root.resolve()
     plan = load_dispatch_plan(plan_path, repo_root=repo_root)
     if execute and not plan.paid_dispatch_authorized:
         raise DispatchError("paid headline dispatch is not authorized")
+    controls = plan.v3_controls
+    if execute and controls is not None and not controls.provider_capacity_confirmed:
+        raise DispatchError("provider capacity is not confirmed")
+    if execute and controls is not None:
+        validate_committed_authorization(plan.path, repo_root=repo_root)
 
     receipts, spend = _existing_receipts(plan)
+    if controls is not None:
+        if len(receipts) % len(plan.spec.arms) != 0:
+            raise DispatchError("v3 valid receipt prefix ends inside a task triplet")
+        if (
+            execute
+            and controls.authorized_completed_prefix != len(receipts)
+        ):
+            raise DispatchError(
+                "v3 completed-prefix authorization does not match current receipts"
+            )
+        if (
+            execute
+            and controls.capacity_confirmed_prefix != len(receipts)
+        ):
+            raise DispatchError(
+                "v3 provider capacity confirmation does not match current receipts"
+            )
     _run_preflight(
         preflight,
         plan=plan,
@@ -514,9 +616,26 @@ def dispatch_headline_study(
         require_clean_output_root=not receipts,
     )
     remaining = plan.slots[len(receipts) :]
+    if controls is not None:
+        remaining = remaining[: controls.max_slots_per_dispatch]
     commands = tuple(
         compile_run_command(slot, plan=plan, repo_root=repo_root) for slot in remaining
     )
+    if execute and controls is not None:
+        end_prefix = len(receipts) + len(remaining)
+        expected_hash = authorization_batch_hash(
+            plan,
+            commands,
+            start_prefix=len(receipts),
+            end_prefix=end_prefix,
+        )
+        if (
+            controls.authorized_end_prefix != end_prefix
+            or controls.authorized_batch_hash != expected_hash
+        ):
+            raise DispatchError(
+                "v3 authorization does not match the exact pending command batch"
+            )
     if not execute:
         return DispatchSummary(
             planned_slots=len(plan.slots),
@@ -529,11 +648,16 @@ def dispatch_headline_study(
     plan.receipts_path.parent.mkdir(parents=True, exist_ok=True)
     executed = 0
     for slot, command in zip(remaining, commands):
-        if spend + plan.per_slot_envelope_usd > plan.authorization_ceiling_usd:
+        slot_reserve = (
+            controls.outer_spend_hard_cap_per_slot_usd
+            if controls is not None
+            else plan.per_slot_envelope_usd
+        )
+        if spend + slot_reserve > plan.authorization_ceiling_usd:
             raise DispatchError(
-                "outer spend reserve is insufficient for the next empirical slot "
+                "outer spend reserve is insufficient for the next hard-capped slot "
                 f"envelope: spent ${spend:.6f}, reserve "
-                f"${plan.per_slot_envelope_usd:.6f}, ceiling "
+                f"${slot_reserve:.6f}, ceiling "
                 f"${plan.authorization_ceiling_usd:.6f}"
             )
         before_count = len(receipts)
@@ -556,7 +680,16 @@ def dispatch_headline_study(
             raise DispatchError(
                 f"run appended receipt {receipt.trial.key}, expected {expected.key}"
             )
-        spend += _receipt_cost(receipt)
+        _validate_provider_budgets(receipt, plan=plan)
+        receipt_cost = _receipt_cost(receipt)
+        spend += receipt_cost
+        if (
+            controls is not None
+            and receipt_cost > controls.outer_spend_hard_cap_per_slot_usd
+        ):
+            raise DispatchError(
+                f"provider exceeded the per-slot hard cap for {receipt.trial.key}"
+            )
         if completed.returncode != 0:
             raise DispatchError(
                 f"run_task exited {completed.returncode} for {receipt.trial.key}"
@@ -580,6 +713,38 @@ def dispatch_headline_study(
         outer_spend_usd=spend,
         commands=commands,
     )
+
+
+def dispatch_headline_study(
+    *,
+    plan_path: Path,
+    repo_root: Path,
+    execute: bool,
+    runner: Runner = subprocess.run,
+    preflight: Preflight = validate_headline_study,
+) -> DispatchSummary:
+    """Validate, preview, or sequentially execute the remaining frozen slots."""
+
+    repo_root = repo_root.resolve()
+    if not execute:
+        return _dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=repo_root,
+            execute=False,
+            runner=runner,
+            preflight=preflight,
+        )
+    try:
+        with exclusive_dispatch_lock(plan_path, repo_root=repo_root):
+            return _dispatch_headline_study(
+                plan_path=plan_path,
+                repo_root=repo_root,
+                execute=True,
+                runner=runner,
+                preflight=preflight,
+            )
+    except DispatchPolicyError as exc:
+        raise DispatchError(str(exc)) from exc
 
 
 def main(argv: Sequence[str] | None = None) -> int:

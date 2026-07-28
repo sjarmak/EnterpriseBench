@@ -56,7 +56,7 @@ def test_v2_builder_mechanically_excludes_only_exposed_tasks() -> None:
     assert build.canary["success_criterion"] == "sgx_tool_calls > 0"
 
 
-def test_repository_v2_artifacts_are_current() -> None:
+def test_repository_v2_artifacts_are_preserved_after_terminal_attempt() -> None:
     revision = configured_revision(PROJECT_ROOT)
     build = build_core_payloads(PROJECT_ROOT, revision=revision)
 

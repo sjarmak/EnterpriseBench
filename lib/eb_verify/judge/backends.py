@@ -7,11 +7,14 @@ Supports Anthropic (Claude) and Claude Code CLI backends.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
 import subprocess
 import time
+
+CLAUDE_CODE_MAX_RETRIES = 3
 
 
 class JudgeBackendError(Exception):
@@ -145,7 +148,7 @@ class AnthropicBackend:
 class ClaudeCodeBackend:
     """Backend using the claude CLI in print mode (no API key needed)."""
 
-    _MAX_RETRIES = 3
+    _MAX_RETRIES = CLAUDE_CODE_MAX_RETRIES
     _ALIAS_MAP = {
         "claude-haiku-4-5-20251001": "haiku",
         "claude-sonnet-4-6": "sonnet",
@@ -157,14 +160,25 @@ class ClaudeCodeBackend:
         model: str = "haiku",
         *,
         account: int | None = None,
+        max_budget_usd: float | None = None,
         **_kwargs: object,
     ):
         if isinstance(account, bool) or (
             account is not None and (not isinstance(account, int) or account <= 0)
         ):
             raise ValueError("Claude judge account must be a positive integer")
+        if max_budget_usd is not None and (
+            not isinstance(max_budget_usd, (int, float))
+            or isinstance(max_budget_usd, bool)
+            or not math.isfinite(max_budget_usd)
+            or max_budget_usd <= 0
+        ):
+            raise ValueError("Claude judge max_budget_usd must be a finite number > 0")
         self.model = self._ALIAS_MAP.get(model, model)
         self.account = account
+        self.max_budget_usd = (
+            float(max_budget_usd) if max_budget_usd is not None else None
+        )
         self.executable = f"claude-{account}" if account is not None else "claude"
         self._claude_bin = shutil.which(self.executable)
         if self._claude_bin is None:
@@ -195,6 +209,8 @@ class ClaudeCodeBackend:
         }
         if self._cli_version is not None:
             provenance["cli_version"] = self._cli_version
+        if self.max_budget_usd is not None:
+            provenance["max_budget_usd"] = self.max_budget_usd
         return provenance
 
     def call(self, system_prompt: str, user_prompt: str) -> dict:
@@ -223,11 +239,17 @@ class ClaudeCodeBackend:
             "json",
             "--model",
             self.model,
+        ]
+        if self.max_budget_usd is not None:
+            cmd.extend(["--max-budget-usd", str(self.max_budget_usd)])
+        cmd.extend(
+            [
             "--no-session-persistence",
             "--append-system-prompt",
             system_prompt,
             user_prompt,
-        ]
+            ]
+        )
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         except subprocess.TimeoutExpired:
@@ -267,12 +289,17 @@ def create_backend(
     temperature: float = 0.0,
     max_tokens: int = 4096,
     account: int | None = None,
+    max_budget_usd: float | None = None,
 ) -> AnthropicBackend | ClaudeCodeBackend:
     """Create the appropriate backend based on model identifier."""
     name = model.lower()
     if name in _CLAUDE_CODE_ALIASES or name.startswith("cc:"):
         sub_model = name.split(":", 1)[1] if ":" in name else "haiku"
-        return ClaudeCodeBackend(model=sub_model, account=account)
+        return ClaudeCodeBackend(
+            model=sub_model,
+            account=account,
+            max_budget_usd=max_budget_usd,
+        )
     if name.startswith("claude"):
         return AnthropicBackend(
             model=model, temperature=temperature, max_tokens=max_tokens

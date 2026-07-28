@@ -83,6 +83,19 @@ def test_explicit_judge_account_overrides_agent_account(tmp_path: Path) -> None:
     assert _resolve_judge_account(config) == 1
 
 
+@pytest.mark.parametrize("budget", [0, -1, True, float("nan"), "0.01"])
+def test_task_run_config_rejects_invalid_judge_budget(
+    tmp_path: Path,
+    budget: object,
+) -> None:
+    with pytest.raises(ValueError, match="judge_max_budget_usd"):
+        TaskRunConfig(
+            task_toml=tmp_path / "task.toml",
+            account=3,
+            judge_max_budget_usd=budget,
+        )
+
+
 # --------------------------------------------------------------------------
 # Finding #2 — candidate paths derived from metadata, no baked-in repo names
 # --------------------------------------------------------------------------
@@ -219,10 +232,15 @@ class TestArtifactFoundAtDerivedPathAppliesCap:
                 "cid",
                 {"task": {}},
                 judge_account=3,
+                judge_max_budget_usd=0.01,
             )
 
         assert "verifier_infra_error" not in out
-        judge_cls.assert_called_once_with(model="cc:haiku", account=3)
+        judge_cls.assert_called_once_with(
+            model="cc:haiku",
+            account=3,
+            max_budget_usd=0.01,
+        )
         assert out["judge_provenance"] == fake_judge.provenance
         cp = out["checkpoints"][0]
         assert cp["judge_score"] == 0.5

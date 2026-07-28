@@ -48,6 +48,9 @@ V2_CONFIG_DIR = Path("configs/studies") / V2_PROTOCOL.study_id
 CANDIDATE_MANIFEST = Path("results/rryas_dataset/candidate_manifest.json")
 CANARY_STUDY_ID = "rryas-headline-v2-cli-compliance-canary"
 CANARY_STATUS = Path("results/studies") / CANARY_STUDY_ID / "study_status.json"
+HEADLINE_STATUS = (
+    Path("results/studies") / V2_PROTOCOL.study_id / "study_status.json"
+)
 
 
 @dataclass(frozen=True)
@@ -500,6 +503,20 @@ def _canary_is_complete(repo_root: Path) -> bool:
     )
 
 
+def _headline_is_terminal(repo_root: Path) -> bool:
+    status_path = repo_root / HEADLINE_STATUS
+    if not status_path.is_file():
+        return False
+    status = _load_object(status_path)
+    return (
+        status.get("study_id") == V2_PROTOCOL.study_id
+        and status.get("status") in {
+            "ABORTED-OPERATIONAL-INVALID",
+            "COMPLETE-OPERATIONAL-VALID",
+        }
+    )
+
+
 def _artifact_payloads(
     build: CorePayloads, *, include_canary: bool
 ) -> dict[str, Mapping[str, Any]]:
@@ -530,6 +547,18 @@ def write_capsule(
     check: bool,
 ) -> None:
     output_dir = repo_root / V2_CONFIG_DIR
+    if _headline_is_terminal(repo_root):
+        required = {
+            "analysis_plan.json",
+            "final_manifest.json",
+            "study_spec.json",
+            "preflight_evidence.json",
+            "dispatch_plan.json",
+        }
+        missing = sorted(name for name in required if not (output_dir / name).is_file())
+        if missing:
+            raise ValueError(f"terminal v2 capsule is missing artifacts: {missing}")
+        return
     artifacts = _artifact_payloads(
         build, include_canary=not _canary_is_complete(repo_root)
     )
