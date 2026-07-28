@@ -524,6 +524,7 @@ def dispatch_headline_study(
             commands=commands,
         )
 
+    plan.receipts_path.parent.mkdir(parents=True, exist_ok=True)
     executed = 0
     for slot, command in zip(remaining, commands):
         if spend + plan.per_slot_envelope_usd > plan.authorization_ceiling_usd:

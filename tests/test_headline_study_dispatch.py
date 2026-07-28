@@ -385,6 +385,38 @@ def test_execution_is_sequential_and_stops_on_an_invalid_receipt(
     assert len(calls) == 2
 
 
+def test_clean_start_creates_receipt_parent_after_preflight(tmp_path: Path) -> None:
+    plan_path, spec_path, *_rest, receipts_path = _write_fixture(
+        tmp_path, authorized=True
+    )
+    spec = StudySpec.load(spec_path)
+    receipts_path.parent.rmdir()
+    preflight_completed = False
+
+    def preflight(**_kwargs):
+        nonlocal preflight_completed
+        assert receipts_path.parent.exists() is False
+        preflight_completed = True
+
+    def runner(_command, **_kwargs):
+        assert preflight_completed is True
+        assert receipts_path.parent.is_dir()
+        _append(
+            receipts_path,
+            _receipt(spec, task_id="task-a", arm="baseline", cost=0.5),
+        )
+        return type("Completed", (), {"returncode": 1})()
+
+    with pytest.raises(DispatchError, match="run_task exited 1"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=runner,
+            preflight=preflight,
+        )
+
+
 def test_budget_reserve_stops_before_starting_the_next_slot(tmp_path: Path) -> None:
     plan_path, spec_path, *_rest, receipts_path = _write_fixture(
         tmp_path,
