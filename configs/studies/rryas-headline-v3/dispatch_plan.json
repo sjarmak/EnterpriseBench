@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v3",
+  "status": "LOCKED-NO-SPEND",
+  "study_spec": "configs/studies/rryas-headline-v3/study_spec.json",
+  "study_spec_file_hash": "sha256:509846f17ef8a05dafdbac4036aec9a2e839b593bbd2bfd0e550d7381b300e28",
+  "study_spec_hash": "sha256:bc41cd59ffdee7dbd880bfebd1b6d2515a048cfbe5e03c9c304492614eb7b5fb",
+  "final_manifest": "configs/studies/rryas-headline-v3/final_manifest.json",
+  "final_manifest_hash": "sha256:11745e559a68402a6206a8bfa9c038b28c4acdc14b307acc021c8cc2df2f6ca9",
+  "preflight_evidence": "configs/studies/rryas-headline-v3/preflight_evidence.json",
+  "preflight_evidence_hash": "sha256:7b0a4f8a2314e064be791526b7ed4666fc5a5d92c695613f844efb4b27f756ac",
+  "cost_forecast": {
+    "basis": "All immutable v1 and v2 attempts, including terminal invalid attempts, with provider-native outer-agent cost and zero cache reads/writes.",
+    "sample_receipts": [
+      {
+        "path": "results/studies/rryas-headline-v1/receipts.jsonl",
+        "sha256": "sha256:d074eee11e5b39e5f1a9584bc6ab0deff419f3ff9ba111fffe240715869144df"
+      },
+      {
+        "path": "results/studies/rryas-headline-v2/receipts.jsonl",
+        "sha256": "sha256:ffa8cac931f6fa6f2fe702719c904c7ba3c8e1121df41f14a57f60da5cae782a"
+      }
+    ],
+    "sample_attempts": 30,
+    "sample_outer_spend_usd": 132.24647,
+    "mean_per_slot_usd": 4.408215667,
+    "forecast_outer_spend_usd": 423.188704,
+    "max_observed_per_slot_usd": 9.085286,
+    "empirical_slot_count_envelope_usd": 872.187456,
+    "authorization_outer_spend_ceiling_usd": 890.0,
+    "uncovered_costs": [
+      "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
+      "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "local Docker compute is not priced"
+    ]
+  },
+  "batch_policy": {
+    "max_slots_per_dispatch": 12,
+    "complete_task_triplets": true,
+    "score_independent_boundaries": true,
+    "agent_max_budget_usd_per_slot": 9.1,
+    "judge_max_budget_usd_per_call": 0.01,
+    "max_judge_calls_per_slot": 5,
+    "max_judge_attempts_per_call": 3,
+    "outer_spend_hard_cap_per_slot_usd": 9.25
+  },
+  "provider_capacity": {
+    "confirmed": false,
+    "capacity_reference": null,
+    "confirmed_completed_prefix": null,
+    "confirmed_max_slots": null
+  },
+  "authorization": {
+    "paid_dispatch_authorized": false,
+    "authorization_reference": null,
+    "authorized_completed_prefix": null,
+    "authorized_end_prefix": null,
+    "authorized_batch_hash": null,
+    "authorized_outer_spend_ceiling_usd": null
+  }
+}
