@@ -490,6 +490,25 @@ def test_repository_dispatch_plan_is_current_and_spend_gated() -> None:
     assert plan.sample_attempts == 9
 
 
+def test_repository_v2_dispatch_plan_is_current_and_spend_gated() -> None:
+    plan_path = (
+        PROJECT_ROOT
+        / "configs"
+        / "studies"
+        / "rryas-headline-v2"
+        / "dispatch_plan.json"
+    )
+    plan = load_dispatch_plan(plan_path, repo_root=PROJECT_ROOT)
+
+    assert len(plan.slots) == 120
+    assert plan.paid_dispatch_authorized is False
+    assert plan.authorization_reference is None
+    assert plan.forecast_outer_spend_usd == pytest.approx(625.217931)
+    assert plan.empirical_envelope_usd == pytest.approx(1090.23432)
+    assert plan.authorization_ceiling_usd == pytest.approx(1100.0)
+    assert plan.sample_attempts == 7
+
+
 def test_repository_aborted_run_is_immutable_and_not_promotable() -> None:
     study_dir = PROJECT_ROOT / "results" / "studies" / "rryas-headline-v1"
     status = json.loads((study_dir / "study_status.json").read_text())

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v2",
+  "status": "LOCKED-NO-SPEND",
+  "study_spec": "configs/studies/rryas-headline-v2/study_spec.json",
+  "study_spec_file_hash": "sha256:91791a5449aafc988b235ca975ccd2c987531d3da18956e36d8aa5faf90f1e29",
+  "study_spec_hash": "sha256:d57ea8d5bfc6cdc77a268e5647c54a548c52be87d576b8d10f07a09186809dac",
+  "final_manifest": "configs/studies/rryas-headline-v2/final_manifest.json",
+  "final_manifest_hash": "sha256:9d69f52b0edf578122b76cd7cf1c3de3a2a57372bce71dfaef4305ddf0727926",
+  "preflight_evidence": "configs/studies/rryas-headline-v2/preflight_evidence.json",
+  "preflight_evidence_hash": "sha256:31f71c5353251971ae6701aaf6756b9080be598eb594b7d9cd2701699c5ad11d",
+  "cost_forecast": {
+    "basis": "All seven immutable rryas-headline-v1 attempts, including the terminal invalid attempt, with provider-native outer-agent cost and zero cache reads/writes.",
+    "sample_receipts": [
+      {
+        "path": "results/studies/rryas-headline-v1/receipts.jsonl",
+        "sha256": "sha256:d074eee11e5b39e5f1a9584bc6ab0deff419f3ff9ba111fffe240715869144df"
+      }
+    ],
+    "sample_attempts": 7,
+    "sample_outer_spend_usd": 36.471046,
+    "mean_per_slot_usd": 5.210149429,
+    "forecast_outer_spend_usd": 625.217931,
+    "max_observed_per_slot_usd": 9.085286,
+    "empirical_slot_count_envelope_usd": 1090.23432,
+    "authorization_outer_spend_ceiling_usd": 1100.0,
+    "uncovered_costs": [
+      "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
+      "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "local Docker compute is not priced"
+    ]
+  },
+  "authorization": {
+    "paid_dispatch_authorized": false,
+    "authorization_reference": null
+  }
+}

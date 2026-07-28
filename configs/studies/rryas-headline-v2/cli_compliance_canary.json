@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "canary_id": "rryas-headline-v2-cli-compliance-canary",
+  "status": "LOCKED-NO-SPEND",
+  "purpose": "Validate strengthened CLI treatment compliance, not reward.",
+  "task_id": "api-contract-dual-envoy-istio-001",
+  "candidate_id": "api-contract-dual-envoy-istio-001",
+  "task_toml": "benchmarks/dependency_management/api-contract-dual-envoy-istio-001/task.toml",
+  "mode": "cli",
+  "harness": "claude",
+  "model": "claude-sonnet-5",
+  "agent_account": 3,
+  "judge_account": 1,
+  "max_attempts": 1,
+  "harness_hash": "sha256:4fdfe11e9c7552e8ff8f6fdf6ecb8079691d75753ac97a4336126282915209a5",
+  "revision": "3ef4a5355cb2a61de40a8728fa6c3230e135386d",
+  "output_root": "results/studies/rryas-headline-v2-cli-compliance-canary",
+  "success_criterion": "sgx_tool_calls > 0",
+  "analysis_use": "operational compliance evidence only",
+  "paid_dispatch_authorized": false,
+  "authorization_reference": null
+}

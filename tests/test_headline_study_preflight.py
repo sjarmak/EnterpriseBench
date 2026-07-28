@@ -558,3 +558,26 @@ def test_repository_aborted_capsule_remains_bound_and_spend_gated() -> None:
     assert evidence["paid_dispatch_authorized"] is False
     for candidate_id, paths in preflight_module.POST_LOCK_EXPOSURE_EVIDENCE.items():
         assert all(candidate_id in (PROJECT_ROOT / path).read_text() for path in paths)
+
+
+def test_repository_v2_capsule_is_current_complete_and_spend_gated() -> None:
+    study_dir = PROJECT_ROOT / "configs" / "studies" / "rryas-headline-v2"
+
+    evidence = validate_headline_study(
+        spec_path=study_dir / "study_spec.json",
+        manifest_path=study_dir / "final_manifest.json",
+        candidate_manifest_path=(
+            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
+        ),
+        analysis_plan_path=study_dir / "analysis_plan.json",
+        repo_root=PROJECT_ROOT,
+        mirror_probe=lambda _repository: True,
+        auth_probe=lambda _credential: True,
+    )
+
+    assert len(evidence.task_ids) == 40
+    assert len(evidence.slots) == 120
+    assert evidence.paid_dispatch_authorized is False
+    assert json.loads(
+        (study_dir / "preflight_evidence.json").read_text()
+    ) == json.loads(json.dumps(evidence.__dict__))

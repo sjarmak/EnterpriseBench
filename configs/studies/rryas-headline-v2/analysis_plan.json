@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "status": "LOCKED-BEFORE-HEADLINE-INFERENCE",
+  "study_id": "rryas-headline-v2",
+  "claim_scope": "Claude Sonnet 5 on the 40-task EnterpriseBench markdown-report confirmatory population remaining after the disclosed v1 operational run",
+  "score": {
+    "field": "task_score",
+    "contract": "weighted-mean-v2",
+    "range": [
+      0.0,
+      1.0
+    ],
+    "unit": "task"
+  },
+  "primary_estimands": [
+    {
+      "name": "mean_paired_reward_difference_mcp_only_minus_baseline",
+      "contrast": [
+        "mcp_only",
+        "baseline"
+      ],
+      "aggregation": "unweighted mean across all 40 paired tasks"
+    },
+    {
+      "name": "mean_paired_reward_difference_cli_minus_baseline",
+      "contrast": [
+        "cli",
+        "baseline"
+      ],
+      "aggregation": "unweighted mean across all 40 paired tasks"
+    }
+  ],
+  "secondary_estimands": [
+    "per-arm mean task_score",
+    "task-type-stratified paired reward differences",
+    "reported_outer_cost_usd",
+    "combined_tokens",
+    "elapsed_seconds",
+    "retrieval activity and validity gates"
+  ],
+  "descriptive_only": {
+    "contrast": "cli_minus_mcp_only",
+    "reason": "the arms jointly change interface and local-source availability"
+  },
+  "inference": {
+    "confidence_level": 0.95,
+    "bootstrap_repetitions": 10000,
+    "bootstrap_seed": 20260728,
+    "bootstrap_unit": "paired task",
+    "stratification": "task_type with locked observed stratum sizes",
+    "interval": "percentile paired bootstrap",
+    "multiplicity": "Holm correction at familywise alpha 0.05 for the two primary contrasts"
+  },
+  "reward_parity_gate_for_efficiency_claims": {
+    "method": "two one-sided tests using a 90% paired-bootstrap interval",
+    "absolute_task_score_margin": 0.05,
+    "claim_rule": "claim cheaper or faster at parity only when the complete 90% reward-difference interval is within [-0.05, 0.05]"
+  },
+  "missing_invalid_handling": {
+    "max_attempts_per_slot": 1,
+    "retry_after_observing_output_or_score": false,
+    "incomplete_pair": "no headline promotion or confirmatory inference",
+    "all_attempts": "retain status, tokens, elapsed time, and cost",
+    "headline_requires_all_120_slots_valid": true
+  },
+  "reporting": {
+    "type_counts_and_per_type_results_required": true,
+    "absolute_arm_means_required": true,
+    "paired_differences_and_intervals_required": true,
+    "all_attempt_spend_required": true,
+    "account_order_and_revision_provenance_required": true,
+    "no_generalization_to_structured_deliverables": true
+  },
+  "protocol_amendment": {
+    "predecessor": "rryas-headline-v1",
+    "reason": "v1 stopped on a prespecified infra_sgx_unused CLI validity gate",
+    "selection_rule": "exclude every task with v1 agent output; retain all other locked candidates without inspecting reward",
+    "excluded_candidate_ids": [
+      "api-contract-001",
+      "api-contract-002",
+      "api-contract-dual-envoy-istio-001"
+    ],
+    "v1_analysis_use": "operational pilot evidence only"
+  }
+}

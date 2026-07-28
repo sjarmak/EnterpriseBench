@@ -1,0 +1,71 @@
+{
+  "study_id": "rryas-headline-v2",
+  "schema_version": 1,
+  "task_manifest_hash": "sha256:9d69f52b0edf578122b76cd7cf1c3de3a2a57372bce71dfaef4305ddf0727926",
+  "task_ids": [
+    "api-contract-dual-hyper-reqwest-001",
+    "api-contract-dual-jackson-spring-001",
+    "api-contract-dual-sqlalchemy-alembic-001",
+    "config-drift-dual-setuptools-pip-001",
+    "dep-graph-dual-cryptography-paramiko-001",
+    "dep-graph-dual-spring-hibernate-001",
+    "dep-graph-dual-tokio-hyper-001",
+    "dep-graph-tri-boto3-urllib3-requests-001",
+    "dep-graph-tri-prometheus-alertmanager-grafana-001",
+    "dep-graph-tri-tokio-hyper-tonic-001",
+    "dep-traversal-001",
+    "dep-traversal-002",
+    "dep-traversal-004",
+    "dep-traversal-005",
+    "dep-traversal-006",
+    "dep-traversal-007",
+    "dep-traversal-008",
+    "dep-traversal-009",
+    "dep-traversal-011",
+    "dep-traversal-012",
+    "dep-traversal-tri-boto3-001",
+    "dep-traversal-tri-jackson-001",
+    "dep-traversal-tri-openssl-001",
+    "error-prov-dual-netty-spring-001",
+    "error-prov-dual-tokio-tower-001",
+    "error-prov-dual-urllib3-requests-001",
+    "incident-inv-docker-shutdown-004",
+    "incident-investigation-dual-cockroach-001",
+    "incident-investigation-dual-cortex-001",
+    "incident-investigation-dual-flux-001",
+    "incident-investigation-dual-kafka-001",
+    "incident-investigation-dual-loki-001",
+    "incident-investigation-dual-nats-001",
+    "incident-investigation-dual-nomad-001",
+    "incident-investigation-dual-prometheus-001",
+    "incident-investigation-dual-tempo-001",
+    "incident-investigation-dual-tikv-001",
+    "incident-investigation-dual-vault-001",
+    "incident-investigation-quad-containerd-001",
+    "incident-investigation-tri-containerd-001"
+  ],
+  "arms": [
+    {
+      "name": "baseline",
+      "capability_fingerprint": "local-repos:no-mcp:no-sgx:cache-isolated:v2"
+    },
+    {
+      "name": "mcp_only",
+      "capability_fingerprint": "sourcegraph-mcp:local-repos-denied:cache-isolated:v2"
+    },
+    {
+      "name": "cli",
+      "capability_fingerprint": "sgx-cli:local-repos-readable:retrieval-before-local:cache-isolated:v3"
+    }
+  ],
+  "baseline_arm": "baseline",
+  "repetitions": 1,
+  "attempt_policy": "first_valid_attempt",
+  "max_attempts": 1,
+  "model": "claude-sonnet-5",
+  "harness": "sha256:4fdfe11e9c7552e8ff8f6fdf6ecb8079691d75753ac97a4336126282915209a5",
+  "revision": "3ef4a5355cb2a61de40a8728fa6c3230e135386d",
+  "token_source": "sdk_model_usage",
+  "score_contract": "weighted-mean-v2",
+  "promotion_policy": "paired-valid-complete-arms"
+}

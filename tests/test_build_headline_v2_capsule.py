@@ -13,7 +13,7 @@ for import_path in (
 ):
     sys.path.insert(0, str(import_path))
 
-from build_headline_v2_capsule import build_core_payloads  # noqa: E402
+from build_headline_v2_capsule import build_core_payloads, write_capsule  # noqa: E402
 
 
 def test_v2_builder_mechanically_excludes_only_exposed_tasks() -> None:
@@ -42,3 +42,16 @@ def test_v2_builder_mechanically_excludes_only_exposed_tasks() -> None:
     assert build.dispatch_plan["cost_forecast"]["sample_attempts"] == 7
     assert build.canary["paid_dispatch_authorized"] is False
     assert build.canary["success_criterion"] == "sgx_tool_calls > 0"
+
+
+def test_repository_v2_artifacts_are_current() -> None:
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    build = build_core_payloads(PROJECT_ROOT, revision=revision)
+
+    write_capsule(PROJECT_ROOT, build, check=True)
