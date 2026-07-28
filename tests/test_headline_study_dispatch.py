@@ -23,9 +23,11 @@ from headline_study_dispatch import (  # noqa: E402
 )
 
 
-def _spec_payload(manifest_hash: str) -> dict[str, object]:
+def _spec_payload(
+    manifest_hash: str, *, study_id: str = "rryas-headline-v1"
+) -> dict[str, object]:
     return {
-        "study_id": "rryas-headline-v1",
+        "study_id": study_id,
         "schema_version": 1,
         "task_manifest_hash": manifest_hash,
         "task_ids": ["task-a", "task-b"],
@@ -53,7 +55,9 @@ def _spec_payload(manifest_hash: str) -> dict[str, object]:
     }
 
 
-def _row(task_id: str, arm: str) -> dict[str, object]:
+def _row(
+    task_id: str, arm: str, *, study_id: str = "rryas-headline-v1"
+) -> dict[str, object]:
     return {
         "candidate_id": task_id,
         "task_id": task_id,
@@ -63,7 +67,7 @@ def _row(task_id: str, arm: str) -> dict[str, object]:
         "agent_account": 3,
         "judge_account": 1,
         "output_dir": (
-            f"results/studies/rryas-headline-v1/runs/{task_id}/{arm}/rep1/attempt1"
+            f"results/studies/{study_id}/runs/{task_id}/{arm}/rep1/attempt1"
         ),
     }
 
@@ -74,6 +78,7 @@ def _write_fixture(
     authorized: bool = False,
     ceiling: float = 20.0,
     per_slot_envelope: float = 2.0,
+    study_id: str = "rryas-headline-v1",
 ) -> tuple[Path, Path, Path, Path, Path]:
     task_paths: dict[str, str] = {}
     for task_id in ("task-a", "task-b"):
@@ -83,18 +88,18 @@ def _write_fixture(
         task_paths[task_id] = str(task_toml.relative_to(tmp_path))
 
     rows = [
-        _row("task-a", "baseline"),
-        _row("task-a", "mcp_only"),
-        _row("task-a", "cli"),
-        _row("task-b", "mcp_only"),
-        _row("task-b", "cli"),
-        _row("task-b", "baseline"),
+        _row("task-a", "baseline", study_id=study_id),
+        _row("task-a", "mcp_only", study_id=study_id),
+        _row("task-a", "cli", study_id=study_id),
+        _row("task-b", "mcp_only", study_id=study_id),
+        _row("task-b", "cli", study_id=study_id),
+        _row("task-b", "baseline", study_id=study_id),
     ]
     manifest_path = tmp_path / "final_manifest.json"
     manifest_path.write_text(
         json.dumps(
             {
-                "study_id": "rryas-headline-v1",
+                "study_id": study_id,
                 "status": "FINAL-NO-SPEND",
                 "tasks": [
                     {"task_id": task_id, "task_toml": path}
@@ -109,7 +114,7 @@ def _write_fixture(
                     "memory_mb": 8192,
                     "no_build": False,
                     "execution_order": rows,
-                    "receipts": ("results/studies/rryas-headline-v1/receipts.jsonl"),
+                    "receipts": (f"results/studies/{study_id}/receipts.jsonl"),
                 },
             },
             sort_keys=True,
@@ -117,13 +122,14 @@ def _write_fixture(
     )
     spec_path = tmp_path / "study_spec.json"
     spec_path.write_text(
-        json.dumps(_spec_payload(file_hash(manifest_path)), sort_keys=True)
+        json.dumps(
+            _spec_payload(file_hash(manifest_path), study_id=study_id),
+            sort_keys=True,
+        )
     )
     evidence_path = tmp_path / "preflight_evidence.json"
     evidence_path.write_text('{"paid_dispatch_authorized": false}\n')
-    receipts_path = (
-        tmp_path / "results" / "studies" / "rryas-headline-v1" / "receipts.jsonl"
-    )
+    receipts_path = tmp_path / "results" / "studies" / study_id / "receipts.jsonl"
     receipts_path.parent.mkdir(parents=True)
     sample_path = tmp_path / "sample_receipts.jsonl"
     sample_path.write_text(
@@ -147,7 +153,7 @@ def _write_fixture(
         json.dumps(
             {
                 "schema_version": 1,
-                "study_id": "rryas-headline-v1",
+                "study_id": study_id,
                 "status": "LOCKED-NO-SPEND",
                 "study_spec": str(spec_path.relative_to(tmp_path)),
                 "study_spec_file_hash": file_hash(spec_path),
@@ -454,6 +460,15 @@ def test_dispatch_plan_must_live_inside_repo_root(tmp_path: Path) -> None:
             load_dispatch_plan(outside, repo_root=tmp_path)
     finally:
         outside.unlink()
+
+
+def test_dispatcher_loads_a_supported_v2_plan(tmp_path: Path) -> None:
+    plan_path, *_ = _write_fixture(tmp_path, study_id="rryas-headline-v2")
+
+    plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+    assert plan.spec.study_id == "rryas-headline-v2"
+    assert all("rryas-headline-v2" in str(slot.output_dir) for slot in plan.slots)
 
 
 def test_repository_dispatch_plan_is_current_and_spend_gated() -> None:

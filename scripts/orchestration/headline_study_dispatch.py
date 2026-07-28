@@ -29,6 +29,7 @@ from eb_study import (  # noqa: E402
     read_receipts,
 )
 from headline_study_preflight import (  # noqa: E402
+    HEADLINE_PROTOCOLS,
     STUDY_ID,
     validate_headline_study,
 )
@@ -298,9 +299,10 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
     except ValueError as exc:
         raise DispatchError("dispatch plan must live inside the repository") from exc
     plan = _load_object(plan_path, "dispatch plan")
+    study_id = plan.get("study_id")
     if (
         plan.get("schema_version") != 1
-        or plan.get("study_id") != STUDY_ID
+        or study_id not in HEADLINE_PROTOCOLS
         or plan.get("status") != "LOCKED-NO-SPEND"
     ):
         raise DispatchError("dispatch plan identity/status is not locked")
@@ -317,10 +319,10 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
     spec = StudySpec.load(spec_path)
     manifest = _load_object(manifest_path, "final manifest")
     if (
-        spec.study_id != STUDY_ID
+        spec.study_id != study_id
         or plan.get("study_spec_hash") != spec.spec_hash
         or spec.task_manifest_hash != file_hash(manifest_path)
-        or manifest.get("study_id") != STUDY_ID
+        or manifest.get("study_id") != study_id
         or manifest.get("status") != "FINAL-NO-SPEND"
     ):
         raise DispatchError("dispatch plan does not bind the frozen headline capsule")
