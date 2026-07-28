@@ -39,7 +39,7 @@
     ]
   },
   "authorization": {
-    "paid_dispatch_authorized": false,
-    "authorization_reference": null
+    "paid_dispatch_authorized": true,
+    "authorization_reference": "user authorization in Codex thread at 2026-07-28T02:25:58Z; outer-agent ceiling USD 275.00"
   }
 }

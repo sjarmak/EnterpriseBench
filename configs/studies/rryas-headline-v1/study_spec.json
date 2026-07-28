@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-headline-v1",
   "schema_version": 1,
-  "task_manifest_hash": "sha256:d016b6494d759d0d8372ab316c5cca9032d09f773078bbdb86d0bfe20bcb04d7",
+  "task_manifest_hash": "sha256:100776d8e26364b6886a5ba7d09b704569db7167ff174489b3f990bcc0de6c2d",
   "task_ids": [
     "api-contract-grpc-metadata-001",
     "api-contract-grpc-balancer-002",
@@ -66,8 +66,8 @@
   "attempt_policy": "first_valid_attempt",
   "max_attempts": 1,
   "model": "claude-sonnet-5",
-  "harness": "sha256:74d28c4bbef19ae8740b08dd76d907dfe3af45b927e6ce66337fb2db7c9f66b0",
-  "revision": "87c26924d76ba3dbb810b75cceb199e7ccfdf819",
+  "harness": "sha256:a3182186e8cacfce391cefafbb364a378146e4f165d621c74aee3d3063eeac9a",
+  "revision": "78eb9a23f125cf0d8f7f7c1e7defe1002b9b9908",
   "token_source": "sdk_model_usage",
   "score_contract": "weighted-mean-v2",
   "promotion_policy": "paired-valid-complete-arms"
