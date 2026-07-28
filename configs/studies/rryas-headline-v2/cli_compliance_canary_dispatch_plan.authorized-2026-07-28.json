@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v2-cli-compliance-canary",
+  "status": "LOCKED-NO-SPEND",
+  "manifest": "configs/studies/rryas-headline-v2/cli_compliance_canary.json",
+  "manifest_hash": "sha256:ef0ff2e32fb4bcf4dc7c247bf738be2d17d5cfc8d432cace6d73d5b45b68ff4d",
+  "study_spec": "configs/studies/rryas-headline-v2/cli_compliance_canary_study_spec.json",
+  "study_spec_file_hash": "sha256:3abff96a2e4bcbe669e96edf557eef64c167d52c95623c890e16815749e6b310",
+  "study_spec_hash": "sha256:fc4cd803174151340b2133740a9ffe14b00b4321a5e2e35229b69e7614efa0d6",
+  "cost_forecast": {
+    "basis": "All seven immutable rryas-headline-v1 attempts, including the terminal invalid attempt, with provider-native outer-agent cost and zero cache reads/writes.",
+    "sample_receipts": [
+      {
+        "path": "results/studies/rryas-headline-v1/receipts.jsonl",
+        "sha256": "sha256:d074eee11e5b39e5f1a9584bc6ab0deff419f3ff9ba111fffe240715869144df"
+      }
+    ],
+    "sample_attempts": 7,
+    "sample_outer_spend_usd": 36.471046,
+    "mean_per_slot_usd": 5.210149429,
+    "forecast_outer_spend_usd": 5.210149,
+    "max_observed_per_slot_usd": 9.085286,
+    "empirical_slot_count_envelope_usd": 9.085286,
+    "authorization_outer_spend_ceiling_usd": 10.0,
+    "uncovered_costs": [
+      "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
+      "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "local Docker compute is not priced"
+    ]
+  },
+  "authorization": {
+    "paid_dispatch_authorized": true,
+    "authorization_reference": "user-authorized-2026-07-28"
+  }
+}
