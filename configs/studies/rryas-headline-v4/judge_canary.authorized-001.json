@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v4-judge-canary",
+  "status": "AUTHORIZED",
+  "paid_dispatch_authorized": true,
+  "authorization_reference": "codex-thread:019f9576-4d39-74a0-80d1-ba3feeca2fb5 user authorized isolated judge-only canary after v3 diagnosis",
+  "revision": "4a7ecda031055f935758156c8f9ff8afc31556b7",
+  "account": 1,
+  "model": "cc:haiku",
+  "max_budget_usd": 0.1,
+  "input_chars": 12000,
+  "backend_hash": "sha256:00efcecd1daa7b600e8e74718d220fec0596d7ca10d9d17767ae362edc4f4c8f",
+  "engine_hash": "sha256:26666e70abb60d3b1d54e6564e0565b2805cedd1fdb5a31ba873df6f79d39475",
+  "output": "results/studies/rryas-headline-v4-judge-canary/result.json"
+}
