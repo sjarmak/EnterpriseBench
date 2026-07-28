@@ -156,29 +156,63 @@ def _cost_forecast(repo_root: Path) -> dict[str, Any]:
     }
 
 
-def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
-    """Derive every v2 artifact without writing to disk or launching a model."""
-
-    repo_root = repo_root.resolve()
-    v1_manifest = _load_object(repo_root / V1_CONFIG_DIR / "final_manifest.json")
-    candidate_path = repo_root / CANDIDATE_MANIFEST
-    candidate_manifest = _load_object(candidate_path)
-    tasks = _selected_tasks(v1_manifest, candidate_manifest)
-    analysis = required_analysis_plan(V2_PROTOCOL)
-    analysis_path = V2_CONFIG_DIR / "analysis_plan.json"
-
+def _task_provenances(
+    repo_root: Path, tasks: Sequence[Mapping[str, Any]]
+) -> tuple[tuple[Any, ...], str]:
     provider = _default_provenance_provider(repo_root)
-    provenances = [provider(repo_root / str(task["task_toml"])) for task in tasks]
+    provenances = tuple(provider(repo_root / str(task["task_toml"])) for task in tasks)
     harness_hashes = {provenance.harness_hash for provenance in provenances}
     if len(harness_hashes) != 1:
         raise ValueError("v2 tasks do not share one current harness hash")
-    harness_hash = next(iter(harness_hashes))
     for task, provenance in zip(tasks, provenances):
         if task.get("task_hash") != provenance.task_hash:
             raise ValueError(f"task hash drifted for {task.get('task_id')}")
+    return provenances, next(iter(harness_hashes))
 
-    manifest = deepcopy(v1_manifest)
+
+def _selection_payload() -> dict[str, Any]:
+    return {
+        "rule": REQUIRED_SELECTION_RULE,
+        "candidate_outcomes_inspected": False,
+        "candidate_count": 48,
+        "selected_count": V2_PROTOCOL.task_count,
+        "post_lock_exposures": [
+            {
+                "candidate_id": candidate_id,
+                "reason": "post_lock_agent_output",
+                "evidence": list(V2_PROTOCOL.post_lock_exposure_evidence[candidate_id]),
+            }
+            for candidate_id in V2_PROTOCOL.post_lock_exposures
+        ],
+    }
+
+
+def _execution_configuration(
+    tasks: Sequence[Mapping[str, Any]], output_root: str
+) -> dict[str, Any]:
+    return {
+        **REQUIRED_EXECUTION_BASE,
+        "output_root": output_root,
+        "receipts": f"{output_root}/receipts.jsonl",
+        "order_policy": REQUIRED_ORDER_POLICY,
+        "execution_order": [
+            dict(row)
+            for row in compile_execution_order(tasks, study_id=V2_PROTOCOL.study_id)
+        ],
+    }
+
+
+def _manifest_payload(
+    *,
+    v1_manifest: Mapping[str, Any],
+    tasks: Sequence[Mapping[str, Any]],
+    analysis: Mapping[str, Any],
+    candidate_path: Path,
+    provenances: Sequence[Any],
+    harness_hash: str,
+) -> dict[str, Any]:
     output_root = f"results/studies/{V2_PROTOCOL.study_id}"
+    manifest = deepcopy(v1_manifest)
     manifest.update(
         {
             "study_id": V2_PROTOCOL.study_id,
@@ -189,40 +223,14 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
             "candidate_manifest": str(CANDIDATE_MANIFEST),
             "candidate_manifest_hash": file_hash(candidate_path),
             "candidate_lock_revision": CANDIDATE_LOCK_REVISION,
-            "analysis_plan": str(analysis_path),
+            "analysis_plan": str(V2_CONFIG_DIR / "analysis_plan.json"),
             "analysis_plan_hash": _payload_hash(analysis),
-            "selection": {
-                "rule": REQUIRED_SELECTION_RULE,
-                "candidate_outcomes_inspected": False,
-                "candidate_count": 48,
-                "selected_count": V2_PROTOCOL.task_count,
-                "post_lock_exposures": [
-                    {
-                        "candidate_id": candidate_id,
-                        "reason": "post_lock_agent_output",
-                        "evidence": list(
-                            V2_PROTOCOL.post_lock_exposure_evidence[candidate_id]
-                        ),
-                    }
-                    for candidate_id in V2_PROTOCOL.post_lock_exposures
-                ],
-            },
-            "tasks": tasks,
+            "selection": _selection_payload(),
+            "tasks": list(tasks),
             "arms": dict(V2_PROTOCOL.arm_descriptions),
             "cache_isolation": REQUIRED_CACHE_ISOLATION,
             "judge_configuration": REQUIRED_JUDGE,
-            "execution_configuration": {
-                **REQUIRED_EXECUTION_BASE,
-                "output_root": output_root,
-                "receipts": f"{output_root}/receipts.jsonl",
-                "order_policy": REQUIRED_ORDER_POLICY,
-                "execution_order": [
-                    dict(row)
-                    for row in compile_execution_order(
-                        tasks, study_id=V2_PROTOCOL.study_id
-                    )
-                ],
-            },
+            "execution_configuration": _execution_configuration(tasks, output_root),
             "spend_guard": {
                 "slots": V2_PROTOCOL.slot_count,
                 "max_attempts_per_slot": 1,
@@ -239,8 +247,17 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
             },
         }
     )
+    return manifest
 
-    spec = {
+
+def _study_spec_payload(
+    tasks: Sequence[Mapping[str, Any]],
+    manifest: Mapping[str, Any],
+    *,
+    harness_hash: str,
+    revision: str,
+) -> dict[str, Any]:
+    return {
         "study_id": V2_PROTOCOL.study_id,
         "schema_version": 1,
         "task_manifest_hash": _payload_hash(manifest),
@@ -260,10 +277,18 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
         "score_contract": "weighted-mean-v2",
         "promotion_policy": "paired-valid-complete-arms",
     }
-    study_spec = StudySpec.from_json(spec)
+
+
+def _preflight_payload(
+    tasks: Sequence[Mapping[str, Any]],
+    *,
+    study_spec: StudySpec,
+    analysis: Mapping[str, Any],
+    revision: str,
+) -> dict[str, Any]:
     task_ids = tuple(str(task["task_id"]) for task in tasks)
     task_types = tuple(str(task["task_type"]) for task in tasks)
-    evidence = asdict(
+    return asdict(
         HeadlineEvidence(
             study_id=V2_PROTOCOL.study_id,
             spec_hash=study_spec.spec_hash,
@@ -282,7 +307,7 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
                 for task in tasks
                 for repository in task["expected_repositories"]
             ),
-            output_root=output_root,
+            output_root=f"results/studies/{V2_PROTOCOL.study_id}",
             type_counts=tuple(
                 (task_type, task_types.count(task_type))
                 for task_type in sorted(set(task_types))
@@ -290,7 +315,17 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
             paid_dispatch_authorized=False,
         )
     )
-    dispatch_plan = {
+
+
+def _dispatch_plan_payload(
+    repo_root: Path,
+    *,
+    spec: Mapping[str, Any],
+    study_spec: StudySpec,
+    manifest: Mapping[str, Any],
+    evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
         "schema_version": 1,
         "study_id": V2_PROTOCOL.study_id,
         "status": "LOCKED-NO-SPEND",
@@ -307,7 +342,10 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
             "authorization_reference": None,
         },
     }
-    canary = {
+
+
+def _canary_payload(*, harness_hash: str, revision: str) -> dict[str, Any]:
+    return {
         "schema_version": 1,
         "canary_id": "rryas-headline-v2-cli-compliance-canary",
         "status": "LOCKED-NO-SPEND",
@@ -326,12 +364,47 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
         "max_attempts": 1,
         "harness_hash": harness_hash,
         "revision": revision,
-        "output_root": ("results/studies/rryas-headline-v2-cli-compliance-canary"),
+        "output_root": "results/studies/rryas-headline-v2-cli-compliance-canary",
         "success_criterion": "sgx_tool_calls > 0",
         "analysis_use": "operational compliance evidence only",
         "paid_dispatch_authorized": False,
         "authorization_reference": None,
     }
+
+
+def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
+    """Derive every v2 artifact without writing to disk or launching a model."""
+
+    repo_root = repo_root.resolve()
+    v1_manifest = _load_object(repo_root / V1_CONFIG_DIR / "final_manifest.json")
+    candidate_path = repo_root / CANDIDATE_MANIFEST
+    candidate_manifest = _load_object(candidate_path)
+    tasks = _selected_tasks(v1_manifest, candidate_manifest)
+    analysis = required_analysis_plan(V2_PROTOCOL)
+    provenances, harness_hash = _task_provenances(repo_root, tasks)
+    manifest = _manifest_payload(
+        v1_manifest=v1_manifest,
+        tasks=tasks,
+        analysis=analysis,
+        candidate_path=candidate_path,
+        provenances=provenances,
+        harness_hash=harness_hash,
+    )
+    spec = _study_spec_payload(
+        tasks, manifest, harness_hash=harness_hash, revision=revision
+    )
+    study_spec = StudySpec.from_json(spec)
+    evidence = _preflight_payload(
+        tasks, study_spec=study_spec, analysis=analysis, revision=revision
+    )
+    dispatch_plan = _dispatch_plan_payload(
+        repo_root,
+        spec=spec,
+        study_spec=study_spec,
+        manifest=manifest,
+        evidence=evidence,
+    )
+    canary = _canary_payload(harness_hash=harness_hash, revision=revision)
     return CorePayloads(
         analysis_plan=analysis,
         manifest=manifest,
@@ -383,6 +456,16 @@ def _git_revision(repo_root: Path) -> str:
     return result.stdout.strip()
 
 
+def configured_revision(repo_root: Path) -> str:
+    """Return the immutable revision recorded by the frozen v2 capsule."""
+
+    spec = _load_object(repo_root / V2_CONFIG_DIR / "study_spec.json")
+    revision = spec.get("revision")
+    if not isinstance(revision, str) or len(revision) != 40:
+        raise ValueError("frozen v2 study spec has no full git revision")
+    return revision
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -391,7 +474,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Fail if committed v2 artifacts differ; do not write files.",
     )
     args = parser.parse_args(argv)
-    build = build_core_payloads(REPO_ROOT, revision=_git_revision(REPO_ROOT))
+    revision = (
+        configured_revision(REPO_ROOT) if args.check else _git_revision(REPO_ROOT)
+    )
+    build = build_core_payloads(REPO_ROOT, revision=revision)
     write_capsule(REPO_ROOT, build, check=args.check)
     print(
         json.dumps(

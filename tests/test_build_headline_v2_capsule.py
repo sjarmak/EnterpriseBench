@@ -13,7 +13,11 @@ for import_path in (
 ):
     sys.path.insert(0, str(import_path))
 
-from build_headline_v2_capsule import build_core_payloads, write_capsule  # noqa: E402
+from build_headline_v2_capsule import (  # noqa: E402
+    build_core_payloads,
+    configured_revision,
+    write_capsule,
+)
 
 
 def test_v2_builder_mechanically_excludes_only_exposed_tasks() -> None:
@@ -45,13 +49,7 @@ def test_v2_builder_mechanically_excludes_only_exposed_tasks() -> None:
 
 
 def test_repository_v2_artifacts_are_current() -> None:
-    revision = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=PROJECT_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    revision = configured_revision(PROJECT_ROOT)
     build = build_core_payloads(PROJECT_ROOT, revision=revision)
 
     write_capsule(PROJECT_ROOT, build, check=True)
