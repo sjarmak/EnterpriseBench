@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-codex-finder-parity-v1",
   "schema_version": 1,
-  "task_manifest_hash": "sha256:3952b84972c07e8f2e9c3c88e731ba0f863e7b2828d4554cd5562848192ce41d",
+  "task_manifest_hash": "sha256:fcdf57afed3f3f4486ebdf6ce43383bfb16e2a9e5509cbe14343d6e65430c26c",
   "task_ids": [
     "incident-investigation-dual-nerdctl-001"
   ],
@@ -20,8 +20,8 @@
   "attempt_policy": "first_valid_attempt",
   "max_attempts": 1,
   "model": "gpt-5.6-sol",
-  "harness": "sha256:16c81b91da9a6a40da0672030c3e4bf0fadffdaab6a9b3cac2612e667c4c55e9",
-  "revision": "4900829ea6d4cd43bd46399c0dd7c6791e21587b",
+  "harness": "sha256:dfb8fd4708f879b26319dc7b6c0025cdfd189f7e4fc391c810155250471f2865",
+  "revision": "78d9144a2f7ea1f4ef21844e5ddd44c9d1b88605",
   "token_source": "provider_native_usage",
   "score_contract": "weighted-mean-v2",
   "promotion_policy": "descriptive-generated-harness-parity-no-promotion"
