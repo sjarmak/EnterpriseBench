@@ -1,0 +1,37 @@
+{
+  "authorization": {
+    "authorization_reference": "user-authorized-2026-07-28-headline-v2",
+    "paid_dispatch_authorized": true
+  },
+  "cost_forecast": {
+    "authorization_outer_spend_ceiling_usd": 1100.0,
+    "basis": "All seven immutable rryas-headline-v1 attempts, including the terminal invalid attempt, with provider-native outer-agent cost and zero cache reads/writes.",
+    "empirical_slot_count_envelope_usd": 1090.23432,
+    "forecast_outer_spend_usd": 625.217931,
+    "max_observed_per_slot_usd": 9.085286,
+    "mean_per_slot_usd": 5.210149429,
+    "sample_attempts": 7,
+    "sample_outer_spend_usd": 36.471046,
+    "sample_receipts": [
+      {
+        "path": "results/studies/rryas-headline-v1/receipts.jsonl",
+        "sha256": "sha256:d074eee11e5b39e5f1a9584bc6ab0deff419f3ff9ba111fffe240715869144df"
+      }
+    ],
+    "uncovered_costs": [
+      "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
+      "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "local Docker compute is not priced"
+    ]
+  },
+  "final_manifest": "configs/studies/rryas-headline-v2/final_manifest.json",
+  "final_manifest_hash": "sha256:10af9b6d07cf11288b688bba779950a4eedd9a179d6d79d05e70d9d60ba8b71a",
+  "preflight_evidence": "configs/studies/rryas-headline-v2/preflight_evidence.json",
+  "preflight_evidence_hash": "sha256:7a4e3afd2e8691eee1e88b4d061cd320768068602c3219cdba60829a45d1bb2e",
+  "schema_version": 1,
+  "status": "LOCKED-NO-SPEND",
+  "study_id": "rryas-headline-v2",
+  "study_spec": "configs/studies/rryas-headline-v2/study_spec.json",
+  "study_spec_file_hash": "sha256:d3a68119e676f5bc89efbc286cd006776461b27164ea2a0c1def9ec292ce7acb",
+  "study_spec_hash": "sha256:30fbc61c3963d0798b85e6e757ab2c6872049088486ccc212f8e5c849480ca4f"
+}
