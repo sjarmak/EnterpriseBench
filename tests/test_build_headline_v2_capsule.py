@@ -18,6 +18,7 @@ from build_headline_v2_capsule import (  # noqa: E402
     configured_revision,
     write_capsule,
 )
+from eb_study import StudySpec  # noqa: E402
 
 
 def test_v2_builder_mechanically_excludes_only_exposed_tasks() -> None:
@@ -44,7 +45,13 @@ def test_v2_builder_mechanically_excludes_only_exposed_tasks() -> None:
         "authorization_reference": None,
     }
     assert build.dispatch_plan["cost_forecast"]["sample_attempts"] == 7
-    assert build.canary["paid_dispatch_authorized"] is False
+    assert build.canary_dispatch_plan["authorization"] == {
+        "paid_dispatch_authorized": False,
+        "authorization_reference": None,
+    }
+    assert StudySpec.from_json(build.canary_spec).slots() == (
+        ("api-contract-dual-envoy-istio-001", "cli", 1),
+    )
     assert build.canary["success_criterion"] == "sgx_tool_calls > 0"
 
 

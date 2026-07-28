@@ -56,6 +56,8 @@ class CorePayloads:
     preflight_evidence: Mapping[str, Any]
     dispatch_plan: Mapping[str, Any]
     canary: Mapping[str, Any]
+    canary_spec: Mapping[str, Any]
+    canary_dispatch_plan: Mapping[str, Any]
 
 
 def _json_bytes(payload: Mapping[str, Any]) -> bytes:
@@ -123,12 +125,18 @@ def _selected_tasks(
     return selected
 
 
-def _cost_forecast(repo_root: Path) -> dict[str, Any]:
+def _cost_forecast(
+    repo_root: Path,
+    *,
+    slot_count: int | None = None,
+    authorization_ceiling_usd: float = 1100.0,
+) -> dict[str, Any]:
     receipts_path = repo_root / V1_RECEIPTS
     costs = _sample_costs(receipts_path)
     total = sum(costs)
     mean = total / len(costs)
     maximum = max(costs)
+    slots = slot_count or V2_PROTOCOL.slot_count
     return {
         "basis": (
             "All seven immutable rryas-headline-v1 attempts, including the "
@@ -144,10 +152,10 @@ def _cost_forecast(repo_root: Path) -> dict[str, Any]:
         "sample_attempts": len(costs),
         "sample_outer_spend_usd": round(total, 6),
         "mean_per_slot_usd": round(mean, 9),
-        "forecast_outer_spend_usd": round(mean * V2_PROTOCOL.slot_count, 6),
+        "forecast_outer_spend_usd": round(mean * slots, 6),
         "max_observed_per_slot_usd": round(maximum, 6),
-        "empirical_slot_count_envelope_usd": round(maximum * V2_PROTOCOL.slot_count, 6),
-        "authorization_outer_spend_ceiling_usd": 1100.0,
+        "empirical_slot_count_envelope_usd": round(maximum * slots, 6),
+        "authorization_outer_spend_ceiling_usd": authorization_ceiling_usd,
         "uncovered_costs": [
             "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
             "Claude judge-account usage is not included in the agent modelUsage receipt",
@@ -347,8 +355,9 @@ def _dispatch_plan_payload(
 def _canary_payload(*, harness_hash: str, revision: str) -> dict[str, Any]:
     return {
         "schema_version": 1,
+        "study_id": "rryas-headline-v2-cli-compliance-canary",
         "canary_id": "rryas-headline-v2-cli-compliance-canary",
-        "status": "LOCKED-NO-SPEND",
+        "status": "FINAL-NO-SPEND",
         "purpose": "Validate strengthened CLI treatment compliance, not reward.",
         "task_id": "api-contract-dual-envoy-istio-001",
         "candidate_id": "api-contract-dual-envoy-istio-001",
@@ -365,10 +374,65 @@ def _canary_payload(*, harness_hash: str, revision: str) -> dict[str, Any]:
         "harness_hash": harness_hash,
         "revision": revision,
         "output_root": "results/studies/rryas-headline-v2-cli-compliance-canary",
+        "receipts": (
+            "results/studies/rryas-headline-v2-cli-compliance-canary/receipts.jsonl"
+        ),
         "success_criterion": "sgx_tool_calls > 0",
         "analysis_use": "operational compliance evidence only",
-        "paid_dispatch_authorized": False,
-        "authorization_reference": None,
+        "execution": dict(REQUIRED_EXECUTION_BASE),
+    }
+
+
+def _canary_spec_payload(
+    canary: Mapping[str, Any], *, harness_hash: str, revision: str
+) -> dict[str, Any]:
+    return {
+        "study_id": canary["study_id"],
+        "schema_version": 1,
+        "task_manifest_hash": _payload_hash(canary),
+        "task_ids": [canary["task_id"]],
+        "arms": [
+            {
+                "name": "cli",
+                "capability_fingerprint": dict(V2_PROTOCOL.arms)["cli"],
+            }
+        ],
+        "baseline_arm": "cli",
+        "repetitions": 1,
+        "attempt_policy": "first_valid_attempt",
+        "max_attempts": 1,
+        "model": "claude-sonnet-5",
+        "harness": harness_hash,
+        "revision": revision,
+        "token_source": "sdk_model_usage",
+        "score_contract": "weighted-mean-v2",
+        "promotion_policy": "operational-cli-compliance-no-promotion",
+    }
+
+
+def _canary_dispatch_payload(
+    repo_root: Path,
+    *,
+    canary: Mapping[str, Any],
+    canary_spec: Mapping[str, Any],
+) -> dict[str, Any]:
+    study_spec = StudySpec.from_json(canary_spec)
+    return {
+        "schema_version": 1,
+        "study_id": canary["study_id"],
+        "status": "LOCKED-NO-SPEND",
+        "manifest": str(V2_CONFIG_DIR / "cli_compliance_canary.json"),
+        "manifest_hash": _payload_hash(canary),
+        "study_spec": str(V2_CONFIG_DIR / "cli_compliance_canary_study_spec.json"),
+        "study_spec_file_hash": _payload_hash(canary_spec),
+        "study_spec_hash": study_spec.spec_hash,
+        "cost_forecast": _cost_forecast(
+            repo_root, slot_count=1, authorization_ceiling_usd=10.0
+        ),
+        "authorization": {
+            "paid_dispatch_authorized": False,
+            "authorization_reference": None,
+        },
     }
 
 
@@ -405,6 +469,12 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
         evidence=evidence,
     )
     canary = _canary_payload(harness_hash=harness_hash, revision=revision)
+    canary_spec = _canary_spec_payload(
+        canary, harness_hash=harness_hash, revision=revision
+    )
+    canary_dispatch_plan = _canary_dispatch_payload(
+        repo_root, canary=canary, canary_spec=canary_spec
+    )
     return CorePayloads(
         analysis_plan=analysis,
         manifest=manifest,
@@ -412,6 +482,8 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
         preflight_evidence=evidence,
         dispatch_plan=dispatch_plan,
         canary=canary,
+        canary_spec=canary_spec,
+        canary_dispatch_plan=canary_dispatch_plan,
     )
 
 
@@ -423,6 +495,8 @@ def _artifact_payloads(build: CorePayloads) -> dict[str, Mapping[str, Any]]:
         "preflight_evidence.json": build.preflight_evidence,
         "dispatch_plan.json": build.dispatch_plan,
         "cli_compliance_canary.json": build.canary,
+        "cli_compliance_canary_study_spec.json": build.canary_spec,
+        "cli_compliance_canary_dispatch_plan.json": build.canary_dispatch_plan,
     }
 
 
