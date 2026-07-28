@@ -546,6 +546,13 @@ def validate_headline_study(
     )
     if declared_candidate != candidate_manifest_path.resolve():
         raise ValueError("final manifest names a different candidate manifest")
+    if manifest.get("analysis_plan_hash") != file_hash(analysis_plan_path):
+        raise ValueError("analysis plan hash does not match final manifest")
+    declared_analysis = _repo_file(
+        repo_root, manifest.get("analysis_plan"), "analysis_plan"
+    )
+    if declared_analysis != analysis_plan_path.resolve():
+        raise ValueError("final manifest names a different analysis plan")
     if analysis != REQUIRED_ANALYSIS_PLAN:
         raise ValueError("headline analysis plan is not the exact locked plan")
 

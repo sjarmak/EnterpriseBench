@@ -158,6 +158,8 @@ def _write_fixture(
             }
         )
 
+    analysis_path = tmp_path / "analysis_plan.json"
+    analysis_path.write_text(json.dumps(REQUIRED_ANALYSIS_PLAN))
     output_root = f"results/studies/{STUDY_ID}"
     manifest_path = tmp_path / "final_manifest.json"
     manifest = {
@@ -168,6 +170,8 @@ def _write_fixture(
         "candidate_manifest": "candidate_manifest.json",
         "candidate_manifest_hash": file_hash(candidate_manifest),
         "candidate_lock_revision": preflight_module.CANDIDATE_LOCK_REVISION,
+        "analysis_plan": "analysis_plan.json",
+        "analysis_plan_hash": file_hash(analysis_path),
         "selection": {
             "rule": REQUIRED_SELECTION_RULE,
             "candidate_outcomes_inspected": False,
@@ -218,9 +222,6 @@ def _write_fixture(
         },
     }
     manifest_path.write_text(json.dumps(manifest))
-
-    analysis_path = tmp_path / "analysis_plan.json"
-    analysis_path.write_text(json.dumps(REQUIRED_ANALYSIS_PLAN))
 
     spec_path = tmp_path / "study_spec.json"
     spec_path.write_text(
