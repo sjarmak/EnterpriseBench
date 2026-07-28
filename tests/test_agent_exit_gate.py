@@ -31,6 +31,7 @@ from run_task import (
     TaskRunResult,
     _effective_status,
     _route_agent_exit,
+    _route_verifier_infra_error,
     _route_zero_mcp_run,
     _scan_agent_rate_limited,
 )
@@ -129,6 +130,50 @@ class TestZeroToolGatePreservesLabel:
 
         assert r.failure_class == "infra_rate_limit"  # not relabelled
         assert r.status == RUN_STATUS_INVALID
+
+
+class TestVerifierInfraPreservesAgentRootCause:
+    def test_rate_limit_survives_missing_output_judge_error(
+        self, tmp_path: Path
+    ) -> None:
+        out = _out_with_stdout(tmp_path, RATE_LIMIT_STDOUT)
+        result = TaskRunResult(task_id="t")
+        _route_agent_exit(result, 1, out)
+        scores = {
+            "task_score": 0.0,
+            "verifier_infra_error": {
+                "reason": "no_agent_output",
+                "stage": "llm_judge",
+                "detail": "missing output",
+            },
+        }
+
+        _route_verifier_infra_error(result, scores)
+
+        assert result.failure_class == "infra_rate_limit"
+        assert result.phase == "agent_infra_error"
+        assert result.status == RUN_STATUS_INVALID
+        assert scores["task_score"] is None
+
+    def test_preexisting_label_without_guarded_phase_cannot_be_resurrected(
+        self,
+    ) -> None:
+        result = TaskRunResult(task_id="t", failure_class="infra_existing")
+        scores = {
+            "task_score": 1.0,
+            "verifier_infra_error": {
+                "reason": "judge_failed",
+                "stage": "llm_judge",
+                "detail": "failure",
+            },
+        }
+
+        _route_verifier_infra_error(result, scores)
+
+        assert result.failure_class == "infra_existing"
+        assert result.phase in run_task.NON_COMPLETE_PHASES
+        assert result.status == RUN_STATUS_INVALID
+        assert scores["task_score"] is None
 
 
 class TestScanAgentRateLimited:

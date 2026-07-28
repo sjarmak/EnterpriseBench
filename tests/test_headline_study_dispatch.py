@@ -526,3 +526,54 @@ def test_repository_aborted_run_is_immutable_and_not_promotable() -> None:
     assert sum(receipt.usage.cost_usd for receipt in receipts) == pytest.approx(
         status["outer_spend_usd"]
     )
+
+
+def test_repository_v2_aborted_run_is_consumed_and_not_replayable() -> None:
+    config_dir = PROJECT_ROOT / "configs" / "studies" / "rryas-headline-v2"
+    study_dir = PROJECT_ROOT / "results" / "studies" / "rryas-headline-v2"
+    plan_path = config_dir / "dispatch_plan.authorized-2026-07-28.json"
+    plan = json.loads(plan_path.read_text())
+    status = json.loads((study_dir / "study_status.json").read_text())
+    receipts_path = study_dir / "receipts.jsonl"
+    receipts = read_receipts(receipts_path)
+    runner_called = False
+
+    def forbidden_runner(*args: object, **kwargs: object) -> None:
+        nonlocal runner_called
+        runner_called = True
+        raise AssertionError("consumed authorization reached the runner")
+
+    with pytest.raises(DispatchError, match="identity/status is not locked"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=PROJECT_ROOT,
+            execute=True,
+            runner=forbidden_runner,
+        )
+
+    assert runner_called is False
+    assert plan["status"] == "CONSUMED"
+    assert plan["authorization"] == {
+        "authorization_reference": None,
+        "paid_dispatch_authorized": False,
+    }
+    assert status["status"] == "ABORTED-OPERATIONAL-INVALID"
+    assert status["disposition"]["headline_eligible"] is False
+    assert status["disposition"]["promotion_eligible"] is False
+    assert status["receipts_hash"] == file_hash(receipts_path)
+    assert plan["consumption"]["receipts_hash"] == status["receipts_hash"]
+    assert len(receipts) == status["attempted_slots"] == 23
+    assert sum(receipt.status == "valid" for receipt in receipts) == 22
+    assert sum(receipt.status == "infra_invalid" for receipt in receipts) == 1
+    assert receipts[-1].failure_class == "verifier_infra_error"
+    assert sum(receipt.usage.cost_usd for receipt in receipts) == pytest.approx(
+        status["outer_spend_usd"]
+    )
+    assert status["outer_spend_usd"] == pytest.approx(95.775424)
+    isolation = [
+        receipt.tool_use["cache_isolation"]
+        for receipt in receipts
+    ]
+    assert all(proof["valid"] is True for proof in isolation)
+    assert sum(proof["cross_run_cache_read_tokens"] for proof in isolation) == 0
+    assert sum(proof["cache_write_tokens"] for proof in isolation) == 0

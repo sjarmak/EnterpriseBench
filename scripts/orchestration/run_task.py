@@ -2151,14 +2151,18 @@ def _route_verifier_infra_error(result: "TaskRunResult", scores: dict) -> None:
 
     Single place that reacts to the scorer trust boundary: if any scoring stage
     tagged an infra error, mark the run so the phase-complete guard never
-    records it as a legitimate score. Idempotent and safe to call after each
-    stage.
+    records it as a legitimate score. Preserve an earlier agent or arm failure:
+    a missing output is a consequence of a provider rate limit, OOM, timeout,
+    or crash, not a more specific replacement root cause. Idempotent and safe
+    to call after each stage.
     """
     infra_err = scores.get("verifier_infra_error")
     if not infra_err:
         return
-    result.failure_class = "verifier_infra_error"
-    result.phase = "verifier_infra_error"
+    if result.failure_class is None:
+        result.failure_class = "verifier_infra_error"
+    if result.phase not in NON_COMPLETE_PHASES:
+        result.phase = "verifier_infra_error"
     result.status = RUN_STATUS_INVALID
     result.success = False
     # Preserve checkpoint diagnostics for triage, but never publish an

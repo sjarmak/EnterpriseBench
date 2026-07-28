@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v2",
+  "policy": {
+    "receipts_are_immutable": true,
+    "overrides_apply_to_quality_analysis_only": true,
+    "excluded_runs_remain_in_operational_spend_and_telemetry_totals": true,
+    "retries_performed": 0
+  },
+  "overrides": [
+    {
+      "task_id": "dep-graph-tri-boto3-urllib3-requests-001",
+      "arm": "cli",
+      "repetition": 1,
+      "attempt": 1,
+      "recorded_status": "infra_invalid",
+      "recorded_failure_class": "verifier_infra_error",
+      "analysis_status": "invalid",
+      "failure_class": "infra_rate_limit",
+      "raw_score": null,
+      "reason": "Claude returned HTTP 429 with `You've hit your session limit \u00b7 resets 8pm (UTC)` before producing the required artifact. The later missing-output judge error was a consequence and overwrote the more specific provider root cause in the immutable raw result.",
+      "evidence": {
+        "run_dir": "runs/dep-graph-tri-boto3-urllib3-requests-001/cli/rep1/attempt1",
+        "agent_stdout_sha256": "sha256:75df2222644b7ac23a11ed359781c9238ddcf05726bb0b43b9e2cf3dde40ab4f",
+        "results_sha256": "sha256:311cd40d2c7eafb6c36d93f282a2c8cd48bc83f17100e77ffcbc78b19047cf76"
+      }
+    }
+  ]
+}
