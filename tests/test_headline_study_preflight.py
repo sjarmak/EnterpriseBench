@@ -300,6 +300,7 @@ def test_v2_protocol_excludes_all_exposed_tasks_and_compiles_120_slots() -> None
         "cli",
         "sgx-cli:local-repos-readable:retrieval-before-local:cache-isolated:v3",
     )
+    assert "strengthened-CLI operational canary" in protocol.forecast_basis
     assert set(protocol.post_lock_exposures) == {
         *POST_LOCK_EXPOSURES,
         "api-contract-001",

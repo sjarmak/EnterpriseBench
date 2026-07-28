@@ -102,6 +102,7 @@ class HeadlineProtocol:
     post_lock_exposure_evidence: Mapping[str, tuple[str, ...]]
     arms: tuple[tuple[str, str], ...]
     arm_descriptions: Mapping[str, str]
+    forecast_basis: str
 
 
 REQUIRED_SELECTION_RULE = (
@@ -140,6 +141,10 @@ V1_PROTOCOL = HeadlineProtocol(
     post_lock_exposure_evidence=POST_LOCK_EXPOSURE_EVIDENCE,
     arms=REQUIRED_ARMS,
     arm_descriptions=REQUIRED_ARM_DESCRIPTIONS,
+    forecast_basis=(
+        "No extrapolation from confounded pilot costs; report actual "
+        "provider usage before paid authorization."
+    ),
 )
 V2_PROTOCOL = HeadlineProtocol(
     study_id="rryas-headline-v2",
@@ -149,6 +154,9 @@ V2_PROTOCOL = HeadlineProtocol(
     post_lock_exposure_evidence=V2_POST_LOCK_EXPOSURE_EVIDENCE,
     arms=V2_REQUIRED_ARMS,
     arm_descriptions=V2_REQUIRED_ARM_DESCRIPTIONS,
+    forecast_basis=(
+        "No v2 spend authorization before a strengthened-CLI operational canary passes."
+    ),
 )
 HEADLINE_PROTOCOLS = {
     protocol.study_id: protocol for protocol in (V1_PROTOCOL, V2_PROTOCOL)
@@ -584,10 +592,7 @@ def _validate_spend_guard(
         "paid_dispatch_requires_new_explicit_authorization": True,
         "paid_dispatch_authorized": False,
         "forecast_reported_outer_spend_usd": None,
-        "forecast_basis": (
-            "No extrapolation from confounded pilot costs; report actual "
-            "provider usage before paid authorization."
-        ),
+        "forecast_basis": protocol.forecast_basis,
     }
     if manifest.get("spend_guard") != expected:
         raise ValueError("headline spend guard is not locked")
