@@ -296,6 +296,10 @@ def test_v2_protocol_excludes_all_exposed_tasks_and_compiles_120_slots() -> None
 
     assert protocol.task_count == 40
     assert protocol.slot_count == 120
+    assert protocol.arms[-1] == (
+        "cli",
+        "sgx-cli:local-repos-readable:retrieval-before-local:cache-isolated:v3",
+    )
     assert set(protocol.post_lock_exposures) == {
         *POST_LOCK_EXPOSURES,
         "api-contract-001",

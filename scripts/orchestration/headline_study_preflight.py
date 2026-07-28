@@ -100,25 +100,10 @@ class HeadlineProtocol:
     slot_count: int
     post_lock_exposures: tuple[str, ...]
     post_lock_exposure_evidence: Mapping[str, tuple[str, ...]]
+    arms: tuple[tuple[str, str], ...]
+    arm_descriptions: Mapping[str, str]
 
 
-V1_PROTOCOL = HeadlineProtocol(
-    study_id=STUDY_ID,
-    task_count=43,
-    slot_count=129,
-    post_lock_exposures=POST_LOCK_EXPOSURES,
-    post_lock_exposure_evidence=POST_LOCK_EXPOSURE_EVIDENCE,
-)
-V2_PROTOCOL = HeadlineProtocol(
-    study_id="rryas-headline-v2",
-    task_count=40,
-    slot_count=120,
-    post_lock_exposures=V2_POST_LOCK_EXPOSURES,
-    post_lock_exposure_evidence=V2_POST_LOCK_EXPOSURE_EVIDENCE,
-)
-HEADLINE_PROTOCOLS = {
-    protocol.study_id: protocol for protocol in (V1_PROTOCOL, V2_PROTOCOL)
-}
 REQUIRED_SELECTION_RULE = (
     "retain every structurally eligible candidate in candidate-manifest order "
     "except tasks with agent output after candidate lock; never inspect "
@@ -133,6 +118,40 @@ REQUIRED_ARM_DESCRIPTIONS = {
     "baseline": "local repositories; no Sourcegraph",
     "mcp_only": "Sourcegraph MCP; local repositories denied",
     "cli": "Sourcegraph CLI; local repositories readable; CLI use required",
+}
+V2_REQUIRED_ARMS = REQUIRED_ARMS[:2] + (
+    (
+        "cli",
+        "sgx-cli:local-repos-readable:retrieval-before-local:cache-isolated:v3",
+    ),
+)
+V2_REQUIRED_ARM_DESCRIPTIONS = {
+    **REQUIRED_ARM_DESCRIPTIONS,
+    "cli": (
+        "Sourcegraph CLI required before local repository inspection; "
+        "local repositories readable after first CLI call"
+    ),
+}
+V1_PROTOCOL = HeadlineProtocol(
+    study_id=STUDY_ID,
+    task_count=43,
+    slot_count=129,
+    post_lock_exposures=POST_LOCK_EXPOSURES,
+    post_lock_exposure_evidence=POST_LOCK_EXPOSURE_EVIDENCE,
+    arms=REQUIRED_ARMS,
+    arm_descriptions=REQUIRED_ARM_DESCRIPTIONS,
+)
+V2_PROTOCOL = HeadlineProtocol(
+    study_id="rryas-headline-v2",
+    task_count=40,
+    slot_count=120,
+    post_lock_exposures=V2_POST_LOCK_EXPOSURES,
+    post_lock_exposure_evidence=V2_POST_LOCK_EXPOSURE_EVIDENCE,
+    arms=V2_REQUIRED_ARMS,
+    arm_descriptions=V2_REQUIRED_ARM_DESCRIPTIONS,
+)
+HEADLINE_PROTOCOLS = {
+    protocol.study_id: protocol for protocol in (V1_PROTOCOL, V2_PROTOCOL)
 }
 REQUIRED_CACHE_ISOLATION = {
     "schema_version": 1,
@@ -684,7 +703,7 @@ def validate_headline_study(
     actual_arms = tuple((arm.name, arm.capability_fingerprint) for arm in spec.arms)
     if (
         spec.task_ids != task_ids
-        or actual_arms != REQUIRED_ARMS
+        or actual_arms != protocol.arms
         or spec.baseline_arm != "baseline"
         or spec.repetitions != 1
         or spec.attempt_policy != "first_valid_attempt"
@@ -695,7 +714,7 @@ def validate_headline_study(
         or spec.promotion_policy != "paired-valid-complete-arms"
     ):
         raise ValueError("StudySpec does not match the locked headline contract")
-    if manifest.get("arms") != REQUIRED_ARM_DESCRIPTIONS:
+    if manifest.get("arms") != protocol.arm_descriptions:
         raise ValueError("headline arm descriptions are not locked")
     if manifest.get("cache_isolation") != REQUIRED_CACHE_ISOLATION:
         raise ValueError("headline cache-isolation contract is not locked")
@@ -749,7 +768,7 @@ def validate_headline_study(
             f"revision {spec.revision!r} does not match current critical inputs"
         )
     expected_slots = tuple(
-        (task_id, arm, 1) for task_id in task_ids for arm, _fingerprint in REQUIRED_ARMS
+        (task_id, arm, 1) for task_id in task_ids for arm, _fingerprint in protocol.arms
     )
     if spec.slots() != expected_slots or len(expected_slots) != protocol.slot_count:
         raise ValueError(
