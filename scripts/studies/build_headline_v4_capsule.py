@@ -117,6 +117,7 @@ def _cost_forecast(repo_root: Path) -> dict[str, Any]:
         "authorization_outer_spend_ceiling_usd": AUTHORIZATION_CEILING_USD,
         "uncovered_costs": [
             "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
+            "Claude judge-account usage is not included in the agent modelUsage receipt",
             "local Docker compute is not priced",
         ],
     }

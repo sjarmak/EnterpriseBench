@@ -1,0 +1,1581 @@
+{
+  "schema_version": 1,
+  "status": "FINAL-NO-SPEND",
+  "study_id": "rryas-headline-v4",
+  "purpose": "Confirmatory Claude Sonnet 5 protocol comparison on every candidate untouched by the v1-v3 operational runs, with an isolated no-tool judge process.",
+  "candidate_manifest": "results/rryas_dataset/candidate_manifest.json",
+  "candidate_manifest_hash": "sha256:007d332e94d729208cf4a0d3307bc800d12b57c1c09da5703f644812d0d9450d",
+  "candidate_lock_revision": "bb60d7e11cbdc77ae94e54dfcaceb7d975ed3e6e",
+  "analysis_plan": "configs/studies/rryas-headline-v4/analysis_plan.json",
+  "analysis_plan_hash": "sha256:e823ab3796d0785f7aea246dc2e18d595ec182f6a28ad96d4eac39e0ca461b54",
+  "selection": {
+    "rule": "retain every structurally eligible candidate in candidate-manifest order except tasks with agent output after candidate lock; never inspect candidate reward or tool behavior to select confirmatory tasks",
+    "candidate_outcomes_inspected": false,
+    "candidate_count": 48,
+    "selected_count": 31,
+    "post_lock_exposures": [
+      {
+        "candidate_id": "api-contract-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v1/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "api-contract-002",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v1/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "api-contract-dual-envoy-istio-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v1/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "dep-graph-dual-junit-mockito-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "configs/studies/rryas_code_finder_interface_pilot_v1/pilot_manifest.json"
+        ]
+      },
+      {
+        "candidate_id": "dep-traversal-003",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "configs/studies/rryas_pilot_v1/pilot_manifest.json",
+          "configs/studies/rryas_code_finder_canary_v1/canary_manifest.json",
+          "configs/studies/rryas_code_finder_canary_v2/canary_manifest.json",
+          "configs/studies/rryas_cli_code_finder_canary_v1/canary_manifest.json",
+          "configs/studies/rryas_cli_code_finder_canary_v2/canary_manifest.json"
+        ]
+      },
+      {
+        "candidate_id": "error-prov-dual-otel-jaeger-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "configs/studies/rryas_code_finder_interface_pilot_v1/pilot_manifest.json"
+        ]
+      },
+      {
+        "candidate_id": "incident-investigation-dual-istio-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "configs/studies/rryas_code_finder_interface_pilot_v1/pilot_manifest.json"
+        ]
+      },
+      {
+        "candidate_id": "incident-investigation-dual-nerdctl-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "configs/studies/rryas_code_finder_interface_supplement_v1/pilot_manifest.json",
+          "configs/studies/rryas_code_finder_interface_supplement_v2/pilot_manifest.json"
+        ]
+      },
+      {
+        "candidate_id": "api-contract-dual-hyper-reqwest-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v2/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "api-contract-dual-jackson-spring-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v2/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "api-contract-dual-sqlalchemy-alembic-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v2/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "config-drift-dual-setuptools-pip-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v2/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "dep-graph-dual-cryptography-paramiko-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v2/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "dep-graph-dual-spring-hibernate-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v2/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "dep-graph-dual-tokio-hyper-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v2/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "dep-graph-tri-boto3-urllib3-requests-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v2/receipts.jsonl"
+        ]
+      },
+      {
+        "candidate_id": "dep-graph-tri-prometheus-alertmanager-grafana-001",
+        "reason": "post_lock_agent_output",
+        "evidence": [
+          "results/studies/rryas-headline-v3/receipts.jsonl"
+        ]
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "candidate_id": "dep-graph-tri-tokio-hyper-tonic-001",
+      "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "tri_repo",
+      "task_toml": "benchmarks/dependency_management/dep-graph-tri-tokio-hyper-tonic-001/task.toml",
+      "task_hash": "sha256:67ef5e2b31b8e22b26cfa699a8fa17db4044ae111a9b1c6a49f4f60ae1447ed5",
+      "graded_artifact_path": "/workspace/analysis/IMPACT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/tokio--tokio-1.0.0",
+        "github.com/sg-evals/hyper--v0.14.0",
+        "github.com/sg-evals/tonic--v0.6.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-001",
+      "task_id": "dep-traversal-001",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-001/task.toml",
+      "task_hash": "sha256:8a80c45d6e7f667532c9dab08465b93b40506cccd3fdc56b8b4c7e1028b7478f",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/lodash--4.17.20",
+        "github.com/sg-evals/webpack--v5.64.0",
+        "github.com/sg-evals/jest--v29.0.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-002",
+      "task_id": "dep-traversal-002",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-002/task.toml",
+      "task_hash": "sha256:621f4830a4f7f94f672baac03115ba8a51acf62a7168526e37cbd27733e0379d",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/axios--v0.21.1",
+        "github.com/sg-evals/grafana--v9.5.0",
+        "github.com/sg-evals/druid--druid-26.0.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-004",
+      "task_id": "dep-traversal-004",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-004/task.toml",
+      "task_hash": "sha256:448f57cde76698b092b1b284d397f99dc6024bcb0bce0079758561663ed91bb2",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/kubernetes--v1.28.0",
+        "github.com/sg-evals/etcd--v3.5.9",
+        "github.com/sg-evals/grpc-go--v1.58.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-005",
+      "task_id": "dep-traversal-005",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-005/task.toml",
+      "task_hash": "sha256:f02ebd8b920305e5476c713e15558cffde5f29e45efb9d5523b6be1145d2240a",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/prometheus--v2.45.0",
+        "github.com/sg-evals/consul--v1.16.0",
+        "github.com/sg-evals/vault--v1.14.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-006",
+      "task_id": "dep-traversal-006",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-006/task.toml",
+      "task_hash": "sha256:6e5a0f733329c7b4cd401ba13fcdc3a646e69aaf8f69421067f25f4dfc055d20",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/grpc-go--v1.62.0",
+        "github.com/sg-evals/istio--1.20.0",
+        "github.com/sg-evals/go-control-plane--v0.12.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-007",
+      "task_id": "dep-traversal-007",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-007/task.toml",
+      "task_hash": "sha256:5dab40a3dacd6b5525426f0fdc0858fb9b6425988297c37911d732162b93e82b",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/grpc-node--v1.8.0",
+        "github.com/sg-evals/javascript--0.18.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-008",
+      "task_id": "dep-traversal-008",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-008/task.toml",
+      "task_hash": "sha256:7db9669e9bd6b7adecce4c016593edd7d68be0feef7e38194de07cf671c17217",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/requests--v2.28.0",
+        "github.com/sg-evals/boto3--1.26.0",
+        "github.com/sg-evals/aws-cli--2.11.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-009",
+      "task_id": "dep-traversal-009",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-009/task.toml",
+      "task_hash": "sha256:4eb52a4379d03c3af2fa07b3b353446a4e9100ee8c4bbbc969bd07eba68b7aa9",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/urllib3--1.26.16",
+        "github.com/sg-evals/requests--v2.28.0",
+        "github.com/sg-evals/boto3--1.26.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-011",
+      "task_id": "dep-traversal-011",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-011/task.toml",
+      "task_hash": "sha256:53295cf5154b8df927d1fadf1ccba69b50a0b1abc33127b3e41d27206c5ddd6b",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/spring-boot--v2.6.1",
+        "github.com/sg-evals/kafka--3.1.0",
+        "github.com/sg-evals/logging-log4j2--rel_2.14.1"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-012",
+      "task_id": "dep-traversal-012",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-012/task.toml",
+      "task_hash": "sha256:3085b5e6de0c800bd808e672f8dbca22e08dc25c7dd6fc9d91a1062fff3016f6",
+      "graded_artifact_path": "/workspace/BLAST_RADIUS.md",
+      "expected_repositories": [
+        "github.com/sg-evals/curl--curl-7_82_0",
+        "github.com/sg-evals/git--v2.35.0",
+        "github.com/sg-evals/kubernetes--v1.24.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-tri-boto3-001",
+      "task_id": "dep-traversal-tri-boto3-001",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "tri_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-tri-boto3-001/task.toml",
+      "task_hash": "sha256:73f7a79a37744e632535adac198eb1113cfbbc2eb9529723f35b73b4be3a312d",
+      "graded_artifact_path": "/workspace/DEPENDENCY_TRACE.md",
+      "expected_repositories": [
+        "github.com/sg-evals/boto3--1.28.0",
+        "github.com/sg-evals/s3transfer--0.6.1",
+        "github.com/sg-evals/botocore--1.31.0"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-tri-jackson-001",
+      "task_id": "dep-traversal-tri-jackson-001",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "tri_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-tri-jackson-001/task.toml",
+      "task_hash": "sha256:936c2358e7d315c5fe655deaf99dcc93334c5a0f04f283363b41ab4e809576bd",
+      "graded_artifact_path": "/workspace/DEPENDENCY_TRACE.md",
+      "expected_repositories": [
+        "github.com/sg-evals/jackson-databind--jackson-databind-2.15.2",
+        "github.com/sg-evals/spring-framework--v6.0.11",
+        "github.com/sg-evals/spring-boot--v3.1.2"
+      ]
+    },
+    {
+      "candidate_id": "dep-traversal-tri-openssl-001",
+      "task_id": "dep-traversal-tri-openssl-001",
+      "task_type": "dependency_graph",
+      "difficulty_stratum": "tri_repo",
+      "task_toml": "benchmarks/dependency_management/dep-traversal-tri-openssl-001/task.toml",
+      "task_hash": "sha256:722f84fb3db5f406e840b9cfd0b6ef157f1de7e32a9e0496f9038cc0c39d7513",
+      "graded_artifact_path": "/workspace/DEPENDENCY_TRACE.md",
+      "expected_repositories": [
+        "github.com/sg-evals/openssl--openssl-3.1.1",
+        "github.com/sg-evals/curl--curl-8_1_2",
+        "github.com/sg-evals/git--v2.41.0"
+      ]
+    },
+    {
+      "candidate_id": "error-prov-dual-netty-spring-001",
+      "task_id": "error-prov-dual-netty-spring-001",
+      "task_type": "error_provenance",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/customer_escalation/error-prov-dual-netty-spring-001/task.toml",
+      "task_hash": "sha256:aee3e661221bdcb141983439043cf07f0b2931b9194c799dd44e04916df41235",
+      "graded_artifact_path": "/workspace/analysis/IMPACT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/netty--netty-4.1.100.Final",
+        "github.com/sg-evals/spring-framework--v6.0.11"
+      ]
+    },
+    {
+      "candidate_id": "error-prov-dual-tokio-tower-001",
+      "task_id": "error-prov-dual-tokio-tower-001",
+      "task_type": "error_provenance",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/customer_escalation/error-prov-dual-tokio-tower-001/task.toml",
+      "task_hash": "sha256:7117125fef0182ce418f9b544002285c1c938cdd98ede61d5fd22c5e328d3a63",
+      "graded_artifact_path": "/workspace/analysis/IMPACT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/tokio--tokio-1.35.0",
+        "github.com/sg-evals/tower--tower-0.4.13"
+      ]
+    },
+    {
+      "candidate_id": "error-prov-dual-urllib3-requests-001",
+      "task_id": "error-prov-dual-urllib3-requests-001",
+      "task_type": "error_provenance",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/customer_escalation/error-prov-dual-urllib3-requests-001/task.toml",
+      "task_hash": "sha256:8295b6673b069ac73164c806d2a040e6a3067a114d535819113fa2d9edd151a3",
+      "graded_artifact_path": "/workspace/analysis/IMPACT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/urllib3--2.0.0",
+        "github.com/sg-evals/requests--v2.28.2"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-004",
+      "task_id": "incident-inv-docker-shutdown-004",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-004/task.toml",
+      "task_hash": "sha256:b79afa9a513fb5887d09cdec22a5e1433cb16e8d794c50e01f8c69e7f7a24159",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/moby--v28.0.0",
+        "github.com/sg-evals/containerd--v1.7.24"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-cockroach-001",
+      "task_id": "incident-investigation-dual-cockroach-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-cockroach-001/task.toml",
+      "task_hash": "sha256:09f82b61f2f3bace1ed26d0d95084fa6fecf9564cc968eaea47d56cf22bbacd1",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/cockroach--v24.2.5",
+        "github.com/sg-evals/pebble--v1.1.2"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-cortex-001",
+      "task_id": "incident-investigation-dual-cortex-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-cortex-001/task.toml",
+      "task_hash": "sha256:dd9164a412519a0c53209d30c12612ff7d6d80f1888d380261ac24ba0dd677ad",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/cortex--v1.18.0",
+        "github.com/sg-evals/alertmanager--v0.27.0"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-flux-001",
+      "task_id": "incident-investigation-dual-flux-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-flux-001/task.toml",
+      "task_hash": "sha256:5d88d077401d6f09fd609928fedf39b03bcdbde9d644fbfaa299a00e17ae3f62",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/flux2--v2.2.0",
+        "github.com/sg-evals/helm-controller--v0.37.0"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-kafka-001",
+      "task_id": "incident-investigation-dual-kafka-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-kafka-001/task.toml",
+      "task_hash": "sha256:bd615c17fb2c6d1352299789538030743df30a462695499192f30f0fcbf10a0b",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/kafka--3.6.0",
+        "github.com/sg-evals/kafka-connect-jdbc--v10.7.4"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-loki-001",
+      "task_id": "incident-investigation-dual-loki-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-loki-001/task.toml",
+      "task_hash": "sha256:a47608cae1a8faa388b4bd3aad4ae5714f25c09220558d66d0a2d66a3f74aa44",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/loki--v3.3.0",
+        "github.com/sg-evals/dskit--53283a0f"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-nats-001",
+      "task_id": "incident-investigation-dual-nats-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-nats-001/task.toml",
+      "task_hash": "sha256:c2c84fb509afbb7cd77e52f35b3d843d65add55b4f045d39d2b3921e6dcc6e2e",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/nats-server--v2.10.22",
+        "github.com/sg-evals/nats.go--v1.37.0"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-nomad-001",
+      "task_id": "incident-investigation-dual-nomad-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-nomad-001/task.toml",
+      "task_hash": "sha256:fc7afe04e3092f7b2ba0cff11fbd9ba3bf985d4c8bd3dfbc64d581a382a570e6",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/nomad--v1.9.3",
+        "github.com/sg-evals/raft--v1.7.1"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-prometheus-001",
+      "task_id": "incident-investigation-dual-prometheus-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-prometheus-001/task.toml",
+      "task_hash": "sha256:65aca03cb66ece285f232168efd6f52828a4880acb4c39a4c5da727556349767",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/prometheus--v2.48.0",
+        "github.com/sg-evals/alertmanager--v0.26.0"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-tempo-001",
+      "task_id": "incident-investigation-dual-tempo-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-tempo-001/task.toml",
+      "task_hash": "sha256:18f549c57ddcc696d158bba324df6a2c878b4150c96ee11d65cdde30f29b055f",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/tempo--v2.6.0",
+        "github.com/sg-evals/dskit--736c44c8"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-tikv-001",
+      "task_id": "incident-investigation-dual-tikv-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-tikv-001/task.toml",
+      "task_hash": "sha256:9bbeefbda7533f2b3ad5708e3567ba62400367843f177e209d490eb787f5822b",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/tikv--v8.5.0",
+        "github.com/sg-evals/pd--v8.5.0"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-dual-vault-001",
+      "task_id": "incident-investigation-dual-vault-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "dual_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-dual-vault-001/task.toml",
+      "task_hash": "sha256:2e2bef8af3268003732f28213dcc263d47d67fad734a5bb52d76cbc9e5ad0f6d",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/vault--v1.18.1",
+        "github.com/sg-evals/raft--v1.7.1"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-quad-containerd-001",
+      "task_id": "incident-investigation-quad-containerd-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "multi_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-quad-containerd-001/task.toml",
+      "task_hash": "sha256:78fb4b1ad9073ca686097c82080efa71348f887663d46cbbb76bfb16a506b847",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/kubernetes--v1.33.0-alpha.2",
+        "github.com/sg-evals/containerd--v1.7.24",
+        "github.com/sg-evals/runc--v1.2.4",
+        "github.com/sg-evals/moby--v28.0.0"
+      ]
+    },
+    {
+      "candidate_id": "incident-investigation-tri-containerd-001",
+      "task_id": "incident-investigation-tri-containerd-001",
+      "task_type": "incident_investigation",
+      "difficulty_stratum": "tri_repo",
+      "task_toml": "benchmarks/incident_response/incident-investigation-tri-containerd-001/task.toml",
+      "task_hash": "sha256:1de27bbdef32cbe49e56f27643800178ddde3961c4b1cb266c112cdd70ebfec0",
+      "graded_artifact_path": "/workspace/agent_output/INCIDENT_REPORT.md",
+      "expected_repositories": [
+        "github.com/sg-evals/moby--v24.0.7",
+        "github.com/sg-evals/containerd--v1.7.8",
+        "github.com/sg-evals/runc--v1.1.10"
+      ]
+    }
+  ],
+  "arms": {
+    "baseline": "local repositories; no Sourcegraph",
+    "mcp_only": "Sourcegraph MCP; local repositories denied",
+    "cli": "Sourcegraph CLI required before local repository inspection; local repositories readable after first CLI call"
+  },
+  "cache_isolation": {
+    "schema_version": 1,
+    "required": true,
+    "mechanism": "prompt-caching-disabled",
+    "scope": "fresh random scope generated independently for every invocation",
+    "comparison_rule": "valid proof and cross_run_cache_read_tokens == 0 and cache_write_tokens == 0",
+    "legacy_evidence": "comparison_ineligible"
+  },
+  "judge_configuration": {
+    "model": "cc:haiku",
+    "account": 1,
+    "executable": "claude-1",
+    "selection": "explicit --judge-account 1",
+    "provenance_required_in_scores": true,
+    "isolation": "safe-mode:no-tools:replacement-system-prompt"
+  },
+  "execution_configuration": {
+    "agent_account": 3,
+    "timeout_seconds": 600,
+    "build_timeout_seconds": 1800,
+    "verifier_timeout_seconds": 600,
+    "memory_mb": 8192,
+    "no_build": false,
+    "repetitions": 1,
+    "max_attempts": 1,
+    "concurrency": 1,
+    "output_root": "results/studies/rryas-headline-v4",
+    "receipts": "results/studies/rryas-headline-v4/receipts.jsonl",
+    "order_policy": "candidate-manifest order; rotate baseline,mcp_only,cli as a three-row Latin square by task index; execute sequentially on agent account 3; judge every completed slot on account 1",
+    "execution_order": [
+      {
+        "candidate_id": "dep-graph-tri-tokio-hyper-tonic-001",
+        "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-graph-tri-tokio-hyper-tonic-001",
+        "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-graph-tri-tokio-hyper-tonic-001",
+        "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-001",
+        "task_id": "dep-traversal-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-001",
+        "task_id": "dep-traversal-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-001",
+        "task_id": "dep-traversal-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-002",
+        "task_id": "dep-traversal-002",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-002/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-002",
+        "task_id": "dep-traversal-002",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-002/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-002",
+        "task_id": "dep-traversal-002",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-002/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-004",
+        "task_id": "dep-traversal-004",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-004/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-004",
+        "task_id": "dep-traversal-004",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-004/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-004",
+        "task_id": "dep-traversal-004",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-004/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-005",
+        "task_id": "dep-traversal-005",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-005/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-005",
+        "task_id": "dep-traversal-005",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-005/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-005",
+        "task_id": "dep-traversal-005",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-005/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-006",
+        "task_id": "dep-traversal-006",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-006/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-006",
+        "task_id": "dep-traversal-006",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-006/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-006",
+        "task_id": "dep-traversal-006",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-006/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-007",
+        "task_id": "dep-traversal-007",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-007/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-007",
+        "task_id": "dep-traversal-007",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-007/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-007",
+        "task_id": "dep-traversal-007",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-007/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-008",
+        "task_id": "dep-traversal-008",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-008/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-008",
+        "task_id": "dep-traversal-008",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-008/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-008",
+        "task_id": "dep-traversal-008",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-008/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-009",
+        "task_id": "dep-traversal-009",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-009/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-009",
+        "task_id": "dep-traversal-009",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-009/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-009",
+        "task_id": "dep-traversal-009",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-009/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-011",
+        "task_id": "dep-traversal-011",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-011/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-011",
+        "task_id": "dep-traversal-011",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-011/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-011",
+        "task_id": "dep-traversal-011",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-011/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-012",
+        "task_id": "dep-traversal-012",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-012/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-012",
+        "task_id": "dep-traversal-012",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-012/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-012",
+        "task_id": "dep-traversal-012",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-012/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-tri-boto3-001",
+        "task_id": "dep-traversal-tri-boto3-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-tri-boto3-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-tri-boto3-001",
+        "task_id": "dep-traversal-tri-boto3-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-tri-boto3-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-tri-boto3-001",
+        "task_id": "dep-traversal-tri-boto3-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-tri-boto3-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-tri-jackson-001",
+        "task_id": "dep-traversal-tri-jackson-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-tri-jackson-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-tri-jackson-001",
+        "task_id": "dep-traversal-tri-jackson-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-tri-jackson-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-tri-jackson-001",
+        "task_id": "dep-traversal-tri-jackson-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-tri-jackson-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-tri-openssl-001",
+        "task_id": "dep-traversal-tri-openssl-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-tri-openssl-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-tri-openssl-001",
+        "task_id": "dep-traversal-tri-openssl-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-tri-openssl-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "dep-traversal-tri-openssl-001",
+        "task_id": "dep-traversal-tri-openssl-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/dep-traversal-tri-openssl-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "error-prov-dual-netty-spring-001",
+        "task_id": "error-prov-dual-netty-spring-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/error-prov-dual-netty-spring-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "error-prov-dual-netty-spring-001",
+        "task_id": "error-prov-dual-netty-spring-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/error-prov-dual-netty-spring-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "error-prov-dual-netty-spring-001",
+        "task_id": "error-prov-dual-netty-spring-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/error-prov-dual-netty-spring-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "error-prov-dual-tokio-tower-001",
+        "task_id": "error-prov-dual-tokio-tower-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/error-prov-dual-tokio-tower-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "error-prov-dual-tokio-tower-001",
+        "task_id": "error-prov-dual-tokio-tower-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/error-prov-dual-tokio-tower-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "error-prov-dual-tokio-tower-001",
+        "task_id": "error-prov-dual-tokio-tower-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/error-prov-dual-tokio-tower-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "error-prov-dual-urllib3-requests-001",
+        "task_id": "error-prov-dual-urllib3-requests-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/error-prov-dual-urllib3-requests-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "error-prov-dual-urllib3-requests-001",
+        "task_id": "error-prov-dual-urllib3-requests-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/error-prov-dual-urllib3-requests-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "error-prov-dual-urllib3-requests-001",
+        "task_id": "error-prov-dual-urllib3-requests-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/error-prov-dual-urllib3-requests-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-004",
+        "task_id": "incident-inv-docker-shutdown-004",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-inv-docker-shutdown-004/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-004",
+        "task_id": "incident-inv-docker-shutdown-004",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-inv-docker-shutdown-004/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-004",
+        "task_id": "incident-inv-docker-shutdown-004",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-inv-docker-shutdown-004/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-cockroach-001",
+        "task_id": "incident-investigation-dual-cockroach-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-cockroach-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-cockroach-001",
+        "task_id": "incident-investigation-dual-cockroach-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-cockroach-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-cockroach-001",
+        "task_id": "incident-investigation-dual-cockroach-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-cockroach-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-cortex-001",
+        "task_id": "incident-investigation-dual-cortex-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-cortex-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-cortex-001",
+        "task_id": "incident-investigation-dual-cortex-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-cortex-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-cortex-001",
+        "task_id": "incident-investigation-dual-cortex-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-cortex-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-flux-001",
+        "task_id": "incident-investigation-dual-flux-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-flux-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-flux-001",
+        "task_id": "incident-investigation-dual-flux-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-flux-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-flux-001",
+        "task_id": "incident-investigation-dual-flux-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-flux-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-kafka-001",
+        "task_id": "incident-investigation-dual-kafka-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-kafka-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-kafka-001",
+        "task_id": "incident-investigation-dual-kafka-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-kafka-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-kafka-001",
+        "task_id": "incident-investigation-dual-kafka-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-kafka-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-loki-001",
+        "task_id": "incident-investigation-dual-loki-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-loki-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-loki-001",
+        "task_id": "incident-investigation-dual-loki-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-loki-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-loki-001",
+        "task_id": "incident-investigation-dual-loki-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-loki-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-nats-001",
+        "task_id": "incident-investigation-dual-nats-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-nats-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-nats-001",
+        "task_id": "incident-investigation-dual-nats-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-nats-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-nats-001",
+        "task_id": "incident-investigation-dual-nats-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-nats-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-nomad-001",
+        "task_id": "incident-investigation-dual-nomad-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-nomad-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-nomad-001",
+        "task_id": "incident-investigation-dual-nomad-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-nomad-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-nomad-001",
+        "task_id": "incident-investigation-dual-nomad-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-nomad-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-prometheus-001",
+        "task_id": "incident-investigation-dual-prometheus-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-prometheus-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-prometheus-001",
+        "task_id": "incident-investigation-dual-prometheus-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-prometheus-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-prometheus-001",
+        "task_id": "incident-investigation-dual-prometheus-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-prometheus-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-tempo-001",
+        "task_id": "incident-investigation-dual-tempo-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-tempo-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-tempo-001",
+        "task_id": "incident-investigation-dual-tempo-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-tempo-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-tempo-001",
+        "task_id": "incident-investigation-dual-tempo-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-tempo-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-tikv-001",
+        "task_id": "incident-investigation-dual-tikv-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-tikv-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-tikv-001",
+        "task_id": "incident-investigation-dual-tikv-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-tikv-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-tikv-001",
+        "task_id": "incident-investigation-dual-tikv-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-tikv-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-vault-001",
+        "task_id": "incident-investigation-dual-vault-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-vault-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-vault-001",
+        "task_id": "incident-investigation-dual-vault-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-vault-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-dual-vault-001",
+        "task_id": "incident-investigation-dual-vault-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-dual-vault-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-quad-containerd-001",
+        "task_id": "incident-investigation-quad-containerd-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-quad-containerd-001/cli/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-quad-containerd-001",
+        "task_id": "incident-investigation-quad-containerd-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-quad-containerd-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-quad-containerd-001",
+        "task_id": "incident-investigation-quad-containerd-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-quad-containerd-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-tri-containerd-001",
+        "task_id": "incident-investigation-tri-containerd-001",
+        "arm": "baseline",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-tri-containerd-001/baseline/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-tri-containerd-001",
+        "task_id": "incident-investigation-tri-containerd-001",
+        "arm": "mcp_only",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-tri-containerd-001/mcp_only/rep1/attempt1"
+      },
+      {
+        "candidate_id": "incident-investigation-tri-containerd-001",
+        "task_id": "incident-investigation-tri-containerd-001",
+        "arm": "cli",
+        "repetition": 1,
+        "attempt": 1,
+        "agent_account": 3,
+        "judge_account": 1,
+        "output_dir": "results/studies/rryas-headline-v4/runs/incident-investigation-tri-containerd-001/cli/rep1/attempt1"
+      }
+    ]
+  },
+  "spend_guard": {
+    "slots": 93,
+    "max_attempts_per_slot": 1,
+    "paid_dispatch_requires_new_explicit_authorization": true,
+    "paid_dispatch_authorized": false,
+    "forecast_reported_outer_spend_usd": null,
+    "forecast_basis": "No v4 spend authorization before the v3 judge-cap root cause is fixed and an isolated judge-only canary passes."
+  },
+  "evidence_policy": {
+    "confirmatory_population": "post-lock-unexposed-candidates-only",
+    "historical_pilots": "operational evidence only; never headline evidence",
+    "forced_code_finder": "separate descriptive study; never headline evidence",
+    "codex_opencode": "secondary harness-model bundles; never causal cross-model evidence",
+    "invalid_slot": "stop promotion; retain receipt and all-attempt spend",
+    "image_identity": "record immutable built image and bound container digests per trial"
+  },
+  "harness_hash": "sha256:b08e740a175dce4d8c55fcab56720f915dd03be1a5dc177ba25a1653ea9b10d9",
+  "verifier_hashes": {
+    "dep-graph-tri-tokio-hyper-tonic-001": "sha256:d5c5d2a523f7dc1a90e77e67a874a5efe12b39917a450393ce29e2147476532a",
+    "dep-traversal-001": "sha256:fe25b7c5a30bffddc5c5abcdf908cfc29d7fbb6b4b6127fd897b693841f36efd",
+    "dep-traversal-002": "sha256:292a1c3e390ae1322618ba21fc69443ee50435a33919fae3a95ac7d0a132151f",
+    "dep-traversal-004": "sha256:7e70dc7f1987b93bbeb00752d311c890b093af4d5392fc927151600e702d4a6a",
+    "dep-traversal-005": "sha256:34be40c33774b5bba37287a4c0eafe8866a02f56507313e8146ada8a4934f7b6",
+    "dep-traversal-006": "sha256:9d286f265cda35b2b4a3513fb8feefa808e18a6f645b9f981bdf128c75b04f6c",
+    "dep-traversal-007": "sha256:72f60a31a49fa886487664608369e0d880d330664e6580118bb36a7e22299f7a",
+    "dep-traversal-008": "sha256:1818d8fd6d66507af743dd5d1e1e09a37db899fe4c2022b0ced810271e1867a4",
+    "dep-traversal-009": "sha256:eceed41e6306394684693e7aed0fab318c825b1b405bd9970290ddece2c3316f",
+    "dep-traversal-011": "sha256:1d2f294c83728e1de2270e0fb9d685dee564781543052200b88cdaf0d1c084ac",
+    "dep-traversal-012": "sha256:527916381594202c345eb04752b7e1a24f05c151463d18de35968d3cff4f7d7d",
+    "dep-traversal-tri-boto3-001": "sha256:d5cdb75a710692f24c0c7d173df69216e886ada415a1be925afb9736079f4f5c",
+    "dep-traversal-tri-jackson-001": "sha256:eea2f0293a9e983b00105b1c921db72027a425772ee1cfacb948918a818c5b2d",
+    "dep-traversal-tri-openssl-001": "sha256:7e0080aabd71c59f2907acbff5761bce6d5ef3ac6920d17ad57e3052a18d6afe",
+    "error-prov-dual-netty-spring-001": "sha256:c0116f96ca2081c0ff8654aadf560f91e7fa24746225c2b6c6bda94b7ddc74d1",
+    "error-prov-dual-tokio-tower-001": "sha256:7c172c96e7bfa8c68ef7a6cd2d72e7ce85b0372f74cffbc68a5b37af8fec713e",
+    "error-prov-dual-urllib3-requests-001": "sha256:378b8f1403909ebbe89822bd9a5a51c0a31474cdef24139257e14a5e173abe14",
+    "incident-inv-docker-shutdown-004": "sha256:b79a4d741662bb7d3a6f22cfbbf0726854e66e35c3c34a7f15afc11f02a8685a",
+    "incident-investigation-dual-cockroach-001": "sha256:abf79fd8588ef055525e1e8cdca294997f9a556108577ecfa6cfa8bf5a220614",
+    "incident-investigation-dual-cortex-001": "sha256:2e46fbd5e0cea04234445ec33d35f403f44d395c78f43ec1f52d7439b5552a6a",
+    "incident-investigation-dual-flux-001": "sha256:a02defc36914560964d4f6e7486c1baac380a19cab2f84ee02288e75c2f61511",
+    "incident-investigation-dual-kafka-001": "sha256:1ecd6bed5dfc837259927ef36728a135dc3c33fc486c3b44e1465546b8f3e739",
+    "incident-investigation-dual-loki-001": "sha256:d2035dbe170c0b3080829c75faa9053ae61e6e43e90cc8254093d9a4e64209e9",
+    "incident-investigation-dual-nats-001": "sha256:fbf8ef8401a449e42cf8dd6719baa8b80c9fb6ccb3eae351ba0cafa62a3adbf9",
+    "incident-investigation-dual-nomad-001": "sha256:5f84bc8c0732038d93165bb0ef84892327397bb684022f154095978c053f7e7e",
+    "incident-investigation-dual-prometheus-001": "sha256:786cbef2f6e4d343fd677d91e6f9d33be7fff7a2f3e38e2aa87fe986f6589c55",
+    "incident-investigation-dual-tempo-001": "sha256:8add6feb71aeedffc049ff33ad242ea2006fe2f7ee867c4a3c8e6f2dda0c499e",
+    "incident-investigation-dual-tikv-001": "sha256:f0124462b9233d7becdf37027a3f8b468565bcd6a15e56a9b7b72d616678607f",
+    "incident-investigation-dual-vault-001": "sha256:9a9b6370ab616550327e89b5629a3d526530f14b2358cd83749fe4116402ed36",
+    "incident-investigation-quad-containerd-001": "sha256:28ae35bcfa1893f442335c058a93b1a3fb7a4dc20045ef391e9b2d0ea4efb237",
+    "incident-investigation-tri-containerd-001": "sha256:9cda0223cb2476bdeb3bc3258e6140ef89e64fd93458997abba7b0cd6a9c7961"
+  }
+}

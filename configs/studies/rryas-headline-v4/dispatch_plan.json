@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v4",
+  "status": "LOCKED-NO-SPEND",
+  "study_spec": "configs/studies/rryas-headline-v4/study_spec.json",
+  "study_spec_file_hash": "sha256:0a61b7c71d8239bbf5eb20ae4dbc58446711c122d2757094cfb85db666b55c93",
+  "study_spec_hash": "sha256:ce1f29b322348c2f30c9876b5f706c897f3f63e0219e624c63bbcd9c1261bdd7",
+  "final_manifest": "configs/studies/rryas-headline-v4/final_manifest.json",
+  "final_manifest_hash": "sha256:f2d6c2ee1d49232913a636aa48e230d60ed981c9828a78e1fa7468d3769734da",
+  "preflight_evidence": "configs/studies/rryas-headline-v4/preflight_evidence.json",
+  "preflight_evidence_hash": "sha256:dd7f9850054118781cfbc2b7f2b0f5b49f8e574920df051d810e29053c77822a",
+  "cost_forecast": {
+    "basis": "All immutable v1, v2, and v3 attempts, including terminal invalid attempts, with provider-native outer-agent cost and zero cache reads/writes.",
+    "sample_receipts": [
+      {
+        "path": "results/studies/rryas-headline-v1/receipts.jsonl",
+        "sha256": "sha256:d074eee11e5b39e5f1a9584bc6ab0deff419f3ff9ba111fffe240715869144df"
+      },
+      {
+        "path": "results/studies/rryas-headline-v2/receipts.jsonl",
+        "sha256": "sha256:ffa8cac931f6fa6f2fe702719c904c7ba3c8e1121df41f14a57f60da5cae782a"
+      },
+      {
+        "path": "results/studies/rryas-headline-v3/receipts.jsonl",
+        "sha256": "sha256:d036efd7bfe402910338f2016ca24a181f09084211283d360988e9751d977b64"
+      }
+    ],
+    "sample_attempts": 31,
+    "sample_outer_spend_usd": 139.189582,
+    "mean_per_slot_usd": 4.489986516,
+    "forecast_outer_spend_usd": 417.568746,
+    "max_observed_per_slot_usd": 9.085286,
+    "empirical_slot_count_envelope_usd": 844.931598,
+    "authorization_outer_spend_ceiling_usd": 990.0,
+    "uncovered_costs": [
+      "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
+      "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "local Docker compute is not priced"
+    ]
+  },
+  "batch_policy": {
+    "max_slots_per_dispatch": 12,
+    "complete_task_triplets": true,
+    "score_independent_boundaries": true,
+    "agent_max_budget_usd_per_slot": 9.1,
+    "judge_max_budget_usd_per_call": 0.1,
+    "max_judge_calls_per_slot": 5,
+    "max_judge_attempts_per_call": 3,
+    "outer_spend_hard_cap_per_slot_usd": 10.6
+  },
+  "provider_capacity": {
+    "confirmed": false,
+    "capacity_reference": null,
+    "confirmed_completed_prefix": null,
+    "confirmed_max_slots": null
+  },
+  "authorization": {
+    "paid_dispatch_authorized": false,
+    "authorization_reference": null,
+    "authorized_completed_prefix": null,
+    "authorized_end_prefix": null,
+    "authorized_batch_hash": null,
+    "authorized_outer_spend_ceiling_usd": null
+  }
+}
