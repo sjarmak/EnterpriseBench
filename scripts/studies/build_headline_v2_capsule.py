@@ -46,6 +46,8 @@ V1_CONFIG_DIR = Path("configs/studies") / V1_STUDY_ID
 V1_RECEIPTS = Path("results/studies") / V1_STUDY_ID / "receipts.jsonl"
 V2_CONFIG_DIR = Path("configs/studies") / V2_PROTOCOL.study_id
 CANDIDATE_MANIFEST = Path("results/rryas_dataset/candidate_manifest.json")
+CANARY_STUDY_ID = "rryas-headline-v2-cli-compliance-canary"
+CANARY_STATUS = Path("results/studies") / CANARY_STUDY_ID / "study_status.json"
 
 
 @dataclass(frozen=True)
@@ -487,17 +489,38 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
     )
 
 
-def _artifact_payloads(build: CorePayloads) -> dict[str, Mapping[str, Any]]:
-    return {
+def _canary_is_complete(repo_root: Path) -> bool:
+    status_path = repo_root / CANARY_STATUS
+    if not status_path.is_file():
+        return False
+    status = _load_object(status_path)
+    return (
+        status.get("study_id") == CANARY_STUDY_ID
+        and status.get("status") == "COMPLETE-OPERATIONAL-VALID"
+    )
+
+
+def _artifact_payloads(
+    build: CorePayloads, *, include_canary: bool
+) -> dict[str, Mapping[str, Any]]:
+    artifacts = {
         "analysis_plan.json": build.analysis_plan,
         "final_manifest.json": build.manifest,
         "study_spec.json": build.spec,
         "preflight_evidence.json": build.preflight_evidence,
         "dispatch_plan.json": build.dispatch_plan,
-        "cli_compliance_canary.json": build.canary,
-        "cli_compliance_canary_study_spec.json": build.canary_spec,
-        "cli_compliance_canary_dispatch_plan.json": build.canary_dispatch_plan,
     }
+    if include_canary:
+        artifacts.update(
+            {
+                "cli_compliance_canary.json": build.canary,
+                "cli_compliance_canary_study_spec.json": build.canary_spec,
+                "cli_compliance_canary_dispatch_plan.json": (
+                    build.canary_dispatch_plan
+                ),
+            }
+        )
+    return artifacts
 
 
 def write_capsule(
@@ -507,7 +530,9 @@ def write_capsule(
     check: bool,
 ) -> None:
     output_dir = repo_root / V2_CONFIG_DIR
-    artifacts = _artifact_payloads(build)
+    artifacts = _artifact_payloads(
+        build, include_canary=not _canary_is_complete(repo_root)
+    )
     if check:
         for name, payload in artifacts.items():
             path = output_dir / name

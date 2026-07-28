@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -60,3 +61,36 @@ def test_repository_v2_artifacts_are_current() -> None:
     build = build_core_payloads(PROJECT_ROOT, revision=revision)
 
     write_capsule(PROJECT_ROOT, build, check=True)
+
+
+def test_completed_canary_artifacts_are_preserved(tmp_path: Path) -> None:
+    revision = configured_revision(PROJECT_ROOT)
+    build = build_core_payloads(PROJECT_ROOT, revision=revision)
+    config_dir = tmp_path / "configs/studies/rryas-headline-v2"
+    config_dir.mkdir(parents=True)
+    historical = {
+        "cli_compliance_canary.json": b'{"historical": "manifest"}\n',
+        "cli_compliance_canary_study_spec.json": b'{"historical": "spec"}\n',
+        "cli_compliance_canary_dispatch_plan.json": b'{"historical": "plan"}\n',
+    }
+    for name, content in historical.items():
+        (config_dir / name).write_bytes(content)
+    status_path = (
+        tmp_path
+        / "results/studies/rryas-headline-v2-cli-compliance-canary"
+        / "study_status.json"
+    )
+    status_path.parent.mkdir(parents=True)
+    status_path.write_text(
+        json.dumps(
+            {
+                "study_id": "rryas-headline-v2-cli-compliance-canary",
+                "status": "COMPLETE-OPERATIONAL-VALID",
+            }
+        )
+    )
+
+    write_capsule(tmp_path, build, check=False)
+    write_capsule(tmp_path, build, check=True)
+
+    assert {name: (config_dir / name).read_bytes() for name in historical} == historical

@@ -1869,7 +1869,7 @@
     "invalid_slot": "stop promotion; retain receipt and all-attempt spend",
     "image_identity": "record immutable built image and bound container digests per trial"
   },
-  "harness_hash": "sha256:82623333ab1d92e1e35c35587c2b9126afffdf5822d2fce6636f71818ee307b9",
+  "harness_hash": "sha256:978c812899ec50d18b08c0980588af33234901e260547f53fa28c762f0e06327",
   "verifier_hashes": {
     "api-contract-dual-hyper-reqwest-001": "sha256:df06f6da6d3cdc405dfe1ffa1c8b8e99d5ac5191da5a0c51b639775efb125afe",
     "api-contract-dual-jackson-spring-001": "sha256:1183607163b4ec6283adfe4d6302dc5d3e6b6ab1bb209899d937f8df955cf817",

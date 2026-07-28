@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-headline-v2",
-  "spec_hash": "sha256:8e252602e129cf21fdd87a4836c20e6c8d4aa7f4cd76dabd881876785720284f",
-  "task_manifest_hash": "sha256:6be2e611c9e9fdc1d875a3df91234e7244770dce24917d0c583ac0e3581a1382",
+  "spec_hash": "sha256:30fbc61c3963d0798b85e6e757ab2c6872049088486ccc212f8e5c849480ca4f",
+  "task_manifest_hash": "sha256:10af9b6d07cf11288b688bba779950a4eedd9a179d6d79d05e70d9d60ba8b71a",
   "analysis_plan_hash": "sha256:37df0f34927fb446ed15839320fbd564849aad0d5a9a9df7612a9295791520b3",
   "candidate_ids": [
     "api-contract-dual-hyper-reqwest-001",
@@ -689,7 +689,7 @@
       1
     ]
   ],
-  "revision": "652cc98d0482836de1a35f3bcb734f409719540e",
+  "revision": "5b92f161ae82a171aa0bd07c6236ecd7fecd5294",
   "mirror_repositories": [
     "github.com/sg-evals/hyper--v1.0.0",
     "github.com/sg-evals/reqwest--v0.11.22",

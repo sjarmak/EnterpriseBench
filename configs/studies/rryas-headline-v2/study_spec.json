@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-headline-v2",
   "schema_version": 1,
-  "task_manifest_hash": "sha256:6be2e611c9e9fdc1d875a3df91234e7244770dce24917d0c583ac0e3581a1382",
+  "task_manifest_hash": "sha256:10af9b6d07cf11288b688bba779950a4eedd9a179d6d79d05e70d9d60ba8b71a",
   "task_ids": [
     "api-contract-dual-hyper-reqwest-001",
     "api-contract-dual-jackson-spring-001",
@@ -63,8 +63,8 @@
   "attempt_policy": "first_valid_attempt",
   "max_attempts": 1,
   "model": "claude-sonnet-5",
-  "harness": "sha256:82623333ab1d92e1e35c35587c2b9126afffdf5822d2fce6636f71818ee307b9",
-  "revision": "652cc98d0482836de1a35f3bcb734f409719540e",
+  "harness": "sha256:978c812899ec50d18b08c0980588af33234901e260547f53fa28c762f0e06327",
+  "revision": "5b92f161ae82a171aa0bd07c6236ecd7fecd5294",
   "token_source": "sdk_model_usage",
   "score_contract": "weighted-mean-v2",
   "promotion_policy": "paired-valid-complete-arms"
