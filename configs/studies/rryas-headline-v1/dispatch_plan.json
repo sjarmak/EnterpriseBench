@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v1",
+  "status": "LOCKED-NO-SPEND",
+  "study_spec": "configs/studies/rryas-headline-v1/study_spec.json",
+  "study_spec_file_hash": "sha256:ea4b033c3ac60ba7b798536d28dc7264a2ecd0dbec233fc6b3a31e63821272c1",
+  "study_spec_hash": "sha256:f7199733c00b24ee6ee476b8755d0c86d62403158f0146c83091ea79834e3b74",
+  "final_manifest": "configs/studies/rryas-headline-v1/final_manifest.json",
+  "final_manifest_hash": "sha256:d016b6494d759d0d8372ab316c5cca9032d09f773078bbdb86d0bfe20bcb04d7",
+  "preflight_evidence": "configs/studies/rryas-headline-v1/preflight_evidence.json",
+  "preflight_evidence_hash": "sha256:fa1d93f6c600c6ba621d0a858708ee99d5cef5c04b0e259acf5a8d5278f9db8f",
+  "cost_forecast": {
+    "basis": "All nine immutable Claude Sonnet 5 interface-pilot attempts with provider-native outer-agent cost and zero cache reads/writes; the mean is the outer-agent forecast and the maximum observed attempt defines the empirical per-slot envelope.",
+    "sample_receipts": [
+      {
+        "path": "results/studies/rryas_code_finder_interface_pilot_v1/receipts.jsonl",
+        "sha256": "sha256:e436b3fbc46756af57c6fd4df5074af926edf915c6ccbe157731899ee0a17937"
+      },
+      {
+        "path": "results/studies/rryas_code_finder_interface_supplement_v1/receipts.jsonl",
+        "sha256": "sha256:3cabe493628aca84c9bb74f7c94028d9a591430bb179170d89dad82f64ae57ce"
+      },
+      {
+        "path": "results/studies/rryas_code_finder_interface_supplement_v2/receipts.jsonl",
+        "sha256": "sha256:3157e0f6fce073e873bf3c88cfc6e4d0b92d8a34445ded1fbe5c2f281a5f1609"
+      }
+    ],
+    "sample_attempts": 9,
+    "sample_outer_spend_usd": 8.412018,
+    "mean_per_slot_usd": 0.934668667,
+    "forecast_outer_spend_usd": 120.572258,
+    "max_observed_per_slot_usd": 2.09479,
+    "empirical_slot_count_envelope_usd": 270.22791,
+    "authorization_outer_spend_ceiling_usd": 275.0,
+    "uncovered_costs": [
+      "Sourcegraph MCP and Code Finder inner-agent cost is not reported by the endpoint",
+      "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "local Docker compute is not priced"
+    ]
+  },
+  "authorization": {
+    "paid_dispatch_authorized": false,
+    "authorization_reference": null
+  }
+}

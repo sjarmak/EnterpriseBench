@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-headline-v1",
-  "spec_hash": "sha256:c9943ded7e6b0db562426584251c87cb4103784b1f1c7d71dea9cb05e9008e2a",
-  "task_manifest_hash": "sha256:f3fb3d4aa03262acf0376ac245ac478d80d2b5fa91fdb30cedea80a1a4007605",
+  "spec_hash": "sha256:f7199733c00b24ee6ee476b8755d0c86d62403158f0146c83091ea79834e3b74",
+  "task_manifest_hash": "sha256:d016b6494d759d0d8372ab316c5cca9032d09f773078bbdb86d0bfe20bcb04d7",
   "analysis_plan_hash": "sha256:b56b495ede7205dbb0b27ad409cd846ea48756fe9a5399c6ca7d7f9a1dee593e",
   "candidate_ids": [
     "api-contract-001",
@@ -740,7 +740,7 @@
       1
     ]
   ],
-  "revision": "78d9144a2f7ea1f4ef21844e5ddd44c9d1b88605",
+  "revision": "87c26924d76ba3dbb810b75cceb199e7ccfdf819",
   "mirror_repositories": [
     "github.com/sg-evals/grpc-go--v1.4.0",
     "github.com/sg-evals/etcd--v3.3.0",

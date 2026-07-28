@@ -1977,7 +1977,7 @@
     "invalid_slot": "stop promotion; retain receipt and all-attempt spend",
     "image_identity": "record immutable built image and bound container digests per trial"
   },
-  "harness_hash": "sha256:dfb8fd4708f879b26319dc7b6c0025cdfd189f7e4fc391c810155250471f2865",
+  "harness_hash": "sha256:74d28c4bbef19ae8740b08dd76d907dfe3af45b927e6ce66337fb2db7c9f66b0",
   "verifier_hashes": {
     "api-contract-grpc-metadata-001": "sha256:7268fcf68d49c0af81f30a5d12fbc87da85596c2d025f8a67cdc833161202c19",
     "api-contract-grpc-balancer-002": "sha256:ee5b88ef8bb2731f284993febe6e1bbcbb458003809ffdc08d0b8be0c4db7fc2",

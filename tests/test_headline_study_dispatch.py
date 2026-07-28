@@ -437,7 +437,7 @@ def test_repository_dispatch_plan_is_current_and_spend_gated() -> None:
     assert len(plan.slots) == 129
     assert plan.paid_dispatch_authorized is False
     assert plan.authorization_reference is None
-    assert plan.forecast_outer_spend_usd == pytest.approx(120.572263)
+    assert plan.forecast_outer_spend_usd == pytest.approx(120.572258)
     assert plan.empirical_envelope_usd == pytest.approx(270.22791)
     assert plan.authorization_ceiling_usd == pytest.approx(275.0)
     assert plan.sample_attempts == 9
