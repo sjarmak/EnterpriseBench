@@ -1544,7 +1544,7 @@
     "invalid_slot": "stop promotion; retain receipt and all-attempt spend",
     "image_identity": "record immutable built image and bound container digests per trial"
   },
-  "harness_hash": "sha256:08be999a2172bab357312a941da4d9a6531fe37eb7a5f800463c01b41d353f4d",
+  "harness_hash": "sha256:ed15980f3fb06e66289a043108b0bc2026b33452df0e7d982ec8aa59980c1a31",
   "verifier_hashes": {
     "dep-graph-tri-tokio-hyper-tonic-001": "sha256:d5c5d2a523f7dc1a90e77e67a874a5efe12b39917a450393ce29e2147476532a",
     "dep-traversal-001": "sha256:fe25b7c5a30bffddc5c5abcdf908cfc29d7fbb6b4b6127fd897b693841f36efd",

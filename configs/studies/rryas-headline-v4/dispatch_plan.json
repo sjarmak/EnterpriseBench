@@ -3,12 +3,12 @@
   "study_id": "rryas-headline-v4",
   "status": "LOCKED-NO-SPEND",
   "study_spec": "configs/studies/rryas-headline-v4/study_spec.json",
-  "study_spec_file_hash": "sha256:db52a754046a362c7f844bfcb0b7615806abf9f807920d1a22d7993f8d551fb3",
-  "study_spec_hash": "sha256:647eb83011f12565d32430060cc56b944c6f446d2026d1c301d1812de51a7e3f",
+  "study_spec_file_hash": "sha256:3eb21248bbb3715d7285d5a939d42eed0bdf8c809a7be93b77386f58da1ddcb6",
+  "study_spec_hash": "sha256:f9c43711aea60da32d1862dbbe5b79dfc62da56f2163bcf69cb3413ef3a9e756",
   "final_manifest": "configs/studies/rryas-headline-v4/final_manifest.json",
-  "final_manifest_hash": "sha256:0d67c91dc73eb45f8b7cc54a3a7d12c168df76e92045518e4db696cd2f79dc7d",
+  "final_manifest_hash": "sha256:cebcb7896f8a16e7fd3f3a035eca5a36e304a93914f87dca10a295b0e207cf9a",
   "preflight_evidence": "configs/studies/rryas-headline-v4/preflight_evidence.json",
-  "preflight_evidence_hash": "sha256:0ca23ce1a424652eeb1455ad06b290864eea954148bad03e4dbfb8d32eb3528d",
+  "preflight_evidence_hash": "sha256:432da04d455050ac3ba26fb450c4d914f5dd425480e9fe6e05163b53b29908a1",
   "cost_forecast": {
     "basis": "All immutable v1, v2, and v3 attempts, including terminal invalid attempts, with provider-native outer-agent cost and zero cache reads/writes.",
     "sample_receipts": [
@@ -35,6 +35,7 @@
     "uncovered_costs": [
       "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
       "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "up to four one-token Haiku capacity probes per authorization are provider usage outside trial receipts",
       "local Docker compute is not priced"
     ]
   },
