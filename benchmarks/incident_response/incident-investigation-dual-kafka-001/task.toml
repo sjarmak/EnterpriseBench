@@ -49,7 +49,7 @@ Your task:
 4. Identify the configuration interaction between Connect's offset flush timeout
    and the JDBC transaction/statement timeout.
 
-Write your incident report to /workspace/kafka/INCIDENT_REPORT.md with:
+Write your incident report to /workspace/agent_output/INCIDENT_REPORT.md with:
 - Root cause identification (file and class in each repo)
 - Full error chain from batch processing to task failure
 - Affected connector configurations

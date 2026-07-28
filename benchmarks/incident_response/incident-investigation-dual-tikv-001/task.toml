@@ -77,7 +77,7 @@ Your task:
    `processRegionHeartbeat` schedules removal -> peer awakens, heartbeats
    resume, peer flap.
 
-Write your incident report to `/workspace/tikv/INCIDENT_REPORT.md` with:
+Write your incident report to `/workspace/agent_output/INCIDENT_REPORT.md` with:
 - Root cause (file and function in each repo)
 - Full error chain across both repos
 - Affected components (TiKV raftstore, PD cluster scheduler, region

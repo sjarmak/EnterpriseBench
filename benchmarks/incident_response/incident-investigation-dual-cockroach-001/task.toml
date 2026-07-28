@@ -64,7 +64,7 @@ Your task:
    of range-key deletes whose suffix matches an existing range key) or a
    CockroachDB-side mitigation (avoid the SST shape that triggers it).
 
-Write your incident report to `/workspace/cockroach/INCIDENT_REPORT.md` with:
+Write your incident report to `/workspace/agent_output/INCIDENT_REPORT.md` with:
 - Root cause (file and function in each repo)
 - Full corruption chain
 - Affected components

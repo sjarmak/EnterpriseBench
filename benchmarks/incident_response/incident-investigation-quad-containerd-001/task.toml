@@ -65,7 +65,7 @@ Your task:
    from runc's BPF filter back through containerd to the kubelet error
    visible to the user?
 
-Write your incident report to /workspace/moby/INCIDENT_REPORT.md with:
+Write your incident report to /workspace/agent_output/INCIDENT_REPORT.md with:
 - Root cause identification (file and function in each repo)
 - Full seccomp profile processing chain across all four repos
 - Comparison of default vs custom profile handling

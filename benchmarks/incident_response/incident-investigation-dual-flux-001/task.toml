@@ -60,7 +60,7 @@ Your task:
 4. Identify the specific status condition fields that changed between versions
    and why the transition is not handled.
 
-Write your incident report to /workspace/flux2/INCIDENT_REPORT.md with:
+Write your incident report to /workspace/agent_output/INCIDENT_REPORT.md with:
 - Root cause: the file and function in helm-controller where old-format
   conditions are misparsed, plus the flux CLI surface where the symptom is
   observed

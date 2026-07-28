@@ -1,4 +1,4 @@
-"""Gate-compatible output contract for the Finder supplement incident task."""
+"""Gate-compatible output contracts for incident-report tasks."""
 
 from __future__ import annotations
 
@@ -24,6 +24,22 @@ from mode_gate import GATED_MODES, check_eligibility  # noqa: E402
 
 REPORT_PATH = "/workspace/agent_output/INCIDENT_REPORT.md"
 OLD_REPORT_PATH = "/workspace/nerdctl/INCIDENT_REPORT.md"
+HEADLINE_INCIDENT_TASK_IDS = (
+    "incident-investigation-004",
+    "incident-investigation-dual-cockroach-001",
+    "incident-investigation-dual-cortex-001",
+    "incident-investigation-dual-flux-001",
+    "incident-investigation-dual-kafka-001",
+    "incident-investigation-dual-loki-001",
+    "incident-investigation-dual-nats-001",
+    "incident-investigation-dual-nomad-001",
+    "incident-investigation-dual-prometheus-001",
+    "incident-investigation-dual-tempo-001",
+    "incident-investigation-dual-tikv-001",
+    "incident-investigation-dual-vault-001",
+    "incident-investigation-quad-containerd-001",
+    "incident-investigation-tri-containerd-001",
+)
 
 
 def test_nerdctl_report_contract_is_gate_compatible() -> None:
@@ -48,6 +64,36 @@ def test_nerdctl_report_contract_is_gate_compatible() -> None:
     assert all(
         OLD_REPORT_PATH not in source.read_text()
         for source in [*prompt_sources, *check_sources]
+    )
+
+
+@pytest.mark.parametrize("task_id", HEADLINE_INCIDENT_TASK_IDS)
+def test_headline_incident_report_contract_is_gate_compatible(task_id: str) -> None:
+    task_dir = PROJECT_ROOT / "benchmarks" / "incident_response" / task_id
+    task_data = run_task._parse_task(task_dir / "task.toml")
+
+    assert run_task._derive_graded_artifact_path(task_dir) == REPORT_PATH
+    for mode in GATED_MODES:
+        check_eligibility(
+            task_data,
+            mode,
+            graded_artifact_path=REPORT_PATH,
+            workspace=run_task.WORKSPACE_DIR,
+        )
+
+    prompt_sources = [task_dir / "instruction.md", task_dir / "task.toml"]
+    check_sources = sorted((task_dir / "checks").glob("*.sh"))
+    assert all(REPORT_PATH in source.read_text() for source in prompt_sources)
+    assert all(
+        "$WORKSPACE/agent_output/INCIDENT_REPORT.md" in source.read_text()
+        for source in check_sources
+    )
+    assert all(
+        f"/workspace/{repo['path']}/INCIDENT_REPORT.md"
+        not in "\n".join(
+            source.read_text() for source in [*prompt_sources, *check_sources]
+        )
+        for repo in task_data["repos"]
     )
 
 
@@ -92,9 +138,7 @@ def test_nerdctl_runtime_checkpoint_names_reach_judge(
         ]
     }
 
-    judged = run_task._apply_llm_judge(
-        scores, TASK_DIR, "container", task_data
-    )
+    judged = run_task._apply_llm_judge(scores, TASK_DIR, "container", task_data)
 
     assert "verifier_infra_error" not in judged
     assert judged["task_score"] == 1.0

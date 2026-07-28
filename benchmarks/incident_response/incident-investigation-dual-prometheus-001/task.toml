@@ -46,7 +46,7 @@ Your task:
 4. Identify the specific code paths in both repos that contribute to this
    silent failure mode.
 
-Write your incident report to /workspace/alertmanager/INCIDENT_REPORT.md with:
+Write your incident report to /workspace/agent_output/INCIDENT_REPORT.md with:
 - Root cause identification (file and function in each repo)
 - Full inhibition chain from recording rule to suppressed alert
 - Affected alerting components

@@ -81,7 +81,7 @@ Your task:
    yet drained backlog -> state_store reads return pre-backlog state ->
    planApply rejects new plans -> allocations stuck pending.
 
-Write your incident report to `/workspace/nomad/INCIDENT_REPORT.md` with:
+Write your incident report to `/workspace/agent_output/INCIDENT_REPORT.md` with:
 - Root cause (file and function in each repo)
 - Full incident chain
 - Affected components

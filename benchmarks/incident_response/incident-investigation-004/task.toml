@@ -61,7 +61,7 @@ Your task:
 3. List all affected components across both repositories.
 4. Propose the correct remediation.
 
-Write your incident report to /workspace/moby/INCIDENT_REPORT.md.
+Write your incident report to /workspace/agent_output/INCIDENT_REPORT.md.
 """
 
 [[repos]]

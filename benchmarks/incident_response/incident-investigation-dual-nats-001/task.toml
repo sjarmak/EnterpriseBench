@@ -73,7 +73,7 @@ Your task:
    returns the next live sequence -> consumer silently skips the evicted
    range.
 
-Write your incident report to `/workspace/nats-server/INCIDENT_REPORT.md`
+Write your incident report to `/workspace/agent_output/INCIDENT_REPORT.md`
 with:
 - Root cause (file and function in each repo)
 - Full error chain across the cross-repo seam

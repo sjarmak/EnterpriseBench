@@ -70,7 +70,7 @@ Your task:
    rejects non-ASCII label name in classic mode -> 400 returned -> ruler
    notifier swallows the error -> alert never delivered, no surfaced metric.
 
-Write your incident report to `/workspace/cortex/INCIDENT_REPORT.md` with:
+Write your incident report to `/workspace/agent_output/INCIDENT_REPORT.md` with:
 - Root cause (file and function in each repo)
 - Full error chain (at least four hops)
 - Affected components

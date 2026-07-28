@@ -50,7 +50,7 @@ Your task:
 4. Trace the full error propagation: runc execve failure → containerd shim
    error → Docker daemon error response → user-visible error.
 
-Write your incident report to /workspace/moby/INCIDENT_REPORT.md with:
+Write your incident report to /workspace/agent_output/INCIDENT_REPORT.md with:
 - Root cause identification (file and function in each repo)
 - Full error chain across all three repos
 - Affected container runtime components
