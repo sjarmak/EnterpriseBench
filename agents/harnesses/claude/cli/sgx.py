@@ -66,7 +66,15 @@ _DIRECT_CLI_RULE = """\
 
 Do not use `sgx finder`. This arm measures direct Sourcegraph retrieval through \
 the search, navigation, and file-reading commands below; the `code_finder` \
-backend is measured separately."""
+backend is measured separately.
+
+You MUST make at least one repository-scoped `sgx` call before inspecting \
+repository contents with local tools such as `ls`, `find`, `grep`, `rg`, or \
+`cat`. A run with zero `sgx` calls is invalid and stops the study. Generic task \
+hints that repositories are cloned under `/workspace` describe path and output \
+locations; they do not permit skipping this required Sourcegraph retrieval. \
+After that first `sgx` call, local repository tools are allowed and may be \
+composed with further `sgx` calls."""
 
 _FINDER_USAGE = """\
 ## Required Code Finder Workflow

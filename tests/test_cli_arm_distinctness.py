@@ -178,6 +178,9 @@ class TestSgxPreambleBuilder:
         assert "`sgx`" in out
         assert "NO MCP tools" in out
         assert "sgx search" in out
+        assert "before inspecting repository contents with local tools" in out
+        assert "zero `sgx` calls is invalid" in out
+        assert "After that first `sgx` call, local repository tools are allowed" in out
 
     def test_cli_code_finder_returns_forced_finder_guidance(self):
         out = sgx_preamble.build_system_prompt("cli_code_finder", repos=[])
