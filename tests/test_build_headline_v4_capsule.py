@@ -50,7 +50,7 @@ def test_v4_builder_excludes_every_v1_through_v3_exposed_task() -> None:
         "safe-mode:no-tools:replacement-system-prompt"
     )
     assert build.dispatch_plan["batch_policy"] == {
-        "max_slots_per_dispatch": 12,
+        "max_slots_per_dispatch": 9,
         "complete_task_triplets": True,
         "score_independent_boundaries": True,
         "agent_max_budget_usd_per_slot": 9.1,

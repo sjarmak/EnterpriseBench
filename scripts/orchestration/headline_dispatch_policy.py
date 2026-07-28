@@ -203,8 +203,8 @@ def validate_v3_dispatch_controls(
         or batch_policy.get("score_independent_boundaries") is not True
     ):
         raise DispatchPolicyError(
-            "v3 batch policy must use exactly 12 slots and the frozen "
-            "provider-side budget caps"
+            f"{study_id} batch policy must use exactly {frozen_batch_size} "
+            "slots and the frozen provider-side budget caps"
         )
     if _max_declared_judge_calls(task_paths) > max_judge_calls:
         raise DispatchPolicyError("v3 task exceeds the frozen judge-call budget")

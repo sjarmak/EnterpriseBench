@@ -18,5 +18,6 @@ V4 changes only the judge execution boundary:
 Do not authorize a headline batch until one isolated judge-only canary succeeds
 on already-exposed v3 material. The canary must not produce a new agent output
 or change task selection. After it passes, each headline batch still requires a
-fresh 12-slot capacity record, a fresh explicit user approval, a newly generated
+fresh 9-slot capacity record from a 0% five-hour starting point, a fresh
+explicit user approval, a newly generated
 authorization artifact, and a committed-clean dispatcher preview.

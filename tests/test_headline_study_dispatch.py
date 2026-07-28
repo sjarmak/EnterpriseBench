@@ -196,7 +196,9 @@ def _write_fixture(
         plan_payload.update(
             {
                 "batch_policy": {
-                    "max_slots_per_dispatch": 12,
+                    "max_slots_per_dispatch": (
+                        9 if study_id == "rryas-headline-v4" else 12
+                    ),
                     "complete_task_triplets": True,
                     "score_independent_boundaries": True,
                     "agent_max_budget_usd_per_slot": 9.1,
@@ -232,11 +234,14 @@ def _write_fixture(
                 "confirmed": True,
                 "capacity_reference": "test-capacity",
                 "confirmed_completed_prefix": prefix,
-                "confirmed_max_slots": 12,
+                "confirmed_max_slots": (
+                    9 if study_id == "rryas-headline-v4" else 12
+                ),
             }
         if authorized:
             preview_plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
-            end_prefix = min(prefix + 12, len(preview_plan.slots))
+            batch_size = 9 if study_id == "rryas-headline-v4" else 12
+            end_prefix = min(prefix + batch_size, len(preview_plan.slots))
             commands = tuple(
                 compile_run_command(slot, plan=preview_plan, repo_root=tmp_path)
                 for slot in preview_plan.slots[prefix:end_prefix]
