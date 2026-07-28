@@ -118,6 +118,7 @@ def _cost_forecast(repo_root: Path) -> dict[str, Any]:
         "uncovered_costs": [
             "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
             "Claude judge-account usage is not included in the agent modelUsage receipt",
+            "up to four one-token Haiku capacity probes per authorization are provider usage outside trial receipts",
             "local Docker compute is not priced",
         ],
     }

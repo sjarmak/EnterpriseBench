@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Create one non-replayable v3 paid-batch artifact after explicit approval."""
+"""Create one non-replayable headline paid-batch artifact after approval."""
 
 from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sys
@@ -20,8 +21,19 @@ for import_path in (
         sys.path.insert(0, str(import_path))
 
 from headline_dispatch_policy import (  # noqa: E402
+    DispatchPolicyError,
     authorization_batch_hash,
+    capacity_evidence_hash,
     nonblank,
+    validate_capacity_evidence_freshness,
+    validate_v4_capacity_evidence,
+)
+from headline_provider_capacity import (  # noqa: E402
+    CapacityProbeError,
+    UsageFetcher,
+    build_live_capacity_evidence,
+    exclusive_provider_account_locks,
+    fetch_provider_usage,
 )
 from headline_study_dispatch import (  # noqa: E402
     DispatchError,
@@ -45,19 +57,58 @@ def _load_payload(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _build_v4_capacity(
+    *,
+    plan: Any,
+    fetcher: UsageFetcher,
+    now: datetime | None,
+    completed_prefix: int,
+) -> dict[str, Any]:
+    agent_accounts = {slot.agent_account for slot in plan.slots}
+    judge_accounts = {slot.judge_account for slot in plan.slots}
+    if len(agent_accounts) != 1 or len(judge_accounts) != 1:
+        raise AuthorizationError("v4 requires one agent and one judge account")
+    try:
+        evidence = build_live_capacity_evidence(
+            agent_account=next(iter(agent_accounts)),
+            judge_account=next(iter(judge_accounts)),
+            fetcher=fetcher,
+        )
+        provider_capacity = {
+            "confirmed": True,
+            "capacity_reference": capacity_evidence_hash(evidence),
+            "confirmed_completed_prefix": completed_prefix,
+            "confirmed_max_slots": plan.v3_controls.max_slots_per_dispatch,
+            "evidence": evidence,
+        }
+        validated = validate_v4_capacity_evidence(
+            provider_capacity,
+            agent_accounts=agent_accounts,
+            judge_accounts=judge_accounts,
+        )
+        validate_capacity_evidence_freshness(
+            validated,
+            now=now or datetime.now(timezone.utc),
+        )
+    except (CapacityProbeError, DispatchPolicyError) as exc:
+        raise AuthorizationError(str(exc)) from exc
+    return provider_capacity
+
+
 def build_authorized_plan(
     *,
     plan_path: Path,
     repo_root: Path,
     authorization_reference: str,
-    capacity_reference: str,
+    capacity_reference: str | None,
+    capacity_fetcher: UsageFetcher | None = None,
+    capacity_lock_factory=None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """Bind approval and current capacity evidence to one exact pending batch."""
 
-    if not nonblank(authorization_reference) or not nonblank(capacity_reference):
-        raise AuthorizationError(
-            "authorization and capacity references must be non-blank"
-        )
+    if not nonblank(authorization_reference):
+        raise AuthorizationError("authorization reference must be non-blank")
     try:
         plan = load_dispatch_plan(plan_path, repo_root=repo_root)
         receipts, _spend = _existing_receipts(plan)
@@ -79,12 +130,39 @@ def build_authorized_plan(
         for slot in plan.slots[start_prefix:end_prefix]
     )
     payload = deepcopy(_load_payload(plan_path))
-    payload["provider_capacity"] = {
-        "confirmed": True,
-        "capacity_reference": capacity_reference,
-        "confirmed_completed_prefix": start_prefix,
-        "confirmed_max_slots": controls.max_slots_per_dispatch,
-    }
+    if plan.spec.study_id == "rryas-headline-v4":
+        accounts = {
+            account
+            for slot in plan.slots
+            for account in (slot.agent_account, slot.judge_account)
+        }
+        lock_factory = capacity_lock_factory or exclusive_provider_account_locks
+        lock = lock_factory(accounts)
+        try:
+            with lock:
+                payload["provider_capacity"] = _build_v4_capacity(
+                    plan=plan,
+                    fetcher=capacity_fetcher or fetch_provider_usage,
+                    now=now,
+                    completed_prefix=start_prefix,
+                )
+        except CapacityProbeError as exc:
+            raise AuthorizationError(str(exc)) from exc
+        bound_capacity_reference = payload["provider_capacity"][
+            "capacity_reference"
+        ]
+    else:
+        if not nonblank(capacity_reference):
+            raise AuthorizationError(
+                "authorization and capacity references must be non-blank"
+            )
+        bound_capacity_reference = capacity_reference
+        payload["provider_capacity"] = {
+            "confirmed": True,
+            "capacity_reference": bound_capacity_reference,
+            "confirmed_completed_prefix": start_prefix,
+            "confirmed_max_slots": controls.max_slots_per_dispatch,
+        }
     payload["authorization"] = {
         "paid_dispatch_authorized": True,
         "authorization_reference": authorization_reference,
@@ -95,6 +173,7 @@ def build_authorized_plan(
             commands,
             start_prefix=start_prefix,
             end_prefix=end_prefix,
+            capacity_reference=bound_capacity_reference,
         ),
         "authorized_outer_spend_ceiling_usd": (
             plan.authorization_ceiling_usd
@@ -129,7 +208,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--authorization-reference", required=True)
-    parser.add_argument("--capacity-reference", required=True)
+    parser.add_argument("--capacity-reference")
     args = parser.parse_args(argv)
     if args.output.resolve().parent != args.plan.resolve().parent:
         parser.error("authorization output must share the capsule directory")

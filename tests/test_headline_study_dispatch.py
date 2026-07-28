@@ -4,6 +4,8 @@ import fcntl
 import json
 import subprocess
 import sys
+import traceback
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -24,6 +26,49 @@ from headline_study_dispatch import (  # noqa: E402
     dispatch_headline_study,
     load_dispatch_plan,
 )
+
+
+def _v4_capacity_payload(
+    *,
+    fetched_at: datetime | None = None,
+) -> dict[str, object]:
+    from headline_dispatch_policy import capacity_evidence_hash
+
+    evidence = {
+        "schema_version": 1,
+        "source": "anthropic-rate-limit-response-headers",
+        "fetched_at": (fetched_at or datetime.now(timezone.utc)).isoformat(),
+        "max_age_seconds": 600,
+        "accounts": {
+            "agent": {
+                "account": 3,
+                "fetched_at": (
+                    fetched_at or datetime.now(timezone.utc)
+                ).isoformat(),
+                "five_hour_utilization_pct": 0.0,
+                "five_hour_resets_at": "2026-07-29T06:00:00+00:00",
+                "seven_day_utilization_pct": 48.0,
+                "seven_day_resets_at": "2026-08-01T16:00:00+00:00",
+            },
+            "judge": {
+                "account": 1,
+                "fetched_at": (
+                    fetched_at or datetime.now(timezone.utc)
+                ).isoformat(),
+                "five_hour_utilization_pct": 0.0,
+                "five_hour_resets_at": "2026-07-29T06:00:00+00:00",
+                "seven_day_utilization_pct": 45.0,
+                "seven_day_resets_at": "2026-07-30T02:00:00+00:00",
+            },
+        },
+    }
+    return {
+        "confirmed": True,
+        "capacity_reference": capacity_evidence_hash(evidence),
+        "confirmed_completed_prefix": 0,
+        "confirmed_max_slots": 9,
+        "evidence": evidence,
+    }
 
 
 def _spec_payload(
@@ -238,6 +283,12 @@ def _write_fixture(
                     9 if study_id == "rryas-headline-v4" else 12
                 ),
             }
+            if study_id == "rryas-headline-v4":
+                plan_payload["provider_capacity"] = _v4_capacity_payload()
+                plan_payload["provider_capacity"][
+                    "confirmed_completed_prefix"
+                ] = prefix
+            plan_path.write_text(json.dumps(plan_payload, sort_keys=True))
         if authorized:
             preview_plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
             batch_size = 9 if study_id == "rryas-headline-v4" else 12
@@ -852,8 +903,324 @@ def test_v3_paid_batch_requires_provider_capacity_confirmation(
             runner=forbidden_runner,
             preflight=lambda **_kwargs: object(),
         )
+    assert runner_called is False
+
+
+def test_v4_paid_dispatch_rejects_capacity_that_expired_before_runner(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v4",
+        authorized=True,
+        capacity_confirmed=True,
+    )
+    payload = json.loads(plan_path.read_text())
+    stale = datetime.now(timezone.utc) - timedelta(seconds=601)
+    payload["provider_capacity"] = _v4_capacity_payload(fetched_at=stale)
+    plan_path.write_text(json.dumps(payload, sort_keys=True))
+    plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
+    commands = tuple(
+        compile_run_command(slot, plan=plan, repo_root=tmp_path)
+        for slot in plan.slots
+    )
+    payload["authorization"]["authorized_batch_hash"] = authorization_batch_hash(
+        plan,
+        commands,
+        start_prefix=0,
+        end_prefix=6,
+    )
+    plan_path.write_text(json.dumps(payload, sort_keys=True))
+
+    with pytest.raises(DispatchError, match="capacity evidence is stale"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=lambda *_args, **_kwargs: pytest.fail("must not dispatch"),
+            preflight=lambda **_kwargs: object(),
+        )
+
+
+def test_v4_load_rejects_capacity_evidence_account_mismatch(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v4",
+        capacity_confirmed=True,
+    )
+    payload = json.loads(plan_path.read_text())
+    payload["provider_capacity"]["evidence"]["accounts"]["agent"]["account"] = 4
+    from headline_dispatch_policy import capacity_evidence_hash
+
+    payload["provider_capacity"]["capacity_reference"] = capacity_evidence_hash(
+        payload["provider_capacity"]["evidence"]
+    )
+    plan_path.write_text(json.dumps(payload, sort_keys=True))
+
+    with pytest.raises(DispatchError, match="agent account"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_v4_load_rejects_capacity_reference_not_matching_evidence(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v4",
+        capacity_confirmed=True,
+    )
+    payload = json.loads(plan_path.read_text())
+    payload["provider_capacity"]["capacity_reference"] = "sha256:" + "0" * 64
+    plan_path.write_text(json.dumps(payload, sort_keys=True))
+
+    with pytest.raises(DispatchError, match="capacity evidence identity"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_v4_load_rejects_boolean_five_hour_usage(tmp_path: Path) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v4",
+        capacity_confirmed=True,
+    )
+    payload = json.loads(plan_path.read_text())
+    evidence = payload["provider_capacity"]["evidence"]
+    evidence["accounts"]["agent"]["five_hour_utilization_pct"] = False
+    from headline_dispatch_policy import capacity_evidence_hash
+
+    payload["provider_capacity"]["capacity_reference"] = capacity_evidence_hash(evidence)
+    plan_path.write_text(json.dumps(payload, sort_keys=True))
+
+    with pytest.raises(DispatchError, match="exact zero usage"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_v4_load_rejects_extra_capacity_evidence_fields(tmp_path: Path) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v4",
+        capacity_confirmed=True,
+    )
+    payload = json.loads(plan_path.read_text())
+    evidence = payload["provider_capacity"]["evidence"]
+    evidence["raw_authorization_header"] = "must-not-be-retained"
+    from headline_dispatch_policy import capacity_evidence_hash
+
+    payload["provider_capacity"]["capacity_reference"] = capacity_evidence_hash(evidence)
+    plan_path.write_text(json.dumps(payload, sort_keys=True))
+
+    with pytest.raises(DispatchError, match="capacity evidence identity"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+@pytest.mark.parametrize("section", ("authorization", "provider_capacity"))
+def test_v4_closed_plan_rejects_extra_control_fields(
+    tmp_path: Path,
+    section: str,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v4",
+    )
+    payload = json.loads(plan_path.read_text())
+    payload[section]["raw_authorization_header"] = "must-not-be-retained"
+    plan_path.write_text(json.dumps(payload, sort_keys=True))
+
+    with pytest.raises(DispatchError, match="v4 .* fields"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_v3_incidental_evidence_does_not_activate_v4_freshness(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        capacity_confirmed=True,
+    )
+    payload = json.loads(plan_path.read_text())
+    payload["provider_capacity"]["evidence"] = {"legacy": True}
+    plan_path.write_text(json.dumps(payload, sort_keys=True))
+
+    plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+    assert plan.v3_controls is not None
+    assert plan.v3_controls.capacity_evidence is None
+
+
+def test_v4_live_capacity_recheck_rejects_hot_account_before_runner(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v4",
+        authorized=True,
+        capacity_confirmed=True,
+    )
+    live = _v4_capacity_payload()["evidence"]
+    live["accounts"]["agent"]["five_hour_utilization_pct"] = 9.0
+    runner_called = False
+
+    def runner(*_args: object, **_kwargs: object) -> None:
+        nonlocal runner_called
+        runner_called = True
+
+    with pytest.raises(DispatchError, match="exact zero usage"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=runner,
+            preflight=lambda **_kwargs: object(),
+            capacity_probe=lambda **_kwargs: live,
+        )
 
     assert runner_called is False
+    captures = sorted(
+        (
+            tmp_path
+            / "results"
+            / "studies"
+            / "rryas-headline-v4"
+            / "capacity_rechecks"
+        ).glob("*.json")
+    )
+    assert [path.name.rsplit(".", 2)[-2] for path in captures] == [
+        "result",
+        "started",
+    ]
+    result = json.loads(
+        next(path for path in captures if path.name.endswith(".result.json")).read_text()
+    )
+    assert result["status"] == "rejected"
+    assert "exact zero usage" in result["invalid_reason"]
+
+
+def test_v4_live_recheck_runs_after_preflight_and_is_captured_before_runner(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v4",
+        authorized=True,
+        capacity_confirmed=True,
+    )
+    live = _v4_capacity_payload()["evidence"]
+    events: list[str] = []
+
+    def preflight(**_kwargs: object) -> object:
+        events.append("preflight")
+        return object()
+
+    def probe(**_kwargs: object) -> dict[str, object]:
+        events.append("probe")
+        return live
+
+    def runner(
+        _command: tuple[str, ...],
+        *,
+        env: dict[str, str],
+        **_kwargs: object,
+    ) -> None:
+        events.append("runner")
+        marker = env["ENTERPRISEBENCH_PROVIDER_ACCOUNT_LOCK_FDS"]
+        inherited_accounts = {
+            int(item.split(":", 1)[0]) for item in marker.split(",")
+        }
+        assert inherited_accounts == {1, 3}
+        assert len(_kwargs["pass_fds"]) == 2
+        captures = list(
+            (
+                tmp_path
+                / "results"
+                / "studies"
+                / "rryas-headline-v4"
+                / "capacity_rechecks"
+            ).glob("*.json")
+        )
+        assert len(captures) == 2
+        result = json.loads(
+            next(
+                path
+                for path in captures
+                if path.name.endswith(".result.json")
+            ).read_text()
+        )
+        assert result["status"] == "accepted"
+        raise RuntimeError("stop after first runner boundary")
+
+    with pytest.raises(RuntimeError, match="runner boundary"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=runner,
+            preflight=preflight,
+            capacity_probe=probe,
+        )
+
+    assert events == ["preflight", "probe", "runner"]
+
+
+def test_v4_failed_live_probe_consumes_authorization_before_retry(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v4",
+        authorized=True,
+        capacity_confirmed=True,
+    )
+    calls = 0
+
+    def failing_probe(**_kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        raise TimeoutError("transport SECRET-SENTINEL")
+
+    with pytest.raises(DispatchError, match="TimeoutError") as failure:
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=lambda *_args, **_kwargs: pytest.fail("must not dispatch"),
+            preflight=lambda **_kwargs: object(),
+            capacity_probe=failing_probe,
+        )
+    rendered_traceback = "".join(
+        traceback.format_exception(
+            failure.type,
+            failure.value,
+            failure.tb,
+        )
+    )
+    assert "SECRET-SENTINEL" not in rendered_traceback
+
+    with pytest.raises(DispatchError, match="already exists"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=lambda *_args, **_kwargs: pytest.fail("must not dispatch"),
+            preflight=lambda **_kwargs: object(),
+            capacity_probe=failing_probe,
+        )
+
+    assert calls == 1
+    result_path = next(
+        (
+            tmp_path
+            / "results"
+            / "studies"
+            / "rryas-headline-v4"
+            / "capacity_rechecks"
+        ).glob("*.result.json")
+    )
+    result = json.loads(result_path.read_text())
+    assert result["status"] == "error"
+    assert "SECRET-SENTINEL" not in result_path.read_text()
 
 
 def test_v3_authorization_is_bound_to_one_completed_prefix(

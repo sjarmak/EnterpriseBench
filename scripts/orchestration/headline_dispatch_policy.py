@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
@@ -32,6 +33,12 @@ class V3DispatchControls:
     outer_spend_hard_cap_per_slot_usd: float
     provider_capacity_confirmed: bool
     capacity_confirmed_prefix: int | None
+    capacity_reference: str | None
+    capacity_evidence: Mapping[str, Any] | None
+
+
+V4_CAPACITY_MAX_AGE_SECONDS = 600
+V4_CAPACITY_SOURCE = "anthropic-rate-limit-response-headers"
 
 
 def strict_non_negative_int(value: Any) -> bool:
@@ -40,6 +47,151 @@ def strict_non_negative_int(value: Any) -> bool:
 
 def nonblank(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def capacity_evidence_hash(evidence: Mapping[str, Any]) -> str:
+    """Return the stable identity of redacted provider-capacity telemetry."""
+
+    encoded = json.dumps(
+        evidence,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _parse_utc_timestamp(value: Any, *, field: str) -> datetime:
+    if not nonblank(value):
+        raise DispatchPolicyError(f"{field} must be a non-blank ISO timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise DispatchPolicyError(f"{field} must be a valid ISO timestamp") from exc
+    if parsed.tzinfo is None:
+        raise DispatchPolicyError(f"{field} must include a UTC offset")
+    return parsed.astimezone(timezone.utc)
+
+
+def _valid_percentage(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and 0.0 <= float(value) <= 100.0
+    )
+
+
+def validate_v4_capacity_evidence(
+    provider_capacity: Mapping[str, Any],
+    *,
+    agent_accounts: set[int],
+    judge_accounts: set[int],
+) -> Mapping[str, Any]:
+    """Validate hash-bound zero-usage telemetry for the exact v4 accounts."""
+
+    if set(provider_capacity) != {
+        "confirmed",
+        "capacity_reference",
+        "confirmed_completed_prefix",
+        "confirmed_max_slots",
+        "evidence",
+    }:
+        raise DispatchPolicyError("v4 capacity evidence identity is inconsistent")
+    evidence = provider_capacity.get("evidence")
+    reference = provider_capacity.get("capacity_reference")
+    if (
+        not isinstance(evidence, dict)
+        or set(evidence)
+        != {
+            "schema_version",
+            "source",
+            "fetched_at",
+            "max_age_seconds",
+            "accounts",
+        }
+        or evidence.get("schema_version") != 1
+        or isinstance(evidence.get("schema_version"), bool)
+        or evidence.get("source") != V4_CAPACITY_SOURCE
+        or evidence.get("max_age_seconds") != V4_CAPACITY_MAX_AGE_SECONDS
+        or capacity_evidence_hash(evidence) != reference
+    ):
+        raise DispatchPolicyError("v4 capacity evidence identity is inconsistent")
+    _parse_utc_timestamp(evidence.get("fetched_at"), field="capacity fetched_at")
+    accounts = evidence.get("accounts")
+    if (
+        not isinstance(accounts, dict)
+        or set(accounts) != {"agent", "judge"}
+        or len(agent_accounts) != 1
+        or len(judge_accounts) != 1
+    ):
+        raise DispatchPolicyError("v4 capacity evidence account roles are inconsistent")
+    expected = {
+        "agent": next(iter(agent_accounts)),
+        "judge": next(iter(judge_accounts)),
+    }
+    required_fields = {
+        "account",
+        "fetched_at",
+        "five_hour_utilization_pct",
+        "five_hour_resets_at",
+        "seven_day_utilization_pct",
+        "seven_day_resets_at",
+    }
+    for role, account_number in expected.items():
+        observed = accounts.get(role)
+        if (
+            not isinstance(observed, dict)
+            or set(observed) != required_fields
+            or observed.get("account") != account_number
+            or isinstance(observed.get("account"), bool)
+            or not _valid_percentage(
+                observed.get("five_hour_utilization_pct")
+            )
+            or float(observed["five_hour_utilization_pct"]) != 0.0
+            or not _valid_percentage(observed.get("seven_day_utilization_pct"))
+        ):
+            raise DispatchPolicyError(
+                f"v4 capacity evidence for {role} account is not exact zero usage"
+            )
+        _parse_utc_timestamp(
+            observed.get("fetched_at"),
+            field=f"{role} fetched_at",
+        )
+        _parse_utc_timestamp(
+            observed.get("five_hour_resets_at"),
+            field=f"{role} five_hour_resets_at",
+        )
+        _parse_utc_timestamp(
+            observed.get("seven_day_resets_at"),
+            field=f"{role} seven_day_resets_at",
+        )
+    return evidence
+
+
+def validate_capacity_evidence_freshness(
+    evidence: Mapping[str, Any],
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Reject v4 paid dispatch when the bound telemetry has aged out."""
+
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    accounts = evidence.get("accounts")
+    timestamps = [("capacity", evidence.get("fetched_at"))]
+    if isinstance(accounts, dict):
+        timestamps.extend(
+            (role, observed.get("fetched_at"))
+            for role, observed in accounts.items()
+            if isinstance(observed, dict)
+        )
+    for label, timestamp in timestamps:
+        observed_at = _parse_utc_timestamp(
+            timestamp,
+            field=f"{label} fetched_at",
+        )
+        age_seconds = (current - observed_at).total_seconds()
+        if age_seconds < 0 or age_seconds > V4_CAPACITY_MAX_AGE_SECONDS:
+            raise DispatchPolicyError("v4 capacity evidence is stale")
 
 
 def validate_committed_authorization(
@@ -85,6 +237,7 @@ def authorization_batch_hash(
     *,
     start_prefix: int,
     end_prefix: int,
+    capacity_reference: str | None = None,
 ) -> str:
     """Bind one approval to the exact immutable command batch and spend cap."""
 
@@ -105,6 +258,16 @@ def authorization_batch_hash(
         ),
         "commands": [list(command) for command in commands],
     }
+    if plan.spec.study_id == "rryas-headline-v4":
+        payload["provider_capacity_reference"] = (
+            capacity_reference
+            if capacity_reference is not None
+            else (
+                plan.v3_controls.capacity_reference
+                if plan.v3_controls is not None
+                else None
+            )
+        )
     encoded = json.dumps(
         payload,
         sort_keys=True,
@@ -139,6 +302,8 @@ def validate_v3_dispatch_controls(
     batch_policy: Any,
     provider_capacity: Any,
     task_paths: Sequence[Path],
+    agent_accounts: set[int],
+    judge_accounts: set[int],
     slot_count: int,
     ceiling: float,
 ) -> V3DispatchControls:
@@ -147,6 +312,15 @@ def validate_v3_dispatch_controls(
     frozen = HEADLINE_BATCH_POLICIES.get(study_id)
     if frozen is None:
         raise DispatchPolicyError(f"{study_id} has no frozen batch policy")
+    if study_id == "rryas-headline-v4" and set(authorization) != {
+        "paid_dispatch_authorized",
+        "authorization_reference",
+        "authorized_completed_prefix",
+        "authorized_end_prefix",
+        "authorized_batch_hash",
+        "authorized_outer_spend_ceiling_usd",
+    }:
+        raise DispatchPolicyError("v4 authorization fields are not exact")
     frozen_batch_size = frozen["max_slots_per_dispatch"]
 
     prefix = authorization.get("authorized_completed_prefix")
@@ -219,6 +393,8 @@ def validate_v3_dispatch_controls(
     capacity_reference = provider_capacity.get("capacity_reference")
     capacity_prefix = provider_capacity.get("confirmed_completed_prefix")
     capacity_max_slots = provider_capacity.get("confirmed_max_slots")
+    raw_capacity_evidence = provider_capacity.get("evidence")
+    capacity_evidence = None
     if (
         not isinstance(capacity_confirmed, bool)
         or (
@@ -245,6 +421,24 @@ def validate_v3_dispatch_controls(
         raise DispatchPolicyError(
             "v3 provider capacity state/reference is inconsistent"
         )
+    if study_id == "rryas-headline-v4":
+        if capacity_confirmed:
+            capacity_evidence = validate_v4_capacity_evidence(
+                provider_capacity,
+                agent_accounts=agent_accounts,
+                judge_accounts=judge_accounts,
+            )
+        elif (
+            raw_capacity_evidence is not None
+            or set(provider_capacity)
+            != {
+                "confirmed",
+                "capacity_reference",
+                "confirmed_completed_prefix",
+                "confirmed_max_slots",
+            }
+        ):
+            raise DispatchPolicyError("v4 provider capacity fields are not exact")
 
     return V3DispatchControls(
         authorized_completed_prefix=prefix,
@@ -256,6 +450,8 @@ def validate_v3_dispatch_controls(
         outer_spend_hard_cap_per_slot_usd=float(hard_cap),
         provider_capacity_confirmed=capacity_confirmed,
         capacity_confirmed_prefix=capacity_prefix,
+        capacity_reference=capacity_reference,
+        capacity_evidence=capacity_evidence,
     )
 
 

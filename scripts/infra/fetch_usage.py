@@ -13,6 +13,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -169,6 +170,7 @@ def _parse_headers(headers: dict) -> dict:
 def update_cache(accounts: list[dict]) -> None:
     """Write or merge results into the usage cache."""
     USAGE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(USAGE_CACHE.parent, 0o700)
 
     # Load existing cache to preserve entries we didn't fetch
     existing = {}
@@ -192,7 +194,9 @@ def update_cache(accounts: list[dict]) -> None:
     }
     tmp = USAGE_CACHE.with_suffix(".tmp")
     tmp.write_text(json.dumps(output, indent=2))
+    os.chmod(tmp, 0o600)
     tmp.replace(USAGE_CACHE)
+    os.chmod(USAGE_CACHE, 0o600)
 
 
 def main():

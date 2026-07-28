@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import base64
+import fcntl
 import json
 import logging
 import math
@@ -73,8 +74,13 @@ _load_env_local(_env_local, os.environ)
 
 # Reuse the TOML parser from create_sg_mirrors
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "infra"))
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "orchestration"))
 from create_sg_mirrors import parse_toml  # noqa: E402
 from mirror_naming import derive_mirror_name  # noqa: E402
+from headline_provider_capacity import (  # noqa: E402
+    DEFAULT_LOCK_DIR,
+    exclusive_provider_account_locks,
+)
 
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 from validation import validate_repo_entry
@@ -5437,6 +5443,62 @@ Examples:
     return parser
 
 
+def _run_task_with_provider_locks(
+    config: TaskRunConfig,
+    *,
+    environ: MutableMapping[str, str] = os.environ,
+    lock_factory=exclusive_provider_account_locks,
+    lock_dir: Path = DEFAULT_LOCK_DIR,
+) -> TaskRunResult:
+    """Serialize all Claude agent/judge use unless a dispatcher owns the locks."""
+
+    accounts = {
+        account
+        for account in (config.account, config.judge_account)
+        if account is not None
+    }
+    if not accounts:
+        return run_task(config)
+    marker = environ.get("ENTERPRISEBENCH_PROVIDER_ACCOUNT_LOCK_FDS")
+    if marker is not None:
+        try:
+            inherited = {
+                int(account): int(file_descriptor)
+                for item in marker.split(",")
+                for account, file_descriptor in (item.split(":", 1),)
+            }
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("provider account lock marker is malformed") from exc
+        if set(inherited) != accounts:
+            raise RuntimeError(
+                "provider account lock marker does not cover the exact task accounts"
+            )
+        lock_root = lock_dir.resolve()
+        for account, file_descriptor in inherited.items():
+            try:
+                actual_path = Path(
+                    f"/proc/self/fd/{file_descriptor}"
+                ).resolve(strict=True)
+                expected_path = (
+                    lock_root / f"account{account}.lock"
+                ).resolve(strict=True)
+                if actual_path != expected_path:
+                    raise RuntimeError(
+                        "provider account lock descriptor has the wrong identity"
+                    )
+                fcntl.flock(
+                    file_descriptor,
+                    fcntl.LOCK_EX | fcntl.LOCK_NB,
+                )
+            except (OSError, RuntimeError) as exc:
+                raise RuntimeError(
+                    "provider account lock descriptor is not verifiable"
+                ) from exc
+        return run_task(config)
+    with lock_factory(accounts):
+        return run_task(config)
+
+
 def main() -> None:
     args = build_parser().parse_args()
 
@@ -5474,7 +5536,7 @@ def main() -> None:
         variant_label=args.variant_label,
     )
 
-    result = run_task(config)
+    result = _run_task_with_provider_locks(config)
 
     # Print summary
     print()

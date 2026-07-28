@@ -17,7 +17,16 @@ V4 changes only the judge execution boundary:
 
 Do not authorize a headline batch until one isolated judge-only canary succeeds
 on already-exposed v3 material. The canary must not produce a new agent output
-or change task selection. After it passes, each headline batch still requires a
-fresh 9-slot capacity record from a 0% five-hour starting point, a fresh
-explicit user approval, a newly generated
-authorization artifact, and a committed-clean dispatcher preview.
+or change task selection. After it passes, generate a committed authorization
+artifact; its fixed live provider probes record redacted, hash-bound telemetry
+for the account 3 agent and account 1 judge. Both accounts must show 0%
+five-hour utilization, the observation must be at most 10 minutes old when
+dispatch starts, and the exact nine-slot command batch must remain committed
+and clean. Dispatch globally locks both accounts, repeats the live probes after
+preflight, writes an exclusive start marker before probing, records the
+accepted or rejected redacted recheck, and holds the locks through the batch.
+Any started recheck consumes that authorization, including provider errors or
+hot-account rejection. Up to four one-token Haiku capacity probes (two at
+authorization and up to two at dispatch) are uncovered provider usage and must
+be included in the authorization disclosure. Every
+batch still requires fresh explicit user approval.

@@ -44,6 +44,13 @@ from headline_dispatch_policy import (  # noqa: E402
     validate_v3_dispatch_controls,
 )
 from headline_dispatch_models import DispatchPlan, DispatchSlot  # noqa: E402
+from headline_provider_capacity import (  # noqa: E402
+    CapacityProbeError,
+    LiveCapacityProbe,
+    build_live_capacity_evidence,
+    exclusive_provider_account_locks,
+    prepare_v4_capacity_dispatch,
+)
 from run_task import DEFAULT_OAUTH_AGENT_COMMAND  # noqa: E402
 
 
@@ -352,6 +359,8 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
                 batch_policy=plan.get("batch_policy"),
                 provider_capacity=plan.get("provider_capacity"),
                 task_paths=tuple(slot.task_toml for slot in slots),
+                agent_accounts={slot.agent_account for slot in slots},
+                judge_accounts={slot.judge_account for slot in slots},
                 slot_count=len(slots),
                 ceiling=ceiling,
             )
@@ -582,6 +591,8 @@ def _dispatch_headline_study(
     execute: bool,
     runner: Runner = subprocess.run,
     preflight: Preflight = validate_headline_study,
+    capacity_probe: LiveCapacityProbe = build_live_capacity_evidence,
+    provider_lock_fds: Mapping[int, int] | None = None,
 ) -> DispatchSummary:
     """Execute after any required paid-dispatch lock has been acquired."""
 
@@ -648,6 +659,15 @@ def _dispatch_headline_study(
             commands=commands,
         )
 
+    runner_env: dict[str, str] | None = None
+    provider_pass_fds: tuple[int, ...] = ()
+    if controls is not None and controls.capacity_evidence is not None:
+        runner_env, provider_pass_fds = prepare_v4_capacity_dispatch(
+            plan=plan,
+            completed_prefix=len(receipts),
+            provider_lock_fds=provider_lock_fds,
+            capacity_probe=capacity_probe,
+        )
     plan.receipts_path.parent.mkdir(parents=True, exist_ok=True)
     executed = 0
     for slot, command in zip(remaining, commands):
@@ -664,11 +684,14 @@ def _dispatch_headline_study(
                 f"${plan.authorization_ceiling_usd:.6f}"
             )
         before_count = len(receipts)
-        completed = runner(
-            command,
-            cwd=repo_root,
-            check=False,
-        )
+        runner_kwargs: dict[str, Any] = {
+            "cwd": repo_root,
+            "check": False,
+        }
+        if runner_env is not None:
+            runner_kwargs["env"] = runner_env
+            runner_kwargs["pass_fds"] = provider_pass_fds
+        completed = runner(command, **runner_kwargs)
         updated = read_receipts(plan.receipts_path)
         if len(updated) != before_count + 1:
             raise DispatchError(
@@ -725,6 +748,7 @@ def dispatch_headline_study(
     execute: bool,
     runner: Runner = subprocess.run,
     preflight: Preflight = validate_headline_study,
+    capacity_probe: LiveCapacityProbe = build_live_capacity_evidence,
 ) -> DispatchSummary:
     """Validate, preview, or sequentially execute the remaining frozen slots."""
 
@@ -736,17 +760,41 @@ def dispatch_headline_study(
             execute=False,
             runner=runner,
             preflight=preflight,
+            capacity_probe=capacity_probe,
+            provider_lock_fds=None,
         )
     try:
         with exclusive_dispatch_lock(plan_path, repo_root=repo_root):
+            preview = load_dispatch_plan(plan_path, repo_root=repo_root)
+            controls = preview.v3_controls
+            if controls is not None and controls.capacity_evidence is not None:
+                account_numbers = {
+                    account
+                    for slot in preview.slots
+                    for account in (slot.agent_account, slot.judge_account)
+                }
+                with exclusive_provider_account_locks(
+                    account_numbers
+                ) as provider_lock_fds:
+                    return _dispatch_headline_study(
+                        plan_path=plan_path,
+                        repo_root=repo_root,
+                        execute=True,
+                        runner=runner,
+                        preflight=preflight,
+                        capacity_probe=capacity_probe,
+                        provider_lock_fds=provider_lock_fds,
+                    )
             return _dispatch_headline_study(
                 plan_path=plan_path,
                 repo_root=repo_root,
                 execute=True,
                 runner=runner,
                 preflight=preflight,
+                capacity_probe=capacity_probe,
+                provider_lock_fds=None,
             )
-    except DispatchPolicyError as exc:
+    except (CapacityProbeError, DispatchPolicyError) as exc:
         raise DispatchError(str(exc)) from exc
 
 
