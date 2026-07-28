@@ -21,7 +21,7 @@ from cli_compliance_canary_dispatch import (  # noqa: E402
     dispatch_cli_compliance_canary,
     load_canary_dispatch_plan,
 )
-from eb_study import StudySpec, file_hash  # noqa: E402
+from eb_study import StudySpec, file_hash, read_receipts  # noqa: E402
 
 
 def _write_fixture(tmp_path: Path, *, authorized: bool = False) -> tuple[Path, Path]:
@@ -181,15 +181,40 @@ def test_execute_requires_fresh_paid_authorization(tmp_path: Path) -> None:
         )
 
 
-def test_repository_canary_is_previewable_and_spend_locked() -> None:
+def test_repository_canary_is_complete_and_cannot_be_replayed() -> None:
     plan_path = (
         PROJECT_ROOT / "configs/studies/rryas-headline-v2/"
         "cli_compliance_canary_dispatch_plan.json"
     )
+    consumed_plan_path = (
+        PROJECT_ROOT / "configs/studies/rryas-headline-v2/"
+        "cli_compliance_canary_dispatch_plan.authorized-2026-07-28.json"
+    )
+    result_root = (
+        PROJECT_ROOT / "results/studies/rryas-headline-v2-cli-compliance-canary"
+    )
 
-    plan = load_canary_dispatch_plan(plan_path, repo_root=PROJECT_ROOT)
-    command = compile_canary_command(plan, PROJECT_ROOT)
+    with pytest.raises(CanaryDispatchError):
+        load_canary_dispatch_plan(plan_path, repo_root=PROJECT_ROOT)
+    with pytest.raises(CanaryDispatchError, match="identity/status is not locked"):
+        load_canary_dispatch_plan(consumed_plan_path, repo_root=PROJECT_ROOT)
 
-    assert plan.paid_dispatch_authorized is False
-    assert plan.spec.slots() == (("api-contract-dual-envoy-istio-001", "cli", 1),)
-    assert command.count("--attempt") == 1
+    plan = json.loads(plan_path.read_text())
+    consumed_plan = json.loads(consumed_plan_path.read_text())
+    status = json.loads((result_root / "study_status.json").read_text())
+    receipts = read_receipts(result_root / "receipts.jsonl")
+    assert plan["authorization"]["paid_dispatch_authorized"] is False
+    assert consumed_plan["status"] == "CONSUMED"
+    assert consumed_plan["authorization"]["paid_dispatch_authorized"] is False
+    assert consumed_plan["consumption"]["receipts_hash"] == file_hash(
+        result_root / "receipts.jsonl"
+    )
+    assert status["status"] == "COMPLETE-OPERATIONAL-VALID"
+    assert status["receipts_hash"] == file_hash(result_root / "receipts.jsonl")
+    assert status["disposition"]["headline_eligible"] is False
+    assert len(receipts) == 1
+    assert receipts[0].status == "valid"
+    assert receipts[0].tool_use["sgx_tool_calls"] == 12
+    assert receipts[0].tool_use["cache_isolation"]["valid"] is True
+    assert receipts[0].tool_use["cache_isolation"]["cache_write_tokens"] == 0
+    assert receipts[0].tool_use["cache_isolation"]["cross_run_cache_read_tokens"] == 0

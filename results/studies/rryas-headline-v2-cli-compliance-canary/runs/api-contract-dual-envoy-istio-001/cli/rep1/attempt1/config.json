@@ -1,0 +1,17 @@
+{
+  "source": "mirror",
+  "agent_command": "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json -p",
+  "harness": "claude",
+  "model": "claude-sonnet-5",
+  "judge_model": "cc:haiku",
+  "timeout": 600,
+  "build_timeout": 1800,
+  "verifier_timeout": 600,
+  "memory_mb": 8192,
+  "dry_run": false,
+  "no_build": false,
+  "keep_container": false,
+  "mode": "cli",
+  "account": 3,
+  "judge_account": 1
+}

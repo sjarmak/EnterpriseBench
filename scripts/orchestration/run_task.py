@@ -2752,6 +2752,7 @@ def _apply_llm_judge(
         cp_gt = checkpoints_gt.get(cp_name)
 
         grep_score = cp.get("score", 0.0)
+        grep_passed = cp.get("passed") is True
 
         try:
             judge_result = judge.evaluate_checkpoint(
@@ -2790,9 +2791,15 @@ def _apply_llm_judge(
             judge_result.reasoning[:80],
         )
         cp["score"] = final_score
-        cp["passed"] = final_score > 0.0
+        judge_passed = getattr(judge_result, "passed", judge_score >= 0.5)
+        cp["passed"] = grep_passed and bool(judge_passed)
         cp["judge_score"] = judge_score
         cp["grep_score"] = grep_score
+
+    checkpoints_passed = sum(cp.get("passed") is True for cp in checkpoints)
+    scores["checkpoints_passed"] = checkpoints_passed
+    scores["checkpoints_total"] = len(checkpoints)
+    scores["all_passed"] = bool(checkpoints) and checkpoints_passed == len(checkpoints)
 
     # Recompute task_score. This is the LAST writer of task_score on an
     # llm_curator task, so it owes the same contract the shell scorer emits:

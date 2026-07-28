@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "study_id": "rryas-headline-v2-cli-compliance-canary",
-  "status": "LOCKED-NO-SPEND",
+  "status": "CONSUMED",
   "manifest": "configs/studies/rryas-headline-v2/cli_compliance_canary.json",
   "manifest_hash": "sha256:ef0ff2e32fb4bcf4dc7c247bf738be2d17d5cfc8d432cace6d73d5b45b68ff4d",
   "study_spec": "configs/studies/rryas-headline-v2/cli_compliance_canary_study_spec.json",
@@ -29,7 +29,12 @@
     ]
   },
   "authorization": {
-    "paid_dispatch_authorized": true,
-    "authorization_reference": "user-authorized-2026-07-28"
+    "paid_dispatch_authorized": false,
+    "authorization_reference": null
+  },
+  "consumption": {
+    "authorization_reference": "user-authorized-2026-07-28",
+    "completed_at": "2026-07-28T11:46:48.001700+00:00",
+    "receipts_hash": "sha256:7494e73ec69531162778e68f2ecc80c2cfb5fd6f3014c6ce6be4292df6186b0e"
   }
 }

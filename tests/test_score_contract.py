@@ -250,8 +250,10 @@ class TestJudgeProducer:
         It has to land on the same contract the shell scorer does, so its
         output is exercised on weights that do NOT sum to 1.0 — the shape where
         a weighted sum and a weighted mean disagree. Here the mean is
-        (2*1.0 + 2*0.5) / 4 = 0.75; the pre-fix sum published 3.0, a task_score
-        three times the maximum the scale allows.
+        (2*1.0 + 2*0.49) / 4 = 0.745; the pre-fix sum published 2.98, a
+        task_score nearly three times the maximum the scale allows. The judge
+        cap also changes the second checkpoint from pass to fail, so the
+        aggregate pass fields must be recomputed from the capped scores.
         """
         (tmp_path / "expected_solution.json").write_text(
             json.dumps(
@@ -273,19 +275,27 @@ class TestJudgeProducer:
         }
         judge = MagicMock()
         judge.evaluate_checkpoint.side_effect = [
-            MagicMock(score=1.0, reasoning=""),
-            MagicMock(score=0.5, reasoning=""),
+            MagicMock(score=1.0, passed=True, reasoning=""),
+            MagicMock(score=0.49, passed=False, reasoning=""),
         ]
         agent_output = MagicMock(returncode=0, stdout='{"answer": "X"}', stderr="")
 
-        with patch.object(run_task, "_docker_exec", return_value=agent_output), patch(
-            "eb_verify.judge.LLMJudge", return_value=judge
+        with (
+            patch.object(run_task, "_docker_exec", return_value=agent_output),
+            patch("eb_verify.judge.LLMJudge", return_value=judge),
         ):
             out = run_task._apply_llm_judge(scores, tmp_path, "cid", {})
 
         assert "verifier_infra_error" not in out
-        assert out["task_score"] == pytest.approx(0.75)
+        assert out["task_score"] == pytest.approx(0.745)
         assert out[SCORE_CONTRACT_KEY] == SCORE_CONTRACT_VERSION
+        assert [checkpoint["passed"] for checkpoint in out["checkpoints"]] == [
+            True,
+            False,
+        ]
+        assert out["checkpoints_passed"] == 1
+        assert out["checkpoints_total"] == 2
+        assert out["all_passed"] is False
 
 
 # ---------------------------------------------------------------------------

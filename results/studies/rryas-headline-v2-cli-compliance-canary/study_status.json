@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v2-cli-compliance-canary",
+  "status": "COMPLETE-OPERATIONAL-VALID",
+  "started_at": "2026-07-28T11:42:58.189135+00:00",
+  "completed_at": "2026-07-28T11:46:48.001700+00:00",
+  "planned_slots": 1,
+  "attempted_slots": 1,
+  "valid_slots": 1,
+  "outer_spend_usd": 1.931904,
+  "authorization_outer_spend_ceiling_usd": 10.0,
+  "receipts_hash": "sha256:7494e73ec69531162778e68f2ecc80c2cfb5fd6f3014c6ce6be4292df6186b0e",
+  "config_hash": "sha256:fa2deeecdae6b50732d4de925b5fcc4024809216877c7ceb6c4792701a2dc2cf",
+  "trace_hash": "sha256:b927835776ed9a440107b1983782e8d2f8dc134ca9ecf53deff189b8853978f5",
+  "treatment_compliance": {
+    "sgx_tool_calls": 12,
+    "sgx_tool_breakdown": {
+      "ls": 2,
+      "read": 2,
+      "search": 8
+    },
+    "trace_captured": true
+  },
+  "cache_isolation": {
+    "valid": true,
+    "cross_run_cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "total_cache_read_tokens": 0
+  },
+  "provenance": {
+    "harness": "claude",
+    "model": "claude-sonnet-5",
+    "mode": "cli",
+    "agent_account": 3,
+    "judge_model": "cc:haiku",
+    "judge_account": 1,
+    "source": "mirror"
+  },
+  "disposition": {
+    "headline_eligible": false,
+    "promotion_eligible": false,
+    "analysis_use": "operational treatment-compliance evidence only",
+    "task_score_must_not_be_used_for_selection_or_headline_analysis": true,
+    "headline_v2_paid_dispatch_authorized": false
+  }
+}
