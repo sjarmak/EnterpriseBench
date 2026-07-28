@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
@@ -480,3 +481,28 @@ def test_nonempty_output_root_fails_closed(tmp_path: Path) -> None:
             mirror_probe=lambda _repository: True,
             auth_probe=lambda _credential: True,
         )
+
+
+def test_repository_capsule_is_current_complete_and_spend_gated() -> None:
+    study_dir = PROJECT_ROOT / "configs" / "studies" / STUDY_ID
+
+    evidence = validate_headline_study(
+        spec_path=study_dir / "study_spec.json",
+        manifest_path=study_dir / "final_manifest.json",
+        candidate_manifest_path=(
+            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
+        ),
+        analysis_plan_path=study_dir / "analysis_plan.json",
+        repo_root=PROJECT_ROOT,
+        mirror_probe=lambda _repository: True,
+        auth_probe=lambda _credential: True,
+    )
+
+    assert len(evidence.task_ids) == 43
+    assert len(evidence.slots) == 129
+    assert evidence.paid_dispatch_authorized is False
+    assert json.loads(
+        (study_dir / "preflight_evidence.json").read_text()
+    ) == json.loads(json.dumps(asdict(evidence)))
+    for candidate_id, paths in preflight_module.POST_LOCK_EXPOSURE_EVIDENCE.items():
+        assert all(candidate_id in (PROJECT_ROOT / path).read_text() for path in paths)
