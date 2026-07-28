@@ -483,6 +483,32 @@ def test_nonempty_output_root_fails_closed(tmp_path: Path) -> None:
         )
 
 
+def test_validated_resume_may_reuse_a_nonempty_output_root(tmp_path: Path) -> None:
+    spec, manifest, candidate, analysis, provenances = _write_fixture(tmp_path)
+    output_root = tmp_path / "results" / "studies" / STUDY_ID
+    output_root.mkdir(parents=True)
+    (output_root / "receipts.jsonl").write_text("{}\n")
+
+    evidence = validate_headline_study(
+        spec_path=spec,
+        manifest_path=manifest,
+        candidate_manifest_path=candidate,
+        analysis_plan_path=analysis,
+        repo_root=tmp_path,
+        revision_validator=lambda _revision, _paths: True,
+        provenance_provider=lambda task_toml: provenances[
+            json.loads((task_toml.parent / "expected_solution.json").read_text())[
+                "task_id"
+            ]
+        ],
+        mirror_probe=lambda _repository: True,
+        auth_probe=lambda _credential: True,
+        require_clean_output_root=False,
+    )
+
+    assert evidence.output_root == f"results/studies/{STUDY_ID}"
+
+
 def test_repository_capsule_is_current_complete_and_spend_gated() -> None:
     study_dir = PROJECT_ROOT / "configs" / "studies" / STUDY_ID
 

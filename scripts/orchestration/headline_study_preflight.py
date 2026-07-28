@@ -399,6 +399,7 @@ def _validate_execution(
     tasks: Sequence[dict[str, Any]],
     *,
     repo_root: Path,
+    require_clean_output_root: bool,
 ) -> str:
     execution = manifest.get("execution_configuration")
     if not isinstance(execution, dict) or any(
@@ -421,9 +422,14 @@ def _validate_execution(
         raise ValueError("headline execution order/account blocking is not locked")
 
     output_root_value = execution.get("output_root")
-    output_root = _repo_file_or_clean_dir(
+    output_root = _repo_relative_path(
         repo_root, output_root_value, "headline output_root"
     )
+    if output_root.exists() and (
+        not output_root.is_dir()
+        or (require_clean_output_root and any(output_root.iterdir()))
+    ):
+        raise ValueError(f"headline output root is not clean: {output_root}")
     receipts = _repo_relative_path(
         repo_root, execution.get("receipts"), "headline receipts"
     )
@@ -522,6 +528,7 @@ def validate_headline_study(
     provenance_provider: ProvenanceProvider | None = None,
     mirror_probe: MirrorProbe | None = None,
     auth_probe: AuthProbe | None = None,
+    require_clean_output_root: bool = True,
 ) -> HeadlineEvidence:
     """Validate the complete 129-slot capsule without launching a model."""
 
@@ -604,7 +611,12 @@ def validate_headline_study(
     if manifest.get("evidence_policy") != REQUIRED_EVIDENCE_POLICY:
         raise ValueError("headline evidence policy is not locked")
     _validate_spend_guard(manifest)
-    output_root = _validate_execution(manifest, entries, repo_root=repo_root)
+    output_root = _validate_execution(
+        manifest,
+        entries,
+        repo_root=repo_root,
+        require_clean_output_root=require_clean_output_root,
+    )
 
     provider = provenance_provider or _default_provenance_provider(repo_root)
     provenances = tuple(provider(task_toml) for task_toml in task_tomls)
