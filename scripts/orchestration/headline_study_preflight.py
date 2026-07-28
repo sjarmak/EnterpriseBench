@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 import shutil
 import subprocess
@@ -11,7 +12,7 @@ import sys
 import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 for import_path in (
@@ -71,6 +72,52 @@ POST_LOCK_EXPOSURE_EVIDENCE = {
         "configs/studies/rryas_code_finder_interface_supplement_v1/pilot_manifest.json",
         "configs/studies/rryas_code_finder_interface_supplement_v2/pilot_manifest.json",
     ),
+}
+V2_ADDITIONAL_EXPOSURES = (
+    "api-contract-001",
+    "api-contract-002",
+    "api-contract-dual-envoy-istio-001",
+)
+V2_POST_LOCK_EXPOSURES = (
+    *V2_ADDITIONAL_EXPOSURES,
+    *POST_LOCK_EXPOSURES,
+)
+V2_POST_LOCK_EXPOSURE_EVIDENCE = {
+    **POST_LOCK_EXPOSURE_EVIDENCE,
+    **{
+        candidate_id: ("results/studies/rryas-headline-v1/receipts.jsonl",)
+        for candidate_id in V2_ADDITIONAL_EXPOSURES
+    },
+}
+
+
+@dataclass(frozen=True)
+class HeadlineProtocol:
+    """Frozen population and slot counts for one confirmatory capsule."""
+
+    study_id: str
+    task_count: int
+    slot_count: int
+    post_lock_exposures: tuple[str, ...]
+    post_lock_exposure_evidence: Mapping[str, tuple[str, ...]]
+
+
+V1_PROTOCOL = HeadlineProtocol(
+    study_id=STUDY_ID,
+    task_count=43,
+    slot_count=129,
+    post_lock_exposures=POST_LOCK_EXPOSURES,
+    post_lock_exposure_evidence=POST_LOCK_EXPOSURE_EVIDENCE,
+)
+V2_PROTOCOL = HeadlineProtocol(
+    study_id="rryas-headline-v2",
+    task_count=40,
+    slot_count=120,
+    post_lock_exposures=V2_POST_LOCK_EXPOSURES,
+    post_lock_exposure_evidence=V2_POST_LOCK_EXPOSURE_EVIDENCE,
+)
+HEADLINE_PROTOCOLS = {
+    protocol.study_id: protocol for protocol in (V1_PROTOCOL, V2_PROTOCOL)
 }
 REQUIRED_SELECTION_RULE = (
     "retain every structurally eligible candidate in candidate-manifest order "
@@ -206,6 +253,38 @@ REQUIRED_ANALYSIS_PLAN = {
     },
 }
 
+
+def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
+    """Return the exact analysis plan required for a supported capsule."""
+
+    plan = deepcopy(REQUIRED_ANALYSIS_PLAN)
+    if protocol == V1_PROTOCOL:
+        return plan
+    plan["study_id"] = protocol.study_id
+    plan["claim_scope"] = (
+        "Claude Sonnet 5 on the 40-task EnterpriseBench markdown-report "
+        "confirmatory population remaining after the disclosed v1 operational run"
+    )
+    for estimand in plan["primary_estimands"]:
+        estimand["aggregation"] = (
+            f"unweighted mean across all {protocol.task_count} paired tasks"
+        )
+    missing = plan["missing_invalid_handling"]
+    missing.pop("headline_requires_all_129_slots_valid")
+    missing[f"headline_requires_all_{protocol.slot_count}_slots_valid"] = True
+    plan["protocol_amendment"] = {
+        "predecessor": "rryas-headline-v1",
+        "reason": "v1 stopped on a prespecified infra_sgx_unused CLI validity gate",
+        "selection_rule": (
+            "exclude every task with v1 agent output; retain all other locked "
+            "candidates without inspecting reward"
+        ),
+        "excluded_candidate_ids": list(V2_ADDITIONAL_EXPOSURES),
+        "v1_analysis_use": "operational pilot evidence only",
+    }
+    return plan
+
+
 AuthProbe = Callable[[str], bool]
 
 
@@ -230,6 +309,8 @@ class HeadlineEvidence:
 def _validate_selection(
     manifest: dict[str, Any],
     candidate: dict[str, Any],
+    *,
+    protocol: HeadlineProtocol,
 ) -> tuple[str, ...]:
     candidate_ids = candidate.get("task_ids")
     if (
@@ -249,26 +330,26 @@ def _validate_selection(
         {
             "candidate_id": candidate_id,
             "reason": "post_lock_agent_output",
-            "evidence": list(POST_LOCK_EXPOSURE_EVIDENCE[candidate_id]),
+            "evidence": list(protocol.post_lock_exposure_evidence[candidate_id]),
         }
-        for candidate_id in POST_LOCK_EXPOSURES
+        for candidate_id in protocol.post_lock_exposures
     ]
     if (
         not isinstance(selection, dict)
         or selection.get("rule") != REQUIRED_SELECTION_RULE
         or selection.get("candidate_outcomes_inspected") is not False
         or selection.get("candidate_count") != 48
-        or selection.get("selected_count") != 43
+        or selection.get("selected_count") != protocol.task_count
     ):
         raise ValueError("headline selection is not the locked outcome-blind rule")
     if selection.get("post_lock_exposures") != expected_exposures:
         raise ValueError("headline exposure ledger is not exact")
-    if not set(POST_LOCK_EXPOSURES).issubset(candidate_ids):
+    if not set(protocol.post_lock_exposures).issubset(candidate_ids):
         raise ValueError("headline exposure ledger names a non-candidate")
     return tuple(
         candidate_id
         for candidate_id in candidate_ids
-        if candidate_id not in POST_LOCK_EXPOSURES
+        if candidate_id not in protocol.post_lock_exposures
     )
 
 
@@ -365,6 +446,8 @@ def _expected_headline_mirrors(task_data: dict[str, Any]) -> tuple[str, ...]:
 
 def compile_execution_order(
     tasks: Sequence[dict[str, Any]],
+    *,
+    study_id: str = STUDY_ID,
 ) -> tuple[dict[str, Any], ...]:
     """Compile the locked Latin-square arm order for each task."""
 
@@ -387,7 +470,7 @@ def compile_execution_order(
                     "agent_account": 3,
                     "judge_account": 1,
                     "output_dir": (
-                        f"results/studies/{STUDY_ID}/runs/{task_id}/{arm}/rep1/attempt1"
+                        f"results/studies/{study_id}/runs/{task_id}/{arm}/rep1/attempt1"
                     ),
                 }
             )
@@ -400,6 +483,7 @@ def _validate_execution(
     *,
     repo_root: Path,
     require_clean_output_root: bool,
+    protocol: HeadlineProtocol,
 ) -> str:
     execution = manifest.get("execution_configuration")
     if not isinstance(execution, dict) or any(
@@ -417,7 +501,10 @@ def _validate_execution(
         set(execution) != expected_keys
         or execution.get("order_policy") != REQUIRED_ORDER_POLICY
         or execution.get("execution_order")
-        != [dict(row) for row in compile_execution_order(tasks)]
+        != [
+            dict(row)
+            for row in compile_execution_order(tasks, study_id=protocol.study_id)
+        ]
     ):
         raise ValueError("headline execution order/account blocking is not locked")
 
@@ -440,8 +527,8 @@ def _validate_execution(
         for row in execution["execution_order"]
     ]
     if (
-        len(output_dirs) != 129
-        or len(set(output_dirs)) != 129
+        len(output_dirs) != protocol.slot_count
+        or len(set(output_dirs)) != protocol.slot_count
         or any(output_root not in output.parents for output in output_dirs)
     ):
         raise ValueError("headline slot output directories are not unique and scoped")
@@ -469,9 +556,11 @@ def _repo_file_or_clean_dir(repo_root: Path, value: Any, label: str) -> Path:
     return path
 
 
-def _validate_spend_guard(manifest: dict[str, Any]) -> None:
+def _validate_spend_guard(
+    manifest: dict[str, Any], *, protocol: HeadlineProtocol
+) -> None:
     expected = {
-        "slots": 129,
+        "slots": protocol.slot_count,
         "max_attempts_per_slot": 1,
         "paid_dispatch_requires_new_explicit_authorization": True,
         "paid_dispatch_authorized": False,
@@ -530,18 +619,20 @@ def validate_headline_study(
     auth_probe: AuthProbe | None = None,
     require_clean_output_root: bool = True,
 ) -> HeadlineEvidence:
-    """Validate the complete 129-slot capsule without launching a model."""
+    """Validate a supported complete capsule without launching a model."""
 
     repo_root = repo_root.resolve()
     spec = StudySpec.load(spec_path)
+    protocol = HEADLINE_PROTOCOLS.get(spec.study_id)
+    if protocol is None:
+        raise ValueError(f"unsupported headline study_id {spec.study_id!r}")
     manifest = _load_object(manifest_path, "headline manifest")
     candidate = _load_object(candidate_manifest_path, "candidate manifest")
     analysis = _load_object(analysis_plan_path, "analysis plan")
     if (
         manifest.get("schema_version") != 1
         or manifest.get("status") != "FINAL-NO-SPEND"
-        or manifest.get("study_id") != STUDY_ID
-        or spec.study_id != STUDY_ID
+        or manifest.get("study_id") != protocol.study_id
     ):
         raise ValueError("headline manifest identity/status is not final")
     if spec.task_manifest_hash != file_hash(manifest_path):
@@ -560,13 +651,15 @@ def validate_headline_study(
     )
     if declared_analysis != analysis_plan_path.resolve():
         raise ValueError("final manifest names a different analysis plan")
-    if analysis != REQUIRED_ANALYSIS_PLAN:
+    if analysis != required_analysis_plan(protocol):
         raise ValueError("headline analysis plan is not the exact locked plan")
 
-    candidate_ids = _validate_selection(manifest, candidate)
+    candidate_ids = _validate_selection(manifest, candidate, protocol=protocol)
     entries = manifest.get("tasks")
-    if not isinstance(entries, list) or len(entries) != 43:
-        raise ValueError("headline manifest must declare exactly 43 tasks")
+    if not isinstance(entries, list) or len(entries) != protocol.task_count:
+        raise ValueError(
+            f"headline manifest must declare exactly {protocol.task_count} tasks"
+        )
     if tuple(entry.get("candidate_id") for entry in entries) != candidate_ids:
         raise ValueError("headline tasks are not candidate-minus-exposure order")
 
@@ -581,7 +674,7 @@ def validate_headline_study(
         for entry, candidate_id in zip(entries, candidate_ids)
     )
     task_ids = tuple(item[0] for item in loaded)
-    if len(set(task_ids)) != 43:
+    if len(set(task_ids)) != protocol.task_count:
         raise ValueError("headline tasks must have a unique task_id mapping")
     task_types = tuple(item[1] for item in loaded)
     task_tomls = tuple(item[2] for item in loaded)
@@ -610,12 +703,13 @@ def validate_headline_study(
         raise ValueError("headline judge configuration is not locked")
     if manifest.get("evidence_policy") != REQUIRED_EVIDENCE_POLICY:
         raise ValueError("headline evidence policy is not locked")
-    _validate_spend_guard(manifest)
+    _validate_spend_guard(manifest, protocol=protocol)
     output_root = _validate_execution(
         manifest,
         entries,
         repo_root=repo_root,
         require_clean_output_root=require_clean_output_root,
+        protocol=protocol,
     )
 
     provider = provenance_provider or _default_provenance_provider(repo_root)
@@ -657,8 +751,11 @@ def validate_headline_study(
     expected_slots = tuple(
         (task_id, arm, 1) for task_id in task_ids for arm, _fingerprint in REQUIRED_ARMS
     )
-    if spec.slots() != expected_slots or len(expected_slots) != 129:
-        raise ValueError("StudySpec does not compile to exactly 129 no-retry slots")
+    if spec.slots() != expected_slots or len(expected_slots) != protocol.slot_count:
+        raise ValueError(
+            "StudySpec does not compile to exactly "
+            f"{protocol.slot_count} no-retry slots"
+        )
     _validate_auth(auth_probe or _default_auth_probe)
 
     type_counts = tuple(

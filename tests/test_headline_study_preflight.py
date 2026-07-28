@@ -285,6 +285,30 @@ def test_final_capsule_compiles_43_tasks_and_129_no_retry_slots(
     assert evidence.paid_dispatch_authorized is False
 
 
+def test_v2_protocol_excludes_all_exposed_tasks_and_compiles_120_slots() -> None:
+    protocol = preflight_module.HEADLINE_PROTOCOLS["rryas-headline-v2"]
+    tasks = [
+        {"candidate_id": f"candidate-{index:02d}", "task_id": f"task-{index:02d}"}
+        for index in range(protocol.task_count)
+    ]
+
+    rows = preflight_module.compile_execution_order(tasks, study_id=protocol.study_id)
+
+    assert protocol.task_count == 40
+    assert protocol.slot_count == 120
+    assert set(protocol.post_lock_exposures) == {
+        *POST_LOCK_EXPOSURES,
+        "api-contract-001",
+        "api-contract-002",
+        "api-contract-dual-envoy-istio-001",
+    }
+    assert len(rows) == 120
+    assert all(
+        row["output_dir"].startswith("results/studies/rryas-headline-v2/")
+        for row in rows
+    )
+
+
 def test_execution_order_rotates_arms_and_has_unique_outputs(tmp_path: Path) -> None:
     spec, manifest_path, candidate, analysis, provenances = _write_fixture(tmp_path)
     manifest = json.loads(manifest_path.read_text())
@@ -512,11 +536,7 @@ def test_repository_aborted_capsule_remains_bound_and_spend_gated() -> None:
     study_dir = PROJECT_ROOT / "configs" / "studies" / STUDY_ID
     run_status = json.loads(
         (
-            PROJECT_ROOT
-            / "results"
-            / "studies"
-            / STUDY_ID
-            / "study_status.json"
+            PROJECT_ROOT / "results" / "studies" / STUDY_ID / "study_status.json"
         ).read_text()
     )
     assert run_status["status"] == "ABORTED-OPERATIONAL-INVALID"
