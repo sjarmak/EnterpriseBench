@@ -57,8 +57,19 @@ TEST_RUNNER = REPO_ROOT / "scripts" / "sandbox" / "test_runner.sh"
 
 # Everything test_runner.sh legitimately needs — deliberately WITHOUT python3.
 _REQUIRED_TOOLS = (
-    "bash", "sed", "tr", "awk", "grep", "cat", "mktemp",
-    "date", "basename", "rm", "timeout", "dirname", "env",
+    "bash",
+    "sed",
+    "tr",
+    "awk",
+    "grep",
+    "cat",
+    "mktemp",
+    "date",
+    "basename",
+    "rm",
+    "timeout",
+    "dirname",
+    "env",
 )
 
 # --- the two never-ran variants, verbatim in shape from the real check scripts --
@@ -198,12 +209,18 @@ class TestNeverRanVerifierIsNotScored:
         """The crux: the verifier swallows the failure, exits 0, and prints a
         well-formed 0.0. Exit code, score and detail are all indistinguishable
         from a genuine wrong answer — only the side channel sees the miss."""
-        result = run_test_runner(tmp_path, {"silent": SILENT_MISSING_TOOL}, sanitized_path)
+        result = run_test_runner(
+            tmp_path, {"silent": SILENT_MISSING_TOOL}, sanitized_path
+        )
         cp = checkpoint(result, "silent")
         assert cp["exit_code"] == 0, "precondition: the failure IS swallowed"
-        assert cp["verifier_ran"] is False, "a swallowed missing command must still surface"
+        assert cp["verifier_ran"] is False, (
+            "a swallowed missing command must still surface"
+        )
         assert "eb_missing_tool" in cp["detail"]
-        assert isinstance(guard_verifier_output(json.dumps(result), returncode=0), InfraError)
+        assert isinstance(
+            guard_verifier_output(json.dumps(result), returncode=0), InfraError
+        )
 
     def test_no_verdict_is_never_fabricated_into_a_pass(
         self, tmp_path: Path, sanitized_path: str
@@ -216,7 +233,9 @@ class TestNeverRanVerifierIsNotScored:
         cp = checkpoint(result, "silent_ok")
         assert cp["verifier_ran"] is False
         assert cp["score"] == 0.0, "an empty verifier must never be credited a pass"
-        assert isinstance(guard_verifier_output(json.dumps(result), returncode=0), InfraError)
+        assert isinstance(
+            guard_verifier_output(json.dumps(result), returncode=0), InfraError
+        )
 
 
 class TestGenuineScoresSurvive:
@@ -233,7 +252,9 @@ class TestGenuineScoresSurvive:
         assert cp["score"] == 0.0
 
         guarded = guard_verifier_output(json.dumps(result), returncode=1)
-        assert isinstance(guarded, dict), "a real wrong answer is a score, not an infra error"
+        assert isinstance(guarded, dict), (
+            "a real wrong answer is a score, not an infra error"
+        )
         assert guarded["task_score"] == 0.0
 
     def test_genuine_pass_stays_a_scored_one(
@@ -319,7 +340,9 @@ def test_preflight_does_not_fire_when_checks_do_not_need_the_interpreter(
     assert guarded["task_score"] == 1.0
 
 
-def test_empty_verifiers_dir_is_infra_not_zero(tmp_path: Path, sanitized_path: str) -> None:
+def test_empty_verifiers_dir_is_infra_not_zero(
+    tmp_path: Path, sanitized_path: str
+) -> None:
     """An existing-but-empty .verifiers/ ran no verifiers, so its 0.0 measures
     nothing. An empty checkpoint list must not pass through as a real score."""
     result = run_test_runner(tmp_path, {}, sanitized_path)
@@ -346,9 +369,13 @@ exit 0
     result = run_test_runner(tmp_path, {"forger": forger}, sanitized_path)
     cp = checkpoint(result, "forger")
     assert cp["verifier_ran"] is False, "a script must not be able to attest for itself"
-    assert cp["score"] == 0.0, "the score printed alongside a forged attestation is discarded"
+    assert cp["score"] == 0.0, (
+        "the score printed alongside a forged attestation is discarded"
+    )
     assert "eb_missing_tool" in cp["detail"]
-    assert isinstance(guard_verifier_output(json.dumps(result), returncode=0), InfraError)
+    assert isinstance(
+        guard_verifier_output(json.dumps(result), returncode=0), InfraError
+    )
 
 
 def test_handler_does_not_fire_for_command_v_probes(
@@ -372,7 +399,9 @@ fi
 """
     result = run_test_runner(tmp_path, {"probe": probe}, sanitized_path)
     cp = checkpoint(result, "probe")
-    assert cp["verifier_ran"] is True, "command -v is a builtin and must not trip the handler"
+    assert cp["verifier_ran"] is True, (
+        "command -v is a builtin and must not trip the handler"
+    )
     assert cp["score"] == 1.0
     assert isinstance(guard_verifier_output(json.dumps(result), returncode=0), dict)
 
@@ -513,7 +542,9 @@ def test_a_tiny_score_is_not_fabricated_into_full_marks(
 
     cp = checkpoint(result, "tiny")
     assert cp["verifier_ran"] is True, "a JSON number IS a verdict, however small"
-    assert cp["score"] == pytest.approx(1e-05), "the score must be the one the verifier gave"
+    assert cp["score"] == pytest.approx(1e-05), (
+        "the score must be the one the verifier gave"
+    )
 
     guarded = guard_verifier_output(json.dumps(result), returncode=0)
     assert isinstance(guarded, dict), "an exponent is valid JSON; this is a real score"
@@ -589,7 +620,9 @@ def test_partial_credit_survives_the_parse(tmp_path: Path, real_path: str) -> No
     """The control the new range check could plausibly break: an ordinary
     fractional score must still be scored, and scored as itself."""
     payload = '{"score": 0.75, "passed": false, "detail": "3 of 4 assertions held"}'
-    result = run_test_runner(tmp_path, {"partial": verifier_printing(payload)}, real_path)
+    result = run_test_runner(
+        tmp_path, {"partial": verifier_printing(payload)}, real_path
+    )
 
     cp = checkpoint(result, "partial")
     assert cp["verifier_ran"] is True
@@ -637,7 +670,9 @@ def test_a_string_cannot_forge_or_hide_the_score(
     result = run_test_runner(tmp_path, {"cp": verifier_printing(payload)}, real_path)
 
     cp = checkpoint(result, "cp")
-    assert cp["verifier_ran"] is True, f"{payload} carries a real score at the top level"
+    assert cp["verifier_ran"] is True, (
+        f"{payload} carries a real score at the top level"
+    )
     assert cp["score"] == expected, (
         f"{payload} was read as {cp['score']}: the string literal changed which "
         f"score the runner credited"
@@ -655,7 +690,9 @@ def test_a_pretty_printed_verdict_is_still_a_verdict(
     channel — a false infra error is as wrong as a false 0.0.
     """
     payload = json.dumps({"passed": True, "score": 1.0, "detail": "ok"}, indent=2)
-    result = run_test_runner(tmp_path, {"pretty": verifier_printing(payload)}, real_path)
+    result = run_test_runner(
+        tmp_path, {"pretty": verifier_printing(payload)}, real_path
+    )
 
     cp = checkpoint(result, "pretty")
     assert cp["verifier_ran"] is True, "an indented verdict is a verdict"
@@ -706,9 +743,13 @@ def test_invalid_agent_answer_is_scored_not_re_run(
     """The REAL check scripts of a REAL task, fed an answer they cannot read."""
     task_dir = REPO_ROOT / "benchmarks" / task
     checks = {p.stem: p.read_text() for p in sorted((task_dir / "checks").glob("*.sh"))}
-    assert len(checks) == REAL_TASKS[task], f"{task} checks changed; revisit this vector"
+    assert len(checks) == REAL_TASKS[task], (
+        f"{task} checks changed; revisit this vector"
+    )
 
-    result = run_test_runner(tmp_path, checks, real_path, answer=answer, task_dir=task_dir)
+    result = run_test_runner(
+        tmp_path, checks, real_path, answer=answer, task_dir=task_dir
+    )
     guarded = guard_verifier_output(json.dumps(result), returncode=1)
 
     assert not isinstance(guarded, InfraError), (
@@ -727,10 +768,9 @@ def test_the_checkpoint_says_why_an_unreadable_answer_scored_zero(
 ) -> None:
     """Non-vacuity, and the diagnosis a 0.0 owes its reader.
 
-    Some checks survive a hostile answer and reach their own verdict; the three
-    here do not — each dies in the command substitution that reads it. Their 0.0
-    therefore comes from the runner, and must say so rather than pass for a
-    considered judgement of the agent's reasoning.
+    Hardened checks may emit their own malformed-answer verdict; checks that
+    still die while reading the answer receive the runner's diagnostic. Either
+    path must make the agent-caused 0.0 explicit.
     """
     task_dir = REPO_ROOT / "benchmarks" / "customer_escalation" / "err-provenance-01"
     checks = {p.stem: p.read_text() for p in sorted((task_dir / "checks").glob("*.sh"))}
@@ -739,7 +779,10 @@ def test_the_checkpoint_says_why_an_unreadable_answer_scored_zero(
         tmp_path, checks, real_path, answer="not json {{{", task_dir=task_dir
     )
     for cp in result["checkpoints"]:
-        assert "not a JSON object" in cp["detail"]
+        assert any(
+            reason in cp["detail"]
+            for reason in ("Malformed answer.json", "not a JSON object")
+        )
 
 
 def test_a_valid_answer_object_still_reaches_the_checks(
@@ -764,7 +807,9 @@ def test_a_valid_answer_object_still_reaches_the_checks(
         assert "not a JSON object" not in cp["detail"], "the checks must do the judging"
 
 
-def test_a_leaked_skeleton_does_not_buy_a_re_run(tmp_path: Path, real_path: str) -> None:
+def test_a_leaked_skeleton_does_not_buy_a_re_run(
+    tmp_path: Path, real_path: str
+) -> None:
     """The escape hatch the score check opens if it is not held to the same
     policy as its sibling.
 
@@ -813,7 +858,9 @@ class TestInfraSignalsOutrankTheAgentAttribution:
         cp = checkpoint(result, "broken")
         assert cp["verifier_ran"] is False
         guarded = guard_verifier_output(json.dumps(result), returncode=1)
-        assert isinstance(guarded, InfraError), "a missing command is the harness's fault"
+        assert isinstance(guarded, InfraError), (
+            "a missing command is the harness's fault"
+        )
         assert guarded.reason == "verifier_did_not_run"
 
     def test_verifier_that_exits_zero_without_a_verdict_still_wins(
@@ -823,7 +870,9 @@ class TestInfraSignalsOutrankTheAgentAttribution:
         nothing did not die on the answer — it is simply broken, and its silence
         must not be read as a considered 0.0."""
         result = run_test_runner(
-            tmp_path, {"silent": "#!/usr/bin/env bash\nexit 0\n"}, real_path,
+            tmp_path,
+            {"silent": "#!/usr/bin/env bash\nexit 0\n"},
+            real_path,
             answer="not json {{{",
         )
         assert checkpoint(result, "silent")["verifier_ran"] is False

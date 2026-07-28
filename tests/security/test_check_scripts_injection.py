@@ -1,28 +1,25 @@
-"""Regression tests for bead 0rv.23 — Python injection in check scripts.
+"""Regression tests for bead 0rv.23 — Python injection in active check scripts.
 
-Covers 37 file-extraction check scripts whose original implementation
+Covers 9 active file-extraction check scripts whose original implementation
 shell-interpolated agent-controlled JSON content into a Python triple-quoted
 string literal (``'''$AGENT_FILES'''``). An agent writing ``'''`` into a path
 inside answer.json could close the string and execute arbitrary Python under
 the task runner uid.
 
-These tests enforce four invariants:
+These tests enforce three invariants:
 
 1. The vulnerable ``'''$`` shell-interpolation pattern does not appear in any
-   of the 37 target scripts.
-2. All 37 target scripts use the single-process safe template (identified by
+   of the 9 target scripts.
+2. All 9 target scripts use the single-process safe template (identified by
    the presence of ``os.environ['ANSWER_FILE']`` inside one ``python3 -c``
    block and ``json.JSONDecodeError`` handling).
-3. The two genuinely safe keyword-overlap scripts in
-   ``support-mapping-dual-spring-kafka-001`` are not touched (SHA256 snapshot).
-4. Running a representative script against adversarial answer.json payloads
+3. Running a representative script against adversarial answer.json payloads
    must not execute injected code, must not silently bypass scoring via
    ``sys.exit``, and must not count substring-only path-spam matches.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -36,25 +33,11 @@ BENCHMARKS = ROOT / "benchmarks"
 
 
 # ---------------------------------------------------------------------------
-# Target file inventory (37 active vulnerable scripts across 19 dirs)
+# Target file inventory (9 active vulnerable scripts across 9 dirs)
 # ---------------------------------------------------------------------------
 
-# Group A: 9 dual-repo dirs where ALL 3 check_*.sh scripts are vulnerable.
-_GROUP_A_DIRS = [
-    "dependency_management/dep-graph-dual-nextjs-swc-001",
-    "technical_debt/refactor-dual-flask-werkzeug-001",
-    "technical_debt/dead-code-dual-spring-hibernate-001",
-    "technical_debt/dead-code-dual-django-wagtail-001",
-    "incident_response/incident-investigation-dual-django-celery-001",
-    "platform_engineering/config-drift-dual-webpack-babel-001",
-    "platform_engineering/config-drift-dual-tokio-hyper-001",
-    "feature_delivery/schema-evolution-dual-spring-flyway-001",
-    "customer_escalation/support-mapping-dual-nextjs-webpack-001",
-]
-
-# Group B: 7 dual-repo dirs where ONLY check_error_source.sh is vulnerable.
-_GROUP_B_DIRS = [
-    "customer_escalation/support-mapping-dual-spring-kafka-001",
+# Seven dual-repo dirs where only check_error_source.sh was vulnerable.
+_DUAL_REPO_DIRS = [
     "customer_escalation/support-mapping-dual-ansible-001",
     "customer_escalation/err-provenance-dual-celery-001",
     "customer_escalation/err-provenance-dual-docker-001",
@@ -74,32 +57,13 @@ _GROUP_C_PATHS = [
 ]
 
 TARGET_FILES: list[Path] = [
-    *(
-        p
-        for d in _GROUP_A_DIRS
-        for p in sorted((BENCHMARKS / d / "checks").glob("check_*.sh"))
-    ),
-    *(BENCHMARKS / d / "checks" / "check_error_source.sh" for d in _GROUP_B_DIRS),
+    *(BENCHMARKS / d / "checks" / "check_error_source.sh" for d in _DUAL_REPO_DIRS),
     *_GROUP_C_PATHS,
 ]
 
 
-# Scripts that are already safe (keyword-overlap algorithm, not file-extraction)
-# and MUST NOT be modified by the rewrite.
-SAFE_SNAPSHOTS: dict[Path, str] = {
-    BENCHMARKS
-    / "customer_escalation/support-mapping-dual-spring-kafka-001/checks/check_error_chain.sh": (
-        "cb85ffd9e98553b27d56fcd79d44b389ffec463f52bee23eac8543c639cc80a7"
-    ),
-    BENCHMARKS
-    / "customer_escalation/support-mapping-dual-spring-kafka-001/checks/check_trigger_conditions.sh": (
-        "c16c6de7666178347efc2af941015ec33e8cf318d886f6199182313247dab83a"
-    ),
-}
-
 REPRESENTATIVE = (
-    BENCHMARKS
-    / "platform_engineering/config-drift-dual-tokio-hyper-001/checks/check_config_valid.sh"
+    BENCHMARKS / "customer_escalation/err-provenance-01/checks/check_error_source.sh"
 )
 
 
@@ -109,10 +73,10 @@ REPRESENTATIVE = (
 
 
 @pytest.mark.security
-def test_target_file_count_is_37() -> None:
+def test_target_file_count_is_9() -> None:
     """If this fails, either the scope changed or a directory was renamed."""
-    assert len(TARGET_FILES) == 37, (
-        f"expected 37 vulnerable files, found {len(TARGET_FILES)}: "
+    assert len(TARGET_FILES) == 9, (
+        f"expected 9 active target files, found {len(TARGET_FILES)}: "
         f"{[str(p.relative_to(ROOT)) for p in TARGET_FILES]}"
     )
 
@@ -121,12 +85,6 @@ def test_target_file_count_is_37() -> None:
 def test_all_target_files_exist() -> None:
     missing = [str(p.relative_to(ROOT)) for p in TARGET_FILES if not p.exists()]
     assert not missing, f"target files missing from disk: {missing}"
-
-
-@pytest.mark.security
-def test_safe_snapshot_files_exist() -> None:
-    missing = [str(p.relative_to(ROOT)) for p in SAFE_SNAPSHOTS if not p.exists()]
-    assert not missing, f"safe snapshot files missing: {missing}"
 
 
 # ---------------------------------------------------------------------------
@@ -163,9 +121,9 @@ def test_script_uses_safe_template(script: Path) -> None:
     assert (
         "os.environ['ANSWER_FILE']" in content or 'os.environ["ANSWER_FILE"]' in content
     ), f"{script.relative_to(ROOT)} does not read ANSWER_FILE via os.environ"
-    assert (
-        "JSONDecodeError" in content
-    ), f"{script.relative_to(ROOT)} does not handle malformed JSON"
+    assert "JSONDecodeError" in content, (
+        f"{script.relative_to(ROOT)} does not handle malformed JSON"
+    )
 
     # There must be exactly ONE python3 -c invocation in the body (single-process),
     # not three as in the vulnerable template.
@@ -184,30 +142,7 @@ def test_script_uses_safe_template(script: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Invariant 3: safe scripts are not touched
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.security
-@pytest.mark.parametrize(
-    "script,expected_sha256",
-    list(SAFE_SNAPSHOTS.items()),
-    ids=lambda x: (
-        str(x)[-60:] if isinstance(x, str) else str(x.relative_to(BENCHMARKS))
-    ),
-)
-def test_safe_keyword_scripts_unchanged(script: Path, expected_sha256: str) -> None:
-    actual = hashlib.sha256(script.read_bytes()).hexdigest()
-    assert actual == expected_sha256, (
-        f"{script.relative_to(ROOT)} changed unexpectedly. "
-        f"Expected SHA256={expected_sha256}, got {actual}. "
-        "These keyword-overlap scripts are already safe and MUST NOT be "
-        "overwritten by the security rewrite."
-    )
-
-
-# ---------------------------------------------------------------------------
-# Invariant 4: adversarial payload suite on a representative script
+# Invariant 3: adversarial payload suite on a representative script
 # ---------------------------------------------------------------------------
 
 
@@ -464,16 +399,16 @@ def test_suffix_anchored_match_still_scores(run_check) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Invariant 4b: key adversarial cases replayed against ALL 37 scripts
+# Invariant 3b: key adversarial cases replayed against all active scripts
 # ---------------------------------------------------------------------------
 #
 # The single-script tests above give fast, detailed coverage on the
-# representative (`check_config_valid.sh`).  The parametrized sweep below
-# catches the case where a future edit silently drifts one of the 36 other
+# representative (`check_error_source.sh`). The parametrized sweep below
+# catches the case where a future edit silently drifts one of the 8 other
 # scripts away from the template — the text-level invariants 1 and 2 can miss
 # subtle runtime regressions that show up only under adversarial input.
 # We only replay the two cheapest, highest-signal payloads to keep test
-# runtime bounded (74 subprocess invocations instead of 37 * 9 = 333).
+# runtime bounded (18 subprocess invocations instead of 9 * 9 = 81).
 
 
 _GT_THREE = {
@@ -542,9 +477,7 @@ def test_all_scripts_survive_type_confusion(script: Path, tmp_path: Path) -> Non
 @pytest.mark.parametrize(
     "script", TARGET_FILES, ids=lambda p: str(p.relative_to(BENCHMARKS))
 )
-def test_all_scripts_survive_deeply_nested_answer(
-    script: Path, tmp_path: Path
-) -> None:
+def test_all_scripts_survive_deeply_nested_answer(script: Path, tmp_path: Path) -> None:
     """A deeply-nested answer.json must still produce a verdict, not crash.
 
     json.load recurses per nesting level; a payload deep enough to blow the
@@ -604,9 +537,9 @@ def test_error_source_non_dict_does_not_crash(run_check) -> None:
     the Python process with an AttributeError during the nested .get() chain.
     """
     proc = run_check(answer={"error_source": "malicious-string"})
-    assert (
-        proc.stdout.strip()
-    ), f"error_source type confusion crashed the script: stderr={proc.stderr!r}"
+    assert proc.stdout.strip(), (
+        f"error_source type confusion crashed the script: stderr={proc.stderr!r}"
+    )
     result = _parse_score(proc)
     assert result["score"] == 0.0
 

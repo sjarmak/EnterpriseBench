@@ -67,6 +67,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 BENCH = REPO_ROOT / "benchmarks"
 
 PATH_FIELDS = ("required_files", "sufficient_files")
+MIN_PATH_GRADED_ACTIVE_TASKS = 32
 
 
 def _noncomment_lines(text: str):
@@ -200,9 +201,10 @@ def test_the_invariant_is_actually_covering_tasks() -> None:
     """Guard against a silently empty sweep: if _graded_path_fields stops matching
     the check idioms (a scorer rename, a jq-to-python rewrite), every test above
     vanishes and the suite still goes green."""
-    assert len(TASK_DIRS) >= 60, (
-        f"only {len(TASK_DIRS)} tasks were found to grade file paths; 63 did when "
-        f"this was written. A drop means _graded_path_fields no longer reads how the "
-        f"checks consume required_files/sufficient_files, or _gt_body stopped "
-        f"unwrapping the nested ground_truth key — the sweep is passing vacuously."
+    assert len(TASK_DIRS) >= MIN_PATH_GRADED_ACTIVE_TASKS, (
+        f"only {len(TASK_DIRS)} active tasks were found to grade file paths; "
+        f"{MIN_PATH_GRADED_ACTIVE_TASKS} are expected after single-repository task "
+        f"retirement. A drop means _graded_path_fields no longer reads how the checks "
+        f"consume required_files/sufficient_files, or _gt_body stopped unwrapping the "
+        f"nested ground_truth key — the sweep is passing vacuously."
     )
