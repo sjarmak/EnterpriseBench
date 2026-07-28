@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "study_id": "rryas-headline-v3",
-  "status": "LOCKED-NO-SPEND",
+  "status": "CONSUMED",
   "study_spec": "configs/studies/rryas-headline-v3/study_spec.json",
   "study_spec_file_hash": "sha256:509846f17ef8a05dafdbac4036aec9a2e839b593bbd2bfd0e550d7381b300e28",
   "study_spec_hash": "sha256:bc41cd59ffdee7dbd880bfebd1b6d2515a048cfbe5e03c9c304492614eb7b5fb",
@@ -51,11 +51,20 @@
     "confirmed_max_slots": 12
   },
   "authorization": {
-    "paid_dispatch_authorized": true,
+    "paid_dispatch_authorized": false,
+    "authorization_reference": null,
+    "authorized_completed_prefix": null,
+    "authorized_end_prefix": null,
+    "authorized_batch_hash": null,
+    "authorized_outer_spend_ceiling_usd": null
+  },
+  "consumption": {
     "authorization_reference": "codex-thread:019f9576-4d39-74a0-80d1-ba3feeca2fb5 user authorization immediately preceding batch-001 capacity recheck",
     "authorized_completed_prefix": 0,
     "authorized_end_prefix": 12,
     "authorized_batch_hash": "sha256:9efcb735ef03a330a6f9a9c6ebab8c1ff30ac319d8883b43b0147231ff3b813a",
-    "authorized_outer_spend_ceiling_usd": 890.0
+    "completed_at": "2026-07-28T20:39:44.507245+00:00",
+    "receipts_hash": "sha256:d036efd7bfe402910338f2016ca24a181f09084211283d360988e9751d977b64",
+    "terminal_status": "ABORTED-JUDGE-CAP-INVALID"
   }
 }

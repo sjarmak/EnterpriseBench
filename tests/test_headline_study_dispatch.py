@@ -155,6 +155,8 @@ def _write_fixture(
 
     if study_id == "rryas-headline-v3" and ceiling == 20.0:
         ceiling = 60.0
+    if study_id == "rryas-headline-v4" and ceiling == 20.0:
+        ceiling = 70.0
     plan_payload = {
                 "schema_version": 1,
                 "study_id": study_id,
@@ -188,7 +190,9 @@ def _write_fixture(
                     "authorization_reference": None,
                 },
             }
-    if study_id == "rryas-headline-v3":
+    if study_id in {"rryas-headline-v3", "rryas-headline-v4"}:
+        judge_budget = 0.1 if study_id == "rryas-headline-v4" else 0.01
+        hard_cap = 10.6 if study_id == "rryas-headline-v4" else 9.25
         plan_payload.update(
             {
                 "batch_policy": {
@@ -196,10 +200,10 @@ def _write_fixture(
                     "complete_task_triplets": True,
                     "score_independent_boundaries": True,
                     "agent_max_budget_usd_per_slot": 9.1,
-                    "judge_max_budget_usd_per_call": 0.01,
+                    "judge_max_budget_usd_per_call": judge_budget,
                     "max_judge_calls_per_slot": 5,
                     "max_judge_attempts_per_call": 3,
-                    "outer_spend_hard_cap_per_slot_usd": 9.25,
+                    "outer_spend_hard_cap_per_slot_usd": hard_cap,
                 },
                 "provider_capacity": {
                     "confirmed": False,
@@ -219,7 +223,9 @@ def _write_fixture(
         )
     plan_path = tmp_path / "dispatch_plan.json"
     plan_path.write_text(json.dumps(plan_payload, sort_keys=True))
-    if study_id == "rryas-headline-v3" and (authorized or capacity_confirmed):
+    if study_id in {"rryas-headline-v3", "rryas-headline-v4"} and (
+        authorized or capacity_confirmed
+    ):
         prefix = authorized_completed_prefix if authorized_completed_prefix is not None else 0
         if capacity_confirmed:
             plan_payload["provider_capacity"] = {
@@ -627,6 +633,19 @@ def test_v3_commands_apply_native_agent_and_judge_budget_caps(
     agent_command = command[command.index("--agent") + 1]
     assert "--max-budget-usd 9.1" in agent_command
     assert command[command.index("--judge-max-budget-usd") + 1] == "0.01"
+
+
+def test_v4_commands_apply_corrected_native_judge_budget_cap(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(tmp_path, study_id="rryas-headline-v4")
+    plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+    command = compile_run_command(plan.slots[0], plan=plan, repo_root=tmp_path)
+
+    agent_command = command[command.index("--agent") + 1]
+    assert "--max-budget-usd 9.1" in agent_command
+    assert command[command.index("--judge-max-budget-usd") + 1] == "0.1"
 
 
 def test_v3_execution_refuses_a_concurrent_dispatcher(

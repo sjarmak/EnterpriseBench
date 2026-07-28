@@ -76,6 +76,20 @@ V3_POST_LOCK_EXPOSURE_EVIDENCE = {
         for candidate_id in V3_ADDITIONAL_EXPOSURES
     },
 }
+V4_ADDITIONAL_EXPOSURES = (
+    "dep-graph-tri-prometheus-alertmanager-grafana-001",
+)
+V4_POST_LOCK_EXPOSURES = (
+    *V3_POST_LOCK_EXPOSURES,
+    *V4_ADDITIONAL_EXPOSURES,
+)
+V4_POST_LOCK_EXPOSURE_EVIDENCE = {
+    **V3_POST_LOCK_EXPOSURE_EVIDENCE,
+    **{
+        candidate_id: ("results/studies/rryas-headline-v3/receipts.jsonl",)
+        for candidate_id in V4_ADDITIONAL_EXPOSURES
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -158,6 +172,19 @@ V3_PROTOCOL = HeadlineProtocol(
         "fixed and a provider-reset capacity gate passes."
     ),
 )
+V4_PROTOCOL = HeadlineProtocol(
+    study_id="rryas-headline-v4",
+    task_count=31,
+    slot_count=93,
+    post_lock_exposures=V4_POST_LOCK_EXPOSURES,
+    post_lock_exposure_evidence=V4_POST_LOCK_EXPOSURE_EVIDENCE,
+    arms=V2_REQUIRED_ARMS,
+    arm_descriptions=V2_REQUIRED_ARM_DESCRIPTIONS,
+    forecast_basis=(
+        "No v4 spend authorization before the v3 judge-cap root cause is "
+        "fixed and an isolated judge-only canary passes."
+    ),
+)
 V3_MAX_SLOTS_PER_DISPATCH = 12
 V3_AGENT_MAX_BUDGET_USD_PER_SLOT = 9.1
 V3_JUDGE_MAX_BUDGET_USD_PER_CALL = 0.01
@@ -170,8 +197,43 @@ V3_OUTER_SPEND_HARD_CAP_PER_SLOT_USD = round(
     * V3_MAX_JUDGE_ATTEMPTS_PER_CALL,
     6,
 )
+V4_MAX_SLOTS_PER_DISPATCH = 12
+V4_AGENT_MAX_BUDGET_USD_PER_SLOT = 9.1
+V4_JUDGE_MAX_BUDGET_USD_PER_CALL = 0.1
+V4_MAX_JUDGE_CALLS_PER_SLOT = 5
+V4_MAX_JUDGE_ATTEMPTS_PER_CALL = CLAUDE_CODE_MAX_RETRIES
+V4_OUTER_SPEND_HARD_CAP_PER_SLOT_USD = round(
+    V4_AGENT_MAX_BUDGET_USD_PER_SLOT
+    + V4_JUDGE_MAX_BUDGET_USD_PER_CALL
+    * V4_MAX_JUDGE_CALLS_PER_SLOT
+    * V4_MAX_JUDGE_ATTEMPTS_PER_CALL,
+    6,
+)
+HEADLINE_BATCH_POLICIES = {
+    V3_PROTOCOL.study_id: {
+        "max_slots_per_dispatch": V3_MAX_SLOTS_PER_DISPATCH,
+        "agent_max_budget_usd_per_slot": V3_AGENT_MAX_BUDGET_USD_PER_SLOT,
+        "judge_max_budget_usd_per_call": V3_JUDGE_MAX_BUDGET_USD_PER_CALL,
+        "max_judge_calls_per_slot": V3_MAX_JUDGE_CALLS_PER_SLOT,
+        "max_judge_attempts_per_call": V3_MAX_JUDGE_ATTEMPTS_PER_CALL,
+        "outer_spend_hard_cap_per_slot_usd": (
+            V3_OUTER_SPEND_HARD_CAP_PER_SLOT_USD
+        ),
+    },
+    V4_PROTOCOL.study_id: {
+        "max_slots_per_dispatch": V4_MAX_SLOTS_PER_DISPATCH,
+        "agent_max_budget_usd_per_slot": V4_AGENT_MAX_BUDGET_USD_PER_SLOT,
+        "judge_max_budget_usd_per_call": V4_JUDGE_MAX_BUDGET_USD_PER_CALL,
+        "max_judge_calls_per_slot": V4_MAX_JUDGE_CALLS_PER_SLOT,
+        "max_judge_attempts_per_call": V4_MAX_JUDGE_ATTEMPTS_PER_CALL,
+        "outer_spend_hard_cap_per_slot_usd": (
+            V4_OUTER_SPEND_HARD_CAP_PER_SLOT_USD
+        ),
+    },
+}
 HEADLINE_PROTOCOLS = {
-    protocol.study_id: protocol for protocol in (V1_PROTOCOL, V2_PROTOCOL, V3_PROTOCOL)
+    protocol.study_id: protocol
+    for protocol in (V1_PROTOCOL, V2_PROTOCOL, V3_PROTOCOL, V4_PROTOCOL)
 }
 REQUIRED_CACHE_ISOLATION = {
     "schema_version": 1,
@@ -189,6 +251,10 @@ REQUIRED_JUDGE = {
     "executable": "claude-1",
     "selection": "explicit --judge-account 1",
     "provenance_required_in_scores": True,
+}
+V4_REQUIRED_JUDGE = {
+    **REQUIRED_JUDGE,
+    "isolation": "safe-mode:no-tools:replacement-system-prompt",
 }
 REQUIRED_EXECUTION_BASE = {
     "agent_account": 3,
@@ -300,11 +366,11 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
     if protocol == V1_PROTOCOL:
         return plan
     plan["study_id"] = protocol.study_id
-    predecessor_scope = (
-        "v1 operational run"
-        if protocol == V2_PROTOCOL
-        else "v1 and v2 operational runs"
-    )
+    predecessor_scope = {
+        V2_PROTOCOL.study_id: "v1 operational run",
+        V3_PROTOCOL.study_id: "v1 and v2 operational runs",
+        V4_PROTOCOL.study_id: "v1, v2, and v3 operational runs",
+    }[protocol.study_id]
     plan["claim_scope"] = (
         f"Claude Sonnet 5 on the {protocol.task_count}-task EnterpriseBench "
         "markdown-report confirmatory population remaining after the disclosed "
@@ -328,7 +394,7 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
             "excluded_candidate_ids": list(V2_ADDITIONAL_EXPOSURES),
             "v1_analysis_use": "operational pilot evidence only",
         }
-    else:
+    elif protocol == V3_PROTOCOL:
         plan["protocol_amendment"] = {
             "predecessor": "rryas-headline-v2",
             "reason": "v2 stopped fail-closed on a provider session limit",
@@ -337,6 +403,20 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
                 "locked candidates without inspecting reward"
             ),
             "excluded_candidate_ids": list(V3_ADDITIONAL_EXPOSURES),
+            "predecessor_analysis_use": "operational evidence only",
+        }
+    else:
+        plan["protocol_amendment"] = {
+            "predecessor": "rryas-headline-v3",
+            "reason": (
+                "v3 stopped fail-closed when the native judge budget rejected "
+                "the unisolated Claude Code startup context before inference"
+            ),
+            "selection_rule": (
+                "exclude every task with v1, v2, or v3 agent output; retain all "
+                "other locked candidates without inspecting reward"
+            ),
+            "excluded_candidate_ids": list(V4_ADDITIONAL_EXPOSURES),
             "predecessor_analysis_use": "operational evidence only",
         }
     return plan

@@ -56,6 +56,9 @@ COST_RECEIPTS = (
     Path("results/studies/rryas-headline-v2/receipts.jsonl"),
 )
 AUTHORIZATION_CEILING_USD = 890.0
+HEADLINE_STATUS = (
+    Path("results/studies") / V3_PROTOCOL.study_id / "study_status.json"
+)
 
 
 @dataclass(frozen=True)
@@ -368,6 +371,28 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
 
 def write_capsule(repo_root: Path, build: CorePayloads, *, check: bool) -> None:
     output_dir = repo_root.resolve() / V3_CONFIG_DIR
+    status_path = repo_root.resolve() / HEADLINE_STATUS
+    if status_path.is_file():
+        status = _load_object(status_path)
+        if (
+            status.get("study_id") == V3_PROTOCOL.study_id
+            and status.get("status") == "ABORTED-JUDGE-CAP-INVALID"
+        ):
+            required = {
+                "analysis_plan.json",
+                "final_manifest.json",
+                "study_spec.json",
+                "preflight_evidence.json",
+                "dispatch_plan.json",
+            }
+            missing = sorted(
+                name for name in required if not (output_dir / name).is_file()
+            )
+            if missing:
+                raise ValueError(
+                    f"terminal v3 capsule is missing artifacts: {missing}"
+                )
+            return
     artifacts = {
         "analysis_plan.json": build.analysis_plan,
         "final_manifest.json": build.manifest,

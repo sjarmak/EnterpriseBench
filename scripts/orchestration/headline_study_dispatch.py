@@ -343,9 +343,10 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
     ):
         raise DispatchError("dispatch authorization state/reference is inconsistent")
     controls = None
-    if study_id == "rryas-headline-v3":
+    if study_id in {"rryas-headline-v3", "rryas-headline-v4"}:
         try:
             controls = validate_v3_dispatch_controls(
+                study_id=study_id,
                 authorized=authorized,
                 authorization=authorization,
                 batch_policy=plan.get("batch_policy"),
@@ -365,7 +366,9 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
             "authorized_outer_spend_ceiling_usd",
         )
     ):
-        raise DispatchError("completed-prefix authorization is only valid for v3")
+        raise DispatchError(
+            "completed-prefix authorization is only valid for batched successors"
+        )
 
     return DispatchPlan(
         path=plan_path,

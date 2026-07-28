@@ -14,14 +14,7 @@ import tomllib
 from typing import Any, Iterator, Mapping, Sequence
 
 from eb_study import file_hash
-from headline_protocol import (
-    V3_AGENT_MAX_BUDGET_USD_PER_SLOT,
-    V3_JUDGE_MAX_BUDGET_USD_PER_CALL,
-    V3_MAX_JUDGE_ATTEMPTS_PER_CALL,
-    V3_MAX_JUDGE_CALLS_PER_SLOT,
-    V3_MAX_SLOTS_PER_DISPATCH,
-    V3_OUTER_SPEND_HARD_CAP_PER_SLOT_USD,
-)
+from headline_protocol import HEADLINE_BATCH_POLICIES
 
 
 class DispatchPolicyError(ValueError):
@@ -140,6 +133,7 @@ def _max_declared_judge_calls(task_paths: Sequence[Path]) -> int:
 
 def validate_v3_dispatch_controls(
     *,
+    study_id: str,
     authorized: bool,
     authorization: Mapping[str, Any],
     batch_policy: Any,
@@ -148,7 +142,12 @@ def validate_v3_dispatch_controls(
     slot_count: int,
     ceiling: float,
 ) -> V3DispatchControls:
-    """Validate all frozen v3 batch, capacity, and authorization controls."""
+    """Validate all frozen successor batch, capacity, and authorization controls."""
+
+    frozen = HEADLINE_BATCH_POLICIES.get(study_id)
+    if frozen is None:
+        raise DispatchPolicyError(f"{study_id} has no frozen batch policy")
+    frozen_batch_size = frozen["max_slots_per_dispatch"]
 
     prefix = authorization.get("authorized_completed_prefix")
     end_prefix = authorization.get("authorized_end_prefix")
@@ -158,7 +157,7 @@ def validate_v3_dispatch_controls(
         not strict_non_negative_int(prefix)
         or not strict_non_negative_int(end_prefix)
         or end_prefix <= prefix
-        or end_prefix != min(prefix + V3_MAX_SLOTS_PER_DISPATCH, slot_count)
+        or end_prefix != min(prefix + frozen_batch_size, slot_count)
         or not nonblank(batch_hash)
         or not isinstance(authorized_ceiling, (int, float))
         or isinstance(authorized_ceiling, bool)
@@ -192,14 +191,14 @@ def validate_v3_dispatch_controls(
     hard_cap = batch_policy.get("outer_spend_hard_cap_per_slot_usd")
     if (
         not strict_non_negative_int(batch_size)
-        or batch_size != V3_MAX_SLOTS_PER_DISPATCH
-        or agent_budget != V3_AGENT_MAX_BUDGET_USD_PER_SLOT
-        or judge_budget != V3_JUDGE_MAX_BUDGET_USD_PER_CALL
+        or batch_size != frozen_batch_size
+        or agent_budget != frozen["agent_max_budget_usd_per_slot"]
+        or judge_budget != frozen["judge_max_budget_usd_per_call"]
         or not strict_non_negative_int(max_judge_calls)
-        or max_judge_calls != V3_MAX_JUDGE_CALLS_PER_SLOT
+        or max_judge_calls != frozen["max_judge_calls_per_slot"]
         or not strict_non_negative_int(max_judge_attempts)
-        or max_judge_attempts != V3_MAX_JUDGE_ATTEMPTS_PER_CALL
-        or hard_cap != V3_OUTER_SPEND_HARD_CAP_PER_SLOT_USD
+        or max_judge_attempts != frozen["max_judge_attempts_per_call"]
+        or hard_cap != frozen["outer_spend_hard_cap_per_slot_usd"]
         or batch_policy.get("complete_task_triplets") is not True
         or batch_policy.get("score_independent_boundaries") is not True
     ):
@@ -228,7 +227,7 @@ def validate_v3_dispatch_controls(
                 not nonblank(capacity_reference)
                 or not strict_non_negative_int(capacity_prefix)
                 or not strict_non_negative_int(capacity_max_slots)
-                or capacity_max_slots != V3_MAX_SLOTS_PER_DISPATCH
+                or capacity_max_slots != frozen_batch_size
             )
         )
         or (

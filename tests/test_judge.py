@@ -366,6 +366,23 @@ class TestClaudeCodeBackend:
         command = run.call_args.args[0]
         assert command[command.index("--max-budget-usd") + 1] == "0.01"
 
+    @patch("eb_verify.judge.backends.shutil.which", return_value="/usr/bin/claude")
+    def test_raw_call_isolates_judge_from_project_context_and_tools(self, _which):
+        backend = ClaudeCodeBackend(model="haiku")
+        envelope = '{"is_error": false, "result": "{\\"score\\": 1.0}"}'
+        completed = subprocess.CompletedProcess([], 0, stdout=envelope, stderr="")
+        with patch(
+            "eb_verify.judge.backends.subprocess.run",
+            return_value=completed,
+        ) as run:
+            backend._raw_call("judge system", "judge input")
+
+        command = run.call_args.args[0]
+        assert "--safe-mode" in command
+        assert command[command.index("--tools") + 1] == ""
+        assert command[command.index("--system-prompt") + 1] == "judge system"
+        assert "--append-system-prompt" not in command
+
     @pytest.mark.parametrize("budget", [0, -1, True, float("nan"), "0.01"])
     @patch("eb_verify.judge.backends.shutil.which", return_value="/usr/bin/claude")
     def test_init_rejects_invalid_native_budget(self, _which, budget):

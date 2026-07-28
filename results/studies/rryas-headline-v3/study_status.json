@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v3",
+  "status": "ABORTED-JUDGE-CAP-INVALID",
+  "started_at": "2026-07-28T20:35:18.777226+00:00",
+  "stopped_at": "2026-07-28T20:39:44.507245+00:00",
+  "planned_slots": 96,
+  "attempted_slots": 1,
+  "valid_slots": 0,
+  "invalid_slots": 1,
+  "completed_paired_tasks": 0,
+  "outer_spend_usd": 6.943112,
+  "authorization_outer_spend_ceiling_usd": 890.0,
+  "receipts_hash": "sha256:d036efd7bfe402910338f2016ca24a181f09084211283d360988e9751d977b64",
+  "cache_isolation": {
+    "all_receipts_valid": true,
+    "cross_run_cache_read_tokens": 0,
+    "cache_write_tokens": 0
+  },
+  "stop_trial": {
+    "task_id": "dep-graph-tri-prometheus-alertmanager-grafana-001",
+    "arm": "baseline",
+    "repetition": 1,
+    "attempt": 1,
+    "status": "infra_invalid",
+    "failure_class": "verifier_infra_error",
+    "root_cause": "judge_native_budget_preflight",
+    "judge_account": 1,
+    "judge_model": "haiku",
+    "judge_max_budget_usd": 0.01,
+    "judge_preflight_estimate_usd": 0.0872411,
+    "judge_duration_api_ms": 0,
+    "judge_input_tokens": 0,
+    "judge_output_tokens": 0,
+    "outer_spend_usd": 6.943112
+  },
+  "disposition": {
+    "headline_eligible": false,
+    "promotion_eligible": false,
+    "analysis_use": "operational evidence only",
+    "retry_authorized": false,
+    "remaining_slots_dispatched": false,
+    "exposed_task_ids": [
+      "dep-graph-tri-prometheus-alertmanager-grafana-001"
+    ],
+    "required_follow_up": "Isolate the Claude Code judge from project/global context, validate a viable native budget cap independently, and freeze a new confirmatory capsule excluding every v1-v3 exposed task."
+  }
+}

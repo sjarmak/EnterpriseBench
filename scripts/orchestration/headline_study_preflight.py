@@ -52,6 +52,8 @@ from headline_protocol import (  # noqa: E402,F401
     V2_REQUIRED_ARMS,
     V3_ADDITIONAL_EXPOSURES,
     V3_PROTOCOL,
+    V4_PROTOCOL,
+    V4_REQUIRED_JUDGE,
     HeadlineProtocol,
     required_analysis_plan,
 )
@@ -475,7 +477,10 @@ def validate_headline_study(
         raise ValueError("headline arm descriptions are not locked")
     if manifest.get("cache_isolation") != REQUIRED_CACHE_ISOLATION:
         raise ValueError("headline cache-isolation contract is not locked")
-    if manifest.get("judge_configuration") != REQUIRED_JUDGE:
+    expected_judge = (
+        V4_REQUIRED_JUDGE if protocol == V4_PROTOCOL else REQUIRED_JUDGE
+    )
+    if manifest.get("judge_configuration") != expected_judge:
         raise ValueError("headline judge configuration is not locked")
     if manifest.get("evidence_policy") != REQUIRED_EVIDENCE_POLICY:
         raise ValueError("headline evidence policy is not locked")

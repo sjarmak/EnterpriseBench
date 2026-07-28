@@ -235,6 +235,9 @@ class ClaudeCodeBackend:
         cmd = [
             self._claude_bin,
             "-p",
+            "--safe-mode",
+            "--tools",
+            "",
             "--output-format",
             "json",
             "--model",
@@ -245,7 +248,7 @@ class ClaudeCodeBackend:
         cmd.extend(
             [
             "--no-session-persistence",
-            "--append-system-prompt",
+            "--system-prompt",
             system_prompt,
             user_prompt,
             ]

@@ -609,26 +609,19 @@ def test_repository_v2_capsule_remains_valid_after_terminal_attempt() -> None:
     assert plan["authorization"]["paid_dispatch_authorized"] is False
 
 
-def test_repository_v3_capsule_is_complete_and_spend_gated() -> None:
+def test_repository_v3_capsule_is_terminal_after_judge_cap_failure() -> None:
     study_dir = PROJECT_ROOT / "configs" / "studies" / "rryas-headline-v3"
+    result_dir = PROJECT_ROOT / "results" / "studies" / "rryas-headline-v3"
+    spec = StudySpec.load(study_dir / "study_spec.json")
+    manifest_path = study_dir / "final_manifest.json"
+    plan = json.loads((study_dir / "dispatch_plan.json").read_text())
+    status = json.loads((result_dir / "study_status.json").read_text())
 
-    evidence = validate_headline_study(
-        spec_path=study_dir / "study_spec.json",
-        manifest_path=study_dir / "final_manifest.json",
-        candidate_manifest_path=(
-            PROJECT_ROOT / "results" / "rryas_dataset" / "candidate_manifest.json"
-        ),
-        analysis_plan_path=study_dir / "analysis_plan.json",
-        repo_root=PROJECT_ROOT,
-        revision_validator=lambda _revision, _paths: True,
-        mirror_probe=lambda _repository: True,
-        auth_probe=lambda _credential: True,
-    )
-
-    assert evidence.study_id == "rryas-headline-v3"
-    assert len(evidence.task_ids) == 32
-    assert len(evidence.slots) == 96
-    assert evidence.paid_dispatch_authorized is False
-    assert json.loads(
-        (study_dir / "preflight_evidence.json").read_text()
-    ) == json.loads(json.dumps(evidence.__dict__))
+    assert spec.task_manifest_hash == file_hash(manifest_path)
+    assert plan["final_manifest_hash"] == file_hash(manifest_path)
+    assert len(spec.task_ids) == 32
+    assert len(spec.slots()) == 96
+    assert plan["authorization"]["paid_dispatch_authorized"] is False
+    assert status["status"] == "ABORTED-JUDGE-CAP-INVALID"
+    assert status["attempted_slots"] == 1
+    assert status["disposition"]["retry_authorized"] is False
