@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "capsule_id": "rryas-generated-harness-finder-parity-v1",
-  "executed_at": "2026-07-28T03:31:47Z",
-  "revision": "3ef4a5355cb2a61de40a8728fa6c3230e135386d",
+  "executed_at": "2026-07-28T04:01:28Z",
+  "revision": "652cc98d0482836de1a35f3bcb734f409719540e",
   "paid_inference_dispatched": false,
   "judge_dispatched": false,
   "result_artifacts_created": [

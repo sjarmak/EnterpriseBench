@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
+  "study_id": "rryas-headline-v2-cli-compliance-canary",
   "canary_id": "rryas-headline-v2-cli-compliance-canary",
-  "status": "LOCKED-NO-SPEND",
+  "status": "FINAL-NO-SPEND",
   "purpose": "Validate strengthened CLI treatment compliance, not reward.",
   "task_id": "api-contract-dual-envoy-istio-001",
   "candidate_id": "api-contract-dual-envoy-istio-001",
@@ -12,11 +13,21 @@
   "agent_account": 3,
   "judge_account": 1,
   "max_attempts": 1,
-  "harness_hash": "sha256:4fdfe11e9c7552e8ff8f6fdf6ecb8079691d75753ac97a4336126282915209a5",
-  "revision": "3ef4a5355cb2a61de40a8728fa6c3230e135386d",
+  "harness_hash": "sha256:82623333ab1d92e1e35c35587c2b9126afffdf5822d2fce6636f71818ee307b9",
+  "revision": "652cc98d0482836de1a35f3bcb734f409719540e",
   "output_root": "results/studies/rryas-headline-v2-cli-compliance-canary",
+  "receipts": "results/studies/rryas-headline-v2-cli-compliance-canary/receipts.jsonl",
   "success_criterion": "sgx_tool_calls > 0",
   "analysis_use": "operational compliance evidence only",
-  "paid_dispatch_authorized": false,
-  "authorization_reference": null
+  "execution": {
+    "agent_account": 3,
+    "timeout_seconds": 600,
+    "build_timeout_seconds": 1800,
+    "verifier_timeout_seconds": 600,
+    "memory_mb": 8192,
+    "no_build": false,
+    "repetitions": 1,
+    "max_attempts": 1,
+    "concurrency": 1
+  }
 }

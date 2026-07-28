@@ -1,0 +1,24 @@
+{
+  "study_id": "rryas-headline-v2-cli-compliance-canary",
+  "schema_version": 1,
+  "task_manifest_hash": "sha256:ef0ff2e32fb4bcf4dc7c247bf738be2d17d5cfc8d432cace6d73d5b45b68ff4d",
+  "task_ids": [
+    "api-contract-dual-envoy-istio-001"
+  ],
+  "arms": [
+    {
+      "name": "cli",
+      "capability_fingerprint": "sgx-cli:local-repos-readable:retrieval-before-local:cache-isolated:v3"
+    }
+  ],
+  "baseline_arm": "cli",
+  "repetitions": 1,
+  "attempt_policy": "first_valid_attempt",
+  "max_attempts": 1,
+  "model": "claude-sonnet-5",
+  "harness": "sha256:82623333ab1d92e1e35c35587c2b9126afffdf5822d2fce6636f71818ee307b9",
+  "revision": "652cc98d0482836de1a35f3bcb734f409719540e",
+  "token_source": "sdk_model_usage",
+  "score_contract": "weighted-mean-v2",
+  "promotion_policy": "operational-cli-compliance-no-promotion"
+}
