@@ -14,7 +14,7 @@ for import_path in (
 ):
     sys.path.insert(0, str(import_path))
 
-from eb_study import StudySpec, TrialReceipt, file_hash  # noqa: E402
+from eb_study import StudySpec, TrialReceipt, file_hash, read_receipts  # noqa: E402
 from headline_study_dispatch import (  # noqa: E402
     DispatchError,
     compile_run_command,
@@ -473,3 +473,22 @@ def test_repository_dispatch_plan_is_current_and_spend_gated() -> None:
     assert plan.empirical_envelope_usd == pytest.approx(270.22791)
     assert plan.authorization_ceiling_usd == pytest.approx(275.0)
     assert plan.sample_attempts == 9
+
+
+def test_repository_aborted_run_is_immutable_and_not_promotable() -> None:
+    study_dir = PROJECT_ROOT / "results" / "studies" / "rryas-headline-v1"
+    status = json.loads((study_dir / "study_status.json").read_text())
+    receipts_path = study_dir / "receipts.jsonl"
+    receipts = read_receipts(receipts_path)
+
+    assert status["status"] == "ABORTED-OPERATIONAL-INVALID"
+    assert status["disposition"]["headline_eligible"] is False
+    assert status["disposition"]["promotion_eligible"] is False
+    assert status["receipts_hash"] == file_hash(receipts_path)
+    assert len(receipts) == status["attempted_slots"] == 7
+    assert sum(receipt.status == "valid" for receipt in receipts) == 6
+    assert receipts[-1].status == "infra_invalid"
+    assert receipts[-1].failure_class == "infra_sgx_unused"
+    assert sum(receipt.usage.cost_usd for receipt in receipts) == pytest.approx(
+        status["outer_spend_usd"]
+    )

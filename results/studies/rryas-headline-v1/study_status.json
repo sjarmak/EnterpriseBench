@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v1",
+  "status": "ABORTED-OPERATIONAL-INVALID",
+  "started_at": "2026-07-28T02:31:28.151876Z",
+  "stopped_at": "2026-07-28T03:11:37.898000Z",
+  "planned_slots": 129,
+  "attempted_slots": 7,
+  "valid_slots": 6,
+  "invalid_slots": 1,
+  "completed_paired_tasks": 2,
+  "outer_spend_usd": 36.471046,
+  "receipts_hash": "sha256:d074eee11e5b39e5f1a9584bc6ab0deff419f3ff9ba111fffe240715869144df",
+  "cache_isolation": {
+    "all_receipts_valid": true,
+    "cross_run_cache_read_tokens": 0,
+    "cache_write_tokens": 0
+  },
+  "stop_trial": {
+    "task_id": "api-contract-dual-envoy-istio-001",
+    "arm": "cli",
+    "repetition": 1,
+    "attempt": 1,
+    "status": "infra_invalid",
+    "failure_class": "infra_sgx_unused",
+    "sgx_tool_calls": 0,
+    "outer_spend_usd": 3.699886
+  },
+  "disposition": {
+    "headline_eligible": false,
+    "promotion_eligible": false,
+    "analysis_use": "operational pilot evidence only",
+    "exposed_task_ids": [
+      "api-contract-grpc-metadata-001",
+      "api-contract-grpc-balancer-002",
+      "api-contract-dual-envoy-istio-001"
+    ],
+    "required_follow_up": "Validate the strengthened CLI contract on an operational canary, then freeze a new confirmatory capsule that excludes every exposed task."
+  }
+}
