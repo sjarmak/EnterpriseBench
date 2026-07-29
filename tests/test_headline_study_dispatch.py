@@ -31,12 +31,22 @@ from headline_study_dispatch import (  # noqa: E402
 def _v4_capacity_payload(
     *,
     fetched_at: datetime | None = None,
+    agent_five_hour: float = 25.0,
+    judge_five_hour: float = 7.0,
+    agent_seven_day: float = 48.0,
+    judge_seven_day: float = 45.0,
 ) -> dict[str, object]:
     from headline_dispatch_policy import capacity_evidence_hash
 
     evidence = {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "anthropic-rate-limit-response-headers",
+        "eligibility_policy": (
+            "fresh-account-specific-utilization-below-100-percent"
+        ),
+        "confound_policy": (
+            "accept-and-report-observed-nonzero-provider-utilization"
+        ),
         "fetched_at": (fetched_at or datetime.now(timezone.utc)).isoformat(),
         "max_age_seconds": 600,
         "accounts": {
@@ -45,9 +55,9 @@ def _v4_capacity_payload(
                 "fetched_at": (
                     fetched_at or datetime.now(timezone.utc)
                 ).isoformat(),
-                "five_hour_utilization_pct": 0.0,
+                "five_hour_utilization_pct": agent_five_hour,
                 "five_hour_resets_at": "2026-07-29T06:00:00+00:00",
-                "seven_day_utilization_pct": 48.0,
+                "seven_day_utilization_pct": agent_seven_day,
                 "seven_day_resets_at": "2026-08-01T16:00:00+00:00",
             },
             "judge": {
@@ -55,9 +65,9 @@ def _v4_capacity_payload(
                 "fetched_at": (
                     fetched_at or datetime.now(timezone.utc)
                 ).isoformat(),
-                "five_hour_utilization_pct": 0.0,
+                "five_hour_utilization_pct": judge_five_hour,
                 "five_hour_resets_at": "2026-07-29T06:00:00+00:00",
-                "seven_day_utilization_pct": 45.0,
+                "seven_day_utilization_pct": judge_seven_day,
                 "seven_day_resets_at": "2026-07-30T02:00:00+00:00",
             },
         },
@@ -67,6 +77,12 @@ def _v4_capacity_payload(
         "capacity_reference": capacity_evidence_hash(evidence),
         "confirmed_completed_prefix": 0,
         "confirmed_max_slots": 9,
+        "eligibility_policy": (
+            "fresh-account-specific-utilization-below-100-percent"
+        ),
+        "confound_policy": (
+            "accept-and-report-observed-nonzero-provider-utilization"
+        ),
         "evidence": evidence,
     }
 
@@ -257,6 +273,20 @@ def _write_fixture(
                     "capacity_reference": None,
                     "confirmed_completed_prefix": None,
                     "confirmed_max_slots": None,
+                    **(
+                        {
+                            "eligibility_policy": (
+                                "fresh-account-specific-utilization-"
+                                "below-100-percent"
+                            ),
+                            "confound_policy": (
+                                "accept-and-report-observed-nonzero-"
+                                "provider-utilization"
+                            ),
+                        }
+                        if study_id == "rryas-headline-v4"
+                        else {}
+                    ),
                 },
             }
         )
@@ -993,7 +1023,7 @@ def test_v4_load_rejects_boolean_five_hour_usage(tmp_path: Path) -> None:
     payload["provider_capacity"]["capacity_reference"] = capacity_evidence_hash(evidence)
     plan_path.write_text(json.dumps(payload, sort_keys=True))
 
-    with pytest.raises(DispatchError, match="exact zero usage"):
+    with pytest.raises(DispatchError, match="capacity evidence.*malformed"):
         load_dispatch_plan(plan_path, repo_root=tmp_path)
 
 
@@ -1050,8 +1080,16 @@ def test_v3_incidental_evidence_does_not_activate_v4_freshness(
     assert plan.v3_controls.capacity_evidence is None
 
 
-def test_v4_live_capacity_recheck_rejects_hot_account_before_runner(
+@pytest.mark.parametrize(
+    "live",
+    (
+        _v4_capacity_payload(agent_five_hour=100.0)["evidence"],
+        _v4_capacity_payload(judge_seven_day=100.0)["evidence"],
+    ),
+)
+def test_v4_live_capacity_recheck_rejects_exhausted_account_before_runner(
     tmp_path: Path,
+    live: object,
 ) -> None:
     plan_path, *_ = _write_fixture(
         tmp_path,
@@ -1059,15 +1097,13 @@ def test_v4_live_capacity_recheck_rejects_hot_account_before_runner(
         authorized=True,
         capacity_confirmed=True,
     )
-    live = _v4_capacity_payload()["evidence"]
-    live["accounts"]["agent"]["five_hour_utilization_pct"] = 9.0
     runner_called = False
 
     def runner(*_args: object, **_kwargs: object) -> None:
         nonlocal runner_called
         runner_called = True
 
-    with pytest.raises(DispatchError, match="exact zero usage"):
+    with pytest.raises(DispatchError, match="remaining provider capacity"):
         dispatch_headline_study(
             plan_path=plan_path,
             repo_root=tmp_path,
@@ -1095,7 +1131,7 @@ def test_v4_live_capacity_recheck_rejects_hot_account_before_runner(
         next(path for path in captures if path.name.endswith(".result.json")).read_text()
     )
     assert result["status"] == "rejected"
-    assert "exact zero usage" in result["invalid_reason"]
+    assert "remaining provider capacity" in result["invalid_reason"]
 
 
 def test_v4_live_recheck_runs_after_preflight_and_is_captured_before_runner(

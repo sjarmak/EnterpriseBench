@@ -14,7 +14,10 @@ from typing import Any
 from fetch_usage import fetch_usage_for_token, load_token
 from headline_dispatch_policy import (
     DispatchPolicyError,
+    V4_CAPACITY_CONFOUND_POLICY,
+    V4_CAPACITY_ELIGIBILITY_POLICY,
     V4_CAPACITY_MAX_AGE_SECONDS,
+    V4_CAPACITY_SCHEMA_VERSION,
     V4_CAPACITY_SOURCE,
     capacity_evidence_hash,
     nonblank,
@@ -105,8 +108,10 @@ def build_live_capacity_evidence(
         observation["fetched_at"] for observation in observations.values()
     )
     return {
-        "schema_version": 1,
+        "schema_version": V4_CAPACITY_SCHEMA_VERSION,
         "source": V4_CAPACITY_SOURCE,
+        "eligibility_policy": V4_CAPACITY_ELIGIBILITY_POLICY,
+        "confound_policy": V4_CAPACITY_CONFOUND_POLICY,
         "fetched_at": fetched_at,
         "max_age_seconds": V4_CAPACITY_MAX_AGE_SECONDS,
         "accounts": observations,
@@ -207,6 +212,8 @@ def _redact_live_capacity_evidence(
     return {
         "schema_version": evidence.get("schema_version"),
         "source": evidence.get("source"),
+        "eligibility_policy": evidence.get("eligibility_policy"),
+        "confound_policy": evidence.get("confound_policy"),
         "fetched_at": evidence.get("fetched_at"),
         "max_age_seconds": evidence.get("max_age_seconds"),
         "accounts": redacted_accounts,
@@ -259,6 +266,8 @@ def prepare_v4_capacity_dispatch(
         "capacity_reference": capacity_evidence_hash(live_evidence),
         "confirmed_completed_prefix": completed_prefix,
         "confirmed_max_slots": controls.max_slots_per_dispatch,
+        "eligibility_policy": V4_CAPACITY_ELIGIBILITY_POLICY,
+        "confound_policy": V4_CAPACITY_CONFOUND_POLICY,
         "evidence": live_evidence,
     }
     try:

@@ -39,6 +39,13 @@ class V3DispatchControls:
 
 V4_CAPACITY_MAX_AGE_SECONDS = 600
 V4_CAPACITY_SOURCE = "anthropic-rate-limit-response-headers"
+V4_CAPACITY_SCHEMA_VERSION = 2
+V4_CAPACITY_ELIGIBILITY_POLICY = (
+    "fresh-account-specific-utilization-below-100-percent"
+)
+V4_CAPACITY_CONFOUND_POLICY = (
+    "accept-and-report-observed-nonzero-provider-utilization"
+)
 
 
 def strict_non_negative_int(value: Any) -> bool:
@@ -87,15 +94,22 @@ def validate_v4_capacity_evidence(
     agent_accounts: set[int],
     judge_accounts: set[int],
 ) -> Mapping[str, Any]:
-    """Validate hash-bound zero-usage telemetry for the exact v4 accounts."""
+    """Validate hash-bound, fresh, non-exhausted telemetry for v4 accounts."""
 
     if set(provider_capacity) != {
         "confirmed",
         "capacity_reference",
         "confirmed_completed_prefix",
         "confirmed_max_slots",
+        "eligibility_policy",
+        "confound_policy",
         "evidence",
-    }:
+    } or (
+        provider_capacity.get("eligibility_policy")
+        != V4_CAPACITY_ELIGIBILITY_POLICY
+        or provider_capacity.get("confound_policy")
+        != V4_CAPACITY_CONFOUND_POLICY
+    ):
         raise DispatchPolicyError("v4 capacity evidence identity is inconsistent")
     evidence = provider_capacity.get("evidence")
     reference = provider_capacity.get("capacity_reference")
@@ -105,13 +119,18 @@ def validate_v4_capacity_evidence(
         != {
             "schema_version",
             "source",
+            "eligibility_policy",
+            "confound_policy",
             "fetched_at",
             "max_age_seconds",
             "accounts",
         }
-        or evidence.get("schema_version") != 1
+        or evidence.get("schema_version") != V4_CAPACITY_SCHEMA_VERSION
         or isinstance(evidence.get("schema_version"), bool)
         or evidence.get("source") != V4_CAPACITY_SOURCE
+        or evidence.get("eligibility_policy")
+        != V4_CAPACITY_ELIGIBILITY_POLICY
+        or evidence.get("confound_policy") != V4_CAPACITY_CONFOUND_POLICY
         or evidence.get("max_age_seconds") != V4_CAPACITY_MAX_AGE_SECONDS
         or capacity_evidence_hash(evidence) != reference
     ):
@@ -147,11 +166,18 @@ def validate_v4_capacity_evidence(
             or not _valid_percentage(
                 observed.get("five_hour_utilization_pct")
             )
-            or float(observed["five_hour_utilization_pct"]) != 0.0
             or not _valid_percentage(observed.get("seven_day_utilization_pct"))
         ):
             raise DispatchPolicyError(
-                f"v4 capacity evidence for {role} account is not exact zero usage"
+                f"v4 capacity evidence for {role} account is malformed"
+            )
+        if (
+            float(observed["five_hour_utilization_pct"]) >= 100.0
+            or float(observed["seven_day_utilization_pct"]) >= 100.0
+        ):
+            raise DispatchPolicyError(
+                f"v4 capacity evidence for {role} account has no remaining "
+                "provider capacity"
             )
         _parse_utc_timestamp(
             observed.get("fetched_at"),
@@ -394,6 +420,8 @@ def validate_v3_dispatch_controls(
     capacity_prefix = provider_capacity.get("confirmed_completed_prefix")
     capacity_max_slots = provider_capacity.get("confirmed_max_slots")
     raw_capacity_evidence = provider_capacity.get("evidence")
+    capacity_eligibility_policy = provider_capacity.get("eligibility_policy")
+    capacity_confound_policy = provider_capacity.get("confound_policy")
     capacity_evidence = None
     if (
         not isinstance(capacity_confirmed, bool)
@@ -422,6 +450,11 @@ def validate_v3_dispatch_controls(
             "v3 provider capacity state/reference is inconsistent"
         )
     if study_id == "rryas-headline-v4":
+        if (
+            capacity_eligibility_policy != V4_CAPACITY_ELIGIBILITY_POLICY
+            or capacity_confound_policy != V4_CAPACITY_CONFOUND_POLICY
+        ):
+            raise DispatchPolicyError("v4 provider capacity policy is not exact")
         if capacity_confirmed:
             capacity_evidence = validate_v4_capacity_evidence(
                 provider_capacity,
@@ -436,6 +469,8 @@ def validate_v3_dispatch_controls(
                 "capacity_reference",
                 "confirmed_completed_prefix",
                 "confirmed_max_slots",
+                "eligibility_policy",
+                "confound_policy",
             }
         ):
             raise DispatchPolicyError("v4 provider capacity fields are not exact")

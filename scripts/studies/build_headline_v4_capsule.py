@@ -49,6 +49,10 @@ from headline_study_preflight import (  # noqa: E402
     HeadlineEvidence,
     compile_execution_order,
 )
+from headline_dispatch_policy import (  # noqa: E402
+    V4_CAPACITY_CONFOUND_POLICY,
+    V4_CAPACITY_ELIGIBILITY_POLICY,
+)
 
 V4_CONFIG_DIR = Path("configs/studies") / V4_PROTOCOL.study_id
 COST_RECEIPTS = (
@@ -292,6 +296,8 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
             "capacity_reference": None,
             "confirmed_completed_prefix": None,
             "confirmed_max_slots": None,
+            "eligibility_policy": V4_CAPACITY_ELIGIBILITY_POLICY,
+            "confound_policy": V4_CAPACITY_CONFOUND_POLICY,
         },
         "authorization": {
             "paid_dispatch_authorized": False,

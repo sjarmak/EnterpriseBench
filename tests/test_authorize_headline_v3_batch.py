@@ -34,8 +34,8 @@ def _write_capacity_cache(
     path: Path,
     *,
     fetched_at: datetime,
-    agent_five_hour: float = 0.0,
-    judge_five_hour: float = 0.0,
+    agent_five_hour: float = 25.0,
+    judge_five_hour: float = 7.0,
     agent_fetched_at: datetime | None = None,
     judge_fetched_at: datetime | None = None,
 ) -> Path:
@@ -125,7 +125,7 @@ def test_build_authorized_plan_binds_one_exact_pending_batch(
     )
 
 
-def test_v4_authorizer_embeds_fresh_zero_usage_capacity_telemetry(
+def test_v4_authorizer_embeds_fresh_nonzero_capacity_telemetry(
     tmp_path: Path,
 ) -> None:
     now = datetime(2026, 7, 29, 1, 1, tzinfo=timezone.utc)
@@ -149,15 +149,21 @@ def test_v4_authorizer_embeds_fresh_zero_usage_capacity_telemetry(
     assert capacity["confirmed"] is True
     assert capacity["capacity_reference"].startswith("sha256:")
     assert capacity["evidence"] == {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "anthropic-rate-limit-response-headers",
+        "eligibility_policy": (
+            "fresh-account-specific-utilization-below-100-percent"
+        ),
+        "confound_policy": (
+            "accept-and-report-observed-nonzero-provider-utilization"
+        ),
         "fetched_at": "2026-07-29T01:00:40+00:00",
         "max_age_seconds": 600,
         "accounts": {
             "agent": {
                 "account": 3,
                 "fetched_at": "2026-07-29T01:00:40+00:00",
-                "five_hour_utilization_pct": 0.0,
+                "five_hour_utilization_pct": 25.0,
                 "five_hour_resets_at": "2026-07-29T06:00:00+00:00",
                 "seven_day_utilization_pct": 48.0,
                 "seven_day_resets_at": "2026-08-01T16:00:00+00:00",
@@ -165,7 +171,7 @@ def test_v4_authorizer_embeds_fresh_zero_usage_capacity_telemetry(
             "judge": {
                 "account": 1,
                 "fetched_at": "2026-07-29T01:00:40+00:00",
-                "five_hour_utilization_pct": 0.0,
+                "five_hour_utilization_pct": 7.0,
                 "five_hour_resets_at": "2026-07-29T06:00:00+00:00",
                 "seven_day_utilization_pct": 45.0,
                 "seven_day_resets_at": "2026-07-30T02:00:00+00:00",
@@ -190,9 +196,9 @@ def test_v4_authorizer_embeds_fresh_zero_usage_capacity_telemetry(
 
 @pytest.mark.parametrize(
     ("agent_five_hour", "judge_five_hour"),
-    ((9.0, 0.0), (0.0, 3.0)),
+    ((100.0, 7.0), (25.0, 100.0)),
 )
-def test_v4_authorizer_rejects_nonzero_five_hour_usage(
+def test_v4_authorizer_rejects_exhausted_five_hour_usage(
     tmp_path: Path,
     agent_five_hour: float,
     judge_five_hour: float,
@@ -206,7 +212,7 @@ def test_v4_authorizer_rejects_nonzero_five_hour_usage(
         judge_five_hour=judge_five_hour,
     )
 
-    with pytest.raises(AuthorizationError, match="zero usage"):
+    with pytest.raises(AuthorizationError, match="remaining provider capacity"):
         build_authorized_plan(
             plan_path=plan_path,
             repo_root=tmp_path,

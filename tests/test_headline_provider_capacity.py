@@ -55,6 +55,15 @@ def test_live_evidence_fetches_exact_accounts_and_redacts_source() -> None:
     assert calls == [3, 1]
     assert evidence["accounts"]["agent"]["account"] == 3
     assert evidence["accounts"]["judge"]["account"] == 1
+    assert evidence["schema_version"] == 2
+    assert (
+        evidence["eligibility_policy"]
+        == "fresh-account-specific-utilization-below-100-percent"
+    )
+    assert (
+        evidence["confound_policy"]
+        == "accept-and-report-observed-nonzero-provider-utilization"
+    )
     serialized = str(evidence)
     assert "must-not-be-retained" not in serialized
     assert "email" not in serialized

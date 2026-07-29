@@ -61,6 +61,12 @@ def test_v4_builder_excludes_every_v1_through_v3_exposed_task() -> None:
     }
     assert build.dispatch_plan["authorization"]["paid_dispatch_authorized"] is False
     assert build.dispatch_plan["provider_capacity"]["confirmed"] is False
+    assert build.dispatch_plan["provider_capacity"]["eligibility_policy"] == (
+        "fresh-account-specific-utilization-below-100-percent"
+    )
+    assert build.dispatch_plan["provider_capacity"]["confound_policy"] == (
+        "accept-and-report-observed-nonzero-provider-utilization"
+    )
 
 
 def test_repository_v4_artifacts_are_current() -> None:

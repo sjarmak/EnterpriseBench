@@ -22,6 +22,8 @@ for import_path in (
 
 from headline_dispatch_policy import (  # noqa: E402
     DispatchPolicyError,
+    V4_CAPACITY_CONFOUND_POLICY,
+    V4_CAPACITY_ELIGIBILITY_POLICY,
     authorization_batch_hash,
     capacity_evidence_hash,
     nonblank,
@@ -79,6 +81,8 @@ def _build_v4_capacity(
             "capacity_reference": capacity_evidence_hash(evidence),
             "confirmed_completed_prefix": completed_prefix,
             "confirmed_max_slots": plan.v3_controls.max_slots_per_dispatch,
+            "eligibility_policy": V4_CAPACITY_ELIGIBILITY_POLICY,
+            "confound_policy": V4_CAPACITY_CONFOUND_POLICY,
             "evidence": evidence,
         }
         validated = validate_v4_capacity_evidence(
