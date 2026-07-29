@@ -131,8 +131,8 @@
     "forecast_basis": "no immutable generated-harness receipts; report provider-native cost without imputation",
     "inner_finder_cost": "unavailable"
   },
-  "harness_hash": "sha256:75d099e55d6b781827fd10969bfbb53e86c237480dbd643932e04cd19c99a9c6",
+  "harness_hash": "sha256:efdd314db5fdd3803fa4ab01ac240773b5e6e1eb5996fbe8c8858318fc0921a5",
   "verifier_hashes": {
-    "incident-investigation-dual-nerdctl-001": "sha256:6dc1a8010f6aeb496fe21d22c2c84e239b888c446a9c0a41c6091f90c70bfa23"
+    "incident-investigation-dual-nerdctl-001": "sha256:1afc71eb9fcfa10bf3a8b3a3855c546f1b8fe311d685ff0c0edf943287dee949"
   }
 }

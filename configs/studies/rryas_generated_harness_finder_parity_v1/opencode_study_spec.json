@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-opencode-kimi-k3-finder-parity-v1",
   "schema_version": 1,
-  "task_manifest_hash": "sha256:236fa6238a34be43dfdf5cc3c58640a64199c69c8bc07d80da91d5dc5acd0561",
+  "task_manifest_hash": "sha256:e8db18d50c15aff137d3babe301b7455ea98a3e7a6d41c13a95dd52257f8223b",
   "task_ids": [
     "incident-investigation-dual-nerdctl-001"
   ],
@@ -20,8 +20,8 @@
   "attempt_policy": "first_valid_attempt",
   "max_attempts": 1,
   "model": "openrouter/moonshotai/kimi-k3",
-  "harness": "sha256:75d099e55d6b781827fd10969bfbb53e86c237480dbd643932e04cd19c99a9c6",
-  "revision": "41973a3c0ee3defee168dc339943f9b807976898",
+  "harness": "sha256:efdd314db5fdd3803fa4ab01ac240773b5e6e1eb5996fbe8c8858318fc0921a5",
+  "revision": "9fe9f4cefece6a53bd269d13c1a199e6e0b702f6",
   "token_source": "provider_native_usage",
   "score_contract": "weighted-mean-v2",
   "promotion_policy": "descriptive-generated-harness-parity-no-promotion"

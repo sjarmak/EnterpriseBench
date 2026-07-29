@@ -3,14 +3,14 @@
   "spec_hashes": [
     [
       "rryas-codex-finder-parity-v1",
-      "sha256:35b4d6274f7ade3a48c0431506efa2fb43aab8cf94a20d650e31bba8dd2486cf"
+      "sha256:b46b7de2119a58d8c4de46ece17979a630b5cfb07ebf1f4d9a335e053f2baafc"
     ],
     [
       "rryas-opencode-kimi-k3-finder-parity-v1",
-      "sha256:6284a92a0c2cc8c780ad34f9f945a51427f7c2a189f98fcefaa561f94208a8e5"
+      "sha256:0cb426b83cf4d814cc8876048cf7995c050497babfa947e474f14b327f7f3106"
     ]
   ],
-  "task_manifest_hash": "sha256:236fa6238a34be43dfdf5cc3c58640a64199c69c8bc07d80da91d5dc5acd0561",
+  "task_manifest_hash": "sha256:e8db18d50c15aff137d3babe301b7455ea98a3e7a6d41c13a95dd52257f8223b",
   "task_ids": [
     "incident-investigation-dual-nerdctl-001"
   ],
@@ -44,7 +44,7 @@
       1
     ]
   ],
-  "revision": "41973a3c0ee3defee168dc339943f9b807976898",
+  "revision": "9fe9f4cefece6a53bd269d13c1a199e6e0b702f6",
   "models": [
     [
       "codex",
