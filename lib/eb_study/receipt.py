@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .errors import ReceiptError
+from .json_io import strict_json_loads
 from .spec import TrialID
 
 RECEIPT_SCHEMA_VERSION = 1
@@ -47,8 +48,30 @@ STATUS_INFRA_INVALID = "infra_invalid"
 STATUS_INELIGIBLE = "ineligible"
 
 STATUSES = (STATUS_VALID, STATUS_INFRA_INVALID, STATUS_INELIGIBLE)
-PRE_AGENT_MCP_ARTIFACTS = frozenset(
-    {"injected_instruction.md", "results.json"}
+PRE_AGENT_MCP_ARTIFACTS = frozenset({"injected_instruction.md", "results.json"})
+TRIAL_FIELDS = frozenset({"study_id", "task_id", "arm", "repetition", "attempt"})
+USAGE_FIELDS = frozenset({"source", "cost_usd", "model_usage"})
+RECEIPT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "trial",
+        "spec_hash",
+        "task_manifest_hash",
+        "status",
+        "failure_class",
+        "image_digest",
+        "arm_gate_proof",
+        "task_hash",
+        "harness_hash",
+        "verifier_hash",
+        "score",
+        "score_contract",
+        "usage",
+        "tool_use",
+        "artifacts",
+        "started_at",
+        "ended_at",
+    }
 )
 
 
@@ -86,23 +109,23 @@ class TrialUsage:
     def from_json(cls, payload: Any) -> "TrialUsage":
         if not isinstance(payload, dict):
             raise ReceiptError(f"usage must be an object, got {type(payload).__name__}")
+        _reject_unknown_fields(payload, USAGE_FIELDS, "usage")
         source = payload.get("source")
         if not isinstance(source, str) or not source:
             raise ReceiptError("usage.source must be a non-empty string")
         cost = payload.get("cost_usd")
-        if cost is not None and (
-            not isinstance(cost, (int, float))
-            or isinstance(cost, bool)
-            or not math.isfinite(cost)
-            or cost < 0
-        ):
-            raise ReceiptError(f"usage.cost_usd must be a number >= 0, got {cost!r}")
+        try:
+            parsed_cost = None if cost is None else _finite_float(cost)
+        except ReceiptError as exc:
+            raise ReceiptError("usage.cost_usd must be a finite number >= 0") from exc
+        if parsed_cost is not None and parsed_cost < 0:
+            raise ReceiptError("usage.cost_usd must be a finite number >= 0")
         model_usage = payload.get("model_usage")
         if not isinstance(model_usage, dict) or not model_usage:
             raise ReceiptError("usage.model_usage must be a non-empty object")
         return cls(
             source=source,
-            cost_usd=float(cost) if cost is not None else None,
+            cost_usd=parsed_cost,
             model_usage=model_usage,
         )
 
@@ -171,6 +194,7 @@ class TrialReceipt:
             raise ReceiptError(
                 f"receipt must be an object, got {type(payload).__name__}"
             )
+        _reject_unknown_fields(payload, RECEIPT_FIELDS, "receipt")
 
         version = payload.get("schema_version")
         if version != RECEIPT_SCHEMA_VERSION:
@@ -302,7 +326,7 @@ def _parse_receipt_lines(path: Path, lines: Iterable[str]) -> list[TrialReceipt]
         if not line.strip():
             continue
         try:
-            payload = json.loads(line)
+            payload = strict_json_loads(line)
         except ValueError as exc:
             raise ReceiptError(f"{path}:{lineno} is not valid JSON: {exc}") from exc
         try:
@@ -365,6 +389,7 @@ def _trial_from_json(payload: Any) -> TrialID:
         raise ReceiptError(
             f"receipt.trial must be an object, got {type(payload).__name__}"
         )
+    _reject_unknown_fields(payload, TRIAL_FIELDS, "receipt.trial")
     missing = [
         f
         for f in ("study_id", "task_id", "arm", "repetition", "attempt")
@@ -412,16 +437,40 @@ def _optional_score(payload: dict[str, Any], trial: TrialID) -> float | None:
     value = payload.get("score")
     if value is None:
         return None
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
+    try:
+        parsed = _finite_float(value)
+    except ReceiptError as exc:
         raise ReceiptError(
-            f"receipt {trial.key}: score must be a number or null, got {value!r}"
-        )
-    if not 0.0 <= float(value) <= 1.0:
+            f"receipt {trial.key}: score must be a finite number or null"
+        ) from exc
+    if not 0.0 <= parsed <= 1.0:
         raise ReceiptError(
             f"receipt {trial.key}: score {value!r} is outside 0..1. The receipt records the "
             "score contract's already-normalized value; nothing downstream renormalizes it."
         )
-    return float(value)
+    return parsed
+
+
+def _finite_float(value: Any) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise ReceiptError("value must be a finite number")
+    try:
+        parsed = float(value)
+    except OverflowError as exc:
+        raise ReceiptError("value must be a finite number") from exc
+    if not math.isfinite(parsed):
+        raise ReceiptError("value must be a finite number")
+    return parsed
+
+
+def _reject_unknown_fields(
+    payload: Mapping[str, Any],
+    allowed: frozenset[str],
+    label: str,
+) -> None:
+    unknown = sorted(set(payload) - allowed)
+    if unknown:
+        raise ReceiptError(f"{label} has unknown field(s): {', '.join(unknown)}")
 
 
 def _require_mapping(

@@ -18,20 +18,49 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 import analysis.study_report as study_report_module  # noqa: E402
+from analysis.study_inference import AnalysisContract  # noqa: E402
 from analysis.study_report import build_report, main  # noqa: E402
-from eb_study import CapsuleError, StudyCapsule  # noqa: E402
+from eb_study import (  # noqa: E402
+    CapsuleError,
+    StudyCapsule,
+    StudySpec,
+    file_hash,
+)
 
 from tests.test_study_capsule import (  # noqa: E402
     full_receipts,
     make_receipt,
     make_spec,
 )
+from tests.test_study_inference import _write_contract_files  # noqa: E402
 
 
 def capsule(spec=None, receipts=None) -> StudyCapsule:
     spec = spec or make_spec()
     return StudyCapsule.build(
         spec, receipts if receipts is not None else full_receipts(spec)
+    )
+
+
+def analysis_contract(spec) -> AnalysisContract:
+    task_types = {
+        task_id: ("dependency_graph" if index == 0 else "error_provenance")
+        for index, task_id in enumerate(spec.task_ids)
+    }
+    return AnalysisContract(
+        plan_hash="sha256:plan",
+        manifest_hash=spec.task_manifest_hash,
+        confidence_level=0.95,
+        bootstrap_repetitions=10_000,
+        bootstrap_seed=20_260_728,
+        parity_margin=0.05,
+        primary_contrasts=(
+            ("mcp_only", "baseline"),
+            ("cli", "baseline"),
+        ),
+        descriptive_contrast=("cli", "mcp_only"),
+        descriptive_reason="interface and source availability both change",
+        task_types=task_types,
     )
 
 
@@ -46,6 +75,17 @@ class TestProvenance:
         assert prov["attempt_policy"] == "all_valid_repetitions"
         assert prov["token_source"] == "sdk_model_usage"
         assert prov["spec_hash"].startswith("sha256:")
+
+    def test_supplemental_source_hashes_cannot_override_frozen_provenance(self):
+        with pytest.raises(CapsuleError, match="source hashes"):
+            build_report(
+                capsule(),
+                source_hashes={
+                    "study_spec_file_hash": "sha256:" + ("a" * 64),
+                    "receipts_file_hash": "sha256:" + ("b" * 64),
+                    "study_id": "forged-study",
+                },
+            )
 
     def test_completeness_names_the_excluded_tasks(self):
         spec = make_spec()
@@ -99,6 +139,74 @@ class TestReward:
         ]
         by_arm = build_report(capsule(spec, receipts))["reward"]["by_arm"]
         assert all(stats["mean"] == 1.0 for stats in by_arm.values())
+
+    def test_locked_complete_analysis_replaces_legacy_significance_fields(self):
+        spec = make_spec(repetitions=1, max_attempts=1)
+        report = build_report(
+            capsule(spec, full_receipts(spec)),
+            contract=analysis_contract(spec),
+        )
+
+        assert report["schema_version"] == 3
+        assert report["analysis"]["status"] == "complete"
+        assert report["completeness"]["headline_eligible"] is True
+        assert report["provenance"]["analysis_plan_hash"] == "sha256:plan"
+        assert report["provenance"]["task_manifest_hash"] == spec.task_manifest_hash
+        assert set(report["reward"]["primary_contrasts"]) == {
+            "mcp_only_vs_baseline",
+            "cli_vs_baseline",
+        }
+        assert report["reward"]["method"]["bootstrap_repetitions"] == 10_000
+        assert report["reward"]["by_task_type"]["dependency_graph"]["n_tasks"] == 1
+        assert "wilcoxon_p" not in json.dumps(report["reward"])
+        assert "significant" not in json.dumps(report["reward"])
+
+    def test_incomplete_locked_analysis_withholds_every_reward_result(self):
+        spec = make_spec(repetitions=1, max_attempts=1)
+        receipts = [
+            receipt
+            for receipt in full_receipts(spec)
+            if not (
+                receipt.trial.task_id == "dep-traversal-002"
+                and receipt.trial.arm == "cli"
+            )
+        ]
+
+        report = build_report(
+            capsule(spec, receipts),
+            contract=analysis_contract(spec),
+        )
+
+        assert report["analysis"]["status"] == "withheld_incomplete"
+        assert report["completeness"]["headline_eligible"] is False
+        assert report["completeness"]["valid_slots"] == 5
+        assert report["completeness"]["missing_or_invalid_slots"] == [
+            "dep-traversal-002/cli/rep1"
+        ]
+        assert report["reward"] is None
+        assert report["economics"]["all_attempts"]["receipts"] == 5
+
+    def test_zero_complete_pairs_still_emit_withheld_schema_v3(self):
+        spec = make_spec(repetitions=1, max_attempts=1)
+
+        report = build_report(
+            capsule(
+                spec,
+                [
+                    make_receipt(spec, task_id, "baseline", 1)
+                    for task_id in spec.task_ids
+                ],
+            ),
+            contract=analysis_contract(spec),
+        )
+
+        assert report["schema_version"] == 3
+        assert report["analysis"]["status"] == "withheld_incomplete"
+        assert report["reward"] is None
+        assert report["completeness"]["paired_tasks"] == 0
+        assert report["completeness"]["valid_slots"] == len(spec.task_ids)
+        assert set(report["completeness"]["excluded_tasks"]) == set(spec.task_ids)
+        assert report["economics"]["paired_valid"]["trials"] == 0
 
 
 class TestEconomics:
@@ -552,6 +660,121 @@ class TestCli:
         )
         assert json.loads(out.read_text())["completeness"]["paired_tasks"] == 2
 
+    def test_writes_locked_analysis_only_from_both_bound_inputs(self, tmp_path):
+        provisional = make_spec(repetitions=1, max_attempts=1)
+        plan_path, manifest_path = _write_contract_files(tmp_path, provisional)
+        payload = provisional.to_json()
+        payload["task_manifest_hash"] = file_hash(manifest_path)
+        spec = StudySpec.from_json(payload)
+        spec_path, receipts_path = self._write(
+            tmp_path,
+            spec,
+            full_receipts(spec),
+        )
+        out = tmp_path / "locked-report.json"
+
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--analysis-plan",
+                    str(plan_path),
+                    "--task-manifest",
+                    str(manifest_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 0
+        )
+        report = json.loads(out.read_text())
+        assert report["analysis"]["status"] == "complete"
+        assert report["provenance"]["analysis_plan_hash"] == file_hash(plan_path)
+        assert report["provenance"]["task_manifest_hash"] == (file_hash(manifest_path))
+
+    def test_repository_v6_partial_report_binds_every_frozen_source(
+        self,
+        tmp_path,
+    ):
+        study_dir = PROJECT_ROOT / "configs" / "studies" / "rryas-headline-v6"
+        receipts_path = (
+            PROJECT_ROOT
+            / "results"
+            / "studies"
+            / "rryas-headline-v6"
+            / "receipts.jsonl"
+        )
+        spec_path = study_dir / "study_spec.json"
+        plan_path = study_dir / "analysis_plan.json"
+        manifest_path = study_dir / "final_manifest.json"
+        out = tmp_path / "report.json"
+
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--analysis-plan",
+                    str(plan_path),
+                    "--task-manifest",
+                    str(manifest_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 0
+        )
+        report = json.loads(out.read_text())
+        provenance = report["provenance"]
+        assert provenance["study_spec_file_hash"] == file_hash(spec_path)
+        assert provenance["receipts_file_hash"] == file_hash(receipts_path)
+        assert provenance["candidate_manifest_hash"].startswith("sha256:")
+        assert provenance["execution_order_hash"].startswith("sha256:")
+        assert provenance["execution_order_count"] == 90
+        assert provenance["agent_account"] == 3
+        assert provenance["judge_account"] == 1
+        assert provenance["task_type_counts"] == {
+            "dependency_graph": 13,
+            "error_provenance": 3,
+            "incident_investigation": 14,
+        }
+        assert report["analysis"]["status"] == "withheld_incomplete"
+        assert report["reward"] is None
+
+    @pytest.mark.parametrize("provided", ("analysis-plan", "task-manifest"))
+    def test_one_locked_input_without_the_other_fails_before_output(
+        self,
+        tmp_path,
+        provided,
+    ):
+        spec = make_spec()
+        spec_path, receipts_path = self._write(tmp_path, spec, full_receipts(spec))
+        extra = tmp_path / f"{provided}.json"
+        extra.write_text("{}")
+        out = tmp_path / "report.json"
+
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    f"--{provided}",
+                    str(extra),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 2
+        )
+        assert not out.exists()
+
     def test_writes_a_report_when_provider_cost_is_unavailable(self, tmp_path, capsys):
         spec = make_spec()
         receipts = full_receipts(spec)
@@ -768,7 +991,7 @@ class TestCli:
         monkeypatch.setattr(
             study_report_module,
             "build_report",
-            lambda _capsule: {"not_json": float("nan")},
+            lambda _capsule, **_kwargs: {"not_json": float("nan")},
         )
 
         assert (

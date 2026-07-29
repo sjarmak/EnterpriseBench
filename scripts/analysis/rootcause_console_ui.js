@@ -93,6 +93,35 @@ fillFilter(
   [...new Set(CELLS.flatMap((cell) => cell.flags))].sort(),
 );
 
+function setFilterFromQuery(params, parameter, elementId) {
+  const requested = params.get(parameter);
+  if (requested == null) return;
+  const element = document.getElementById(elementId);
+  if (element.tagName !== "SELECT") {
+    element.value = requested;
+    return;
+  }
+  const available = [...element.options].some(
+    (option) => option.value === requested,
+  );
+  if (available) element.value = requested;
+}
+
+function applyUrlState() {
+  const params = new URLSearchParams(window.location.search);
+  setFilterFromQuery(params, "q", "q");
+  setFilterFromQuery(params, "arm", "fmode");
+  setFilterFromQuery(params, "harness", "fharness");
+  setFilterFromQuery(params, "suite", "fsuite");
+  setFilterFromQuery(params, "phase", "fphase");
+  setFilterFromQuery(params, "flag", "fflag");
+  setFilterFromQuery(params, "score", "fscore");
+  const requestedRun = params.get("run");
+  if (requestedRun != null) {
+    selectedIndex = CELLS.findIndex((cell) => cell.run_id === requestedRun);
+  }
+}
+
 document.getElementById("head").innerHTML = COLS.map(
   ([key, label]) => `<th data-k="${key}">${label}</th>`,
 ).join("");
@@ -434,4 +463,6 @@ function renderDetail(cell) {
   },
 );
 
+applyUrlState();
 render();
+if (selectedIndex >= 0) renderDetail(CELLS[selectedIndex]);

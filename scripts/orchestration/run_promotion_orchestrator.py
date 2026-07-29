@@ -8,12 +8,9 @@ resume mode always re-runs the read-only validation gates.
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 import os
-import re
-import shutil
 import subprocess
 import sys
 import time
@@ -25,39 +22,102 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_RAW_RUNS_ROOT = REPO_ROOT / "results" / "runs"
-DEFAULT_OFFICIAL_RUNS_ROOT = REPO_ROOT / "results" / "official_runs"
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 
 if __package__:
+    from .promotion_cli import VALID_TARGET_STATES, build_context, main  # noqa: F401
     from .promotion_capsule import (
+        PUBLICATION_FILES,
+        assert_analysis_tools_unchanged as _assert_analysis_tools_unchanged,
+        assert_capsule_source_unchanged as _assert_capsule_source_unchanged,
         capsule_snapshot as _capsule_snapshot,
         declared_task_tomls as _declared_task_tomls,
+        stage_markdown_report as _stage_markdown_report,
         stage_metrics as _stage_capsule_metrics,
+        validate_declared_input_provenance as _validate_declared_input_provenance,
+        validate_staged_study_analysis as _validate_staged_study_analysis,
+        validate_staged_publication as _validate_staged_publication,
+        validate_promotion_seal as _validate_promotion_seal,
         validate_inputs as _step_validate_inputs,
     )
-    from .promotion_types import PromotionContext, PromotionReport, Step, StepOutcome
+    from .publication_fs import (
+        ensure_staging_directory as _ensure_safe_staging_dir,
+        final_publication_exists as _final_publication_exists,
+        freeze_staged_publication as _freeze_staged_publication,
+        lock_final_publication_directory as _lock_final_publication_directory,
+        quarantine_staging_publication as _quarantine_staging_publication,
+        read_publication_artifact as _read_publication_artifact,
+        read_registry_source as _read_registry_source,
+        rename_final_to_staging as _rename_final_to_staging,
+        rename_staging_to_final as _rename_staging_to_final,
+        staging_publication_exists as _staging_publication_exists,
+        thaw_publication as _thaw_publication,
+        validate_frozen_publication as _validate_frozen_publication,
+        validate_publication_identity as _validate_publication_identity,
+        write_forensics_artifacts as _write_forensics_artifacts,
+        write_registry_source as _write_registry_source,
+        write_staged_artifact as _write_staged_artifact,
+    )
+    from .promotion_types import (
+        CapsuleSnapshot,
+        PromotionContext,
+        PromotionReport,
+        Step,
+        StepOutcome,
+    )
 else:
+    from promotion_cli import (  # noqa: E402, F401
+        VALID_TARGET_STATES,
+        build_context,
+        main,
+    )
     from promotion_capsule import (  # noqa: E402
+        PUBLICATION_FILES,
+        assert_analysis_tools_unchanged as _assert_analysis_tools_unchanged,
+        assert_capsule_source_unchanged as _assert_capsule_source_unchanged,
         capsule_snapshot as _capsule_snapshot,
         declared_task_tomls as _declared_task_tomls,
+        stage_markdown_report as _stage_markdown_report,
         stage_metrics as _stage_capsule_metrics,
+        validate_declared_input_provenance as _validate_declared_input_provenance,
+        validate_staged_study_analysis as _validate_staged_study_analysis,
+        validate_staged_publication as _validate_staged_publication,
+        validate_promotion_seal as _validate_promotion_seal,
         validate_inputs as _step_validate_inputs,
+    )
+    from publication_fs import (  # noqa: E402
+        ensure_staging_directory as _ensure_safe_staging_dir,
+        final_publication_exists as _final_publication_exists,
+        freeze_staged_publication as _freeze_staged_publication,
+        lock_final_publication_directory as _lock_final_publication_directory,
+        quarantine_staging_publication as _quarantine_staging_publication,
+        read_publication_artifact as _read_publication_artifact,
+        read_registry_source as _read_registry_source,
+        rename_final_to_staging as _rename_final_to_staging,
+        rename_staging_to_final as _rename_staging_to_final,
+        staging_publication_exists as _staging_publication_exists,
+        thaw_publication as _thaw_publication,
+        validate_frozen_publication as _validate_frozen_publication,
+        validate_publication_identity as _validate_publication_identity,
+        write_forensics_artifacts as _write_forensics_artifacts,
+        write_registry_source as _write_registry_source,
+        write_staged_artifact as _write_staged_artifact,
     )
     from promotion_types import (  # noqa: E402
+        CapsuleSnapshot,
         PromotionContext,
         PromotionReport,
         Step,
         StepOutcome,
     )
 
+from eb_verify.redact import redact as _redact, safe_detail as _safe_detail  # noqa: E402
+
 # Maximum failure-class string length retained for forensics; trimming keeps
 # the forensics JSON readable when callers attach long stderr blobs.
 MAX_ERROR_DETAIL_LEN = 4_000
 
-VALID_TARGET_STATES = frozenset({"official", "candidate"})
 MAX_SAFE_RESUME_STEP = 5
-RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 
 def _run_subprocess(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
@@ -139,15 +199,11 @@ def _step_validate_expected_solutions(ctx: PromotionContext) -> StepOutcome:
 def _step_stage_metrics(ctx: PromotionContext) -> StepOutcome:
     """Build the exact validated named capsule's report into staging."""
 
-    return _stage_capsule_metrics(
-        ctx,
-        _run_subprocess,
-        MAX_ERROR_DETAIL_LEN,
-    )
+    return _stage_capsule_metrics(ctx)
 
 
 def _step_stage_charts(ctx: PromotionContext) -> StepOutcome:
-    """Generate charts into the staging directory."""
+    """Confirm capsule charts are intentionally omitted."""
     if ctx.dry_run:
         return StepOutcome(
             step_name="stage_charts",
@@ -155,37 +211,21 @@ def _step_stage_charts(ctx: PromotionContext) -> StepOutcome:
             details="would generate charts into staging",
         )
 
-    charts_dir = ctx.staging_dir / "charts"
-    charts_dir.mkdir(parents=True, exist_ok=True)
-    analysis_path = ctx.staging_dir / "score_analysis.json"
-    if not analysis_path.is_file():
-        raise RuntimeError(f"stage_charts: prerequisite missing: {analysis_path}")
-    analysis = json.loads(analysis_path.read_text())
+    _ensure_safe_staging_dir(ctx, create=False)
+    try:
+        analysis = json.loads(
+            _read_publication_artifact(ctx, "score_analysis.json").decode()
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("stage_charts: staged analysis is unreadable") from exc
     if isinstance(analysis, dict) and "provenance" in analysis:
         return StepOutcome(
             step_name="stage_charts",
             status="skipped",
             details="capsule report is promoted as auditable JSON; legacy charts skipped",
         )
-    cmd = [
-        sys.executable,
-        str(ctx.repo_root / "scripts" / "generate_charts.py"),
-        "--analysis",
-        str(analysis_path),
-        "--output-dir",
-        str(charts_dir),
-    ]
-    rc, _stdout, stderr = _run_subprocess(cmd, ctx.repo_root)
-    if rc != 0:
-        raise RuntimeError(
-            f"generate_charts.py exited {rc}: {stderr[-MAX_ERROR_DETAIL_LEN:]}"
-        )
-    chart_files = sorted(p.name for p in charts_dir.glob("*.png"))
-    return StepOutcome(
-        step_name="stage_charts",
-        status="reversible",
-        details=f"generated {len(chart_files)} charts",
-        artifacts=tuple(str(charts_dir / n) for n in chart_files),
+    raise RuntimeError(
+        "stage_charts: legacy unsealed analysis is not publication eligible"
     )
 
 
@@ -198,42 +238,17 @@ def _step_stage_report(ctx: PromotionContext) -> StepOutcome:
             details="would generate report.md into staging",
         )
 
-    report_path = ctx.staging_dir / "report.md"
-    analysis_path = ctx.staging_dir / "score_analysis.json"
-    charts_dir = ctx.staging_dir / "charts"
-    if not analysis_path.is_file():
-        raise RuntimeError("stage_report: prerequisite missing (analysis)")
-    analysis = json.loads(analysis_path.read_text())
-    if isinstance(analysis, dict) and "provenance" in analysis:
-        return StepOutcome(
-            step_name="stage_report",
-            status="skipped",
-            details="capsule report is promoted as auditable JSON; legacy markdown skipped",
-        )
-    if not charts_dir.is_dir():
-        raise RuntimeError("stage_report: prerequisite missing (charts)")
-
-    cmd = [
-        sys.executable,
-        str(ctx.repo_root / "scripts" / "generate_report.py"),
-        "--analysis",
-        str(analysis_path),
-        "--charts-dir",
-        str(charts_dir),
-        "--output",
-        str(report_path),
-    ]
-    rc, _stdout, stderr = _run_subprocess(cmd, ctx.repo_root)
-    if rc != 0:
-        raise RuntimeError(
-            f"generate_report.py exited {rc}: {stderr[-MAX_ERROR_DETAIL_LEN:]}"
-        )
-    if not report_path.is_file():
-        raise RuntimeError(f"generate_report.py did not write {report_path}")
+    _ensure_safe_staging_dir(ctx, create=False)
+    snapshot = _capsule_snapshot(ctx)
+    report_path = _stage_markdown_report(
+        ctx,
+        snapshot,
+        console_url="../../../rootcause_console.html",
+    )
     return StepOutcome(
         step_name="stage_report",
         status="reversible",
-        details=f"wrote {report_path.name}",
+        details=f"wrote and sealed {report_path.name}",
         artifacts=(str(report_path),),
     )
 
@@ -252,16 +267,28 @@ def _step_atomic_publish(ctx: PromotionContext) -> StepOutcome:
             details=f"would rename {ctx.staging_dir} -> {ctx.final_dir}",
         )
 
-    if not ctx.staging_dir.is_dir():
-        raise RuntimeError(f"atomic_publish: staging dir missing: {ctx.staging_dir}")
-    if ctx.final_dir.exists():
+    _ensure_safe_staging_dir(ctx, create=False)
+    if _final_publication_exists(ctx):
         raise RuntimeError(
-            f"atomic_publish: final dir already exists (refusing to "
-            f"overwrite): {ctx.final_dir}"
+            "atomic_publish: final dir already exists "
+            f"(refusing to overwrite): {ctx.final_dir}"
         )
 
-    ctx.final_dir.parent.mkdir(parents=True, exist_ok=True)
-    os.rename(ctx.staging_dir, ctx.final_dir)
+    snapshot = _capsule_snapshot(ctx)
+    _validate_staging_for_publish(ctx, snapshot)
+    frozen_identity = _freeze_staged_publication(ctx, PUBLICATION_FILES)
+    try:
+        _rename_staging_to_final(ctx, frozen_identity, os.rename)
+    except BaseException as exc:
+        _thaw_publication(ctx, location="staging")
+        raise RuntimeError("atomic publication rename failed") from exc
+    try:
+        _validate_final_publication(ctx, snapshot, frozen_identity)
+    except BaseException:
+        rollback_path = _rename_final_to_staging(ctx)
+        if rollback_path == ctx.staging_dir:
+            _thaw_publication(ctx, location="staging")
+        raise
     return StepOutcome(
         step_name="atomic_publish",
         status="reversible",
@@ -270,15 +297,73 @@ def _step_atomic_publish(ctx: PromotionContext) -> StepOutcome:
     )
 
 
-def _step_update_registry(ctx: PromotionContext) -> StepOutcome:
-    """Append an entry to the official-runs registry atomically.
+def _validate_staging_for_publish(
+    ctx: PromotionContext,
+    snapshot: CapsuleSnapshot,
+) -> None:
+    """Revalidate all immutable staging inputs immediately before rename."""
 
-    The registry is a JSON file rewritten via tmp + rename. The previous
-    contents are kept on disk as ``<registry>.bak`` only for the duration
-    of this step so the rollback hook can restore them on failure of a
-    later step (currently no later step exists, but the contract is
-    preserved for future extension).
-    """
+    _assert_capsule_source_unchanged(ctx, snapshot)
+    _assert_analysis_tools_unchanged(ctx, snapshot)
+    _validate_declared_input_provenance(ctx, snapshot)
+    staged_sources = {
+        "study_spec.json": snapshot.spec_source,
+        "receipts.jsonl": snapshot.receipts_source,
+        "final_manifest.json": snapshot.task_manifest_source,
+        "analysis_plan.json": snapshot.analysis_plan_source,
+    }
+    try:
+        staged_unchanged = all(
+            _read_publication_artifact(ctx, name) == expected
+            for name, expected in staged_sources.items()
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(f"staged capsule seal is unreadable: {exc}") from exc
+    if not staged_unchanged:
+        raise RuntimeError("staged capsule seal does not match validated inputs")
+    _validate_staged_publication(ctx)
+    _validate_staged_study_analysis(
+        ctx,
+        snapshot.spec,
+        snapshot.analysis_contract,
+    )
+    _validate_promotion_seal(ctx, snapshot)
+
+
+def _validate_final_publication(
+    ctx: PromotionContext,
+    snapshot: CapsuleSnapshot,
+    frozen_identity: tuple[int, int],
+) -> None:
+    """Lock and revalidate the renamed tree before returning success."""
+
+    _validate_publication_identity(
+        ctx,
+        frozen_identity,
+        location="final",
+    )
+    _lock_final_publication_directory(ctx)
+    _validate_frozen_publication(
+        ctx,
+        PUBLICATION_FILES,
+        location="final",
+    )
+    _validate_staged_study_analysis(
+        ctx,
+        snapshot.spec,
+        snapshot.analysis_contract,
+        location="final",
+    )
+    _validate_promotion_seal(ctx, snapshot, location="final")
+    _validate_publication_identity(
+        ctx,
+        frozen_identity,
+        location="final",
+    )
+
+
+def _step_update_registry(ctx: PromotionContext) -> StepOutcome:
+    """Append an entry to the official-runs registry atomically."""
     if ctx.dry_run:
         return StepOutcome(
             step_name="update_registry",
@@ -286,13 +371,14 @@ def _step_update_registry(ctx: PromotionContext) -> StepOutcome:
             details=f"would update {ctx.registry_path.name}",
         )
 
-    ctx.registry_path.parent.mkdir(parents=True, exist_ok=True)
-    if ctx.registry_path.is_file():
-        registry = json.loads(ctx.registry_path.read_text())
+    source = _read_registry_source(ctx)
+    if source is not None:
+        try:
+            registry = json.loads(source)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("Registry is not valid UTF-8 JSON") from exc
         if not isinstance(registry, dict):
             raise RuntimeError(f"Registry is not a JSON object: {ctx.registry_path}")
-        backup = ctx.registry_path.with_suffix(ctx.registry_path.suffix + ".bak")
-        backup.write_text(ctx.registry_path.read_text())
     else:
         registry = {
             "_description": ("Index of promoted EnterpriseBench official runs."),
@@ -300,8 +386,10 @@ def _step_update_registry(ctx: PromotionContext) -> StepOutcome:
         }
 
     entries = registry.get("entries", [])
-    if not isinstance(entries, list):
-        raise RuntimeError("Registry 'entries' is not a list")
+    if not isinstance(entries, list) or any(
+        not isinstance(value, dict) for value in entries
+    ):
+        raise RuntimeError("Registry 'entries' is not an object list")
 
     entry = {
         "run_id": ctx.run_id,
@@ -312,14 +400,14 @@ def _step_update_registry(ctx: PromotionContext) -> StepOutcome:
     # Keep entries sorted by promoted_at ascending so the file diff is stable.
     entries = [e for e in entries if e.get("run_id") != ctx.run_id]
     entries.append(entry)
-    registry["entries"] = entries
-
-    tmp_path = ctx.registry_path.with_suffix(ctx.registry_path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(registry, indent=2) + "\n")
-    os.rename(tmp_path, ctx.registry_path)
+    updated = {**registry, "entries": entries}
+    _write_registry_source(
+        ctx,
+        (json.dumps(updated, indent=2) + "\n").encode(),
+    )
     return StepOutcome(
         step_name="update_registry",
-        status="reversible",
+        status="forward_only",
         details="appended registry entry",
         artifacts=(str(ctx.registry_path),),
     )
@@ -335,27 +423,22 @@ def _rollback_noop(_ctx: PromotionContext) -> None:
 
 
 def _rollback_staging(ctx: PromotionContext) -> None:
-    """Remove the staging directory if it exists.
+    """Quarantine the staging directory if it exists.
 
     Idempotent — safe to call when the step never ran or was already rolled
     back.
     """
-    if ctx.staging_dir.is_dir():
-        shutil.rmtree(ctx.staging_dir)
+    if _staging_publication_exists(ctx):
+        _thaw_publication(ctx, location="staging")
+        _quarantine_staging_publication(ctx)
 
 
 def _rollback_atomic_publish(ctx: PromotionContext) -> None:
     """Move the published directory back to staging, if still possible."""
-    if ctx.final_dir.is_dir() and not ctx.staging_dir.exists():
-        ctx.staging_dir.parent.mkdir(parents=True, exist_ok=True)
-        os.rename(ctx.final_dir, ctx.staging_dir)
-
-
-def _rollback_registry(ctx: PromotionContext) -> None:
-    """Restore the registry from its ``.bak`` snapshot if present."""
-    backup = ctx.registry_path.with_suffix(ctx.registry_path.suffix + ".bak")
-    if backup.is_file():
-        os.replace(backup, ctx.registry_path)
+    if _final_publication_exists(ctx):
+        rollback_path = _rename_final_to_staging(ctx)
+        if rollback_path == ctx.staging_dir:
+            _thaw_publication(ctx, location="staging")
 
 
 def build_default_pipeline() -> list[Step]:
@@ -391,8 +474,56 @@ def build_default_pipeline() -> list[Step]:
             _step_atomic_publish,
             _rollback_atomic_publish,
         ),
-        Step("update_registry", _step_update_registry, _rollback_registry),
+        Step(
+            "update_registry",
+            _step_update_registry,
+            _rollback_noop,
+            reversible=False,
+        ),
     ]
+
+
+def _forensics_sources(
+    ctx: PromotionContext,
+    completed: list[tuple[Step, StepOutcome]],
+    exc: BaseException,
+) -> dict[str, bytes]:
+    context = {
+        "run_id": ctx.run_id,
+        "target_state": ctx.target_state,
+        "raw_run_dir": str(ctx.raw_run_dir),
+        "staging_dir": str(ctx.staging_dir),
+        "final_dir": str(ctx.final_dir),
+        "registry_path": str(ctx.registry_path),
+        "dry_run": ctx.dry_run,
+        "resume_from": ctx.resume_from,
+    }
+    error = {
+        "type": type(exc).__name__,
+        "message": _safe_detail(exc)[:MAX_ERROR_DETAIL_LEN],
+    }
+    outcomes = [asdict(outcome) for _step, outcome in completed]
+    return {
+        "context.json": _safe_json_bytes(context),
+        "error.json": _safe_json_bytes(error),
+        "completed_steps.json": _safe_json_bytes(outcomes),
+    }
+
+
+def _safe_json_bytes(value: object) -> bytes:
+    return (json.dumps(_redact_json_value(value), indent=2) + "\n").encode()
+
+
+def _redact_json_value(value: object) -> object:
+    if isinstance(value, str):
+        return _redact(value)
+    if isinstance(value, dict):
+        return {
+            _redact(str(key)): _redact_json_value(item) for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact_json_value(item) for item in value]
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -515,10 +646,11 @@ class RunPromotionOrchestrator:
             return report
 
         except Exception as exc:  # noqa: BLE001 — orchestrator catches all
+            safe_error = _safe_detail(exc)
             logger.error(
                 "[%s] promotion failed during step execution: %s",
                 self._ctx.run_id,
-                exc,
+                safe_error,
             )
             forensics = None if validate_only else self._write_forensics(completed, exc)
             self._rollback_completed(completed)
@@ -530,7 +662,7 @@ class RunPromotionOrchestrator:
                 succeeded=False,
                 steps=tuple(o for _s, o in completed),
                 forensics_path=str(forensics) if forensics else None,
-                error=str(exc)[:MAX_ERROR_DETAIL_LEN],
+                error=safe_error[:MAX_ERROR_DETAIL_LEN],
             )
 
     # -------------------------------------------------------------- helpers
@@ -554,13 +686,17 @@ class RunPromotionOrchestrator:
                     "[%s] rollback of %s raised: %s",
                     self._ctx.run_id,
                     step.name,
-                    exc,
+                    _safe_detail(exc),
                 )
 
     def _write_progress(self, completed: list[tuple[Step, StepOutcome]]) -> None:
-        if not self._ctx.staging_dir.is_dir():
+        completed_names = {outcome.step_name for _step, outcome in completed}
+        if (
+            "stage_metrics" not in completed_names
+            or "atomic_publish" in completed_names
+            or not self._ctx.staging_dir.exists()
+        ):
             return
-        progress_path = self._ctx.staging_dir / "_progress.json"
         payload = {
             "run_id": self._ctx.run_id,
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -573,9 +709,12 @@ class RunPromotionOrchestrator:
                 for _s, o in completed
             ],
         }
-        tmp = progress_path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(payload, indent=2) + "\n")
-        os.rename(tmp, progress_path)
+        _write_staged_artifact(
+            self._ctx,
+            "_progress.json",
+            (json.dumps(payload, indent=2) + "\n").encode(),
+            replace=True,
+        )
 
     def _write_forensics(
         self,
@@ -584,212 +723,18 @@ class RunPromotionOrchestrator:
     ) -> Optional[Path]:
         try:
             stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            target = self._ctx.forensics_dir / f"{self._ctx.run_id}_{stamp}"
-            target.mkdir(parents=True, exist_ok=True)
-
-            (target / "context.json").write_text(
-                json.dumps(
-                    {
-                        "run_id": self._ctx.run_id,
-                        "target_state": self._ctx.target_state,
-                        "raw_run_dir": str(self._ctx.raw_run_dir),
-                        "staging_dir": str(self._ctx.staging_dir),
-                        "final_dir": str(self._ctx.final_dir),
-                        "registry_path": str(self._ctx.registry_path),
-                        "dry_run": self._ctx.dry_run,
-                        "resume_from": self._ctx.resume_from,
-                    },
-                    indent=2,
-                )
-                + "\n"
+            return _write_forensics_artifacts(
+                self._ctx,
+                f"{self._ctx.run_id}_{stamp}",
+                _forensics_sources(self._ctx, completed, exc),
             )
-            (target / "error.json").write_text(
-                json.dumps(
-                    {
-                        "type": type(exc).__name__,
-                        "message": str(exc)[:MAX_ERROR_DETAIL_LEN],
-                    },
-                    indent=2,
-                )
-                + "\n"
-            )
-            (target / "completed_steps.json").write_text(
-                json.dumps(
-                    [asdict(o) for _s, o in completed],
-                    indent=2,
-                )
-                + "\n"
-            )
-            return target
         except Exception as forensic_exc:  # noqa: BLE001
             logger.error(
                 "[%s] failed to write forensics: %s",
                 self._ctx.run_id,
-                forensic_exc,
+                _safe_detail(forensic_exc),
             )
             return None
-
-
-# ---------------------------------------------------------------------------
-# Context construction helpers
-# ---------------------------------------------------------------------------
-
-
-def build_context(
-    run_id: str,
-    target_state: str,
-    repo_root: Optional[Path] = None,
-    dry_run: bool = False,
-    resume_from: int = 0,
-    raw_runs_root: Optional[Path] = None,
-    official_runs_root: Optional[Path] = None,
-    spec_path: Optional[Path] = None,
-    receipts_path: Optional[Path] = None,
-    study_report_path: Optional[Path] = None,
-) -> PromotionContext:
-    repo_root = repo_root or REPO_ROOT
-    if RUN_ID_RE.fullmatch(run_id) is None:
-        raise ValueError(
-            "run_id must be a single safe path component containing only "
-            "letters, digits, '.', '_' or '-'"
-        )
-    raw_root = raw_runs_root or (repo_root / "results" / "runs")
-    official_root = official_runs_root or (repo_root / "results" / "official_runs")
-    raw_run_dir = raw_root / run_id
-    return PromotionContext(
-        run_id=run_id,
-        target_state=target_state,
-        repo_root=repo_root,
-        study_report_path=(
-            study_report_path
-            or (repo_root / "scripts" / "analysis" / "study_report.py")
-        ),
-        raw_run_dir=raw_run_dir,
-        spec_path=spec_path or (raw_run_dir / "study_spec.json"),
-        receipts_path=receipts_path or (raw_run_dir / "receipts.jsonl"),
-        staging_dir=official_root / "_staging" / run_id,
-        final_dir=official_root / run_id,
-        registry_path=official_root / "_registry.json",
-        forensics_dir=official_root / "_failures",
-        dry_run=dry_run,
-        resume_from=resume_from,
-    )
-
-
-# ---------------------------------------------------------------------------
-# CLI entry point
-# ---------------------------------------------------------------------------
-
-
-def _build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Atomic run-promotion orchestrator for EnterpriseBench. "
-            "Promotes a raw run directory to official-run state with "
-            "per-step rollback on failure."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  %(prog)s --run-id 20260429_001 --target-state official\n"
-            "  %(prog)s --run-id 20260429_001 --validate-only\n"
-            "  %(prog)s --run-id 20260429_001 --resume-from-step 5\n"
-        ),
-    )
-    parser.add_argument(
-        "--run-id", required=True, help="Identifier of the run to promote"
-    )
-    parser.add_argument(
-        "--spec",
-        type=Path,
-        default=None,
-        help="Exact StudySpec JSON path (default: raw run/study_spec.json)",
-    )
-    parser.add_argument(
-        "--receipts",
-        type=Path,
-        default=None,
-        help="Exact receipt JSONL path (default: raw run/receipts.jsonl)",
-    )
-    parser.add_argument(
-        "--target-state",
-        default="official",
-        choices=sorted(VALID_TARGET_STATES),
-        help="State to promote to (default: official)",
-    )
-    parser.add_argument(
-        "--validate-only",
-        action="store_true",
-        help=(
-            "Run only the read-only validators; never write to the staging "
-            "or final directory"
-        ),
-    )
-    parser.add_argument(
-        "--resume-from-step",
-        type=int,
-        default=0,
-        metavar="N",
-        help=(
-            "Skip steps with 1-based index < N. Use after a transient "
-            "failure to pick up where the previous attempt stopped."
-        ),
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print what would be executed without writing artefacts",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit the promotion report as JSON to stdout",
-    )
-    return parser
-
-
-def main(argv: Optional[list[str]] = None) -> int:
-    parser = _build_arg_parser()
-    args = parser.parse_args(argv)
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-8s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    ctx = build_context(
-        run_id=args.run_id,
-        target_state=args.target_state,
-        dry_run=args.dry_run,
-        resume_from=args.resume_from_step,
-        spec_path=args.spec,
-        receipts_path=args.receipts,
-    )
-    orchestrator = RunPromotionOrchestrator(ctx)
-    report = orchestrator.run(validate_only=args.validate_only)
-
-    if args.json:
-        print(json.dumps(report.to_dict(), indent=2))
-    else:
-        print(
-            f"[promotion] run_id={report.run_id} "
-            f"target={report.target_state} "
-            f"succeeded={report.succeeded}"
-        )
-        for step in report.steps:
-            print(
-                f"  - {step.step_name:30s} "
-                f"{step.status:12s} "
-                f"({step.duration_seconds:.2f}s) "
-                f"{step.details}"
-            )
-        if report.forensics_path:
-            print(f"[promotion] forensics: {report.forensics_path}")
-        if report.error:
-            print(f"[promotion] error: {report.error}")
-
-    return 0 if report.succeeded else 1
 
 
 if __name__ == "__main__":

@@ -25,14 +25,19 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "lib"))
 
-from eb_verify.redact import MAX_DETAIL_CHARS, bound, redact, safe_detail
-from eb_verify.scorer_guard import InfraError, guard_checkpoint_verdict
-from orchestration.chain_runner import ChainTaskDefinition, run_chain
-from orchestration.session import SessionConfig
+from eb_verify.redact import MAX_DETAIL_CHARS, bound, redact, safe_detail  # noqa: E402
+from eb_verify.scorer_guard import InfraError, guard_checkpoint_verdict  # noqa: E402
+from orchestration.chain_runner import (  # noqa: E402
+    ChainTaskDefinition,
+    run_chain,
+)
+from orchestration.session import SessionConfig  # noqa: E402
 
 # Shaped like a real Anthropic key so the pattern is exercised, but not one.
 FAKE_KEY = "sk-ant-api03-" + "A" * 40
@@ -61,6 +66,16 @@ def task_def() -> ChainTaskDefinition:
 class TestRedact:
     def test_anthropic_key_is_destroyed(self) -> None:
         assert FAKE_KEY not in redact(f"401 invalid x-api-key {FAKE_KEY}")
+
+    @pytest.mark.parametrize(
+        "credential",
+        (
+            "sk-proj-FAKE-CREDENTIAL-123456789",
+            "sk-or-v1-FAKE-CREDENTIAL-123456789",
+        ),
+    )
+    def test_openai_compatible_key_is_destroyed(self, credential: str) -> None:
+        assert credential not in redact(f"provider rejected {credential}")
 
     def test_bearer_token_is_destroyed(self) -> None:
         out = redact("Authorization: Bearer abc123.def-456_ghi")
@@ -238,4 +253,6 @@ class TestSessionFailureChannel:
         """The negative control: scrubbing must not cost an operator the reason
         the session died."""
         result = self._run(tmp_path, "connection refused to localhost:8080")
-        assert "connection refused to localhost:8080" in result.session_failure["detail"]
+        assert (
+            "connection refused to localhost:8080" in result.session_failure["detail"]
+        )

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from eb_study import StudyCapsule, StudySpec
+
+if TYPE_CHECKING:
+    from analysis.study_inference import AnalysisContract
 
 
 @dataclass(frozen=True)
@@ -24,10 +27,15 @@ class StepOutcome:
 class CapsuleSnapshot:
     """The exact capsule bytes validated by one promotion invocation."""
 
-    spec_source: str
-    receipts_source: str
+    spec_source: bytes
+    receipts_source: bytes
+    task_manifest_source: bytes
+    analysis_plan_source: bytes
+    study_report_source: bytes
+    markdown_report_source: bytes
     spec: StudySpec
     capsule: StudyCapsule
+    analysis_contract: AnalysisContract
 
 
 @dataclass(frozen=True)
@@ -41,6 +49,8 @@ class PromotionContext:
     raw_run_dir: Path
     spec_path: Path
     receipts_path: Path
+    task_manifest_path: Path
+    analysis_plan_path: Path
     staging_dir: Path
     final_dir: Path
     registry_path: Path

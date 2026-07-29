@@ -41,13 +41,24 @@ sys.path.insert(0, str(PROJECT_ROOT / "lib"))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 from analyze_scores import statistical_tests  # noqa: E402
-from eb_study import CapsuleError, PairedValid, StudyCapsule  # noqa: E402
+from analysis.study_inference import (  # noqa: E402
+    AnalysisContract,
+    build_inference,
+    load_analysis_contract,
+)
+from eb_study import (  # noqa: E402
+    STATUS_VALID,
+    CapsuleError,
+    PairedValid,
+    StudyCapsule,
+    file_hash,
+)
 
 logger = logging.getLogger(__name__)
 
 #: Bumped when the report's shape changes, so a consumer refuses an unknown
 #: version rather than reading a missing key through ``.get(key, 0)``.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 TOKEN_DEFINITION = (
     "combined_tokens = input + output + cache_creation + cache_read "
@@ -72,14 +83,20 @@ TOKEN_FIELD_ALIASES = {
     ),
 }
 MODEL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+@-]{0,127}\Z")
+SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
+SOURCE_HASH_FIELDS = frozenset({"study_spec_file_hash", "receipts_file_hash"})
 MAX_TOKEN_COUNT = (1 << 63) - 1
 
 
-def provenance(capsule: StudyCapsule) -> dict[str, Any]:
+def provenance(
+    capsule: StudyCapsule,
+    contract: AnalysisContract | None = None,
+    source_hashes: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Everything the study froze before it observed an outcome."""
 
     spec = capsule.spec
-    return {
+    result = {
         "study_id": spec.study_id,
         "spec_hash": spec.spec_hash,
         "task_manifest_hash": spec.task_manifest_hash,
@@ -94,9 +111,37 @@ def provenance(capsule: StudyCapsule) -> dict[str, Any]:
         "score_contract": spec.score_contract,
         "promotion_policy": spec.promotion_policy,
     }
+    if contract is not None:
+        result.update(
+            {
+                "analysis_plan_hash": contract.plan_hash,
+                "task_manifest_hash": contract.manifest_hash,
+                "candidate_manifest_hash": contract.candidate_manifest_hash,
+                "candidate_lock_revision": contract.candidate_lock_revision,
+                "execution_order_hash": contract.execution_order_hash,
+                "execution_order_count": contract.execution_order_count,
+                "agent_account": contract.agent_account,
+                "judge_account": contract.judge_account,
+                "task_type_counts": dict(contract.stratum_counts),
+            }
+        )
+    if source_hashes is not None:
+        if set(source_hashes) != SOURCE_HASH_FIELDS or any(
+            not isinstance(value, str) or SHA256_RE.fullmatch(value) is None
+            for value in source_hashes.values()
+        ):
+            raise CapsuleError(
+                "source hashes must contain only the two frozen capsule digests"
+            )
+        result.update(source_hashes)
+    return result
 
 
-def completeness(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
+def completeness(
+    capsule: StudyCapsule,
+    paired: PairedValid,
+    contract: AnalysisContract | None = None,
+) -> dict[str, Any]:
     """What the study declared against what it actually produced.
 
     Excluded tasks are named with the slots they were missing. A task that
@@ -104,7 +149,7 @@ def completeness(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
     never in it.
     """
 
-    return {
+    result = {
         "declared_tasks": len(capsule.spec.task_ids),
         "paired_tasks": len(paired.task_ids),
         "paired_trials": len(paired.trials),
@@ -114,15 +159,35 @@ def completeness(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
         },
         "receipts_by_status": capsule.all_attempts().count_by_status,
     }
+    if contract is not None:
+        receipts_by_slot = {
+            slot: tuple(
+                receipt for receipt in capsule.receipts if receipt.trial.slot == slot
+            )
+            for slot in capsule.spec.slots()
+        }
+        invalid_slots = tuple(
+            slot
+            for slot, receipts in receipts_by_slot.items()
+            if len(receipts) != 1 or receipts[0].status != STATUS_VALID
+        )
+        result.update(
+            {
+                "required_valid_slots": len(receipts_by_slot),
+                "valid_slots": len(receipts_by_slot) - len(invalid_slots),
+                "missing_or_invalid_slots": [
+                    _slot_name(slot) for slot in invalid_slots
+                ],
+                "headline_eligible": not invalid_slots,
+            }
+        )
+    return result
 
 
 def reward(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
     """Per-arm distributions and every baseline contrast the spec declares."""
 
-    per_task = {
-        task_id: {arm: paired.mean_score(task_id, arm) for arm in paired.arms}
-        for task_id in paired.task_ids
-    }
+    per_task = _per_task_scores(paired)
 
     baseline = capsule.spec.baseline_arm
     contrasts = {
@@ -189,14 +254,61 @@ def timing(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
     }
 
 
-def build_report(capsule: StudyCapsule) -> dict[str, Any]:
-    paired = capsule.paired_valid()
+def build_report(
+    capsule: StudyCapsule,
+    *,
+    contract: AnalysisContract | None = None,
+    source_hashes: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    paired = capsule.paired_valid(allow_empty=contract is not None)
+    completeness_result = completeness(capsule, paired, contract)
+    analysis: dict[str, Any] | None = None
+    reward_result: dict[str, Any] | None = (
+        reward(capsule, paired) if contract is None else None
+    )
+    if contract is not None:
+        per_task_scores = _per_task_scores(paired)
+        inference = build_inference(
+            per_task_scores=per_task_scores,
+            contract=contract,
+            complete=completeness_result["headline_eligible"],
+        )
+        analysis = {
+            key: value
+            for key, value in inference.items()
+            if key
+            not in {
+                "primary",
+                "descriptive_only",
+                "by_task_type",
+            }
+        }
+        if inference["status"] == "withheld_incomplete":
+            reward_result = None
+        else:
+            reward_result = {
+                "by_arm": {
+                    arm: _distribution(
+                        [per_task_scores[task_id][arm] for task_id in paired.task_ids]
+                    )
+                    for arm in paired.arms
+                },
+                "per_task": {
+                    task_id: {arm: round(score, 4) for arm, score in arms.items()}
+                    for task_id, arms in sorted(per_task_scores.items())
+                },
+                "method": inference["method"],
+                "primary_contrasts": inference["primary"],
+                "descriptive_only": inference["descriptive_only"],
+                "by_task_type": inference["by_task_type"],
+            }
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "provenance": provenance(capsule),
-        "completeness": completeness(capsule, paired),
-        "reward": reward(capsule, paired),
+        "analysis": analysis,
+        "provenance": provenance(capsule, contract, source_hashes),
+        "completeness": completeness_result,
+        "reward": reward_result,
         "economics": economics(capsule, paired),
         "tokens": tokens(capsule, paired),
         "timing": timing(capsule, paired),
@@ -206,6 +318,18 @@ def build_report(capsule: StudyCapsule) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
+
+
+def _per_task_scores(paired: PairedValid) -> dict[str, dict[str, float]]:
+    return {
+        task_id: {arm: paired.mean_score(task_id, arm) for arm in paired.arms}
+        for task_id in paired.task_ids
+    }
+
+
+def _slot_name(slot: tuple[str, str, int]) -> str:
+    task_id, arm, repetition = slot
+    return f"{task_id}/{arm}/rep{repetition}"
 
 
 def _costs_by_arm(
@@ -540,15 +664,47 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--receipts", type=Path, required=True, help="Trial receipt JSONL path."
     )
+    parser.add_argument(
+        "--analysis-plan",
+        type=Path,
+        default=None,
+        help="Frozen analysis-plan JSON path (requires --task-manifest).",
+    )
+    parser.add_argument(
+        "--task-manifest",
+        type=Path,
+        default=None,
+        help="Frozen final-manifest JSON path (requires --analysis-plan).",
+    )
     parser.add_argument("--output", type=Path, default=None, help="Report JSON path.")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
+    if (args.analysis_plan is None) != (args.task_manifest is None):
+        logger.error("--analysis-plan and --task-manifest must be provided together")
+        return 2
+
     try:
         capsule = StudyCapsule.load(args.spec, args.receipts)
-        report = build_report(capsule)
-    except CapsuleError as exc:
+        contract = (
+            None
+            if args.analysis_plan is None
+            else load_analysis_contract(
+                capsule.spec,
+                args.analysis_plan,
+                args.task_manifest,
+            )
+        )
+        report = build_report(
+            capsule,
+            contract=contract,
+            source_hashes={
+                "study_spec_file_hash": file_hash(args.spec),
+                "receipts_file_hash": file_hash(args.receipts),
+            },
+        )
+    except (CapsuleError, OSError) as exc:
         # Fail closed. A study that cannot prove what it ran has no headline.
         logger.error("%s: %s", type(exc).__name__, exc)
         return 2
@@ -577,12 +733,24 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(comp['excluded_tasks'])} excluded",
         file=sys.stderr,
     )
-    for name, contrast in report["reward"]["contrasts"].items():
+    reward_result = report["reward"]
+    if reward_result is None:
         print(
-            f"  {name}: mean_delta={contrast['mean_delta']:+.3f} "
-            f"cohens_d={contrast['cohens_d']:.3f} n={contrast['n_paired']}",
+            "  confirmatory reward inference withheld: incomplete study",
             file=sys.stderr,
         )
+    else:
+        contrasts = reward_result.get(
+            "primary_contrasts",
+            reward_result.get("contrasts", {}),
+        )
+        for name, contrast in contrasts.items():
+            detail = (
+                f"mean_delta={contrast['mean_delta']:+.3f} n={contrast['n_paired']}"
+            )
+            if "cohens_d" in contrast:
+                detail += f" cohens_d={contrast['cohens_d']:.3f}"
+            print(f"  {name}: {detail}", file=sys.stderr)
     econ = report["economics"]
     print(
         "  paired-valid "

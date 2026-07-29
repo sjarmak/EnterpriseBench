@@ -16,6 +16,7 @@ from .errors import (
     SpecError,
 )
 from .hashing import content_hash, file_hash
+from .json_io import strict_json_loads
 from .receipt import (
     RECEIPT_SCHEMA_VERSION,
     STATUS_INELIGIBLE,
@@ -64,4 +65,5 @@ __all__ = [
     "file_hash",
     "is_zero_cost_pre_agent_mcp_failure",
     "read_receipts",
+    "strict_json_loads",
 ]

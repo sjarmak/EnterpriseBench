@@ -40,7 +40,8 @@ _REDACTED = "[REDACTED]"
 # error body prints them in. Over-redacting an operator's debug string costs a
 # little context; under-redacting one publishes a live key.
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"sk-ant-[A-Za-z0-9_-]+"), _REDACTED),
+    (re.compile(r"sk-(?:ant|proj|or-v1)-[A-Za-z0-9_-]+"), _REDACTED),
+    (re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"), _REDACTED),
     (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]+=*"), f"Bearer {_REDACTED}"),
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), _REDACTED),
     # The NAME survives so an operator still learns WHICH credential reached the

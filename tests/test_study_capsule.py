@@ -20,8 +20,10 @@ from eb_study import (
     StudyCapsule,
     StudySpec,
     TrialReceipt,
+    TrialUsage,
     append_receipt,
     read_receipts,
+    strict_json_loads,
 )
 
 ARMS = ("baseline", "mcp_only", "cli")
@@ -125,6 +127,19 @@ class TestStudySpec:
         with pytest.raises(SpecError, match="schema_version"):
             StudySpec.from_json(spec_payload(schema_version=99))
 
+    def test_unknown_frozen_field_is_refused_instead_of_ignored(self):
+        with pytest.raises(SpecError, match="unknown"):
+            StudySpec.from_json(
+                spec_payload(analysis_plan_hash="sha256:not-actually-frozen")
+            )
+
+    def test_unknown_arm_field_is_refused_instead_of_ignored(self):
+        arms = spec_payload()["arms"]
+        arms[0]["hidden_capability"] = "network"
+
+        with pytest.raises(SpecError, match="unknown"):
+            StudySpec.from_json(spec_payload(arms=arms))
+
     def test_attempt_policy_must_be_declared(self):
         with pytest.raises(SpecError, match="attempt_policy"):
             StudySpec.from_json(spec_payload(attempt_policy="highest_score"))
@@ -164,6 +179,19 @@ class TestStudySpec:
             spec.trial_id("dep-traversal-001", "hybrid", 1, 1)
         with pytest.raises(SpecError, match="repetition"):
             spec.trial_id("dep-traversal-001", "cli", 9, 1)
+
+    def test_load_rejects_duplicate_json_keys(self, tmp_path):
+        source = json.dumps(spec_payload())
+        source = source.replace(
+            '"study_id": "rryas-headline-2026-07"',
+            ('"study_id": "shadow-study", "study_id": "rryas-headline-2026-07"'),
+            1,
+        )
+        path = tmp_path / "duplicate-study.json"
+        path.write_text(source)
+
+        with pytest.raises(SpecError, match="duplicate JSON object key"):
+            StudySpec.load(path)
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +305,33 @@ class TestTrialReceipt:
                 },
             )
 
+    def test_oversized_finite_dollar_cost_is_a_domain_error(self):
+        with pytest.raises(ReceiptError, match="cost_usd"):
+            TrialUsage.from_json(
+                {
+                    "source": "sdk_model_usage",
+                    "cost_usd": 10**4000,
+                    "model_usage": {"model": {"inputTokens": 1}},
+                }
+            )
+
+    def test_receipt_rejects_unknown_top_level_fields(self):
+        payload = make_receipt(
+            make_spec(), "dep-traversal-001", "baseline", 1
+        ).to_json()
+        payload["post_hoc_override"] = True
+
+        with pytest.raises(ReceiptError, match="unknown"):
+            TrialReceipt.from_json(payload)
+
+    @pytest.mark.parametrize("container", ("trial", "usage"))
+    def test_receipt_rejects_unknown_nested_contract_fields(self, container):
+        payload = receipt_payload(make_spec(), "dep-traversal-001", "baseline", 1)
+        payload[container]["post_hoc_override"] = True
+
+        with pytest.raises(ReceiptError, match="unknown"):
+            TrialReceipt.from_json(payload)
+
     def test_score_outside_the_unit_interval_is_refused(self):
         """A weighted score re-divided by checkpoint count lands here."""
 
@@ -315,6 +370,27 @@ class TestAppendOnlyLog:
         path.write_text("{not json}\n")
         with pytest.raises(ReceiptError, match="not valid JSON"):
             read_receipts(path)
+
+    def test_duplicate_json_key_fails_the_whole_log(self, tmp_path):
+        spec = make_spec()
+        source = json.dumps(make_receipt(spec, "dep-traversal-001", "cli", 1).to_json())
+        source = source.replace(
+            '"schema_version": 1',
+            '"schema_version": 999, "schema_version": 1',
+            1,
+        )
+        path = tmp_path / "receipts.jsonl"
+        path.write_text(source + "\n")
+
+        with pytest.raises(ReceiptError, match="duplicate JSON object key"):
+            read_receipts(path)
+
+    def test_duplicate_json_diagnostic_does_not_echo_the_key(self):
+        secret_key = "sentinel-secret-model-name"
+        with pytest.raises(ValueError) as exc_info:
+            strict_json_loads(f'{{"{secret_key}": 1, "{secret_key}": 2}}')
+
+        assert secret_key not in str(exc_info.value)
 
     def test_an_oversized_json_integer_fails_inside_the_receipt_boundary(
         self, tmp_path
@@ -478,6 +554,20 @@ class TestPairedValid:
         receipts = [r for r in full_receipts(spec) if r.trial.repetition == 1]
         with pytest.raises(CompletenessError, match="no task complete"):
             StudyCapsule.build(spec, receipts).paired_valid()
+
+    def test_report_view_can_name_every_missing_slot_when_no_task_is_complete(self):
+        spec = make_spec(repetitions=1)
+        receipts = [
+            make_receipt(spec, task_id, "baseline", 1) for task_id in spec.task_ids
+        ]
+
+        paired = StudyCapsule.build(spec, receipts).paired_valid(allow_empty=True)
+
+        assert paired.task_ids == ()
+        assert paired.trials == ()
+        assert paired.excluded == {
+            task_id: ("mcp_only/rep1", "cli/rep1") for task_id in spec.task_ids
+        }
 
     def test_mean_score_averages_repetitions_rather_than_taking_the_best(self):
         spec = make_spec()

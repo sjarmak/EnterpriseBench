@@ -25,6 +25,7 @@ from typing import Any
 
 from .errors import SpecError
 from .hashing import canonical_json, content_hash
+from .json_io import strict_json_loads
 
 SPEC_SCHEMA_VERSION = 1
 
@@ -81,6 +82,9 @@ class Arm:
             raise SpecError(
                 f"arm entry must be an object, got {type(payload).__name__}"
             )
+        unknown = sorted(set(payload) - {"name", "capability_fingerprint"})
+        if unknown:
+            raise SpecError(f"arm entry has unknown field(s): {', '.join(unknown)}")
         name = payload.get("name")
         fingerprint = payload.get("capability_fingerprint")
         if not isinstance(name, str) or not name:
@@ -164,6 +168,9 @@ class StudySpec:
         missing = [f for f in _REQUIRED_FIELDS if f not in payload]
         if missing:
             raise SpecError(f"spec is missing required field(s): {', '.join(missing)}")
+        unknown = sorted(set(payload) - set(_REQUIRED_FIELDS))
+        if unknown:
+            raise SpecError(f"spec has unknown field(s): {', '.join(unknown)}")
 
         version = payload["schema_version"]
         if version != SPEC_SCHEMA_VERSION:
@@ -227,15 +234,13 @@ class StudySpec:
 
     @classmethod
     def load(cls, path: Path) -> "StudySpec":
-        import json
-
         try:
-            raw = Path(path).read_text()
-        except OSError as exc:
+            raw = Path(path).read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
             raise SpecError(f"cannot read study spec {path}: {exc}") from exc
         try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError as exc:
+            payload = strict_json_loads(raw)
+        except ValueError as exc:
             raise SpecError(f"study spec {path} is not valid JSON: {exc}") from exc
         return cls.from_json(payload)
 

@@ -134,20 +134,15 @@ class StudyCapsule:
     def all_attempts(self) -> AllAttempts:
         return AllAttempts(receipts=self.receipts)
 
-    def paired_valid(self) -> PairedValid:
-        """Admit trials by the frozen attempt policy, then require completeness."""
+    def paired_valid(self, *, allow_empty: bool = False) -> PairedValid:
+        """Admit trials by the frozen attempt policy, then require completeness.
+
+        ``allow_empty`` exists only so an analysis report can account for an
+        incomplete locked study without inventing a comparison population.
+        Promotion callers keep the strict default.
+        """
 
         admitted = self._admit()
-
-        by_arm: dict[str, int] = {arm: 0 for arm in self.spec.arm_names}
-        for slot in admitted:
-            by_arm[slot[1]] += 1
-        empty_arms = sorted(arm for arm, n in by_arm.items() if n == 0)
-        if empty_arms:
-            raise CompletenessError(
-                f"study {self.spec.study_id!r} declares arm(s) {empty_arms} with no valid "
-                "trial. A comparison missing a declared arm is incomplete, not smaller."
-            )
 
         complete: list[str] = []
         excluded: dict[str, tuple[str, ...]] = {}
@@ -163,7 +158,18 @@ class StudyCapsule:
             else:
                 complete.append(task_id)
 
-        if not complete:
+        if not allow_empty:
+            by_arm = {arm: 0 for arm in self.spec.arm_names}
+            for slot in admitted:
+                by_arm[slot[1]] += 1
+            empty_arms = sorted(arm for arm, count in by_arm.items() if count == 0)
+            if empty_arms:
+                raise CompletenessError(
+                    f"study {self.spec.study_id!r} declares arm(s) {empty_arms} "
+                    "with no valid trial. A comparison missing a declared arm is "
+                    "incomplete, not smaller."
+                )
+        if not complete and not allow_empty:
             raise CompletenessError(
                 f"study {self.spec.study_id!r} has no task complete in every declared arm; "
                 f"{len(excluded)} task(s) are incomplete"
