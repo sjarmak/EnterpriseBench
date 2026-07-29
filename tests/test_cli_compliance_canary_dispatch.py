@@ -83,18 +83,53 @@ def _write_fixture(tmp_path: Path, *, authorized: bool = False) -> tuple[Path, P
         "promotion_policy": "operational-cli-compliance-no-promotion",
     }
     spec_path.write_text(json.dumps(spec_payload))
+    spec = StudySpec.load(spec_path)
     sample_path = tmp_path / "sample_receipts.jsonl"
     sample_path.write_text(
         json.dumps(
             {
-                "usage": {"cost_usd": 9.0},
+                "schema_version": 1,
+                "trial": {
+                    "study_id": spec.study_id,
+                    "task_id": "task-a",
+                    "arm": "cli",
+                    "repetition": 1,
+                    "attempt": 1,
+                },
+                "spec_hash": spec.spec_hash,
+                "task_manifest_hash": spec.task_manifest_hash,
+                "status": "valid",
+                "failure_class": None,
+                "image_digest": "sha256:image",
+                "arm_gate_proof": "mode_gate:proof",
+                "task_hash": "sha256:task",
+                "harness_hash": spec.harness,
+                "verifier_hash": "sha256:verifier",
+                "score": 0.5,
+                "score_contract": spec.score_contract,
+                "usage": {
+                    "source": spec.token_source,
+                    "cost_usd": 9.0,
+                    "model_usage": {
+                        spec.model: {
+                            "input_tokens": 100,
+                            "output_tokens": 10,
+                            "cache_write_tokens": 0,
+                            "cache_read_tokens": 0,
+                            "cost_usd": 9.0,
+                        }
+                    },
+                },
                 "tool_use": {
                     "cache_isolation": {
                         "valid": True,
                         "cache_write_tokens": 0,
                         "cross_run_cache_read_tokens": 0,
-                    }
+                    },
                 },
+                "artifacts": {"results.json": "sha256:result"},
+                "started_at": "2026-07-28T00:00:00Z",
+                "ended_at": "2026-07-28T00:01:00Z",
             }
         )
         + "\n"
@@ -110,7 +145,7 @@ def _write_fixture(tmp_path: Path, *, authorized: bool = False) -> tuple[Path, P
                 "manifest_hash": file_hash(manifest_path),
                 "study_spec": str(spec_path.relative_to(tmp_path)),
                 "study_spec_file_hash": file_hash(spec_path),
-                "study_spec_hash": StudySpec.load(spec_path).spec_hash,
+                "study_spec_hash": spec.spec_hash,
                 "cost_forecast": {
                     "sample_receipts": [
                         {
