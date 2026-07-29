@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-headline-v4",
   "schema_version": 1,
-  "task_manifest_hash": "sha256:cebcb7896f8a16e7fd3f3a035eca5a36e304a93914f87dca10a295b0e207cf9a",
+  "task_manifest_hash": "sha256:766715c9dfb427e1989a89c3c0f623bd30034752923045716fe8bb353d38f166",
   "task_ids": [
     "dep-graph-tri-tokio-hyper-tonic-001",
     "dep-traversal-001",
@@ -54,8 +54,8 @@
   "attempt_policy": "first_valid_attempt",
   "max_attempts": 1,
   "model": "claude-sonnet-5",
-  "harness": "sha256:ed15980f3fb06e66289a043108b0bc2026b33452df0e7d982ec8aa59980c1a31",
-  "revision": "88a41424e21976540c2239bee76231335d1d19b0",
+  "harness": "sha256:5caa646ffce7284302096da7a973e6352c2d572af1c85443908ab534054c49f9",
+  "revision": "34ddd7d083a9f3eb28d9cb30b6367e173ad300a1",
   "token_source": "sdk_model_usage",
   "score_contract": "weighted-mean-v2",
   "promotion_policy": "paired-valid-complete-arms"

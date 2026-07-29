@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-headline-v4",
-  "spec_hash": "sha256:f9c43711aea60da32d1862dbbe5b79dfc62da56f2163bcf69cb3413ef3a9e756",
-  "task_manifest_hash": "sha256:cebcb7896f8a16e7fd3f3a035eca5a36e304a93914f87dca10a295b0e207cf9a",
+  "spec_hash": "sha256:50dc3aa8f2cc0b7f96dca1fd753efbfb2d685e617e5299c532f4753a7578903a",
+  "task_manifest_hash": "sha256:766715c9dfb427e1989a89c3c0f623bd30034752923045716fe8bb353d38f166",
   "analysis_plan_hash": "sha256:e823ab3796d0785f7aea246dc2e18d595ec182f6a28ad96d4eac39e0ca461b54",
   "candidate_ids": [
     "dep-graph-tri-tokio-hyper-tonic-001",
@@ -536,7 +536,7 @@
       1
     ]
   ],
-  "revision": "88a41424e21976540c2239bee76231335d1d19b0",
+  "revision": "34ddd7d083a9f3eb28d9cb30b6367e173ad300a1",
   "mirror_repositories": [
     "github.com/sg-evals/tokio--tokio-1.0.0",
     "github.com/sg-evals/hyper--v0.14.0",
