@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import shlex
@@ -75,16 +76,24 @@ Runner = Callable[..., Any]
 Preflight = Callable[..., Any]
 
 
-def _load_object(path: Path, label: str) -> dict[str, Any]:
+def _load_object_with_bytes(
+    path: Path,
+    label: str,
+) -> tuple[dict[str, Any], bytes]:
     try:
-        payload = json.loads(path.read_text())
+        source = path.read_bytes()
+        payload = json.loads(source)
     except OSError as exc:
         raise DispatchError(f"cannot read {label} {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise DispatchError(f"{label} {path} is not valid JSON: {exc}") from exc
     if not isinstance(payload, dict):
         raise DispatchError(f"{label} must be a JSON object")
-    return payload
+    return payload, source
+
+
+def _load_object(path: Path, label: str) -> dict[str, Any]:
+    return _load_object_with_bytes(path, label)[0]
 
 
 def _repo_path(repo_root: Path, value: Any, label: str) -> Path:
@@ -269,7 +278,7 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
         plan_path.relative_to(repo_root)
     except ValueError as exc:
         raise DispatchError("dispatch plan must live inside the repository") from exc
-    plan = _load_object(plan_path, "dispatch plan")
+    plan, source = _load_object_with_bytes(plan_path, "dispatch plan")
     study_id = plan.get("study_id")
     schema_version = plan.get("schema_version")
     if (
@@ -361,6 +370,7 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
 
     return DispatchPlan(
         path=plan_path,
+        source_hash=f"sha256:{hashlib.sha256(source).hexdigest()}",
         spec_path=spec_path,
         manifest_path=manifest_path,
         preflight_evidence_path=evidence_path,
@@ -598,7 +608,11 @@ def _dispatch_headline_study(
     if execute and controls is not None and not controls.provider_capacity_confirmed:
         raise DispatchError("provider capacity is not confirmed")
     if execute and controls is not None:
-        validate_committed_authorization(plan.path, repo_root=repo_root)
+        validate_committed_authorization(
+            plan.path,
+            repo_root=repo_root,
+            expected_file_hash=plan.source_hash,
+        )
 
     receipts, spend = _existing_receipts(plan)
     if controls is not None:

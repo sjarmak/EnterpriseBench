@@ -70,7 +70,8 @@ def load_canary_plan(plan_path: Path, *, repo_root: Path) -> CanaryPlan:
 
     repo_root = repo_root.resolve()
     try:
-        payload = json.loads(plan_path.read_text())
+        source = plan_path.read_bytes()
+        payload = json.loads(source)
     except (OSError, json.JSONDecodeError) as exc:
         raise CanaryError(f"cannot read canary plan: {exc}") from exc
     if not isinstance(payload, dict):
@@ -101,6 +102,7 @@ def load_canary_plan(plan_path: Path, *, repo_root: Path) -> CanaryPlan:
         validate_committed_authorization(
             plan_path.resolve(),
             repo_root=repo_root,
+            expected_file_hash=f"sha256:{hashlib.sha256(source).hexdigest()}",
         )
     except (ValueError, OSError) as exc:
         raise CanaryError(str(exc)) from exc

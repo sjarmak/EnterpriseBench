@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from eb_study import file_hash
-from headline_protocol import HeadlineProtocol, V5_PROTOCOL, V6_PROTOCOL
+from headline_protocol import (
+    HeadlineProtocol,
+    V5_PROTOCOL,
+    V6_PROTOCOL,
+    V7_PROTOCOL,
+)
 
 
 def validate_protocol_amendment_evidence(
@@ -17,7 +22,7 @@ def validate_protocol_amendment_evidence(
 ) -> None:
     """Fail closed when a protocol amendment's cited evidence has drifted."""
 
-    if protocol not in (V5_PROTOCOL, V6_PROTOCOL):
+    if protocol not in (V5_PROTOCOL, V6_PROTOCOL, V7_PROTOCOL):
         return
     amendment = analysis_plan.get("protocol_amendment")
     if not isinstance(amendment, dict):
@@ -41,7 +46,7 @@ def validate_protocol_amendment_evidence(
                 amendment.get("predecessor_receipts_sha256"),
             ),
         )
-        error = "v6 predecessor evidence"
+        error = f"{protocol.study_id.removeprefix('rryas-headline-')} predecessor evidence"
 
     root = repo_root.resolve()
     for evidence_value, expected_hash in evidence:

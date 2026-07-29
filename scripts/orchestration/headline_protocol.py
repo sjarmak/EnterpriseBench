@@ -126,6 +126,35 @@ V6_POST_LOCK_EXPOSURE_EVIDENCE = {
         for candidate_id in V6_ADDITIONAL_EXPOSURES
     },
 }
+V7_ADDITIONAL_EXPOSURES = (
+    "dep-traversal-001",
+    "dep-traversal-002",
+    "dep-traversal-004",
+)
+V7_POST_LOCK_EXPOSURES = (
+    *V6_POST_LOCK_EXPOSURES,
+    *V7_ADDITIONAL_EXPOSURES,
+)
+V7_PREDECESSOR_TERMINAL_EVIDENCE = (
+    "results/studies/rryas-headline-v6/batch-001-terminal.json"
+)
+V7_PREDECESSOR_TERMINAL_EVIDENCE_SHA256 = (
+    "sha256:b0a2f7e2302dacc90123a90e5c978a5be0c0761b9f23eb9430414840aead9338"
+)
+V7_PREDECESSOR_RECEIPTS = "results/studies/rryas-headline-v6/receipts.jsonl"
+V7_PREDECESSOR_RECEIPTS_SHA256 = (
+    "sha256:52f28200ea8f4fa7493045d07568f91bb6b5271abb53be2051742b91ec1c8795"
+)
+V7_POST_LOCK_EXPOSURE_EVIDENCE = {
+    **V6_POST_LOCK_EXPOSURE_EVIDENCE,
+    **{
+        candidate_id: (
+            V7_PREDECESSOR_RECEIPTS,
+            V7_PREDECESSOR_TERMINAL_EVIDENCE,
+        )
+        for candidate_id in V7_ADDITIONAL_EXPOSURES
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -247,6 +276,20 @@ V6_PROTOCOL = HeadlineProtocol(
         "failure is terminally sealed and every v5 agent-exposed task is excluded."
     ),
 )
+V7_PROTOCOL = HeadlineProtocol(
+    study_id="rryas-headline-v7",
+    task_count=27,
+    slot_count=81,
+    post_lock_exposures=V7_POST_LOCK_EXPOSURES,
+    post_lock_exposure_evidence=V7_POST_LOCK_EXPOSURE_EVIDENCE,
+    arms=V2_REQUIRED_ARMS,
+    arm_descriptions=V2_REQUIRED_ARM_DESCRIPTIONS,
+    forecast_basis=(
+        "No v7 spend authorization before v6 batch 1 is terminally sealed, "
+        "every v6 agent-exposed task is excluded, and the hardened execution "
+        "harness is frozen under a new StudySpec."
+    ),
+)
 V3_MAX_SLOTS_PER_DISPATCH = 12
 V3_AGENT_MAX_BUDGET_USD_PER_SLOT = 9.1
 V3_JUDGE_MAX_BUDGET_USD_PER_CALL = 0.01
@@ -271,7 +314,12 @@ V4_OUTER_SPEND_HARD_CAP_PER_SLOT_USD = round(
     * V4_MAX_JUDGE_ATTEMPTS_PER_CALL,
     6,
 )
-CAPACITY_GATED_PROTOCOLS = (V4_PROTOCOL, V5_PROTOCOL, V6_PROTOCOL)
+CAPACITY_GATED_PROTOCOLS = (
+    V4_PROTOCOL,
+    V5_PROTOCOL,
+    V6_PROTOCOL,
+    V7_PROTOCOL,
+)
 CAPACITY_GATED_STUDY_IDS = frozenset(
     protocol.study_id for protocol in CAPACITY_GATED_PROTOCOLS
 )
@@ -452,6 +500,7 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
         V4_PROTOCOL.study_id: "v1, v2, and v3 operational runs",
         V5_PROTOCOL.study_id: "v1, v2, v3, and v4 operational attempts",
         V6_PROTOCOL.study_id: "v1-v3 and v5 operational attempts",
+        V7_PROTOCOL.study_id: "v1-v3, v5, and v6 operational attempts",
     }[protocol.study_id]
     plan["claim_scope"] = (
         f"Claude Sonnet 5 on the {protocol.task_count}-task EnterpriseBench "
@@ -539,6 +588,32 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
                 V6_PREDECESSOR_RECEIPTS_SHA256
             ),
             "unexposed_failed_task_ids": list(V6_UNEXPOSED_FAILED_TASKS),
+            "predecessor_analysis_use": (
+                "operational evidence and task-level descriptive diagnostics only"
+            ),
+        }
+    elif protocol == V7_PROTOCOL:
+        plan["protocol_amendment"] = {
+            "predecessor": "rryas-headline-v6",
+            "reason": (
+                "the execution harness changed after v6 batch 1 was sealed; "
+                "continuing v6 would mix harness identities"
+            ),
+            "selection_rule": (
+                "exclude every task with v1-v3, v5, or v6 agent output; retain "
+                "all other locked candidates without inspecting reward"
+            ),
+            "excluded_candidate_ids": list(V7_ADDITIONAL_EXPOSURES),
+            "predecessor_terminal_evidence": (
+                V7_PREDECESSOR_TERMINAL_EVIDENCE
+            ),
+            "predecessor_terminal_evidence_sha256": (
+                V7_PREDECESSOR_TERMINAL_EVIDENCE_SHA256
+            ),
+            "predecessor_receipts": V7_PREDECESSOR_RECEIPTS,
+            "predecessor_receipts_sha256": (
+                V7_PREDECESSOR_RECEIPTS_SHA256
+            ),
             "predecessor_analysis_use": (
                 "operational evidence and task-level descriptive diagnostics only"
             ),

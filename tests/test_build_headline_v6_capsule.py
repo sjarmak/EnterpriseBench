@@ -19,8 +19,6 @@ for import_path in (
 
 from build_headline_v6_capsule import (  # noqa: E402
     build_core_payloads,
-    configured_revision,
-    write_capsule,
 )
 from eb_study import file_hash  # noqa: E402
 import headline_protocol_evidence as protocol_evidence  # noqa: E402
@@ -106,13 +104,33 @@ def test_v6_excludes_only_the_v5_agent_exposed_task() -> None:
     }
 
 
-def test_repository_v6_artifacts_are_current() -> None:
-    build = build_core_payloads(
-        PROJECT_ROOT,
-        revision=configured_revision(PROJECT_ROOT),
+def test_repository_v6_artifacts_match_published_terminal_commit() -> None:
+    terminal = json.loads(
+        (
+            PROJECT_ROOT
+            / "results"
+            / "studies"
+            / V6_PROTOCOL.study_id
+            / "batch-001-terminal.json"
+        ).read_text()
     )
-
-    write_capsule(PROJECT_ROOT, build, check=True)
+    revision = terminal["authorization"]["plan_commit"]
+    capsule_root = Path("configs/studies") / V6_PROTOCOL.study_id
+    for name in (
+        "analysis_plan.json",
+        "dispatch_plan.json",
+        "final_manifest.json",
+        "preflight_evidence.json",
+        "study_spec.json",
+    ):
+        relative = capsule_root / name
+        committed = subprocess.run(
+            ["git", "show", f"{revision}:{relative}"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout
+        assert (PROJECT_ROOT / relative).read_bytes() == committed
 
 
 def test_repository_v6_dispatch_plan_is_locked_no_spend() -> None:

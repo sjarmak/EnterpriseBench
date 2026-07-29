@@ -228,11 +228,14 @@ def validate_committed_authorization(
     plan_path: Path,
     *,
     repo_root: Path,
+    expected_file_hash: str,
 ) -> None:
-    """Reject paid plans that are not immutable in the current Git tree."""
+    """Reject paid plans whose loaded bytes are not published on origin/main."""
 
     if not (repo_root / ".git").exists():
-        return
+        raise DispatchPolicyError(
+            "paid v3 authorization plan requires a Git checkout"
+        )
     relative = plan_path.relative_to(repo_root)
     tracked = subprocess.run(
         ["git", "ls-files", "--error-unmatch", "--", str(relative)],
@@ -258,6 +261,81 @@ def validate_committed_authorization(
     if tracked.returncode != 0 or status.returncode != 0 or status.stdout.strip():
         raise DispatchPolicyError(
             "paid v3 authorization plan must be committed and clean"
+        )
+    try:
+        remote = subprocess.run(
+            [
+                "git",
+                "ls-remote",
+                "--exit-code",
+                "origin",
+                "refs/heads/main",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        fields = remote.stdout.strip().split()
+        if remote.returncode != 0 or len(fields) != 2:
+            raise DispatchPolicyError(
+                "paid v3 authorization plan must be published on origin/main"
+            )
+        remote_oid, remote_ref = fields
+        try:
+            int(remote_oid, 16)
+        except ValueError as exc:
+            raise DispatchPolicyError(
+                "paid v3 authorization plan must be published on origin/main"
+            ) from exc
+        if (
+            len(remote_oid) not in {40, 64}
+            or remote_ref != "refs/heads/main"
+        ):
+            raise DispatchPolicyError(
+                "paid v3 authorization plan must be published on origin/main"
+            )
+        fetched = subprocess.run(
+            [
+                "git",
+                "fetch",
+                "--quiet",
+                "--no-tags",
+                "origin",
+                remote_oid,
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        if fetched.returncode != 0:
+            raise DispatchPolicyError(
+                "paid v3 authorization plan must be published on origin/main"
+            )
+        published = subprocess.run(
+            [
+                "git",
+                "show",
+                f"{remote_oid}:{relative.as_posix()}",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DispatchPolicyError(
+            "paid v3 authorization plan must be published on origin/main"
+        ) from exc
+    published_hash = f"sha256:{hashlib.sha256(published.stdout).hexdigest()}"
+    if (
+        published.returncode != 0
+        or published_hash != expected_file_hash
+    ):
+        raise DispatchPolicyError(
+            "paid v3 authorization plan must be published on origin/main"
         )
 
 

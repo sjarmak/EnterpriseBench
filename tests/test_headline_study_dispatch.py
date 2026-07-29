@@ -27,6 +27,10 @@ from eb_study import (  # noqa: E402
     read_receipts,
 )
 import headline_study_dispatch as dispatch_module  # noqa: E402
+from headline_dispatch_policy import (  # noqa: E402
+    DispatchPolicyError,
+    validate_committed_authorization,
+)
 from headline_study_dispatch import (  # noqa: E402
     DispatchError,
     authorization_batch_hash,
@@ -34,6 +38,7 @@ from headline_study_dispatch import (  # noqa: E402
     dispatch_headline_study,
     load_dispatch_plan,
 )
+from tests.git_publish_helpers import publish_fixture  # noqa: E402
 
 
 def _v4_capacity_payload(
@@ -208,6 +213,7 @@ def _write_fixture(
         "rryas-headline-v4",
         "rryas-headline-v5",
         "rryas-headline-v6",
+        "rryas-headline-v7",
     }
     paid_batch = study_id == "rryas-headline-v3" or capacity_gated
     receipts_path.parent.mkdir(parents=True)
@@ -1054,6 +1060,7 @@ def test_v5_rejects_ceiling_without_prior_spend_before_external_checks(
     )
     plan_path.write_text(json.dumps(payload))
 
+    publish_fixture(tmp_path)
     external_calls: list[str] = []
     with pytest.raises(DispatchError, match="cumulative spend"):
         dispatch_headline_study(
@@ -1082,6 +1089,7 @@ def test_v3_authorization_hash_binds_the_exact_pending_commands(
     payload["authorization"]["authorized_batch_hash"] = "sha256:" + "0" * 64
     plan_path.write_text(json.dumps(payload))
 
+    publish_fixture(tmp_path)
     with pytest.raises(DispatchError, match="exact pending command batch"):
         dispatch_headline_study(
             plan_path=plan_path,
@@ -1131,6 +1139,154 @@ def test_v3_paid_authorization_plan_must_be_committed_and_clean(
         )
 
 
+def test_v3_paid_authorization_plan_must_be_published_on_origin_main(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+
+    with pytest.raises(DispatchPolicyError, match="Git checkout"):
+        validate_committed_authorization(
+            plan_path,
+            repo_root=tmp_path,
+            expected_file_hash=file_hash(plan_path),
+        )
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "eval@example.com"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Eval Test"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "published fixture"],
+        cwd=tmp_path,
+        check=True,
+    )
+    published = load_dispatch_plan(plan_path, repo_root=tmp_path)
+    published_bytes = plan_path.read_bytes()
+
+    external_calls: list[str] = []
+    with pytest.raises(DispatchError, match="published on origin/main"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=lambda *_args, **_kwargs: external_calls.append("runner"),
+            preflight=lambda **_kwargs: external_calls.append("preflight"),
+        )
+    assert external_calls == []
+
+    remote_path = tmp_path.with_name(f"{tmp_path.name}-origin.git")
+    subprocess.run(
+        ["git", "init", "-q", "--bare", str(remote_path)],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "remote", "add", "origin", str(remote_path)],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "push", "-q", "origin", "HEAD:refs/heads/main"],
+        cwd=tmp_path,
+        check=True,
+    )
+
+    validate_committed_authorization(
+        plan_path,
+        repo_root=tmp_path,
+        expected_file_hash=published.source_hash,
+    )
+
+    writer_path = tmp_path.with_name(f"{tmp_path.name}-writer")
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "-q",
+            "--branch",
+            "main",
+            str(remote_path),
+            str(writer_path),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "eval@example.com"],
+        cwd=writer_path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Eval Test"],
+        cwd=writer_path,
+        check=True,
+    )
+    (writer_path / "unrelated.txt").write_text("remote advanced")
+    subprocess.run(["git", "add", "unrelated.txt"], cwd=writer_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "unrelated remote change"],
+        cwd=writer_path,
+        check=True,
+    )
+    subprocess.run(["git", "push", "-q", "origin", "main"], cwd=writer_path, check=True)
+
+    validate_committed_authorization(
+        plan_path,
+        repo_root=tmp_path,
+        expected_file_hash=published.source_hash,
+    )
+
+    payload = json.loads(plan_path.read_text())
+    payload["authorization"]["authorization_reference"] = "new-local-approval"
+    plan_path.write_text(json.dumps(payload))
+    local_only = load_dispatch_plan(plan_path, repo_root=tmp_path)
+    plan_path.write_bytes(published_bytes)
+    assert (
+        subprocess.run(
+            ["git", "status", "--porcelain=v1", "--", str(plan_path)],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        == ""
+    )
+
+    with pytest.raises(DispatchPolicyError, match="published on origin/main"):
+        validate_committed_authorization(
+            plan_path,
+            repo_root=tmp_path,
+            expected_file_hash=local_only.source_hash,
+        )
+
+    plan_path.write_text(json.dumps(payload))
+    subprocess.run(["git", "add", str(plan_path)], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "local-only authorization"],
+        cwd=tmp_path,
+        check=True,
+    )
+
+    with pytest.raises(DispatchPolicyError, match="published on origin/main"):
+        validate_committed_authorization(
+            plan_path,
+            repo_root=tmp_path,
+            expected_file_hash=local_only.source_hash,
+        )
+
+
 def test_v3_rejects_an_agent_receipt_above_the_native_agent_cap(
     tmp_path: Path,
 ) -> None:
@@ -1150,6 +1306,7 @@ def test_v3_rejects_an_agent_receipt_above_the_native_agent_cap(
         )
         return type("Completed", (), {"returncode": 0})()
 
+    publish_fixture(tmp_path)
     with pytest.raises(DispatchError, match="exceeded the native agent cap"):
         dispatch_headline_study(
             plan_path=plan_path,
@@ -1185,6 +1342,7 @@ def test_v3_invalid_receipt_still_enforces_provider_budget_caps(
         )
         return type("Completed", (), {"returncode": 1})()
 
+    publish_fixture(tmp_path)
     with pytest.raises(DispatchError, match="exceeded the native agent cap"):
         dispatch_headline_study(
             plan_path=plan_path,
@@ -1283,6 +1441,7 @@ def test_v4_paid_dispatch_rejects_capacity_that_expired_before_runner(
     )
     plan_path.write_text(json.dumps(payload, sort_keys=True))
 
+    publish_fixture(tmp_path)
     with pytest.raises(DispatchError, match="capacity evidence is stale"):
         dispatch_headline_study(
             plan_path=plan_path,
@@ -1451,6 +1610,7 @@ def test_v4_live_capacity_recheck_rejects_exhausted_account_before_runner(
         nonlocal runner_called
         runner_called = True
 
+    publish_fixture(tmp_path)
     with pytest.raises(DispatchError, match="remaining provider capacity"):
         dispatch_headline_study(
             plan_path=plan_path,
@@ -1535,6 +1695,7 @@ def test_v4_live_recheck_runs_after_preflight_and_is_captured_before_runner(
         assert result["status"] == "accepted"
         raise RuntimeError("stop after first runner boundary")
 
+    publish_fixture(tmp_path)
     with pytest.raises(RuntimeError, match="runner boundary"):
         dispatch_headline_study(
             plan_path=plan_path,
@@ -1564,6 +1725,7 @@ def test_v4_failed_live_probe_consumes_authorization_before_retry(
         calls += 1
         raise TimeoutError("transport SECRET-SENTINEL")
 
+    publish_fixture(tmp_path)
     with pytest.raises(DispatchError, match="TimeoutError") as failure:
         dispatch_headline_study(
             plan_path=plan_path,
@@ -1637,6 +1799,7 @@ def test_v3_authorization_is_bound_to_one_completed_prefix(
         _append(receipts_path, _receipt(spec, task_id=task_id, arm=arm, cost=0.5))
         return type("Completed", (), {"returncode": 0})()
 
+    publish_fixture(tmp_path)
     summary = dispatch_headline_study(
         plan_path=plan_path,
         repo_root=tmp_path,

@@ -20,6 +20,7 @@ from headline_v4_judge_canary import (  # noqa: E402
     load_canary_plan,
     run_canary,
 )
+from tests.git_publish_helpers import publish_fixture  # noqa: E402
 
 
 def _plan(tmp_path: Path, *, authorized: bool = True) -> Path:
@@ -58,6 +59,7 @@ def _plan(tmp_path: Path, *, authorized: bool = True) -> Path:
 
 def test_canary_runs_exact_isolated_judge_contract(tmp_path: Path) -> None:
     plan_path = _plan(tmp_path)
+    publish_fixture(tmp_path)
     plan = load_canary_plan(plan_path, repo_root=tmp_path)
     observed: dict[str, object] = {}
 
@@ -97,7 +99,9 @@ def test_canary_refuses_closed_plan(tmp_path: Path) -> None:
 
 
 def test_canary_refuses_replay(tmp_path: Path) -> None:
-    plan = load_canary_plan(_plan(tmp_path), repo_root=tmp_path)
+    plan_path = _plan(tmp_path)
+    publish_fixture(tmp_path)
+    plan = load_canary_plan(plan_path, repo_root=tmp_path)
     output = tmp_path / "results/canary/result.json"
     output.parent.mkdir(parents=True)
     output.write_text("{}")

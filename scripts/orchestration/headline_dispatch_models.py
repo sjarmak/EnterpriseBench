@@ -25,6 +25,7 @@ class DispatchSlot:
 @dataclass(frozen=True)
 class DispatchPlan:
     path: Path
+    source_hash: str
     spec_path: Path
     manifest_path: Path
     preflight_evidence_path: Path
