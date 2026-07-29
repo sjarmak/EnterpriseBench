@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v6",
+  "status": "LOCKED-NO-SPEND",
+  "study_spec": "configs/studies/rryas-headline-v6/study_spec.json",
+  "study_spec_file_hash": "sha256:441354eaccb1b4204537f29126b1bebcd217c9f7c1547fdc52fbb312a0640374",
+  "study_spec_hash": "sha256:68a59e65a97bad154e48af2acef956beddb7c4ab218010df058d83840a3a3e1b",
+  "final_manifest": "configs/studies/rryas-headline-v6/final_manifest.json",
+  "final_manifest_hash": "sha256:556f1b46b166374ee9cf79f6706c9be80421cba5e1ffc84c61edc8a206227c2b",
+  "preflight_evidence": "configs/studies/rryas-headline-v6/preflight_evidence.json",
+  "preflight_evidence_hash": "sha256:a2f4c4c034f6d972b8c1352f67adc4933e37a6e29209e02a40ac9132940763cc",
+  "cost_forecast": {
+    "basis": "All immutable v1, v2, v3, and v5 attempts, including terminal invalid attempts and the structurally proven zero-cost pre-agent MCP failure, with provider-native outer-agent cost and zero cache reads/writes on every agent-executed attempt.",
+    "sample_receipts": [
+      {
+        "path": "results/studies/rryas-headline-v1/receipts.jsonl",
+        "sha256": "sha256:d074eee11e5b39e5f1a9584bc6ab0deff419f3ff9ba111fffe240715869144df"
+      },
+      {
+        "path": "results/studies/rryas-headline-v2/receipts.jsonl",
+        "sha256": "sha256:ffa8cac931f6fa6f2fe702719c904c7ba3c8e1121df41f14a57f60da5cae782a"
+      },
+      {
+        "path": "results/studies/rryas-headline-v3/receipts.jsonl",
+        "sha256": "sha256:d036efd7bfe402910338f2016ca24a181f09084211283d360988e9751d977b64"
+      },
+      {
+        "path": "results/studies/rryas-headline-v5/receipts.jsonl",
+        "sha256": "sha256:cbd815f188af68c385db044031c9b2edc390cfbba19cac11719db77364333851"
+      }
+    ],
+    "sample_attempts": 35,
+    "sample_outer_spend_usd": 145.601469,
+    "mean_per_slot_usd": 4.160041971,
+    "forecast_outer_spend_usd": 374.403777,
+    "max_observed_per_slot_usd": 9.085286,
+    "empirical_slot_count_envelope_usd": 817.67574,
+    "authorization_outer_spend_ceiling_usd": 990.0,
+    "uncovered_costs": [
+      "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
+      "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "up to four one-token Haiku capacity probes per authorization are provider usage outside trial receipts",
+      "local Docker compute is not priced"
+    ]
+  },
+  "batch_policy": {
+    "max_slots_per_dispatch": 9,
+    "complete_task_triplets": true,
+    "score_independent_boundaries": true,
+    "agent_max_budget_usd_per_slot": 9.1,
+    "judge_max_budget_usd_per_call": 0.1,
+    "max_judge_calls_per_slot": 5,
+    "max_judge_attempts_per_call": 3,
+    "outer_spend_hard_cap_per_slot_usd": 10.6
+  },
+  "provider_capacity": {
+    "confirmed": false,
+    "capacity_reference": null,
+    "confirmed_completed_prefix": null,
+    "confirmed_max_slots": null,
+    "eligibility_policy": "fresh-account-specific-utilization-below-100-percent",
+    "confound_policy": "accept-and-report-observed-nonzero-provider-utilization"
+  },
+  "authorization": {
+    "paid_dispatch_authorized": false,
+    "authorization_reference": null,
+    "authorized_completed_prefix": null,
+    "authorized_end_prefix": null,
+    "authorized_batch_hash": null,
+    "authorized_outer_spend_ceiling_usd": null
+  }
+}
