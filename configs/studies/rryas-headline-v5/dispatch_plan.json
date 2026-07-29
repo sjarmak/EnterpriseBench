@@ -3,12 +3,12 @@
   "study_id": "rryas-headline-v5",
   "status": "LOCKED-NO-SPEND",
   "study_spec": "configs/studies/rryas-headline-v5/study_spec.json",
-  "study_spec_file_hash": "sha256:2f459b04fb70e578832a6a8ee4fdbf51c90c74e1164267edf2574d52fec6ff8e",
-  "study_spec_hash": "sha256:6b75d45f64d37c07996a7b16bd5e66d2724c20b91f2fd092a9d7bfcc373a6192",
+  "study_spec_file_hash": "sha256:a85d931f1dc18274161c48bbc578e1636289690b5122033905166301c3c5283c",
+  "study_spec_hash": "sha256:8b5429dd052a08a122e38468df571823177e8a2ee1cf1528c6e8c2fbc2efe1b6",
   "final_manifest": "configs/studies/rryas-headline-v5/final_manifest.json",
-  "final_manifest_hash": "sha256:a19dd9861dde935cac73f397a2ee1e425f17c2fc54f3c4efc464f4456eecf654",
+  "final_manifest_hash": "sha256:1c73058ae1d711a7a2d54bda3b36fe97c8ab573aa69b0673e7a815a9c47ebfa3",
   "preflight_evidence": "configs/studies/rryas-headline-v5/preflight_evidence.json",
-  "preflight_evidence_hash": "sha256:5933b774c9cd3679f61b58c102aafb924aad52e5161b7d7cf759918ca2edabab",
+  "preflight_evidence_hash": "sha256:72d641d2614a4d9ee87592ee24691904ee57bcbdb81de4f6a1215604bd604ee8",
   "cost_forecast": {
     "basis": "All immutable v1, v2, and v3 attempts, including terminal invalid attempts, with provider-native outer-agent cost and zero cache reads/writes.",
     "sample_receipts": [
