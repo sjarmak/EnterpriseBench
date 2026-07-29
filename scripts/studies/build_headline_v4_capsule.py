@@ -98,9 +98,11 @@ def _cost_forecast(
     repo_root: Path,
     *,
     protocol: HeadlineProtocol = V4_PROTOCOL,
+    cost_receipts: Sequence[Path] = COST_RECEIPTS,
+    basis: str | None = None,
 ) -> dict[str, Any]:
     samples = tuple(
-        (path, _sample_costs(repo_root / path)) for path in COST_RECEIPTS
+        (path, _sample_costs(repo_root / path)) for path in cost_receipts
     )
     costs = tuple(cost for _path, values in samples for cost in values)
     total = sum(costs)
@@ -120,9 +122,12 @@ def _cost_forecast(
         )
     return {
         "basis": (
-            "All immutable v1, v2, and v3 attempts, including terminal invalid "
-            "attempts, with provider-native outer-agent cost and zero cache "
-            "reads/writes."
+            basis
+            or (
+                "All immutable v1, v2, and v3 attempts, including terminal "
+                "invalid attempts, with provider-native outer-agent cost and "
+                "zero cache reads/writes."
+            )
         ),
         "sample_receipts": [
             {"path": str(path), "sha256": file_hash(repo_root / path)}
@@ -190,6 +195,8 @@ def build_core_payloads(
     protocol: HeadlineProtocol = V4_PROTOCOL,
     config_dir: Path = V4_CONFIG_DIR,
     purpose: str | None = None,
+    cost_receipts: Sequence[Path] = COST_RECEIPTS,
+    cost_basis: str | None = None,
 ) -> CorePayloads:
     """Derive every isolated-judge successor artifact without model inference."""
 
@@ -314,7 +321,12 @@ def build_core_payloads(
         "final_manifest_hash": _payload_hash(manifest),
         "preflight_evidence": str(config_dir / "preflight_evidence.json"),
         "preflight_evidence_hash": _payload_hash(evidence),
-        "cost_forecast": _cost_forecast(repo_root, protocol=protocol),
+        "cost_forecast": _cost_forecast(
+            repo_root,
+            protocol=protocol,
+            cost_receipts=cost_receipts,
+            basis=cost_basis,
+        ),
         "batch_policy": {
             "max_slots_per_dispatch": policy["max_slots_per_dispatch"],
             "complete_task_triplets": True,

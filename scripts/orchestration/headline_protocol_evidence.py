@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from eb_study import file_hash
-from headline_protocol import HeadlineProtocol, V5_PROTOCOL
+from headline_protocol import HeadlineProtocol, V5_PROTOCOL, V6_PROTOCOL
 
 
 def validate_protocol_amendment_evidence(
@@ -17,19 +17,38 @@ def validate_protocol_amendment_evidence(
 ) -> None:
     """Fail closed when a protocol amendment's cited evidence has drifted."""
 
-    if protocol != V5_PROTOCOL:
+    if protocol not in (V5_PROTOCOL, V6_PROTOCOL):
         return
     amendment = analysis_plan.get("protocol_amendment")
     if not isinstance(amendment, dict):
-        raise ValueError("v5 protocol amendment is missing")
-    evidence_value = amendment.get("zero_agent_exposure_evidence")
-    expected_hash = amendment.get("zero_agent_exposure_evidence_sha256")
-    if not isinstance(evidence_value, str) or not isinstance(expected_hash, str):
-        raise ValueError("v5 zero-agent exposure evidence is not hash-bound")
+        raise ValueError(f"{protocol.study_id} protocol amendment is missing")
+    if protocol == V5_PROTOCOL:
+        evidence = (
+            (
+                amendment.get("zero_agent_exposure_evidence"),
+                amendment.get("zero_agent_exposure_evidence_sha256"),
+            ),
+        )
+        error = "v5 zero-agent exposure evidence"
+    else:
+        evidence = (
+            (
+                amendment.get("predecessor_terminal_evidence"),
+                amendment.get("predecessor_terminal_evidence_sha256"),
+            ),
+            (
+                amendment.get("predecessor_receipts"),
+                amendment.get("predecessor_receipts_sha256"),
+            ),
+        )
+        error = "v6 predecessor evidence"
 
     root = repo_root.resolve()
-    evidence_path = (root / evidence_value).resolve()
-    if evidence_path == root or root not in evidence_path.parents:
-        raise ValueError("v5 zero-agent exposure evidence escapes the repository")
-    if not evidence_path.is_file() or file_hash(evidence_path) != expected_hash:
-        raise ValueError("v5 zero-agent exposure evidence hash does not match")
+    for evidence_value, expected_hash in evidence:
+        if not isinstance(evidence_value, str) or not isinstance(expected_hash, str):
+            raise ValueError(f"{error} is not hash-bound")
+        evidence_path = (root / evidence_value).resolve()
+        if evidence_path == root or root not in evidence_path.parents:
+            raise ValueError(f"{error} escapes the repository")
+        if not evidence_path.is_file() or file_hash(evidence_path) != expected_hash:
+            raise ValueError(f"{error} hash does not match")

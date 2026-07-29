@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 for import_path in (
     PROJECT_ROOT / "lib",
@@ -15,10 +17,12 @@ for import_path in (
     sys.path.insert(0, str(import_path))
 
 from build_headline_v3_capsule import (  # noqa: E402
+    _sample_costs,
     build_core_payloads,
     configured_revision,
     write_capsule,
 )
+from eb_study import ReceiptError  # noqa: E402
 from headline_protocol import V3_PROTOCOL  # noqa: E402
 
 
@@ -89,3 +93,51 @@ def test_repository_v3_artifacts_are_current() -> None:
     build = build_core_payloads(PROJECT_ROOT, revision=revision)
 
     write_capsule(PROJECT_ROOT, build, check=True)
+
+
+def test_cost_samples_reject_schema_less_zero_cost_claim(tmp_path: Path) -> None:
+    receipts = tmp_path / "receipts.jsonl"
+    receipts.write_text(
+        json.dumps(
+            {
+                "usage": None,
+                "status": "infra_invalid",
+                "failure_class": "infra_mcp_preflight",
+                "score": None,
+                "score_contract": None,
+                "arm_gate_proof": None,
+                "tool_use": {},
+                "artifacts": {"results.json": "sha256:result"},
+            }
+        )
+        + "\n"
+    )
+
+    with pytest.raises(ReceiptError):
+        _sample_costs(receipts)
+
+
+def test_cost_samples_reject_zero_cost_claim_with_agent_trace(
+    tmp_path: Path,
+) -> None:
+    source = (
+        PROJECT_ROOT
+        / "results"
+        / "studies"
+        / "rryas-headline-v5"
+        / "receipts.jsonl"
+    )
+    receipt = json.loads(source.read_text().splitlines()[-1])
+    contradictory = {
+        **receipt,
+        "arm_gate_proof": "mode_gate:agent-started",
+        "artifacts": {
+            **receipt["artifacts"],
+            "agent_trace.jsonl": "sha256:trace",
+        },
+    }
+    receipts = tmp_path / "receipts.jsonl"
+    receipts.write_text(json.dumps(contradictory) + "\n")
+
+    with pytest.raises(ValueError, match="lacks cache-isolated outer cost"):
+        _sample_costs(receipts)

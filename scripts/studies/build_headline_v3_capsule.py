@@ -25,7 +25,12 @@ for import_path in (
 from code_finder_interface_pilot_preflight import (  # noqa: E402
     _default_provenance_provider,
 )
-from eb_study import StudySpec, file_hash  # noqa: E402
+from eb_study import (  # noqa: E402
+    StudySpec,
+    TrialReceipt,
+    file_hash,
+    is_zero_cost_pre_agent_mcp_failure,
+)
 from headline_protocol import (  # noqa: E402
     CANDIDATE_LOCK_REVISION,
     REQUIRED_CACHE_ISOLATION,
@@ -93,10 +98,13 @@ def _sample_costs(receipts_path: Path) -> tuple[float, ...]:
     for line_number, line in enumerate(receipts_path.read_text().splitlines(), start=1):
         if not line.strip():
             continue
-        receipt = json.loads(line)
-        usage = receipt.get("usage")
-        isolation = receipt.get("tool_use", {}).get("cache_isolation")
-        cost = usage.get("cost_usd") if isinstance(usage, dict) else None
+        receipt = TrialReceipt.from_json(json.loads(line))
+        if is_zero_cost_pre_agent_mcp_failure(receipt):
+            costs.append(0.0)
+            continue
+        usage = receipt.usage
+        isolation = receipt.tool_use.get("cache_isolation")
+        cost = usage.cost_usd if usage is not None else None
         if (
             not isinstance(cost, (int, float))
             or isinstance(cost, bool)

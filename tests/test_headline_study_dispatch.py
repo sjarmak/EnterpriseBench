@@ -207,6 +207,7 @@ def _write_fixture(
     capacity_gated = study_id in {
         "rryas-headline-v4",
         "rryas-headline-v5",
+        "rryas-headline-v6",
     }
     paid_batch = study_id == "rryas-headline-v3" or capacity_gated
     receipts_path.parent.mkdir(parents=True)

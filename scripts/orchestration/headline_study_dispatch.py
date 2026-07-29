@@ -23,12 +23,12 @@ for import_path in (
 
 from eb_study import (  # noqa: E402
     ReceiptError,
-    STATUS_INFRA_INVALID,
     STATUS_VALID,
     StudyCapsule,
     StudySpec,
     TrialReceipt,
     file_hash,
+    is_zero_cost_pre_agent_mcp_failure,
     read_receipts,
 )
 from headline_study_preflight import (  # noqa: E402
@@ -491,17 +491,7 @@ def _terminal_receipt_cost(receipt: TrialReceipt) -> float:
 
     if receipt.usage is not None:
         return _receipt_cost(receipt)
-    if (
-        receipt.status == STATUS_INFRA_INVALID
-        and receipt.failure_class == "infra_mcp_preflight"
-        and receipt.score is None
-        and receipt.score_contract is None
-        and receipt.arm_gate_proof is None
-        and not receipt.tool_use
-        and "results.json" in receipt.artifacts
-        and set(receipt.artifacts)
-        <= {"injected_instruction.md", "results.json"}
-    ):
+    if is_zero_cost_pre_agent_mcp_failure(receipt):
         return 0.0
     raise DispatchError(f"receipt {receipt.trial.key} has no outer cost")
 

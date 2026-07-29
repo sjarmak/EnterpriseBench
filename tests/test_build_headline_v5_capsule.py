@@ -22,6 +22,7 @@ from build_headline_v5_capsule import (  # noqa: E402
     configured_revision,
     write_capsule,
 )
+import build_headline_v5_capsule as v5_builder  # noqa: E402
 import headline_protocol_evidence as protocol_evidence  # noqa: E402
 from headline_protocol import V4_PROTOCOL, V5_PROTOCOL  # noqa: E402
 
@@ -134,3 +135,40 @@ def test_v5_builder_rejects_changed_zero_exposure_evidence(
 
     with pytest.raises(ValueError, match="zero-agent exposure evidence"):
         build_core_payloads(PROJECT_ROOT, revision=_head())
+
+
+def test_terminal_v5_check_rejects_tampered_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dir = tmp_path / v5_builder.V5_CONFIG_DIR
+    config_dir.mkdir(parents=True)
+    required = (
+        "analysis_plan.json",
+        "dispatch_plan.json",
+        "final_manifest.json",
+        "preflight_evidence.json",
+        "study_spec.json",
+    )
+    for name in required:
+        (config_dir / name).write_bytes(b"expected")
+    (config_dir / "final_manifest.json").write_bytes(b"tampered")
+    terminal = tmp_path / v5_builder.V5_TERMINAL
+    terminal.parent.mkdir(parents=True)
+    terminal.write_text("{}\n")
+    monkeypatch.setattr(
+        v5_builder,
+        "_committed_capsule_bytes",
+        lambda _root, _name: b"expected",
+        raising=False,
+    )
+
+    with pytest.raises(ValueError, match="terminal v5 capsule artifact drifted"):
+        write_capsule(tmp_path, object(), check=True)
+
+
+def test_terminal_v5_write_mode_refuses_regeneration() -> None:
+    build = build_core_payloads(PROJECT_ROOT, revision=_head())
+
+    with pytest.raises(ValueError, match="terminal v5 capsule cannot be rewritten"):
+        write_capsule(PROJECT_ROOT, build, check=False)

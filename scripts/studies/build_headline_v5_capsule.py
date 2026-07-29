@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import subprocess
 import sys
 from typing import Sequence
 
@@ -29,6 +30,10 @@ from eb_study import StudySpec  # noqa: E402
 from headline_protocol import V5_PROTOCOL  # noqa: E402
 
 V5_CONFIG_DIR = Path("configs/studies") / V5_PROTOCOL.study_id
+V5_TERMINAL = (
+    Path("results/studies") / V5_PROTOCOL.study_id / "batch-001-terminal.json"
+)
+V5_FROZEN_CONFIG_COMMIT = "51b8127"
 V5_PURPOSE = (
     "Confirmatory Claude Sonnet 5 protocol comparison on the unchanged "
     "31-task v4 population after v4 failed during run_task module import "
@@ -49,9 +54,45 @@ def build_core_payloads(repo_root: Path, *, revision: str):
     )
 
 
+def _committed_capsule_bytes(repo_root: Path, name: str) -> bytes:
+    result = subprocess.run(
+        [
+            "git",
+            "show",
+            f"{V5_FROZEN_CONFIG_COMMIT}:{V5_CONFIG_DIR / name}",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        check=True,
+    )
+    return result.stdout
+
+
 def write_capsule(repo_root: Path, build, *, check: bool) -> None:
     """Write or verify the v5 capsule."""
 
+    if (repo_root.resolve() / V5_TERMINAL).is_file():
+        if not check:
+            raise ValueError("terminal v5 capsule cannot be rewritten")
+        required = {
+            "analysis_plan.json",
+            "dispatch_plan.json",
+            "final_manifest.json",
+            "preflight_evidence.json",
+            "study_spec.json",
+        }
+        output_dir = repo_root.resolve() / V5_CONFIG_DIR
+        for name in sorted(required):
+            path = output_dir / name
+            if (
+                not path.is_file()
+                or path.read_bytes()
+                != _committed_capsule_bytes(repo_root, name)
+            ):
+                raise ValueError(
+                    f"terminal v5 capsule artifact drifted: {path}"
+                )
+        return
     _write_capsule(
         repo_root,
         build,

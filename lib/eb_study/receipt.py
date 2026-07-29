@@ -47,6 +47,25 @@ STATUS_INFRA_INVALID = "infra_invalid"
 STATUS_INELIGIBLE = "ineligible"
 
 STATUSES = (STATUS_VALID, STATUS_INFRA_INVALID, STATUS_INELIGIBLE)
+PRE_AGENT_MCP_ARTIFACTS = frozenset(
+    {"injected_instruction.md", "results.json"}
+)
+
+
+def is_zero_cost_pre_agent_mcp_failure(receipt: TrialReceipt) -> bool:
+    """Return whether a validated receipt proves failure before agent startup."""
+
+    return (
+        receipt.usage is None
+        and receipt.status == STATUS_INFRA_INVALID
+        and receipt.failure_class == "infra_mcp_preflight"
+        and receipt.score is None
+        and receipt.score_contract is None
+        and receipt.arm_gate_proof is None
+        and not receipt.tool_use
+        and "results.json" in receipt.artifacts
+        and set(receipt.artifacts) <= PRE_AGENT_MCP_ARTIFACTS
+    )
 
 
 @dataclass(frozen=True)

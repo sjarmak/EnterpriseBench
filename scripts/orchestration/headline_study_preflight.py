@@ -33,6 +33,7 @@ from code_finder_interface_pilot_preflight import (  # noqa: E402
 )
 from eb_study import StudySpec, file_hash  # noqa: E402
 from headline_protocol import (  # noqa: E402,F401
+    CAPACITY_GATED_STUDY_IDS,
     CANDIDATE_LOCK_REVISION,
     HEADLINE_PROTOCOLS,
     POST_LOCK_EXPOSURES,
@@ -488,7 +489,7 @@ def validate_headline_study(
         raise ValueError("headline cache-isolation contract is not locked")
     expected_judge = (
         V4_REQUIRED_JUDGE
-        if protocol in (V4_PROTOCOL, V5_PROTOCOL)
+        if protocol.study_id in CAPACITY_GATED_STUDY_IDS
         else REQUIRED_JUDGE
     )
     if manifest.get("judge_configuration") != expected_judge:

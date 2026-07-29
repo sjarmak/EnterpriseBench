@@ -98,6 +98,34 @@ V5_ZERO_AGENT_EXPOSURE_EVIDENCE = (
 V5_ZERO_AGENT_EXPOSURE_EVIDENCE_SHA256 = (
     "sha256:05c65bb88a98276e4065c6eb3ab1cfe9bf18bfbdb68b3553b73adf0ecd10edb9"
 )
+V6_ADDITIONAL_EXPOSURES = (
+    "dep-graph-tri-tokio-hyper-tonic-001",
+)
+V6_POST_LOCK_EXPOSURES = (
+    *V5_POST_LOCK_EXPOSURES,
+    *V6_ADDITIONAL_EXPOSURES,
+)
+V6_PREDECESSOR_TERMINAL_EVIDENCE = (
+    "results/studies/rryas-headline-v5/batch-001-terminal.json"
+)
+V6_PREDECESSOR_TERMINAL_EVIDENCE_SHA256 = (
+    "sha256:bbbac4f9a943aff8ab30e3e1e80882824e114570995e5417a1db5fec78733ab3"
+)
+V6_PREDECESSOR_RECEIPTS = "results/studies/rryas-headline-v5/receipts.jsonl"
+V6_PREDECESSOR_RECEIPTS_SHA256 = (
+    "sha256:cbd815f188af68c385db044031c9b2edc390cfbba19cac11719db77364333851"
+)
+V6_UNEXPOSED_FAILED_TASKS = ("dep-traversal-001",)
+V6_POST_LOCK_EXPOSURE_EVIDENCE = {
+    **V5_POST_LOCK_EXPOSURE_EVIDENCE,
+    **{
+        candidate_id: (
+            V6_PREDECESSOR_RECEIPTS,
+            V6_PREDECESSOR_TERMINAL_EVIDENCE,
+        )
+        for candidate_id in V6_ADDITIONAL_EXPOSURES
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -206,6 +234,19 @@ V5_PROTOCOL = HeadlineProtocol(
         "failure is fixed and terminally sealed."
     ),
 )
+V6_PROTOCOL = HeadlineProtocol(
+    study_id="rryas-headline-v6",
+    task_count=30,
+    slot_count=90,
+    post_lock_exposures=V6_POST_LOCK_EXPOSURES,
+    post_lock_exposure_evidence=V6_POST_LOCK_EXPOSURE_EVIDENCE,
+    arms=V2_REQUIRED_ARMS,
+    arm_descriptions=V2_REQUIRED_ARM_DESCRIPTIONS,
+    forecast_basis=(
+        "No v6 spend authorization before the v5 mid-batch MCP authentication "
+        "failure is terminally sealed and every v5 agent-exposed task is excluded."
+    ),
+)
 V3_MAX_SLOTS_PER_DISPATCH = 12
 V3_AGENT_MAX_BUDGET_USD_PER_SLOT = 9.1
 V3_JUDGE_MAX_BUDGET_USD_PER_CALL = 0.01
@@ -230,6 +271,18 @@ V4_OUTER_SPEND_HARD_CAP_PER_SLOT_USD = round(
     * V4_MAX_JUDGE_ATTEMPTS_PER_CALL,
     6,
 )
+CAPACITY_GATED_PROTOCOLS = (V4_PROTOCOL, V5_PROTOCOL, V6_PROTOCOL)
+CAPACITY_GATED_STUDY_IDS = frozenset(
+    protocol.study_id for protocol in CAPACITY_GATED_PROTOCOLS
+)
+V4_FAMILY_BATCH_POLICY = {
+    "max_slots_per_dispatch": V4_MAX_SLOTS_PER_DISPATCH,
+    "agent_max_budget_usd_per_slot": V4_AGENT_MAX_BUDGET_USD_PER_SLOT,
+    "judge_max_budget_usd_per_call": V4_JUDGE_MAX_BUDGET_USD_PER_CALL,
+    "max_judge_calls_per_slot": V4_MAX_JUDGE_CALLS_PER_SLOT,
+    "max_judge_attempts_per_call": V4_MAX_JUDGE_ATTEMPTS_PER_CALL,
+    "outer_spend_hard_cap_per_slot_usd": V4_OUTER_SPEND_HARD_CAP_PER_SLOT_USD,
+}
 HEADLINE_BATCH_POLICIES = {
     V3_PROTOCOL.study_id: {
         "max_slots_per_dispatch": V3_MAX_SLOTS_PER_DISPATCH,
@@ -241,31 +294,14 @@ HEADLINE_BATCH_POLICIES = {
             V3_OUTER_SPEND_HARD_CAP_PER_SLOT_USD
         ),
     },
-    V4_PROTOCOL.study_id: {
-        "max_slots_per_dispatch": V4_MAX_SLOTS_PER_DISPATCH,
-        "agent_max_budget_usd_per_slot": V4_AGENT_MAX_BUDGET_USD_PER_SLOT,
-        "judge_max_budget_usd_per_call": V4_JUDGE_MAX_BUDGET_USD_PER_CALL,
-        "max_judge_calls_per_slot": V4_MAX_JUDGE_CALLS_PER_SLOT,
-        "max_judge_attempts_per_call": V4_MAX_JUDGE_ATTEMPTS_PER_CALL,
-        "outer_spend_hard_cap_per_slot_usd": (
-            V4_OUTER_SPEND_HARD_CAP_PER_SLOT_USD
-        ),
-    },
-    V5_PROTOCOL.study_id: {
-        "max_slots_per_dispatch": V4_MAX_SLOTS_PER_DISPATCH,
-        "agent_max_budget_usd_per_slot": V4_AGENT_MAX_BUDGET_USD_PER_SLOT,
-        "judge_max_budget_usd_per_call": V4_JUDGE_MAX_BUDGET_USD_PER_CALL,
-        "max_judge_calls_per_slot": V4_MAX_JUDGE_CALLS_PER_SLOT,
-        "max_judge_attempts_per_call": V4_MAX_JUDGE_ATTEMPTS_PER_CALL,
-        "outer_spend_hard_cap_per_slot_usd": (
-            V4_OUTER_SPEND_HARD_CAP_PER_SLOT_USD
-        ),
+    **{
+        protocol.study_id: dict(V4_FAMILY_BATCH_POLICY)
+        for protocol in CAPACITY_GATED_PROTOCOLS
     },
 }
 HEADLINE_STUDY_SPEND_CEILINGS_USD = {
     V3_PROTOCOL.study_id: 890.0,
-    V4_PROTOCOL.study_id: 990.0,
-    V5_PROTOCOL.study_id: 990.0,
+    **{protocol.study_id: 990.0 for protocol in CAPACITY_GATED_PROTOCOLS},
 }
 HEADLINE_PROTOCOLS = {
     protocol.study_id: protocol
@@ -273,13 +309,9 @@ HEADLINE_PROTOCOLS = {
         V1_PROTOCOL,
         V2_PROTOCOL,
         V3_PROTOCOL,
-        V4_PROTOCOL,
-        V5_PROTOCOL,
+        *CAPACITY_GATED_PROTOCOLS,
     )
 }
-CAPACITY_GATED_STUDY_IDS = frozenset(
-    (V4_PROTOCOL.study_id, V5_PROTOCOL.study_id)
-)
 PAID_BATCH_STUDY_IDS = frozenset(
     (V3_PROTOCOL.study_id, *CAPACITY_GATED_STUDY_IDS)
 )
@@ -419,6 +451,7 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
         V3_PROTOCOL.study_id: "v1 and v2 operational runs",
         V4_PROTOCOL.study_id: "v1, v2, and v3 operational runs",
         V5_PROTOCOL.study_id: "v1, v2, v3, and v4 operational attempts",
+        V6_PROTOCOL.study_id: "v1-v3 and v5 operational attempts",
     }[protocol.study_id]
     plan["claim_scope"] = (
         f"Claude Sonnet 5 on the {protocol.task_count}-task EnterpriseBench "
@@ -468,7 +501,7 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
             "excluded_candidate_ids": list(V4_ADDITIONAL_EXPOSURES),
             "predecessor_analysis_use": "operational evidence only",
         }
-    else:
+    elif protocol == V5_PROTOCOL:
         plan["protocol_amendment"] = {
             "predecessor": "rryas-headline-v4",
             "reason": "v4 stopped during run_task module import before agent startup",
@@ -483,4 +516,33 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
             ),
             "predecessor_analysis_use": "operational evidence only",
         }
+    elif protocol == V6_PROTOCOL:
+        plan["protocol_amendment"] = {
+            "predecessor": "rryas-headline-v5",
+            "reason": (
+                "v5 stopped fail-closed on a Sourcegraph MCP authentication "
+                "failure before agent startup on the fourth attempt"
+            ),
+            "selection_rule": (
+                "exclude every task with v1-v3 or v5 agent output; retain all "
+                "other locked candidates without inspecting reward"
+            ),
+            "excluded_candidate_ids": list(V6_ADDITIONAL_EXPOSURES),
+            "predecessor_terminal_evidence": (
+                V6_PREDECESSOR_TERMINAL_EVIDENCE
+            ),
+            "predecessor_terminal_evidence_sha256": (
+                V6_PREDECESSOR_TERMINAL_EVIDENCE_SHA256
+            ),
+            "predecessor_receipts": V6_PREDECESSOR_RECEIPTS,
+            "predecessor_receipts_sha256": (
+                V6_PREDECESSOR_RECEIPTS_SHA256
+            ),
+            "unexposed_failed_task_ids": list(V6_UNEXPOSED_FAILED_TASKS),
+            "predecessor_analysis_use": (
+                "operational evidence and task-level descriptive diagnostics only"
+            ),
+        }
+    else:
+        raise ValueError(f"unsupported headline protocol: {protocol.study_id}")
     return plan
