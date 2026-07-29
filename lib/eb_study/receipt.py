@@ -330,6 +330,31 @@ def read_receipts(path: Path) -> list[TrialReceipt]:
     return _parse_receipt_lines(path, lines)
 
 
+def cache_isolated_receipt_costs(path: Path) -> tuple[float, ...]:
+    """Return trusted historical costs, including proven pre-agent zeroes."""
+
+    costs: list[float] = []
+    for index, receipt in enumerate(read_receipts(path), start=1):
+        if is_zero_cost_pre_agent_mcp_failure(receipt):
+            costs.append(0.0)
+            continue
+        usage = receipt.usage
+        isolation = receipt.tool_use.get("cache_isolation")
+        cost = usage.cost_usd if usage is not None else None
+        if (
+            cost is None
+            or not isinstance(isolation, dict)
+            or isolation.get("valid") is not True
+            or isolation.get("cache_write_tokens") != 0
+            or isolation.get("cross_run_cache_read_tokens") != 0
+        ):
+            raise ReceiptError(
+                f"{path}: receipt {index} lacks cache-isolated outer cost"
+            )
+        costs.append(cost)
+    return tuple(costs)
+
+
 # ---------------------------------------------------------------------------
 # Field readers
 # ---------------------------------------------------------------------------

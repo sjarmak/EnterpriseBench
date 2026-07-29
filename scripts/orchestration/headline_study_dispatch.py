@@ -27,6 +27,7 @@ from eb_study import (  # noqa: E402
     StudyCapsule,
     StudySpec,
     TrialReceipt,
+    cache_isolated_receipt_costs,
     file_hash,
     is_zero_cost_pre_agent_mcp_failure,
     read_receipts,
@@ -139,35 +140,11 @@ def _sample_costs(
         if entry["sha256"] != file_hash(path):
             raise DispatchError(f"sample receipt hash drifted: {path}")
         try:
-            lines = path.read_text().splitlines()
-        except OSError as exc:
-            raise DispatchError(f"cannot read sample receipt {path}: {exc}") from exc
-        for line_number, line in enumerate(lines, start=1):
-            if not line.strip():
-                continue
-            try:
-                receipt = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise DispatchError(
-                    f"sample receipt {path}:{line_number} is invalid JSON"
-                ) from exc
-            usage = receipt.get("usage")
-            isolation = receipt.get("tool_use", {}).get("cache_isolation")
-            cost = usage.get("cost_usd") if isinstance(usage, dict) else None
-            if (
-                not isinstance(cost, (int, float))
-                or isinstance(cost, bool)
-                or not math.isfinite(cost)
-                or cost < 0
-                or not isinstance(isolation, dict)
-                or isolation.get("valid") is not True
-                or isolation.get("cache_write_tokens") != 0
-                or isolation.get("cross_run_cache_read_tokens") != 0
-            ):
-                raise DispatchError(
-                    f"sample receipt {path}:{line_number} lacks cache-isolated cost"
-                )
-            costs.append(float(cost))
+            costs.extend(cache_isolated_receipt_costs(path))
+        except ReceiptError:
+            raise DispatchError(
+                f"sample receipt {path} is malformed or lacks cache-isolated cost"
+            ) from None
     return tuple(costs)
 
 

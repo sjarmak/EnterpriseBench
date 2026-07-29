@@ -27,9 +27,8 @@ from code_finder_interface_pilot_preflight import (  # noqa: E402
 )
 from eb_study import (  # noqa: E402
     StudySpec,
-    TrialReceipt,
+    cache_isolated_receipt_costs,
     file_hash,
-    is_zero_cost_pre_agent_mcp_failure,
 )
 from headline_protocol import (  # noqa: E402
     CANDIDATE_LOCK_REVISION,
@@ -94,32 +93,10 @@ def _load_object(path: Path) -> dict[str, Any]:
 
 
 def _sample_costs(receipts_path: Path) -> tuple[float, ...]:
-    costs: list[float] = []
-    for line_number, line in enumerate(receipts_path.read_text().splitlines(), start=1):
-        if not line.strip():
-            continue
-        receipt = TrialReceipt.from_json(json.loads(line))
-        if is_zero_cost_pre_agent_mcp_failure(receipt):
-            costs.append(0.0)
-            continue
-        usage = receipt.usage
-        isolation = receipt.tool_use.get("cache_isolation")
-        cost = usage.cost_usd if usage is not None else None
-        if (
-            not isinstance(cost, (int, float))
-            or isinstance(cost, bool)
-            or not isinstance(isolation, dict)
-            or isolation.get("valid") is not True
-            or isolation.get("cross_run_cache_read_tokens") != 0
-            or isolation.get("cache_write_tokens") != 0
-        ):
-            raise ValueError(
-                f"{receipts_path}:{line_number} lacks cache-isolated outer cost"
-            )
-        costs.append(float(cost))
+    costs = cache_isolated_receipt_costs(receipts_path)
     if not costs:
         raise ValueError(f"{receipts_path} contains no cost evidence")
-    return tuple(costs)
+    return costs
 
 
 def _selected_tasks(

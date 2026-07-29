@@ -139,5 +139,5 @@ def test_cost_samples_reject_zero_cost_claim_with_agent_trace(
     receipts = tmp_path / "receipts.jsonl"
     receipts.write_text(json.dumps(contradictory) + "\n")
 
-    with pytest.raises(ValueError, match="lacks cache-isolated outer cost"):
+    with pytest.raises(ReceiptError, match="lacks cache-isolated outer cost"):
         _sample_costs(receipts)

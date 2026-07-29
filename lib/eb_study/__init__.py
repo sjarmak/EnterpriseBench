@@ -24,6 +24,7 @@ from .receipt import (
     TrialReceipt,
     TrialUsage,
     append_receipt,
+    cache_isolated_receipt_costs,
     is_zero_cost_pre_agent_mcp_failure,
     read_receipts,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "TrialReceipt",
     "TrialUsage",
     "append_receipt",
+    "cache_isolated_receipt_costs",
     "content_hash",
     "file_hash",
     "is_zero_cost_pre_agent_mcp_failure",

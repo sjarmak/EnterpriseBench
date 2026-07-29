@@ -25,6 +25,7 @@ from build_headline_v6_capsule import (  # noqa: E402
 from eb_study import file_hash  # noqa: E402
 import headline_protocol_evidence as protocol_evidence  # noqa: E402
 from headline_protocol import V5_PROTOCOL, V6_PROTOCOL  # noqa: E402
+from headline_study_dispatch import load_dispatch_plan  # noqa: E402
 
 
 V5_TERMINAL = Path("results/studies/rryas-headline-v5/batch-001-terminal.json")
@@ -112,6 +113,22 @@ def test_repository_v6_artifacts_are_current() -> None:
     )
 
     write_capsule(PROJECT_ROOT, build, check=True)
+
+
+def test_repository_v6_dispatch_plan_is_locked_no_spend() -> None:
+    plan = load_dispatch_plan(
+        PROJECT_ROOT
+        / "configs"
+        / "studies"
+        / V6_PROTOCOL.study_id
+        / "dispatch_plan.json",
+        repo_root=PROJECT_ROOT,
+    )
+
+    assert len(plan.slots) == 90
+    assert plan.paid_dispatch_authorized is False
+    assert plan.authorization_reference is None
+    assert plan.authorization_ceiling_usd == pytest.approx(990.0)
 
 
 @pytest.mark.parametrize("evidence_path", (V5_TERMINAL, V5_RECEIPTS))

@@ -214,16 +214,12 @@ def _write_fixture(
     sample_path = tmp_path / "sample_receipts.jsonl"
     sample_path.write_text(
         json.dumps(
-            {
-                "usage": {"cost_usd": per_slot_envelope},
-                "tool_use": {
-                    "cache_isolation": {
-                        "valid": True,
-                        "cache_write_tokens": 0,
-                        "cross_run_cache_read_tokens": 0,
-                    }
-                },
-            }
+            _receipt(
+                StudySpec.load(spec_path),
+                task_id="task-a",
+                arm="baseline",
+                cost=per_slot_envelope,
+            ).to_json()
         )
         + "\n"
     )
