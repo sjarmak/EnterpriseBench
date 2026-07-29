@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import os
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import sys
 
@@ -12,6 +14,26 @@ import run_task as run_task_module  # noqa: E402
 from headline_provider_capacity import (  # noqa: E402
     exclusive_provider_account_locks,
 )
+
+
+def test_run_task_cli_imports_capacity_dependencies_without_pythonpath() -> None:
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "orchestration" / "run_task.py"),
+            "--help",
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_standalone_task_holds_all_provider_accounts(

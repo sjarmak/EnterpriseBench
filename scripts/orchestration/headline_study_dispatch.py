@@ -22,6 +22,7 @@ for import_path in (
         sys.path.insert(0, str(import_path))
 
 from eb_study import (  # noqa: E402
+    ReceiptError,
     STATUS_VALID,
     StudyCapsule,
     StudySpec,
@@ -691,17 +692,28 @@ def _dispatch_headline_study(
         if runner_env is not None:
             runner_kwargs["env"] = runner_env
             runner_kwargs["pass_fds"] = provider_pass_fds
+        expected = plan.spec.trial_id(
+            slot.task_id, slot.arm, slot.repetition, slot.attempt
+        )
         completed = runner(command, **runner_kwargs)
-        updated = read_receipts(plan.receipts_path)
+        try:
+            updated = read_receipts(plan.receipts_path)
+        except ReceiptError:
+            outcome = (
+                f"exited {completed.returncode}"
+                if completed.returncode != 0
+                else "completed"
+            )
+            raise DispatchError(
+                f"run_task {outcome} for {expected.key} without a readable "
+                "appended receipt"
+            ) from None
         if len(updated) != before_count + 1:
             raise DispatchError(
                 "run_task must append exactly one receipt before dispatch can continue"
             )
         StudyCapsule.build(plan.spec, updated)
         receipt = updated[-1]
-        expected = plan.spec.trial_id(
-            slot.task_id, slot.arm, slot.repetition, slot.attempt
-        )
         if receipt.trial != expected:
             raise DispatchError(
                 f"run appended receipt {receipt.trial.key}, expected {expected.key}"

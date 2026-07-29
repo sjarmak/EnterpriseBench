@@ -18,7 +18,14 @@ for import_path in (
 ):
     sys.path.insert(0, str(import_path))
 
-from eb_study import StudySpec, TrialReceipt, file_hash, read_receipts  # noqa: E402
+from eb_study import (  # noqa: E402
+    ReceiptError,
+    StudySpec,
+    TrialReceipt,
+    file_hash,
+    read_receipts,
+)
+import headline_study_dispatch as dispatch_module  # noqa: E402
 from headline_study_dispatch import (  # noqa: E402
     DispatchError,
     authorization_batch_hash,
@@ -579,6 +586,67 @@ def test_clean_start_creates_receipt_parent_after_preflight(tmp_path: Path) -> N
             runner=runner,
             preflight=preflight,
         )
+
+
+def test_runner_failure_without_receipt_is_a_bounded_dispatch_error(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_rest, receipts_path = _write_fixture(
+        tmp_path,
+        authorized=True,
+    )
+    calls = 0
+
+    def runner(_command, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return type("Completed", (), {"returncode": 1})()
+
+    with pytest.raises(
+        DispatchError,
+        match=r"run_task exited 1 .* without a readable appended receipt",
+    ):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=runner,
+            preflight=lambda **_kwargs: object(),
+        )
+
+    assert calls == 1
+    assert receipts_path.exists() is False
+
+
+def test_receipt_error_cause_is_not_exposed_in_dispatch_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan_path, *_ = _write_fixture(tmp_path, authorized=True)
+    sentinel = "SECRET-RECEIPT-TOKEN"
+
+    def fail_read(_path: Path) -> list[TrialReceipt]:
+        raise ReceiptError(f"malformed receipt {sentinel}")
+
+    monkeypatch.setattr(dispatch_module, "read_receipts", fail_read)
+
+    try:
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=lambda *_args, **_kwargs: type(
+                "Completed",
+                (),
+                {"returncode": 1},
+            )(),
+            preflight=lambda **_kwargs: object(),
+        )
+    except DispatchError as exc:
+        assert sentinel not in str(exc)
+        assert sentinel not in traceback.format_exc()
+    else:
+        pytest.fail("receipt failure must stop dispatch")
 
 
 def test_budget_reserve_stops_before_starting_the_next_slot(tmp_path: Path) -> None:

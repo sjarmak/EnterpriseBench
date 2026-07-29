@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v4",
+  "batch": 1,
+  "status": "TERMINAL-PRE-INFERENCE-INFRA-INVALID",
+  "authorization": {
+    "reference": "user-authorized-headline-v4-batch-001-2026-07-28",
+    "batch_hash": "sha256:7db0d3021945d5908f29ebccdfb407ca9219032a056043b26e6230678c76a27b",
+    "plan_commit": "ea5bbaadd39987dac5fbcf054d44dc05fb1cedbc",
+    "plan_sha256": "da525ee5326746f3a2616389601cb8e886f5bd9a56fbe1c5fd740bf02be14f57",
+    "authorized_completed_prefix": 0,
+    "authorized_end_prefix": 9,
+    "consumed": true,
+    "retry_authorized": false
+  },
+  "capacity_recheck": {
+    "status": "accepted",
+    "started_sha256": "77e5a22629072fcda74f9d2ed08c936e6dc44b10c01df937a5bb07284fb18243",
+    "result_sha256": "b8c9304f935c4d03fb9f2859fc57a5e649bc8d6a2dee127e10550f25d66cc64e"
+  },
+  "failed_slot": {
+    "trial": "rryas-headline-v4/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/att1",
+    "phase": "runner_import",
+    "process_returncode": 1,
+    "error_type": "ModuleNotFoundError",
+    "error": "No module named 'eb_study'"
+  },
+  "observed_outputs": {
+    "failed_slot_output_dir": "results/studies/rryas-headline-v4/runs/dep-graph-tri-tokio-hyper-tonic-001/baseline",
+    "receipt_created": false,
+    "agent_stdout_created": false,
+    "agent_trace_created": false,
+    "results_created": false,
+    "agent_inference_started": false,
+    "agent_input_tokens": 0,
+    "agent_output_tokens": 0,
+    "agent_cost_usd": 0.0,
+    "capacity_probe_usage_is_uncovered": true
+  },
+  "sealed_study_files": [
+    "batch-001-terminal.json",
+    "capacity_rechecks/7db0d3021945d5908f29ebccdfb407ca9219032a056043b26e6230678c76a27b.result.json",
+    "capacity_rechecks/7db0d3021945d5908f29ebccdfb407ca9219032a056043b26e6230678c76a27b.started.json"
+  ],
+  "disposition": {
+    "headline_result": false,
+    "task_exposed_to_agent": false,
+    "continue_batch": false,
+    "retry_batch": false,
+    "reason": "run_task failed during Python module import before agent startup; the one-shot authorization and capacity recheck were consumed"
+  },
+  "recorded_at": "2026-07-29T02:45:31+00:00"
+}

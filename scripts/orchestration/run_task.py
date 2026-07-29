@@ -75,6 +75,7 @@ _load_env_local(_env_local, os.environ)
 # Reuse the TOML parser from create_sg_mirrors
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "infra"))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "orchestration"))
+sys.path.insert(0, str(REPO_ROOT / "lib"))
 from create_sg_mirrors import parse_toml  # noqa: E402
 from mirror_naming import derive_mirror_name  # noqa: E402
 from headline_provider_capacity import (  # noqa: E402
