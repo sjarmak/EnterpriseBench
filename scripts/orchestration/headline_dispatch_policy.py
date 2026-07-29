@@ -15,7 +15,11 @@ import tomllib
 from typing import Any, Iterator, Mapping, Sequence
 
 from eb_study import file_hash
-from headline_protocol import CAPACITY_GATED_STUDY_IDS, HEADLINE_BATCH_POLICIES
+from headline_protocol import (
+    CAPACITY_GATED_STUDY_IDS,
+    HEADLINE_BATCH_POLICIES,
+    HEADLINE_STUDY_SPEND_CEILINGS_USD,
+)
 
 
 class DispatchPolicyError(ValueError):
@@ -264,6 +268,7 @@ def authorization_batch_hash(
     start_prefix: int,
     end_prefix: int,
     capacity_reference: str | None = None,
+    authorization_ceiling_usd: float | None = None,
 ) -> str:
     """Bind one approval to the exact immutable command batch and spend cap."""
 
@@ -274,8 +279,13 @@ def authorization_batch_hash(
         "preflight_evidence_hash": file_hash(plan.preflight_evidence_path),
         "start_prefix": start_prefix,
         "end_prefix": end_prefix,
+        "study_authorization_outer_spend_ceiling_usd": (
+            plan.study_authorization_ceiling_usd
+        ),
         "authorization_outer_spend_ceiling_usd": (
             plan.authorization_ceiling_usd
+            if authorization_ceiling_usd is None
+            else authorization_ceiling_usd
         ),
         "outer_spend_hard_cap_per_slot_usd": (
             plan.v3_controls.outer_spend_hard_cap_per_slot_usd
@@ -336,8 +346,18 @@ def validate_v3_dispatch_controls(
     """Validate all frozen successor batch, capacity, and authorization controls."""
 
     frozen = HEADLINE_BATCH_POLICIES.get(study_id)
-    if frozen is None:
+    frozen_ceiling = HEADLINE_STUDY_SPEND_CEILINGS_USD.get(study_id)
+    if frozen is None or frozen_ceiling is None:
         raise DispatchPolicyError(f"{study_id} has no frozen batch policy")
+    if not math.isclose(
+        ceiling,
+        frozen_ceiling,
+        rel_tol=0.0,
+        abs_tol=1e-6,
+    ):
+        raise DispatchPolicyError(
+            f"{study_id} whole-study spend ceiling is not frozen"
+        )
     if study_id in CAPACITY_GATED_STUDY_IDS and set(authorization) != {
         "paid_dispatch_authorized",
         "authorization_reference",
@@ -362,12 +382,7 @@ def validate_v3_dispatch_controls(
         or not isinstance(authorized_ceiling, (int, float))
         or isinstance(authorized_ceiling, bool)
         or not math.isfinite(authorized_ceiling)
-        or not math.isclose(
-            float(authorized_ceiling),
-            ceiling,
-            rel_tol=0.0,
-            abs_tol=1e-6,
-        )
+        or authorized_ceiling <= 0
     ):
         raise DispatchPolicyError(
             "v3 authorization must bind the exact prefix, batch, and "
@@ -411,6 +426,15 @@ def validate_v3_dispatch_controls(
     if ceiling < hard_cap * slot_count:
         raise DispatchPolicyError(
             "v3 authorization ceiling does not cover every hard-capped slot"
+        )
+    if authorized and (
+        float(authorized_ceiling) > ceiling
+        or float(authorized_ceiling) + 1e-6
+        < hard_cap * (end_prefix - prefix)
+    ):
+        raise DispatchPolicyError(
+            "v3 batch authorization ceiling must cover the pending "
+            "batch without exceeding the whole-study ceiling"
         )
 
     if not isinstance(provider_capacity, dict):

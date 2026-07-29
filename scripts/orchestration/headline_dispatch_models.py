@@ -36,6 +36,7 @@ class DispatchPlan:
     forecast_outer_spend_usd: float
     empirical_envelope_usd: float
     per_slot_envelope_usd: float
+    study_authorization_ceiling_usd: float
     authorization_ceiling_usd: float
     paid_dispatch_authorized: bool
     authorization_reference: str | None

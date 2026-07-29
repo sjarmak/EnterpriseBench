@@ -227,9 +227,9 @@ def _write_fixture(
     )
 
     if study_id == "rryas-headline-v3" and ceiling == 20.0:
-        ceiling = 60.0
+        ceiling = 890.0
     if capacity_gated and ceiling == 20.0:
-        ceiling = 70.0
+        ceiling = 990.0
     plan_payload = {
                 "schema_version": 1,
                 "study_id": study_id,
@@ -849,8 +849,89 @@ def test_v3_authorization_binds_the_outer_spend_ceiling(
     payload["cost_forecast"]["authorization_outer_spend_ceiling_usd"] = 1e9
     plan_path.write_text(json.dumps(payload))
 
-    with pytest.raises(DispatchError, match="authorized spend ceiling"):
+    with pytest.raises(DispatchError, match="whole-study spend ceiling"):
         load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "batch_ceiling",
+    (True, -1.0, float("nan"), 55.4, 890.1),
+)
+def test_v3_rejects_invalid_batch_authorization_ceiling(
+    tmp_path: Path,
+    batch_ceiling: object,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+    payload = json.loads(plan_path.read_text())
+    payload["authorization"][
+        "authorized_outer_spend_ceiling_usd"
+    ] = batch_ceiling
+    plan_path.write_text(json.dumps(payload))
+
+    with pytest.raises(DispatchError, match="authorization"):
+        load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+
+def test_v5_rejects_ceiling_without_prior_spend_before_external_checks(
+    tmp_path: Path,
+) -> None:
+    plan_path, spec_path, *_rest, receipts_path = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v5",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=3,
+    )
+    spec = StudySpec.load(spec_path)
+    original = load_dispatch_plan(plan_path, repo_root=tmp_path)
+    for slot in original.slots[:3]:
+        slot.output_dir.mkdir(parents=True)
+        _append(
+            receipts_path,
+            _receipt(
+                spec,
+                task_id=slot.task_id,
+                arm=slot.arm,
+                cost=9.0,
+            ),
+        )
+
+    payload = json.loads(plan_path.read_text())
+    payload["authorization"][
+        "authorized_outer_spend_ceiling_usd"
+    ] = 31.8
+    plan_path.write_text(json.dumps(payload))
+    malformed = load_dispatch_plan(plan_path, repo_root=tmp_path)
+    commands = tuple(
+        compile_run_command(slot, plan=malformed, repo_root=tmp_path)
+        for slot in malformed.slots[3:6]
+    )
+    payload["authorization"]["authorized_batch_hash"] = authorization_batch_hash(
+        malformed,
+        commands,
+        start_prefix=3,
+        end_prefix=6,
+    )
+    plan_path.write_text(json.dumps(payload))
+
+    external_calls: list[str] = []
+    with pytest.raises(DispatchError, match="cumulative spend"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=lambda *_args, **_kwargs: external_calls.append("runner"),
+            preflight=lambda **_kwargs: external_calls.append("preflight"),
+            capacity_probe=lambda **_kwargs: external_calls.append("capacity"),
+        )
+
+    assert external_calls == []
 
 
 def test_v3_authorization_hash_binds_the_exact_pending_commands(

@@ -36,6 +36,7 @@ from eb_study import StudySpec, file_hash  # noqa: E402
 from headline_protocol import (  # noqa: E402
     CANDIDATE_LOCK_REVISION,
     HEADLINE_BATCH_POLICIES,
+    HEADLINE_STUDY_SPEND_CEILINGS_USD,
     REQUIRED_CACHE_ISOLATION,
     REQUIRED_EVIDENCE_POLICY,
     REQUIRED_EXECUTION_BASE,
@@ -64,9 +65,6 @@ COST_RECEIPTS = (
     Path("results/studies/rryas-headline-v2/receipts.jsonl"),
     Path("results/studies/rryas-headline-v3/receipts.jsonl"),
 )
-AUTHORIZATION_CEILING_USD = 990.0
-
-
 def _selected_tasks(
     source_manifest: Mapping[str, Any],
     candidate_manifest: Mapping[str, Any],
@@ -113,7 +111,10 @@ def _cost_forecast(
     hard_cap_envelope = (
         policy["outer_spend_hard_cap_per_slot_usd"] * protocol.slot_count
     )
-    if AUTHORIZATION_CEILING_USD < max(empirical_envelope, hard_cap_envelope):
+    authorization_ceiling = HEADLINE_STUDY_SPEND_CEILINGS_USD[
+        protocol.study_id
+    ]
+    if authorization_ceiling < max(empirical_envelope, hard_cap_envelope):
         raise ValueError(
             f"{protocol.study_id} authorization ceiling is below a required envelope"
         )
@@ -133,7 +134,7 @@ def _cost_forecast(
         "forecast_outer_spend_usd": round(mean * protocol.slot_count, 6),
         "max_observed_per_slot_usd": round(maximum, 6),
         "empirical_slot_count_envelope_usd": round(empirical_envelope, 6),
-        "authorization_outer_spend_ceiling_usd": AUTHORIZATION_CEILING_USD,
+        "authorization_outer_spend_ceiling_usd": authorization_ceiling,
         "uncovered_costs": [
             "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
             "Claude judge-account usage is not included in the agent modelUsage receipt",

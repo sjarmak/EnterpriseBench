@@ -394,7 +394,12 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
         forecast_outer_spend_usd=forecast,
         empirical_envelope_usd=envelope,
         per_slot_envelope_usd=per_slot,
-        authorization_ceiling_usd=ceiling,
+        study_authorization_ceiling_usd=ceiling,
+        authorization_ceiling_usd=(
+            float(authorization["authorized_outer_spend_ceiling_usd"])
+            if authorized and study_id in PAID_BATCH_STUDY_IDS
+            else ceiling
+        ),
         paid_dispatch_authorized=authorized,
         authorization_reference=reference,
         v3_controls=controls,
@@ -625,12 +630,6 @@ def _dispatch_headline_study(
             raise DispatchError(
                 "v3 provider capacity confirmation does not match current receipts"
             )
-    _run_preflight(
-        preflight,
-        plan=plan,
-        repo_root=repo_root,
-        require_clean_output_root=not receipts,
-    )
     remaining = plan.slots[len(receipts) :]
     if controls is not None:
         remaining = remaining[: controls.max_slots_per_dispatch]
@@ -652,6 +651,21 @@ def _dispatch_headline_study(
             raise DispatchError(
                 "v3 authorization does not match the exact pending command batch"
             )
+        required_ceiling = (
+            spend
+            + controls.outer_spend_hard_cap_per_slot_usd * len(remaining)
+        )
+        if required_ceiling > plan.authorization_ceiling_usd + 1e-6:
+            raise DispatchError(
+                "batch authorization ceiling does not cover cumulative spend "
+                "plus the complete pending batch reserve"
+            )
+    _run_preflight(
+        preflight,
+        plan=plan,
+        repo_root=repo_root,
+        require_clean_output_root=not receipts,
+    )
     if not execute:
         return DispatchSummary(
             planned_slots=len(plan.slots),

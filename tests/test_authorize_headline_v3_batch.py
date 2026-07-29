@@ -5,6 +5,7 @@ import sys
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,6 +21,7 @@ for import_path in (
 import authorize_headline_v3_batch  # noqa: E402
 from authorize_headline_v3_batch import (  # noqa: E402
     AuthorizationError,
+    _authorized_batch_ceiling,
     build_authorized_plan,
     main,
     write_authorized_plan,
@@ -107,7 +109,9 @@ def test_build_authorized_plan_binds_one_exact_pending_batch(
     assert payload["authorization"]["paid_dispatch_authorized"] is True
     assert payload["authorization"]["authorized_completed_prefix"] == 0
     assert payload["authorization"]["authorized_end_prefix"] == 6
-    assert payload["authorization"]["authorized_outer_spend_ceiling_usd"] == 60.0
+    assert payload["authorization"][
+        "authorized_outer_spend_ceiling_usd"
+    ] == pytest.approx(55.5)
 
     authorized_path = tmp_path / "dispatch_plan.authorized-test.json"
     write_authorized_plan(authorized_path, payload)
@@ -123,6 +127,22 @@ def test_build_authorized_plan_binds_one_exact_pending_batch(
         start_prefix=0,
         end_prefix=6,
     )
+
+
+def test_authorized_batch_ceiling_adds_only_pending_reserve_to_spend() -> None:
+    plan = SimpleNamespace(
+        authorization_ceiling_usd=990.0,
+        v3_controls=SimpleNamespace(
+            outer_spend_hard_cap_per_slot_usd=10.6,
+        ),
+    )
+
+    assert _authorized_batch_ceiling(
+        plan,
+        spend=27.25,
+        start_prefix=9,
+        end_prefix=18,
+    ) == pytest.approx(122.65)
 
 
 def test_v4_authorizer_embeds_fresh_nonzero_capacity_telemetry(
@@ -220,6 +240,15 @@ def test_v5_authorizer_reuses_fresh_nonzero_capacity_contract(
         "five_hour_utilization_pct"
     ] == 25.0
     assert payload["authorization"]["authorized_end_prefix"] == 6
+    assert payload["authorization"][
+        "authorized_outer_spend_ceiling_usd"
+    ] == pytest.approx(63.6)
+
+    authorized_path = plan_path.with_name("dispatch_plan.authorized-v5.json")
+    write_authorized_plan(authorized_path, payload)
+    authorized = load_dispatch_plan(authorized_path, repo_root=tmp_path)
+    assert authorized.study_authorization_ceiling_usd == pytest.approx(990.0)
+    assert authorized.authorization_ceiling_usd == pytest.approx(63.6)
 
 
 @pytest.mark.parametrize(

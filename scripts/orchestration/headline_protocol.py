@@ -262,6 +262,11 @@ HEADLINE_BATCH_POLICIES = {
         ),
     },
 }
+HEADLINE_STUDY_SPEND_CEILINGS_USD = {
+    V3_PROTOCOL.study_id: 890.0,
+    V4_PROTOCOL.study_id: 990.0,
+    V5_PROTOCOL.study_id: 990.0,
+}
 HEADLINE_PROTOCOLS = {
     protocol.study_id: protocol
     for protocol in (

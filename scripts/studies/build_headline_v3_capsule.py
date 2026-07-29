@@ -41,6 +41,7 @@ from headline_protocol import (  # noqa: E402
     V3_MAX_SLOTS_PER_DISPATCH,
     V3_OUTER_SPEND_HARD_CAP_PER_SLOT_USD,
     V3_PROTOCOL,
+    HEADLINE_STUDY_SPEND_CEILINGS_USD,
     required_analysis_plan,
 )
 from headline_study_preflight import (  # noqa: E402
@@ -55,7 +56,9 @@ COST_RECEIPTS = (
     Path("results/studies/rryas-headline-v1/receipts.jsonl"),
     Path("results/studies/rryas-headline-v2/receipts.jsonl"),
 )
-AUTHORIZATION_CEILING_USD = 890.0
+AUTHORIZATION_CEILING_USD = HEADLINE_STUDY_SPEND_CEILINGS_USD[
+    V3_PROTOCOL.study_id
+]
 HEADLINE_STATUS = (
     Path("results/studies") / V3_PROTOCOL.study_id / "study_status.json"
 )

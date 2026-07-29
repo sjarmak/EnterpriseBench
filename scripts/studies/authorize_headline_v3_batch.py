@@ -100,6 +100,30 @@ def _build_v4_capacity(
     return provider_capacity
 
 
+def _authorized_batch_ceiling(
+    plan: Any,
+    *,
+    spend: float,
+    start_prefix: int,
+    end_prefix: int,
+) -> float:
+    """Return the cumulative ceiling after reserving only the pending batch."""
+
+    controls = plan.v3_controls
+    if controls is None:
+        raise AuthorizationError("batched authorization controls are unavailable")
+    reserve = (
+        controls.outer_spend_hard_cap_per_slot_usd
+        * (end_prefix - start_prefix)
+    )
+    authorized_ceiling = round(spend + reserve, 6)
+    if authorized_ceiling > plan.authorization_ceiling_usd:
+        raise AuthorizationError(
+            "whole-study spend ceiling cannot reserve the exact pending batch"
+        )
+    return authorized_ceiling
+
+
 def build_authorized_plan(
     *,
     plan_path: Path,
@@ -133,6 +157,12 @@ def build_authorized_plan(
     commands = tuple(
         compile_run_command(slot, plan=plan, repo_root=repo_root)
         for slot in plan.slots[start_prefix:end_prefix]
+    )
+    authorized_ceiling = _authorized_batch_ceiling(
+        plan,
+        spend=_spend,
+        start_prefix=start_prefix,
+        end_prefix=end_prefix,
     )
     payload = deepcopy(_load_payload(plan_path))
     if plan.spec.study_id in CAPACITY_GATED_STUDY_IDS:
@@ -179,10 +209,9 @@ def build_authorized_plan(
             start_prefix=start_prefix,
             end_prefix=end_prefix,
             capacity_reference=bound_capacity_reference,
+            authorization_ceiling_usd=authorized_ceiling,
         ),
-        "authorized_outer_spend_ceiling_usd": (
-            plan.authorization_ceiling_usd
-        ),
+        "authorized_outer_spend_ceiling_usd": authorized_ceiling,
     }
     return payload
 
