@@ -23,6 +23,7 @@ for import_path in (
 
 from eb_study import (  # noqa: E402
     ReceiptError,
+    STATUS_INFRA_INVALID,
     STATUS_VALID,
     StudyCapsule,
     StudySpec,
@@ -485,6 +486,26 @@ def _receipt_cost(receipt: TrialReceipt) -> float:
     return receipt.usage.cost_usd
 
 
+def _terminal_receipt_cost(receipt: TrialReceipt) -> float:
+    """Return observed spend for an invalid receipt without inventing usage."""
+
+    if receipt.usage is not None:
+        return _receipt_cost(receipt)
+    if (
+        receipt.status == STATUS_INFRA_INVALID
+        and receipt.failure_class == "infra_mcp_preflight"
+        and receipt.score is None
+        and receipt.score_contract is None
+        and receipt.arm_gate_proof is None
+        and not receipt.tool_use
+        and "results.json" in receipt.artifacts
+        and set(receipt.artifacts)
+        <= {"injected_instruction.md", "results.json"}
+    ):
+        return 0.0
+    raise DispatchError(f"receipt {receipt.trial.key} has no outer cost")
+
+
 def _validate_cache_isolation(receipt: TrialReceipt) -> None:
     isolation = receipt.tool_use.get("cache_isolation")
     if (
@@ -733,8 +754,13 @@ def _dispatch_headline_study(
             raise DispatchError(
                 f"run appended receipt {receipt.trial.key}, expected {expected.key}"
             )
-        _validate_provider_budgets(receipt, plan=plan)
-        receipt_cost = _receipt_cost(receipt)
+        if receipt.usage is not None:
+            _validate_provider_budgets(receipt, plan=plan)
+        receipt_cost = (
+            _receipt_cost(receipt)
+            if receipt.status == STATUS_VALID
+            else _terminal_receipt_cost(receipt)
+        )
         spend += receipt_cost
         if (
             controls is not None
@@ -743,13 +769,14 @@ def _dispatch_headline_study(
             raise DispatchError(
                 f"provider exceeded the per-slot hard cap for {receipt.trial.key}"
             )
+        if receipt.status != STATUS_VALID:
+            raise DispatchError(
+                f"receipt {receipt.trial.key} has status {receipt.status!r}; "
+                f"reported trial cost ${receipt_cost:.6f}"
+            )
         if completed.returncode != 0:
             raise DispatchError(
                 f"run_task exited {completed.returncode} for {receipt.trial.key}"
-            )
-        if receipt.status != STATUS_VALID:
-            raise DispatchError(
-                f"receipt {receipt.trial.key} has status {receipt.status!r}"
             )
         _validate_cache_isolation(receipt)
         if spend > plan.authorization_ceiling_usd:

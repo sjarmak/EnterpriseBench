@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import traceback
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -417,6 +418,42 @@ def _receipt(
     )
 
 
+def _pre_agent_infra_receipt(
+    spec: StudySpec,
+    *,
+    task_id: str,
+    arm: str,
+) -> TrialReceipt:
+    return TrialReceipt.from_json(
+        {
+            "schema_version": 1,
+            "trial": {
+                "study_id": spec.study_id,
+                "task_id": task_id,
+                "arm": arm,
+                "repetition": 1,
+                "attempt": 1,
+            },
+            "spec_hash": spec.spec_hash,
+            "task_manifest_hash": spec.task_manifest_hash,
+            "status": "infra_invalid",
+            "failure_class": "infra_mcp_preflight",
+            "image_digest": "sha256:image",
+            "arm_gate_proof": None,
+            "task_hash": "sha256:task",
+            "harness_hash": spec.harness,
+            "verifier_hash": "sha256:verifier",
+            "score": None,
+            "score_contract": None,
+            "usage": None,
+            "tool_use": {},
+            "artifacts": {"results.json": "sha256:result"},
+            "started_at": "2026-07-28T00:00:00Z",
+            "ended_at": "2026-07-28T00:01:00Z",
+        }
+    )
+
+
 def _append(path: Path, receipt: TrialReceipt) -> None:
     output_dir = (
         path.parent
@@ -557,6 +594,106 @@ def test_execution_is_sequential_and_stops_on_an_invalid_receipt(
         )
 
     assert len(calls) == 2
+
+
+def test_pre_agent_infra_receipt_reports_terminal_status_before_cost(
+    tmp_path: Path,
+) -> None:
+    plan_path, spec_path, *_rest, receipts_path = _write_fixture(
+        tmp_path, authorized=True
+    )
+    spec = StudySpec.load(spec_path)
+    calls = 0
+
+    def runner(_command, **_kwargs):
+        nonlocal calls
+        calls += 1
+        _append(
+            receipts_path,
+            _pre_agent_infra_receipt(
+                spec,
+                task_id="task-a",
+                arm="baseline",
+            ),
+        )
+        return type("Completed", (), {"returncode": 2})()
+
+    with pytest.raises(
+        DispatchError,
+        match=r"status 'infra_invalid'.*reported trial cost \$0\.000000",
+    ):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=runner,
+            preflight=lambda **_kwargs: object(),
+        )
+
+    assert calls == 1
+
+
+def test_valid_receipt_without_outer_cost_still_fails_closed(
+    tmp_path: Path,
+) -> None:
+    plan_path, spec_path, *_rest, receipts_path = _write_fixture(
+        tmp_path, authorized=True
+    )
+    spec = StudySpec.load(spec_path)
+    receipt = _receipt(spec, task_id="task-a", arm="baseline", cost=0.5)
+    assert receipt.usage is not None
+    receipt_without_outer_cost = replace(
+        receipt,
+        usage=replace(receipt.usage, cost_usd=None),
+    )
+
+    def runner(_command, **_kwargs):
+        _append(receipts_path, receipt_without_outer_cost)
+        return type("Completed", (), {"returncode": 0})()
+
+    with pytest.raises(DispatchError, match="has no outer cost"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=runner,
+            preflight=lambda **_kwargs: object(),
+        )
+
+
+def test_zero_cost_infra_receipt_rejects_agent_provenance(
+    tmp_path: Path,
+) -> None:
+    plan_path, spec_path, *_rest, receipts_path = _write_fixture(
+        tmp_path, authorized=True
+    )
+    spec = StudySpec.load(spec_path)
+    receipt = _pre_agent_infra_receipt(
+        spec,
+        task_id="task-a",
+        arm="baseline",
+    )
+    contradictory = replace(
+        receipt,
+        arm_gate_proof="mode_gate:agent-started",
+        artifacts={
+            **receipt.artifacts,
+            "agent_trace.jsonl": "sha256:trace",
+        },
+    )
+
+    def runner(_command, **_kwargs):
+        _append(receipts_path, contradictory)
+        return type("Completed", (), {"returncode": 2})()
+
+    with pytest.raises(DispatchError, match="has no outer cost"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=runner,
+            preflight=lambda **_kwargs: object(),
+        )
 
 
 def test_clean_start_creates_receipt_parent_after_preflight(tmp_path: Path) -> None:
@@ -1015,6 +1152,41 @@ def test_v3_rejects_an_agent_receipt_above_the_native_agent_cap(
             _receipt(spec, task_id="task-a", arm="baseline", cost=9.2),
         )
         return type("Completed", (), {"returncode": 0})()
+
+    with pytest.raises(DispatchError, match="exceeded the native agent cap"):
+        dispatch_headline_study(
+            plan_path=plan_path,
+            repo_root=tmp_path,
+            execute=True,
+            runner=runner,
+            preflight=lambda **_kwargs: object(),
+        )
+
+
+def test_v3_invalid_receipt_still_enforces_provider_budget_caps(
+    tmp_path: Path,
+) -> None:
+    plan_path, spec_path, *_rest, receipts_path = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v3",
+        authorized=True,
+        capacity_confirmed=True,
+        authorized_completed_prefix=0,
+    )
+    spec = StudySpec.load(spec_path)
+
+    def runner(_command: tuple[str, ...], **_kwargs: object) -> object:
+        _append(
+            receipts_path,
+            _receipt(
+                spec,
+                task_id="task-a",
+                arm="baseline",
+                cost=9.2,
+                status="infra_invalid",
+            ),
+        )
+        return type("Completed", (), {"returncode": 1})()
 
     with pytest.raises(DispatchError, match="exceeded the native agent cap"):
         dispatch_headline_study(
