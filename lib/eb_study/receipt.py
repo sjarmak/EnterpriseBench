@@ -303,7 +303,7 @@ def _parse_receipt_lines(path: Path, lines: Iterable[str]) -> list[TrialReceipt]
             continue
         try:
             payload = json.loads(line)
-        except json.JSONDecodeError as exc:
+        except ValueError as exc:
             raise ReceiptError(f"{path}:{lineno} is not valid JSON: {exc}") from exc
         try:
             receipts.append(TrialReceipt.from_json(payload))

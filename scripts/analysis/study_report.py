@@ -28,6 +28,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
+import re
 import statistics
 import sys
 from datetime import datetime, timezone
@@ -45,7 +47,32 @@ logger = logging.getLogger(__name__)
 
 #: Bumped when the report's shape changes, so a consumer refuses an unknown
 #: version rather than reading a missing key through ``.get(key, 0)``.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+TOKEN_DEFINITION = (
+    "combined_tokens = input + output + cache_creation + cache_read "
+    "across every SDK-reported model"
+)
+TIMING_DEFINITION = (
+    "elapsed_seconds = host-authored ended_at - started_at per receipt; "
+    "totals sum trial durations and are not parallel makespan"
+)
+TOKEN_FIELD_ALIASES = {
+    "input_tokens": ("input_tokens", "inputTokens"),
+    "output_tokens": ("output_tokens", "outputTokens"),
+    "cache_creation_tokens": (
+        "cache_write_tokens",
+        "cache_creation_input_tokens",
+        "cacheCreationInputTokens",
+    ),
+    "cache_read_tokens": (
+        "cache_read_tokens",
+        "cache_read_input_tokens",
+        "cacheReadInputTokens",
+    ),
+}
+MODEL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+@-]{0,127}\Z")
+MAX_TOKEN_COUNT = (1 << 63) - 1
 
 
 def provenance(capsule: StudyCapsule) -> dict[str, Any]:
@@ -121,22 +148,44 @@ def economics(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
 
     paired_costs = _costs_by_arm(paired.trials, paired.arms)
     all_costs = _costs_by_arm(capsule.receipts, capsule.spec.arm_names)
+    paired_total = _finite_aggregate_cost(paired.cost_usd)
+    all_total = _finite_aggregate_cost(capsule.all_attempts().cost_usd)
 
     return {
         "paired_valid": {
             "population": "prespecified comparable trials, complete in every declared arm",
-            "total_cost_usd": paired.cost_usd,
+            "total_cost_usd": paired_total,
             "by_arm_usd": paired_costs["by_arm_usd"],
+            "per_task_usd": paired_costs["per_task_usd"],
             "cost_coverage": paired_costs["cost_coverage"],
             "trials": len(paired.trials),
         },
         "all_attempts": {
             "population": "every receipt the study emitted, valid or not",
-            "total_cost_usd": capsule.all_attempts().cost_usd,
+            "total_cost_usd": all_total,
             "by_arm_usd": all_costs["by_arm_usd"],
+            "per_task_usd": all_costs["per_task_usd"],
             "cost_coverage": all_costs["cost_coverage"],
             "receipts": len(capsule.receipts),
         },
+    }
+
+
+def tokens(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
+    """Report complete SDK token categories without collapsing away submodels."""
+
+    return {
+        "paired_valid": _token_view(paired.trials, paired.arms),
+        "all_attempts": _token_view(capsule.receipts, capsule.spec.arm_names),
+    }
+
+
+def timing(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
+    """Report host-authored trial duration for both comparison populations."""
+
+    return {
+        "paired_valid": _timing_view(paired.trials, paired.arms),
+        "all_attempts": _timing_view(capsule.receipts, capsule.spec.arm_names),
     }
 
 
@@ -149,6 +198,8 @@ def build_report(capsule: StudyCapsule) -> dict[str, Any]:
         "completeness": completeness(capsule, paired),
         "reward": reward(capsule, paired),
         "economics": economics(capsule, paired),
+        "tokens": tokens(capsule, paired),
+        "timing": timing(capsule, paired),
     }
 
 
@@ -161,25 +212,271 @@ def _costs_by_arm(
     receipts: tuple[Any, ...],
     arms: tuple[str, ...],
 ) -> dict[str, Any]:
-    known: dict[str, float] = {arm: 0.0 for arm in arms}
-    missing: dict[str, int] = {arm: 0 for arm in arms}
-    costed = 0
-    for receipt in receipts:
-        usage = receipt.usage
-        if usage is None or usage.cost_usd is None:
-            missing[receipt.trial.arm] += 1
-            continue
-        known[receipt.trial.arm] += usage.cost_usd
-        costed += 1
+    costed = sum(
+        1
+        for receipt in receipts
+        if receipt.usage is not None and receipt.usage.cost_usd is not None
+    )
     return {
-        "by_arm_usd": {
-            arm: None if missing[arm] else round(known[arm], 6) for arm in sorted(arms)
+        "by_arm_usd": {arm: _cost_cell(receipts, arm=arm) for arm in sorted(arms)},
+        "per_task_usd": {
+            task_id: {
+                arm: _cost_cell(receipts, arm=arm, task_id=task_id)
+                for arm in sorted(arms)
+            }
+            for task_id in sorted({receipt.trial.task_id for receipt in receipts})
         },
         "cost_coverage": {
             "costed_trials": costed,
             "missing_cost_trials": len(receipts) - costed,
         },
     }
+
+
+def _cost_cell(
+    receipts: tuple[Any, ...],
+    *,
+    arm: str,
+    task_id: str | None = None,
+) -> float | None:
+    cell = tuple(
+        receipt
+        for receipt in receipts
+        if receipt.trial.arm == arm
+        and (task_id is None or receipt.trial.task_id == task_id)
+    )
+    if not cell or any(
+        receipt.usage is None or receipt.usage.cost_usd is None for receipt in cell
+    ):
+        return None
+    return _finite_aggregate_cost(
+        round(sum(receipt.usage.cost_usd for receipt in cell), 6)
+    )
+
+
+def _finite_aggregate_cost(cost_usd: float | None) -> float | None:
+    if cost_usd is not None and not math.isfinite(cost_usd):
+        raise CapsuleError("aggregate cost must be finite")
+    return cost_usd
+
+
+def _token_view(
+    receipts: tuple[Any, ...],
+    arms: tuple[str, ...],
+) -> dict[str, Any]:
+    normalized = tuple((receipt, _receipt_token_usage(receipt)) for receipt in receipts)
+    known = tuple(
+        (receipt, usage) for receipt, usage in normalized if usage is not None
+    )
+    missing = tuple(receipt for receipt, usage in normalized if usage is None)
+    models = sorted({model for _receipt, usage in known for model in usage["by_model"]})
+    return {
+        "definition": TOKEN_DEFINITION,
+        "coverage": {
+            "tokenized_receipts": len(known),
+            "missing_usage_receipts": len(missing),
+        },
+        "total": (
+            None
+            if missing
+            else _sum_token_totals(tuple(usage["total"] for _, usage in known))
+        ),
+        "by_arm": {arm: _token_cell(normalized, arm=arm) for arm in sorted(arms)},
+        "per_task": {
+            task_id: {
+                arm: _token_cell(normalized, task_id=task_id, arm=arm)
+                for arm in sorted(arms)
+            }
+            for task_id in sorted({receipt.trial.task_id for receipt in receipts})
+        },
+        "by_model": {
+            model: _sum_token_totals(
+                tuple(
+                    usage["by_model"][model]
+                    for _receipt, usage in known
+                    if model in usage["by_model"]
+                )
+            )
+            for model in models
+        },
+    }
+
+
+def _token_cell(
+    normalized: tuple[tuple[Any, dict[str, Any] | None], ...],
+    *,
+    arm: str,
+    task_id: str | None = None,
+) -> dict[str, int] | None:
+    cell = tuple(
+        usage
+        for receipt, usage in normalized
+        if receipt.trial.arm == arm
+        and (task_id is None or receipt.trial.task_id == task_id)
+    )
+    if not cell or any(usage is None for usage in cell):
+        return None
+    return _sum_token_totals(
+        tuple(usage["total"] for usage in cell if usage is not None)
+    )
+
+
+def _receipt_token_usage(receipt: Any) -> dict[str, Any] | None:
+    if receipt.usage is None:
+        return None
+    by_model = {
+        model: _normalize_model_tokens(receipt.trial.key, model, usage)
+        for model, usage in sorted(receipt.usage.model_usage.items())
+    }
+    return {
+        "total": _sum_token_totals(tuple(by_model.values())),
+        "by_model": by_model,
+    }
+
+
+def _normalize_model_tokens(
+    trial_key: str,
+    model: str,
+    usage: Any,
+) -> dict[str, int]:
+    if not isinstance(model, str) or MODEL_NAME_RE.fullmatch(model) is None:
+        raise CapsuleError(f"receipt {trial_key}: usage model name is invalid")
+    if not isinstance(usage, dict):
+        raise CapsuleError(f"receipt {trial_key}: usage model entry must be an object")
+    totals = {
+        field: _token_field(
+            trial_key,
+            model,
+            usage,
+            aliases,
+            required=field in {"input_tokens", "output_tokens"},
+        )
+        for field, aliases in TOKEN_FIELD_ALIASES.items()
+    }
+    return {
+        **totals,
+        "combined_tokens": _checked_token_sum(tuple(totals.values())),
+    }
+
+
+def _token_field(
+    trial_key: str,
+    model: str,
+    usage: dict[str, Any],
+    aliases: tuple[str, ...],
+    *,
+    required: bool,
+) -> int:
+    present = tuple(alias for alias in aliases if alias in usage)
+    if not present:
+        if required:
+            raise CapsuleError(
+                f"receipt {trial_key}: usage model entry is missing {aliases[0]}"
+            )
+        return 0
+    values = tuple(usage[alias] for alias in present)
+    if any(
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+        for value in values
+    ):
+        raise CapsuleError(
+            f"receipt {trial_key}: usage model entry {present[0]} "
+            "must be a non-negative integer"
+        )
+    if any(value > MAX_TOKEN_COUNT for value in values):
+        raise CapsuleError(
+            f"receipt {trial_key}: usage model token count "
+            "must fit a signed 64-bit integer"
+        )
+    if len(set(values)) != 1:
+        raise CapsuleError(
+            f"receipt {trial_key}: usage model entry has conflicting "
+            f"{'/'.join(present)} values"
+        )
+    value = values[0]
+    return value
+
+
+def _sum_token_totals(totals: tuple[dict[str, int], ...]) -> dict[str, int]:
+    fields = (*TOKEN_FIELD_ALIASES, "combined_tokens")
+    return {
+        field: _checked_token_sum(tuple(total[field] for total in totals))
+        for field in fields
+    }
+
+
+def _checked_token_sum(values: tuple[int, ...]) -> int:
+    total = sum(values)
+    if total > MAX_TOKEN_COUNT:
+        raise CapsuleError("aggregate token count must fit a signed 64-bit integer")
+    return total
+
+
+def _timing_view(
+    receipts: tuple[Any, ...],
+    arms: tuple[str, ...],
+) -> dict[str, Any]:
+    timed = tuple((receipt, _elapsed_seconds(receipt)) for receipt in receipts)
+    return {
+        "definition": TIMING_DEFINITION,
+        "total_elapsed_seconds": round(
+            sum(seconds for _receipt, seconds in timed),
+            6,
+        ),
+        "by_arm": {
+            arm: _timing_summary(
+                tuple(seconds for receipt, seconds in timed if receipt.trial.arm == arm)
+            )
+            for arm in sorted(arms)
+        },
+        "per_task_seconds": {
+            task_id: {
+                arm: round(
+                    sum(
+                        seconds
+                        for receipt, seconds in timed
+                        if receipt.trial.task_id == task_id and receipt.trial.arm == arm
+                    ),
+                    6,
+                )
+                for arm in sorted(arms)
+            }
+            for task_id in sorted({receipt.trial.task_id for receipt in receipts})
+        },
+    }
+
+
+def _timing_summary(seconds: tuple[float, ...]) -> dict[str, Any]:
+    if not seconds:
+        return {
+            "trials": 0,
+            "total_elapsed_seconds": 0.0,
+            "mean_elapsed_seconds": None,
+        }
+    return {
+        "trials": len(seconds),
+        "total_elapsed_seconds": round(sum(seconds), 6),
+        "mean_elapsed_seconds": round(statistics.mean(seconds), 6),
+    }
+
+
+def _elapsed_seconds(receipt: Any) -> float:
+    started = _parse_receipt_time(receipt.trial.key, "started_at", receipt.started_at)
+    ended = _parse_receipt_time(receipt.trial.key, "ended_at", receipt.ended_at)
+    elapsed = (ended - started).total_seconds()
+    if elapsed < 0:
+        raise CapsuleError(f"receipt {receipt.trial.key}: ended before it started")
+    return elapsed
+
+
+def _parse_receipt_time(trial_key: str, field: str, value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise CapsuleError(f"receipt {trial_key}: invalid {field}") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise CapsuleError(f"receipt {trial_key}: {field} must be timezone-aware")
+    return parsed
 
 
 def _format_cost(cost_usd: float | None) -> str:
@@ -256,7 +553,11 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("%s: %s", type(exc).__name__, exc)
         return 2
 
-    payload = json.dumps(report, indent=2) + "\n"
+    try:
+        payload = json.dumps(report, indent=2, allow_nan=False) + "\n"
+    except ValueError:
+        logger.error("report contains a non-finite JSON number")
+        return 2
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(payload)

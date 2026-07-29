@@ -316,6 +316,15 @@ class TestAppendOnlyLog:
         with pytest.raises(ReceiptError, match="not valid JSON"):
             read_receipts(path)
 
+    def test_an_oversized_json_integer_fails_inside_the_receipt_boundary(
+        self, tmp_path
+    ):
+        path = tmp_path / "receipts.jsonl"
+        path.write_text('{"schema_version": ' + "1" * 5001 + "}\n")
+
+        with pytest.raises(ReceiptError, match="not valid JSON"):
+            read_receipts(path)
+
     def test_line_number_is_reported(self, tmp_path):
         spec = make_spec()
         path = tmp_path / "receipts.jsonl"

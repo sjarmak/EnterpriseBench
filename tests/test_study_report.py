@@ -17,8 +17,9 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
+import analysis.study_report as study_report_module  # noqa: E402
 from analysis.study_report import build_report, main  # noqa: E402
-from eb_study import StudyCapsule  # noqa: E402
+from eb_study import CapsuleError, StudyCapsule  # noqa: E402
 
 from tests.test_study_capsule import (  # noqa: E402
     full_receipts,
@@ -121,6 +122,11 @@ class TestEconomics:
         assert econ["all_attempts"]["total_cost_usd"] == pytest.approx(16.25)
         assert econ["paired_valid"]["by_arm_usd"]["cli"] == pytest.approx(5.0)
         assert econ["all_attempts"]["by_arm_usd"]["cli"] == pytest.approx(6.25)
+        assert econ["paired_valid"]["per_task_usd"]["dep-traversal-001"] == {
+            "baseline": 2.5,
+            "cli": 2.5,
+            "mcp_only": 2.5,
+        }
 
     def test_no_blended_total_is_published(self):
         econ = build_report(capsule())["economics"]
@@ -162,6 +168,359 @@ class TestEconomics:
             "costed_trials": 11,
             "missing_cost_trials": 1,
         }
+
+    def test_overflowing_aggregate_cost_fails_closed(self):
+        spec = make_spec()
+        receipts = [
+            make_receipt(
+                spec,
+                task_id,
+                arm,
+                rep,
+                usage={
+                    "source": "sdk_model_usage",
+                    "cost_usd": 1e308,
+                    "model_usage": {
+                        "claude-opus-4-8": {
+                            "input_tokens": 1,
+                            "output_tokens": 1,
+                        }
+                    },
+                },
+            )
+            for task_id in spec.task_ids
+            for arm in spec.arm_names
+            for rep in (1, 2)
+        ]
+
+        with pytest.raises(CapsuleError, match="aggregate cost must be finite"):
+            build_report(capsule(spec, receipts))
+
+
+class TestTokens:
+    @staticmethod
+    def _usage() -> dict:
+        return {
+            "source": "sdk_model_usage",
+            "cost_usd": 0.3,
+            "model_usage": {
+                "claude-opus-4-8": {
+                    "input_tokens": 10,
+                    "output_tokens": 2,
+                    "cache_write_tokens": 3,
+                    "cache_read_tokens": 5,
+                    "cost_usd": 0.1,
+                },
+                "claude-haiku-4-5": {
+                    "input_tokens": 1,
+                    "output_tokens": 4,
+                    "cache_write_tokens": 6,
+                    "cache_read_tokens": 7,
+                    "cost_usd": 0.2,
+                },
+            },
+        }
+
+    def test_reports_every_sdk_token_category_and_model(self):
+        spec = make_spec()
+        receipts = [
+            make_receipt(
+                spec,
+                task_id,
+                arm,
+                rep,
+                usage=self._usage(),
+            )
+            for task_id in spec.task_ids
+            for arm in spec.arm_names
+            for rep in (1, 2)
+        ]
+
+        tokens = build_report(capsule(spec, receipts))["tokens"]["paired_valid"]
+
+        assert tokens["definition"] == (
+            "combined_tokens = input + output + cache_creation + cache_read "
+            "across every SDK-reported model"
+        )
+        assert tokens["coverage"] == {
+            "tokenized_receipts": 12,
+            "missing_usage_receipts": 0,
+        }
+        assert tokens["total"] == {
+            "input_tokens": 132,
+            "output_tokens": 72,
+            "cache_creation_tokens": 108,
+            "cache_read_tokens": 144,
+            "combined_tokens": 456,
+        }
+        assert tokens["by_arm"]["cli"]["combined_tokens"] == 152
+        assert tokens["by_model"]["claude-opus-4-8"]["combined_tokens"] == 240
+        assert tokens["by_model"]["claude-haiku-4-5"]["combined_tokens"] == 216
+        assert tokens["per_task"]["dep-traversal-001"]["cli"]["combined_tokens"] == 76
+
+    def test_missing_usage_is_disclosed_instead_of_counted_as_zero(self):
+        spec = make_spec()
+        receipts = [
+            make_receipt(
+                spec,
+                task_id,
+                arm,
+                rep,
+                usage=self._usage(),
+            )
+            for task_id in spec.task_ids
+            for arm in spec.arm_names
+            for rep in (1, 2)
+        ]
+        receipts.append(
+            make_receipt(
+                spec,
+                "dep-traversal-001",
+                "cli",
+                1,
+                status="infra_invalid",
+                failure_class="provider_usage_missing",
+                score=None,
+                usage=None,
+                trial={"attempt": 2},
+            )
+        )
+
+        tokens = build_report(capsule(spec, receipts))["tokens"]
+
+        assert tokens["paired_valid"]["total"]["combined_tokens"] == 456
+        assert tokens["all_attempts"]["total"] is None
+        assert tokens["all_attempts"]["by_arm"]["cli"] is None
+        assert tokens["all_attempts"]["coverage"] == {
+            "tokenized_receipts": 12,
+            "missing_usage_receipts": 1,
+        }
+
+    def test_legacy_sdk_field_names_are_normalized(self):
+        report = build_report(capsule())
+
+        assert report["tokens"]["paired_valid"]["total"] == {
+            "input_tokens": 120,
+            "output_tokens": 240,
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 0,
+            "combined_tokens": 360,
+        }
+
+    def test_vendor_qualified_model_identifier_is_preserved(self):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = receipts[0]
+        model = "openrouter:moonshotai/kimi-k2.5+preview@2026"
+        receipts[0] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": 0.1,
+                "model_usage": {
+                    model: {
+                        "input_tokens": 1,
+                        "output_tokens": 1,
+                    }
+                },
+            },
+        )
+
+        by_model = build_report(capsule(spec, receipts))["tokens"]["paired_valid"][
+            "by_model"
+        ]
+
+        assert by_model[model]["combined_tokens"] == 2
+
+    @pytest.mark.parametrize(
+        ("model_usage", "message"),
+        (
+            (
+                {
+                    "input_tokens": 1,
+                    "inputTokens": 2,
+                    "output_tokens": 3,
+                },
+                "conflicting input_tokens/inputTokens",
+            ),
+            (
+                {"output_tokens": 3},
+                "missing input_tokens",
+            ),
+            (
+                {"input_tokens": 1, "output_tokens": -1},
+                "must be a non-negative integer",
+            ),
+            (
+                {"input_tokens": [], "output_tokens": 1},
+                "must be a non-negative integer",
+            ),
+            (
+                {"input_tokens": 2**63, "output_tokens": 1},
+                "signed 64-bit",
+            ),
+        ),
+    )
+    def test_malformed_sdk_token_usage_fails_closed(self, model_usage, message):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = receipts[0]
+        receipts[0] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": 0.1,
+                "model_usage": {"claude-opus-4-8": model_usage},
+            },
+        )
+
+        with pytest.raises(CapsuleError, match=message):
+            build_report(capsule(spec, receipts))
+
+    def test_per_model_combined_token_overflow_fails_closed(self):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = receipts[0]
+        receipts[0] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": 0.1,
+                "model_usage": {
+                    "claude-opus-4-8": {
+                        "input_tokens": 2**63 - 1,
+                        "output_tokens": 1,
+                    }
+                },
+            },
+        )
+
+        with pytest.raises(CapsuleError, match="aggregate token count"):
+            build_report(capsule(spec, receipts))
+
+    def test_cross_model_token_overflow_fails_closed(self):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = receipts[0]
+        half_plus_one = 2**62
+        receipts[0] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": 0.1,
+                "model_usage": {
+                    "claude-opus-4-8": {
+                        "input_tokens": half_plus_one,
+                        "output_tokens": 0,
+                    },
+                    "claude-haiku-4-5": {
+                        "input_tokens": half_plus_one,
+                        "output_tokens": 0,
+                    },
+                },
+            },
+        )
+
+        with pytest.raises(CapsuleError, match="aggregate token count"):
+            build_report(capsule(spec, receipts))
+
+    def test_cross_receipt_token_overflow_fails_closed(self):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        first, second = receipts[:2]
+        receipts[0] = make_receipt(
+            spec,
+            first.trial.task_id,
+            first.trial.arm,
+            first.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": 0.1,
+                "model_usage": {
+                    "claude-opus-4-8": {
+                        "input_tokens": 2**63 - 1,
+                        "output_tokens": 0,
+                    }
+                },
+            },
+        )
+        receipts[1] = make_receipt(
+            spec,
+            second.trial.task_id,
+            second.trial.arm,
+            second.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": 0.1,
+                "model_usage": {
+                    "claude-opus-4-8": {
+                        "input_tokens": 1,
+                        "output_tokens": 0,
+                    }
+                },
+            },
+        )
+
+        with pytest.raises(CapsuleError, match="aggregate token count"):
+            build_report(capsule(spec, receipts))
+
+
+class TestTiming:
+    def test_reports_paired_and_all_attempt_wall_time(self):
+        report = build_report(capsule())
+        timing = report["timing"]["paired_valid"]
+
+        assert timing["total_elapsed_seconds"] == 7200.0
+        assert timing["by_arm"]["baseline"] == {
+            "trials": 4,
+            "total_elapsed_seconds": 2400.0,
+            "mean_elapsed_seconds": 600.0,
+        }
+        assert timing["per_task_seconds"]["dep-traversal-001"]["cli"] == 1200.0
+
+    @pytest.mark.parametrize(
+        ("started_at", "ended_at", "message"),
+        (
+            ("not-a-time", "2026-07-20T00:10:00Z", "invalid started_at"),
+            (
+                "2026-07-20T00:10:00Z",
+                "2026-07-20T00:00:00Z",
+                "ended before it started",
+            ),
+            (
+                "2026-07-20T00:00:00",
+                "2026-07-20T00:10:00",
+                "timezone-aware",
+            ),
+        ),
+    )
+    def test_malformed_wall_time_fails_closed(self, started_at, ended_at, message):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = receipts[0]
+        receipts[0] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            started_at=started_at,
+            ended_at=ended_at,
+        )
+
+        with pytest.raises(CapsuleError, match=message):
+            build_report(capsule(spec, receipts))
 
 
 class TestCli:
@@ -267,6 +626,151 @@ class TestCli:
             tmp_path, spec, full_receipts(spec) + [foreign]
         )
         out = tmp_path / "report.json"
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 2
+        )
+        assert not out.exists()
+
+    def test_malformed_usage_fails_before_writing_output(self, tmp_path):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = receipts[0]
+        receipts[0] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": 0.1,
+                "model_usage": {
+                    "claude-opus-4-8": {
+                        "input_tokens": True,
+                        "output_tokens": 1,
+                    }
+                },
+            },
+        )
+        spec_path, receipts_path = self._write(tmp_path, spec, receipts)
+        out = tmp_path / "report.json"
+
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 2
+        )
+        assert not out.exists()
+
+    def test_malformed_model_name_is_rejected_without_reflection(
+        self, tmp_path, capsys
+    ):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = receipts[0]
+        secret = "Bearer SECRET-SENTINEL"
+        receipts[0] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": 0.1,
+                "model_usage": {
+                    secret: {
+                        "input_tokens": 1,
+                        "output_tokens": 1,
+                    }
+                },
+            },
+        )
+        spec_path, receipts_path = self._write(tmp_path, spec, receipts)
+        out = tmp_path / "report.json"
+
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 2
+        )
+        assert not out.exists()
+        assert "SECRET-SENTINEL" not in capsys.readouterr().err
+
+    def test_huge_token_count_fails_before_writing_output(self, tmp_path):
+        spec = make_spec()
+        receipts = full_receipts(spec)
+        target = receipts[0]
+        receipts[0] = make_receipt(
+            spec,
+            target.trial.task_id,
+            target.trial.arm,
+            target.trial.repetition,
+            usage={
+                "source": "sdk_model_usage",
+                "cost_usd": 0.1,
+                "model_usage": {
+                    "claude-opus-4-8": {
+                        "input_tokens": 10**4000,
+                        "output_tokens": 1,
+                    }
+                },
+            },
+        )
+        spec_path, receipts_path = self._write(tmp_path, spec, receipts)
+        out = tmp_path / "report.json"
+
+        assert (
+            main(
+                [
+                    "--spec",
+                    str(spec_path),
+                    "--receipts",
+                    str(receipts_path),
+                    "--output",
+                    str(out),
+                ]
+            )
+            == 2
+        )
+        assert not out.exists()
+
+    def test_nonfinite_report_number_fails_strict_json_serialization(
+        self, tmp_path, monkeypatch
+    ):
+        spec = make_spec()
+        spec_path, receipts_path = self._write(tmp_path, spec, full_receipts(spec))
+        out = tmp_path / "report.json"
+        monkeypatch.setattr(
+            study_report_module,
+            "build_report",
+            lambda _capsule: {"not_json": float("nan")},
+        )
+
         assert (
             main(
                 [
