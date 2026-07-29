@@ -19,10 +19,9 @@ from __future__ import annotations
 
 import json
 import os
-import stat
 import subprocess
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +99,16 @@ def _all_results(task: TaskSpec, workspace: Path) -> list[dict[str, Any]]:
         _run_verifier(task.task_dir, c.script_name, workspace)
         for c in task.checks
     ]
+
+
+def _expected_solution_report(
+    task_dir: Path,
+    checkpoints: tuple[str, ...] | None = None,
+) -> str:
+    payload = json.loads((task_dir / "expected_solution.json").read_text())
+    solutions = payload["checkpoints"]
+    names = checkpoints or tuple(solutions)
+    return "\n\n".join(solutions[name]["expected_solution"] for name in names)
 
 
 # ── incident investigation tasks ────────────────────────────────────────────
@@ -295,69 +304,20 @@ Prometheus API -> Grafana dataproxy -> converter
     # 004: Docker daemon spurious restart warnings
     TaskSpec(
         task_dir=_II_DIR / "incident-investigation-004",
-        report_path="moby/INCIDENT_REPORT.md",
+        report_path="agent_output/INCIDENT_REPORT.md",
         checks=[
             CheckSpec("check_root_cause.sh", 0.35),
             CheckSpec("check_error_chain.sh", 0.30),
             CheckSpec("check_affected_services.sh", 0.15),
             CheckSpec("check_remediation.sh", 0.20),
         ],
-        gt_answer="""\
-# Incident Report
-
-## Root Cause
-
-The bug is in `daemon/monitor.go`, in the `handleContainerExit` function. During
-graceful shutdown, the daemon calls `container.ExitOnNext()` to stop the restart
-manager. When the containerd shim sends the TaskDelete event, `handleContainerExit`
-calls `RestartManager().ShouldRestart()`, which returns `ErrRestartCanceled`.
-This error is logged as a WARN even though it's expected during normal shutdown.
-
-The confusing "ignoring event" message in `daemon/internal/libcontainerd/remote/client.go`
-for TaskDelete events also misleads operators.
-
-## Error Chain
-
-1. **SIGINT signal** received by daemon
-2. **Daemon shutdown**: Calls `container.ExitOnNext()` to stop restart manager
-3. **containerd shim**: Container exits, shim sends TaskDelete event
-4. **libcontainerd/remote/client.go**: Receives TaskDelete, logs "ignoring event"
-5. **daemon/monitor.go handleContainerExit**: Calls ShouldRestart(), gets
-   ErrRestartCanceled, logs as WARN — this is the spurious warning
-
-## Affected Components
-
-- **daemon/monitor.go** (handleContainerExit)
-- **daemon/container/container.go** (ExitOnNext, RestartManager)
-- **daemon/internal/libcontainerd/remote/client.go** (event logging)
-- **container restart manager**
-
-## Remediation
-
-In `handleContainerExit`: check if the error from ShouldRestart is
-`ErrRestartCanceled`; if so, do not log it as a warning — it is expected during
-shutdown. Suppress the warning for this specific error case.
-
-In `libcontainerd/remote/client.go`: change the confusing "ignoring event" log to a
-more descriptive message like "received task-delete event from containerd". Also split
-the exitStatus field into separate exitCode and exitedAt for better log readability.
-""",
-        partial_answer="""\
-# Incident Report
-
-## Root Cause
-
-The monitor.go has an issue with ShouldRestart during shutdown. The restart manager
-returns ErrRestartCanceled which gets logged as a warning.
-
-## Error Chain
-
-SIGINT -> daemon shutdown -> containerd shim TaskDelete -> handleContainerExit
-
-## Affected Components
-
-- daemon monitor
-""",
+        gt_answer=_expected_solution_report(
+            _II_DIR / "incident-investigation-004"
+        ),
+        partial_answer=_expected_solution_report(
+            _II_DIR / "incident-investigation-004",
+            ("root_cause_identification",),
+        ),
     ),
 ]
 

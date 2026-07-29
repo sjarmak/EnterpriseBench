@@ -100,8 +100,7 @@
       "x509_vfy"
     ],
     "trace_curl_integration": [
-      "urldata.h",
-      "task.toml"
+      "urldata.h"
     ],
     "openssl_verification": [
       "x509_vfy.c",
