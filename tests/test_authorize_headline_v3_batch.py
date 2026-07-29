@@ -194,6 +194,34 @@ def test_v4_authorizer_embeds_fresh_nonzero_capacity_telemetry(
     )
 
 
+def test_v5_authorizer_reuses_fresh_nonzero_capacity_contract(
+    tmp_path: Path,
+) -> None:
+    now = datetime(2026, 7, 29, 1, 1, tzinfo=timezone.utc)
+    plan_path, *_ = _write_fixture(tmp_path, study_id="rryas-headline-v5")
+    capacity_cache = _write_capacity_cache(
+        tmp_path / "usage_cache.json",
+        fetched_at=now,
+    )
+
+    payload = build_authorized_plan(
+        plan_path=plan_path,
+        repo_root=tmp_path,
+        authorization_reference="user-approved-v5-batch",
+        capacity_reference=None,
+        capacity_fetcher=_capacity_fetcher(capacity_cache),
+        capacity_lock_factory=lambda _accounts: nullcontext(),
+        now=now,
+    )
+
+    assert payload["study_id"] == "rryas-headline-v5"
+    assert payload["provider_capacity"]["confirmed"] is True
+    assert payload["provider_capacity"]["evidence"]["accounts"]["agent"][
+        "five_hour_utilization_pct"
+    ] == 25.0
+    assert payload["authorization"]["authorized_end_prefix"] == 6
+
+
 @pytest.mark.parametrize(
     ("agent_five_hour", "judge_five_hour"),
     ((100.0, 7.0), (25.0, 100.0)),

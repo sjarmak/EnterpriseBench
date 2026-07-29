@@ -15,7 +15,7 @@ import tomllib
 from typing import Any, Iterator, Mapping, Sequence
 
 from eb_study import file_hash
-from headline_protocol import HEADLINE_BATCH_POLICIES
+from headline_protocol import CAPACITY_GATED_STUDY_IDS, HEADLINE_BATCH_POLICIES
 
 
 class DispatchPolicyError(ValueError):
@@ -284,7 +284,7 @@ def authorization_batch_hash(
         ),
         "commands": [list(command) for command in commands],
     }
-    if plan.spec.study_id == "rryas-headline-v4":
+    if plan.spec.study_id in CAPACITY_GATED_STUDY_IDS:
         payload["provider_capacity_reference"] = (
             capacity_reference
             if capacity_reference is not None
@@ -338,7 +338,7 @@ def validate_v3_dispatch_controls(
     frozen = HEADLINE_BATCH_POLICIES.get(study_id)
     if frozen is None:
         raise DispatchPolicyError(f"{study_id} has no frozen batch policy")
-    if study_id == "rryas-headline-v4" and set(authorization) != {
+    if study_id in CAPACITY_GATED_STUDY_IDS and set(authorization) != {
         "paid_dispatch_authorized",
         "authorization_reference",
         "authorized_completed_prefix",
@@ -449,7 +449,7 @@ def validate_v3_dispatch_controls(
         raise DispatchPolicyError(
             "v3 provider capacity state/reference is inconsistent"
         )
-    if study_id == "rryas-headline-v4":
+    if study_id in CAPACITY_GATED_STUDY_IDS:
         if (
             capacity_eligibility_policy != V4_CAPACITY_ELIGIBILITY_POLICY
             or capacity_confound_policy != V4_CAPACITY_CONFOUND_POLICY

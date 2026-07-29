@@ -43,11 +43,15 @@ from headline_protocol import (  # noqa: E402
     REQUIRED_SELECTION_RULE,
     V4_PROTOCOL,
     V4_REQUIRED_JUDGE,
+    HeadlineProtocol,
     required_analysis_plan,
 )
 from headline_study_preflight import (  # noqa: E402
     HeadlineEvidence,
     compile_execution_order,
+)
+from headline_protocol_evidence import (  # noqa: E402
+    validate_protocol_amendment_evidence,
 )
 from headline_dispatch_policy import (  # noqa: E402
     V4_CAPACITY_CONFOUND_POLICY,
@@ -66,6 +70,8 @@ AUTHORIZATION_CEILING_USD = 990.0
 def _selected_tasks(
     source_manifest: Mapping[str, Any],
     candidate_manifest: Mapping[str, Any],
+    *,
+    protocol: HeadlineProtocol = V4_PROTOCOL,
 ) -> list[dict[str, Any]]:
     source_tasks = source_manifest.get("tasks")
     candidate_ids = candidate_manifest.get("task_ids")
@@ -74,20 +80,27 @@ def _selected_tasks(
     selected = [
         deepcopy(task)
         for task in source_tasks
-        if task.get("candidate_id") not in V4_PROTOCOL.post_lock_exposures
+        if task.get("candidate_id") not in protocol.post_lock_exposures
     ]
     expected_ids = [
         candidate_id
         for candidate_id in candidate_ids
-        if candidate_id not in V4_PROTOCOL.post_lock_exposures
+        if candidate_id not in protocol.post_lock_exposures
     ]
     actual_ids = [task.get("candidate_id") for task in selected]
-    if actual_ids != expected_ids or len(selected) != V4_PROTOCOL.task_count:
-        raise ValueError("v4 selection is not candidate order minus every exposure")
+    if actual_ids != expected_ids or len(selected) != protocol.task_count:
+        raise ValueError(
+            f"{protocol.study_id} selection is not candidate order minus "
+            "every exposure"
+        )
     return selected
 
 
-def _cost_forecast(repo_root: Path) -> dict[str, Any]:
+def _cost_forecast(
+    repo_root: Path,
+    *,
+    protocol: HeadlineProtocol = V4_PROTOCOL,
+) -> dict[str, Any]:
     samples = tuple(
         (path, _sample_costs(repo_root / path)) for path in COST_RECEIPTS
     )
@@ -95,13 +108,15 @@ def _cost_forecast(repo_root: Path) -> dict[str, Any]:
     total = sum(costs)
     mean = total / len(costs)
     maximum = max(costs)
-    empirical_envelope = maximum * V4_PROTOCOL.slot_count
-    policy = HEADLINE_BATCH_POLICIES[V4_PROTOCOL.study_id]
+    empirical_envelope = maximum * protocol.slot_count
+    policy = HEADLINE_BATCH_POLICIES[protocol.study_id]
     hard_cap_envelope = (
-        policy["outer_spend_hard_cap_per_slot_usd"] * V4_PROTOCOL.slot_count
+        policy["outer_spend_hard_cap_per_slot_usd"] * protocol.slot_count
     )
     if AUTHORIZATION_CEILING_USD < max(empirical_envelope, hard_cap_envelope):
-        raise ValueError("v4 authorization ceiling is below a required envelope")
+        raise ValueError(
+            f"{protocol.study_id} authorization ceiling is below a required envelope"
+        )
     return {
         "basis": (
             "All immutable v1, v2, and v3 attempts, including terminal invalid "
@@ -115,7 +130,7 @@ def _cost_forecast(repo_root: Path) -> dict[str, Any]:
         "sample_attempts": len(costs),
         "sample_outer_spend_usd": round(total, 6),
         "mean_per_slot_usd": round(mean, 9),
-        "forecast_outer_spend_usd": round(mean * V4_PROTOCOL.slot_count, 6),
+        "forecast_outer_spend_usd": round(mean * protocol.slot_count, 6),
         "max_observed_per_slot_usd": round(maximum, 6),
         "empirical_slot_count_envelope_usd": round(empirical_envelope, 6),
         "authorization_outer_spend_ceiling_usd": AUTHORIZATION_CEILING_USD,
@@ -128,27 +143,32 @@ def _cost_forecast(repo_root: Path) -> dict[str, Any]:
     }
 
 
-def _selection_payload() -> dict[str, Any]:
+def _selection_payload(
+    protocol: HeadlineProtocol = V4_PROTOCOL,
+) -> dict[str, Any]:
     return {
         "rule": REQUIRED_SELECTION_RULE,
         "candidate_outcomes_inspected": False,
         "candidate_count": 48,
-        "selected_count": V4_PROTOCOL.task_count,
+        "selected_count": protocol.task_count,
         "post_lock_exposures": [
             {
                 "candidate_id": candidate_id,
                 "reason": "post_lock_agent_output",
                 "evidence": list(
-                    V4_PROTOCOL.post_lock_exposure_evidence[candidate_id]
+                    protocol.post_lock_exposure_evidence[candidate_id]
                 ),
             }
-            for candidate_id in V4_PROTOCOL.post_lock_exposures
+            for candidate_id in protocol.post_lock_exposures
         ],
     }
 
 
 def _execution_configuration(
-    tasks: Sequence[Mapping[str, Any]], output_root: str
+    tasks: Sequence[Mapping[str, Any]],
+    output_root: str,
+    *,
+    protocol: HeadlineProtocol = V4_PROTOCOL,
 ) -> dict[str, Any]:
     return {
         **REQUIRED_EXECUTION_BASE,
@@ -157,28 +177,45 @@ def _execution_configuration(
         "order_policy": REQUIRED_ORDER_POLICY,
         "execution_order": [
             dict(row)
-            for row in compile_execution_order(tasks, study_id=V4_PROTOCOL.study_id)
+            for row in compile_execution_order(tasks, study_id=protocol.study_id)
         ],
     }
 
 
-def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
-    """Derive every v4 artifact without writing or launching a model."""
+def build_core_payloads(
+    repo_root: Path,
+    *,
+    revision: str,
+    protocol: HeadlineProtocol = V4_PROTOCOL,
+    config_dir: Path = V4_CONFIG_DIR,
+    purpose: str | None = None,
+) -> CorePayloads:
+    """Derive every isolated-judge successor artifact without model inference."""
 
     repo_root = repo_root.resolve()
     source_manifest = _load_object(
         repo_root / SOURCE_CONFIG_DIR / "final_manifest.json"
     )
     candidate_path = repo_root / CANDIDATE_MANIFEST
-    tasks = _selected_tasks(source_manifest, _load_object(candidate_path))
-    analysis = required_analysis_plan(V4_PROTOCOL)
+    tasks = _selected_tasks(
+        source_manifest,
+        _load_object(candidate_path),
+        protocol=protocol,
+    )
+    analysis = required_analysis_plan(protocol)
+    validate_protocol_amendment_evidence(
+        repo_root,
+        analysis,
+        protocol=protocol,
+    )
     provenances, harness_hash = _task_provenances(repo_root, tasks)
-    output_root = f"results/studies/{V4_PROTOCOL.study_id}"
+    output_root = f"results/studies/{protocol.study_id}"
     manifest = deepcopy(source_manifest)
     manifest.update(
         {
-            "study_id": V4_PROTOCOL.study_id,
-            "purpose": (
+            "study_id": protocol.study_id,
+            "purpose": purpose
+            or (
                 "Confirmatory Claude Sonnet 5 protocol comparison on every "
                 "candidate untouched by the v1-v3 operational runs, with an "
                 "isolated no-tool judge process."
@@ -186,21 +223,25 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
             "candidate_manifest": str(CANDIDATE_MANIFEST),
             "candidate_manifest_hash": file_hash(candidate_path),
             "candidate_lock_revision": CANDIDATE_LOCK_REVISION,
-            "analysis_plan": str(V4_CONFIG_DIR / "analysis_plan.json"),
+            "analysis_plan": str(config_dir / "analysis_plan.json"),
             "analysis_plan_hash": _payload_hash(analysis),
-            "selection": _selection_payload(),
+            "selection": _selection_payload(protocol),
             "tasks": tasks,
-            "arms": dict(V4_PROTOCOL.arm_descriptions),
+            "arms": dict(protocol.arm_descriptions),
             "cache_isolation": REQUIRED_CACHE_ISOLATION,
             "judge_configuration": V4_REQUIRED_JUDGE,
-            "execution_configuration": _execution_configuration(tasks, output_root),
+            "execution_configuration": _execution_configuration(
+                tasks,
+                output_root,
+                protocol=protocol,
+            ),
             "spend_guard": {
-                "slots": V4_PROTOCOL.slot_count,
+                "slots": protocol.slot_count,
                 "max_attempts_per_slot": 1,
                 "paid_dispatch_requires_new_explicit_authorization": True,
                 "paid_dispatch_authorized": False,
                 "forecast_reported_outer_spend_usd": None,
-                "forecast_basis": V4_PROTOCOL.forecast_basis,
+                "forecast_basis": protocol.forecast_basis,
             },
             "evidence_policy": REQUIRED_EVIDENCE_POLICY,
             "harness_hash": harness_hash,
@@ -211,13 +252,13 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
         }
     )
     spec = {
-        "study_id": V4_PROTOCOL.study_id,
+        "study_id": protocol.study_id,
         "schema_version": 1,
         "task_manifest_hash": _payload_hash(manifest),
         "task_ids": [task["task_id"] for task in tasks],
         "arms": [
             {"name": name, "capability_fingerprint": fingerprint}
-            for name, fingerprint in V4_PROTOCOL.arms
+            for name, fingerprint in protocol.arms
         ],
         "baseline_arm": "baseline",
         "repetitions": 1,
@@ -235,7 +276,7 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
     task_types = tuple(str(task["task_type"]) for task in tasks)
     evidence = asdict(
         HeadlineEvidence(
-            study_id=V4_PROTOCOL.study_id,
+            study_id=protocol.study_id,
             spec_hash=study_spec.spec_hash,
             task_manifest_hash=study_spec.task_manifest_hash,
             analysis_plan_hash=_payload_hash(analysis),
@@ -244,7 +285,7 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
             slots=tuple(
                 (task_id, arm, 1)
                 for task_id in task_ids
-                for arm, _fingerprint in V4_PROTOCOL.arms
+                for arm, _fingerprint in protocol.arms
             ),
             revision=revision,
             mirror_repositories=tuple(
@@ -260,19 +301,19 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
             paid_dispatch_authorized=False,
         )
     )
-    policy = HEADLINE_BATCH_POLICIES[V4_PROTOCOL.study_id]
+    policy = HEADLINE_BATCH_POLICIES[protocol.study_id]
     dispatch_plan = {
         "schema_version": 1,
-        "study_id": V4_PROTOCOL.study_id,
+        "study_id": protocol.study_id,
         "status": "LOCKED-NO-SPEND",
-        "study_spec": str(V4_CONFIG_DIR / "study_spec.json"),
+        "study_spec": str(config_dir / "study_spec.json"),
         "study_spec_file_hash": _payload_hash(spec),
         "study_spec_hash": study_spec.spec_hash,
-        "final_manifest": str(V4_CONFIG_DIR / "final_manifest.json"),
+        "final_manifest": str(config_dir / "final_manifest.json"),
         "final_manifest_hash": _payload_hash(manifest),
-        "preflight_evidence": str(V4_CONFIG_DIR / "preflight_evidence.json"),
+        "preflight_evidence": str(config_dir / "preflight_evidence.json"),
         "preflight_evidence_hash": _payload_hash(evidence),
-        "cost_forecast": _cost_forecast(repo_root),
+        "cost_forecast": _cost_forecast(repo_root, protocol=protocol),
         "batch_policy": {
             "max_slots_per_dispatch": policy["max_slots_per_dispatch"],
             "complete_task_triplets": True,
@@ -317,8 +358,14 @@ def build_core_payloads(repo_root: Path, *, revision: str) -> CorePayloads:
     )
 
 
-def write_capsule(repo_root: Path, build: CorePayloads, *, check: bool) -> None:
-    output_dir = repo_root.resolve() / V4_CONFIG_DIR
+def write_capsule(
+    repo_root: Path,
+    build: CorePayloads,
+    *,
+    check: bool,
+    config_dir: Path = V4_CONFIG_DIR,
+) -> None:
+    output_dir = repo_root.resolve() / config_dir
     artifacts = {
         "analysis_plan.json": build.analysis_plan,
         "final_manifest.json": build.manifest,
@@ -330,7 +377,7 @@ def write_capsule(repo_root: Path, build: CorePayloads, *, check: bool) -> None:
         for name, payload in artifacts.items():
             path = output_dir / name
             if not path.is_file() or path.read_bytes() != _json_bytes(payload):
-                raise ValueError(f"generated v4 artifact is stale: {path}")
+                raise ValueError(f"generated capsule artifact is stale: {path}")
         return
     output_dir.mkdir(parents=True, exist_ok=True)
     for name, payload in artifacts.items():
@@ -348,11 +395,15 @@ def _git_revision(repo_root: Path) -> str:
     return result.stdout.strip()
 
 
-def configured_revision(repo_root: Path) -> str:
-    spec = _load_object(repo_root / V4_CONFIG_DIR / "study_spec.json")
+def configured_revision(
+    repo_root: Path,
+    *,
+    config_dir: Path = V4_CONFIG_DIR,
+) -> str:
+    spec = _load_object(repo_root / config_dir / "study_spec.json")
     revision = spec.get("revision")
     if not isinstance(revision, str) or len(revision) != 40:
-        raise ValueError("frozen v4 study spec has no full git revision")
+        raise ValueError("frozen study spec has no full git revision")
     return revision
 
 

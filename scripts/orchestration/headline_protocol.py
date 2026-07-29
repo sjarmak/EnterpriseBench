@@ -90,6 +90,14 @@ V4_POST_LOCK_EXPOSURE_EVIDENCE = {
         for candidate_id in V4_ADDITIONAL_EXPOSURES
     },
 }
+V5_POST_LOCK_EXPOSURES = V4_POST_LOCK_EXPOSURES
+V5_POST_LOCK_EXPOSURE_EVIDENCE = V4_POST_LOCK_EXPOSURE_EVIDENCE
+V5_ZERO_AGENT_EXPOSURE_EVIDENCE = (
+    "results/studies/rryas-headline-v4/batch-001-terminal.json"
+)
+V5_ZERO_AGENT_EXPOSURE_EVIDENCE_SHA256 = (
+    "sha256:05c65bb88a98276e4065c6eb3ab1cfe9bf18bfbdb68b3553b73adf0ecd10edb9"
+)
 
 
 @dataclass(frozen=True)
@@ -185,6 +193,19 @@ V4_PROTOCOL = HeadlineProtocol(
         "fixed and an isolated judge-only canary passes."
     ),
 )
+V5_PROTOCOL = HeadlineProtocol(
+    study_id="rryas-headline-v5",
+    task_count=31,
+    slot_count=93,
+    post_lock_exposures=V5_POST_LOCK_EXPOSURES,
+    post_lock_exposure_evidence=V5_POST_LOCK_EXPOSURE_EVIDENCE,
+    arms=V2_REQUIRED_ARMS,
+    arm_descriptions=V2_REQUIRED_ARM_DESCRIPTIONS,
+    forecast_basis=(
+        "No v5 spend authorization before the v4 pre-inference child-import "
+        "failure is fixed and terminally sealed."
+    ),
+)
 V3_MAX_SLOTS_PER_DISPATCH = 12
 V3_AGENT_MAX_BUDGET_USD_PER_SLOT = 9.1
 V3_JUDGE_MAX_BUDGET_USD_PER_CALL = 0.01
@@ -230,11 +251,33 @@ HEADLINE_BATCH_POLICIES = {
             V4_OUTER_SPEND_HARD_CAP_PER_SLOT_USD
         ),
     },
+    V5_PROTOCOL.study_id: {
+        "max_slots_per_dispatch": V4_MAX_SLOTS_PER_DISPATCH,
+        "agent_max_budget_usd_per_slot": V4_AGENT_MAX_BUDGET_USD_PER_SLOT,
+        "judge_max_budget_usd_per_call": V4_JUDGE_MAX_BUDGET_USD_PER_CALL,
+        "max_judge_calls_per_slot": V4_MAX_JUDGE_CALLS_PER_SLOT,
+        "max_judge_attempts_per_call": V4_MAX_JUDGE_ATTEMPTS_PER_CALL,
+        "outer_spend_hard_cap_per_slot_usd": (
+            V4_OUTER_SPEND_HARD_CAP_PER_SLOT_USD
+        ),
+    },
 }
 HEADLINE_PROTOCOLS = {
     protocol.study_id: protocol
-    for protocol in (V1_PROTOCOL, V2_PROTOCOL, V3_PROTOCOL, V4_PROTOCOL)
+    for protocol in (
+        V1_PROTOCOL,
+        V2_PROTOCOL,
+        V3_PROTOCOL,
+        V4_PROTOCOL,
+        V5_PROTOCOL,
+    )
 }
+CAPACITY_GATED_STUDY_IDS = frozenset(
+    (V4_PROTOCOL.study_id, V5_PROTOCOL.study_id)
+)
+PAID_BATCH_STUDY_IDS = frozenset(
+    (V3_PROTOCOL.study_id, *CAPACITY_GATED_STUDY_IDS)
+)
 REQUIRED_CACHE_ISOLATION = {
     "schema_version": 1,
     "required": True,
@@ -370,6 +413,7 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
         V2_PROTOCOL.study_id: "v1 operational run",
         V3_PROTOCOL.study_id: "v1 and v2 operational runs",
         V4_PROTOCOL.study_id: "v1, v2, and v3 operational runs",
+        V5_PROTOCOL.study_id: "v1, v2, v3, and v4 operational attempts",
     }[protocol.study_id]
     plan["claim_scope"] = (
         f"Claude Sonnet 5 on the {protocol.task_count}-task EnterpriseBench "
@@ -405,7 +449,7 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
             "excluded_candidate_ids": list(V3_ADDITIONAL_EXPOSURES),
             "predecessor_analysis_use": "operational evidence only",
         }
-    else:
+    elif protocol == V4_PROTOCOL:
         plan["protocol_amendment"] = {
             "predecessor": "rryas-headline-v3",
             "reason": (
@@ -417,6 +461,21 @@ def required_analysis_plan(protocol: HeadlineProtocol) -> dict[str, Any]:
                 "other locked candidates without inspecting reward"
             ),
             "excluded_candidate_ids": list(V4_ADDITIONAL_EXPOSURES),
+            "predecessor_analysis_use": "operational evidence only",
+        }
+    else:
+        plan["protocol_amendment"] = {
+            "predecessor": "rryas-headline-v4",
+            "reason": "v4 stopped during run_task module import before agent startup",
+            "selection_rule": (
+                "retain the unchanged v4 population because v4 produced no "
+                "agent output and exposed no task"
+            ),
+            "excluded_candidate_ids": [],
+            "zero_agent_exposure_evidence": V5_ZERO_AGENT_EXPOSURE_EVIDENCE,
+            "zero_agent_exposure_evidence_sha256": (
+                V5_ZERO_AGENT_EXPOSURE_EVIDENCE_SHA256
+            ),
             "predecessor_analysis_use": "operational evidence only",
         }
     return plan

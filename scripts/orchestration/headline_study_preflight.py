@@ -54,8 +54,12 @@ from headline_protocol import (  # noqa: E402,F401
     V3_PROTOCOL,
     V4_PROTOCOL,
     V4_REQUIRED_JUDGE,
+    V5_PROTOCOL,
     HeadlineProtocol,
     required_analysis_plan,
+)
+from headline_protocol_evidence import (  # noqa: E402
+    validate_protocol_amendment_evidence,
 )
 from mirror_naming import derive_mirror_name  # noqa: E402
 from mode_gate import IneligibleTask, check_eligibility  # noqa: E402
@@ -431,6 +435,11 @@ def validate_headline_study(
         raise ValueError("final manifest names a different analysis plan")
     if analysis != required_analysis_plan(protocol):
         raise ValueError("headline analysis plan is not the exact locked plan")
+    validate_protocol_amendment_evidence(
+        repo_root,
+        analysis,
+        protocol=protocol,
+    )
 
     candidate_ids = _validate_selection(manifest, candidate, protocol=protocol)
     entries = manifest.get("tasks")
@@ -478,7 +487,9 @@ def validate_headline_study(
     if manifest.get("cache_isolation") != REQUIRED_CACHE_ISOLATION:
         raise ValueError("headline cache-isolation contract is not locked")
     expected_judge = (
-        V4_REQUIRED_JUDGE if protocol == V4_PROTOCOL else REQUIRED_JUDGE
+        V4_REQUIRED_JUDGE
+        if protocol in (V4_PROTOCOL, V5_PROTOCOL)
+        else REQUIRED_JUDGE
     )
     if manifest.get("judge_configuration") != expected_judge:
         raise ValueError("headline judge configuration is not locked")

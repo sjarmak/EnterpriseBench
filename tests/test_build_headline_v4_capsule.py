@@ -14,11 +14,8 @@ for import_path in (
 ):
     sys.path.insert(0, str(import_path))
 
-from build_headline_v4_capsule import (  # noqa: E402
-    build_core_payloads,
-    configured_revision,
-    write_capsule,
-)
+from build_headline_v4_capsule import build_core_payloads  # noqa: E402
+from eb_study import file_hash  # noqa: E402
 from headline_protocol import V4_PROTOCOL  # noqa: E402
 
 
@@ -69,8 +66,26 @@ def test_v4_builder_excludes_every_v1_through_v3_exposed_task() -> None:
     )
 
 
-def test_repository_v4_artifacts_are_current() -> None:
-    revision = configured_revision(PROJECT_ROOT)
-    build = build_core_payloads(PROJECT_ROOT, revision=revision)
+def test_repository_v4_artifacts_remain_terminally_frozen() -> None:
+    expected_hashes = {
+        "analysis_plan.json": (
+            "sha256:e823ab3796d0785f7aea246dc2e18d595ec182f6a28ad96d4eac39e0ca461b54"
+        ),
+        "dispatch_plan.json": (
+            "sha256:a9e36ae5f30ba7c7718edd0d0910295a95a99faf949586655f538d28356ca0a7"
+        ),
+        "final_manifest.json": (
+            "sha256:766715c9dfb427e1989a89c3c0f623bd30034752923045716fe8bb353d38f166"
+        ),
+        "preflight_evidence.json": (
+            "sha256:989fd5f37c29fce9e73e5ed7465d6dc77d3b8e8c054fd71f7a54b9543e19b416"
+        ),
+        "study_spec.json": (
+            "sha256:808544fe1d256b39f037761d4605d761641508769f426d9749d5be2681871b2d"
+        ),
+    }
+    config_dir = PROJECT_ROOT / "configs" / "studies" / "rryas-headline-v4"
 
-    write_capsule(PROJECT_ROOT, build, check=True)
+    assert {
+        name: file_hash(config_dir / name) for name in expected_hashes
+    } == expected_hashes

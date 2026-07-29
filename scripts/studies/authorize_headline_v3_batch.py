@@ -37,6 +37,7 @@ from headline_provider_capacity import (  # noqa: E402
     exclusive_provider_account_locks,
     fetch_provider_usage,
 )
+from headline_protocol import CAPACITY_GATED_STUDY_IDS  # noqa: E402
 from headline_study_dispatch import (  # noqa: E402
     DispatchError,
     _existing_receipts,
@@ -134,7 +135,7 @@ def build_authorized_plan(
         for slot in plan.slots[start_prefix:end_prefix]
     )
     payload = deepcopy(_load_payload(plan_path))
-    if plan.spec.study_id == "rryas-headline-v4":
+    if plan.spec.study_id in CAPACITY_GATED_STUDY_IDS:
         accounts = {
             account
             for slot in plan.slots

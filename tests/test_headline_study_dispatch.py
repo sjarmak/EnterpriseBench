@@ -203,6 +203,11 @@ def _write_fixture(
     evidence_path = tmp_path / "preflight_evidence.json"
     evidence_path.write_text('{"paid_dispatch_authorized": false}\n')
     receipts_path = tmp_path / "results" / "studies" / study_id / "receipts.jsonl"
+    capacity_gated = study_id in {
+        "rryas-headline-v4",
+        "rryas-headline-v5",
+    }
+    paid_batch = study_id == "rryas-headline-v3" or capacity_gated
     receipts_path.parent.mkdir(parents=True)
     sample_path = tmp_path / "sample_receipts.jsonl"
     sample_path.write_text(
@@ -223,7 +228,7 @@ def _write_fixture(
 
     if study_id == "rryas-headline-v3" and ceiling == 20.0:
         ceiling = 60.0
-    if study_id == "rryas-headline-v4" and ceiling == 20.0:
+    if capacity_gated and ceiling == 20.0:
         ceiling = 70.0
     plan_payload = {
                 "schema_version": 1,
@@ -258,14 +263,14 @@ def _write_fixture(
                     "authorization_reference": None,
                 },
             }
-    if study_id in {"rryas-headline-v3", "rryas-headline-v4"}:
-        judge_budget = 0.1 if study_id == "rryas-headline-v4" else 0.01
-        hard_cap = 10.6 if study_id == "rryas-headline-v4" else 9.25
+    if paid_batch:
+        judge_budget = 0.1 if capacity_gated else 0.01
+        hard_cap = 10.6 if capacity_gated else 9.25
         plan_payload.update(
             {
                 "batch_policy": {
                     "max_slots_per_dispatch": (
-                        9 if study_id == "rryas-headline-v4" else 12
+                        9 if capacity_gated else 12
                     ),
                     "complete_task_triplets": True,
                     "score_independent_boundaries": True,
@@ -291,7 +296,7 @@ def _write_fixture(
                                 "provider-utilization"
                             ),
                         }
-                        if study_id == "rryas-headline-v4"
+                        if capacity_gated
                         else {}
                     ),
                 },
@@ -307,9 +312,7 @@ def _write_fixture(
         )
     plan_path = tmp_path / "dispatch_plan.json"
     plan_path.write_text(json.dumps(plan_payload, sort_keys=True))
-    if study_id in {"rryas-headline-v3", "rryas-headline-v4"} and (
-        authorized or capacity_confirmed
-    ):
+    if paid_batch and (authorized or capacity_confirmed):
         prefix = authorized_completed_prefix if authorized_completed_prefix is not None else 0
         if capacity_confirmed:
             plan_payload["provider_capacity"] = {
@@ -317,10 +320,10 @@ def _write_fixture(
                 "capacity_reference": "test-capacity",
                 "confirmed_completed_prefix": prefix,
                 "confirmed_max_slots": (
-                    9 if study_id == "rryas-headline-v4" else 12
+                    9 if capacity_gated else 12
                 ),
             }
-            if study_id == "rryas-headline-v4":
+            if capacity_gated:
                 plan_payload["provider_capacity"] = _v4_capacity_payload()
                 plan_payload["provider_capacity"][
                     "confirmed_completed_prefix"
@@ -328,7 +331,7 @@ def _write_fixture(
             plan_path.write_text(json.dumps(plan_payload, sort_keys=True))
         if authorized:
             preview_plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
-            batch_size = 9 if study_id == "rryas-headline-v4" else 12
+            batch_size = 9 if capacity_gated else 12
             end_prefix = min(prefix + batch_size, len(preview_plan.slots))
             commands = tuple(
                 compile_run_command(slot, plan=preview_plan, repo_root=tmp_path)
@@ -1146,6 +1149,33 @@ def test_v3_incidental_evidence_does_not_activate_v4_freshness(
 
     assert plan.v3_controls is not None
     assert plan.v3_controls.capacity_evidence is None
+
+
+def test_v5_loads_same_nonzero_capacity_contract_and_nine_slot_batch(
+    tmp_path: Path,
+) -> None:
+    plan_path, *_ = _write_fixture(
+        tmp_path,
+        study_id="rryas-headline-v5",
+        authorized=True,
+        capacity_confirmed=True,
+    )
+
+    summary = dispatch_headline_study(
+        plan_path=plan_path,
+        repo_root=tmp_path,
+        execute=False,
+        preflight=lambda **_kwargs: object(),
+    )
+    plan = load_dispatch_plan(plan_path, repo_root=tmp_path)
+
+    assert summary.executed_slots == 0
+    assert len(summary.commands) == 6
+    assert plan.v3_controls is not None
+    assert plan.v3_controls.capacity_evidence is not None
+    assert plan.v3_controls.capacity_evidence["accounts"]["agent"][
+        "five_hour_utilization_pct"
+    ] == 25.0
 
 
 @pytest.mark.parametrize(

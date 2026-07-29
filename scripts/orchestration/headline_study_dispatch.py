@@ -52,6 +52,7 @@ from headline_provider_capacity import (  # noqa: E402
     exclusive_provider_account_locks,
     prepare_v4_capacity_dispatch,
 )
+from headline_protocol import PAID_BATCH_STUDY_IDS  # noqa: E402
 from run_task import DEFAULT_OAUTH_AGENT_COMMAND  # noqa: E402
 
 
@@ -351,7 +352,7 @@ def load_dispatch_plan(plan_path: Path, *, repo_root: Path) -> DispatchPlan:
     ):
         raise DispatchError("dispatch authorization state/reference is inconsistent")
     controls = None
-    if study_id in {"rryas-headline-v3", "rryas-headline-v4"}:
+    if study_id in PAID_BATCH_STUDY_IDS:
         try:
             controls = validate_v3_dispatch_controls(
                 study_id=study_id,
