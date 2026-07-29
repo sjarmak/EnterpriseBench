@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v5",
+  "batch": 1,
+  "status": "TERMINAL-MID-BATCH-INFRA-INVALID",
+  "authorization": {
+    "reference": "user-authorized-headline-v5-batch-001-2026-07-29",
+    "batch_hash": "sha256:363e2a3a91f1babce72e4aff0c353aaf04930b2c14fd7a5f480cb4b4ec9131c7",
+    "plan_commit": "51b8127",
+    "plan_sha256": "2b9adb24346828cbff5c210f1fe477bf34680d71fcbba2727b49ad7e49462366",
+    "authorized_completed_prefix": 0,
+    "authorized_end_prefix": 9,
+    "consumed": true,
+    "retry_authorized": false
+  },
+  "capacity_recheck": {
+    "status": "accepted",
+    "started_sha256": "d41c4c5aa1e63613825863e56a1df3de555b2c1c00b84d0a27c353439cb0e153",
+    "result_sha256": "d44fc21bb77d1c28afb8de72c313c49910f384efa490419f650bf61c3f22f65d"
+  },
+  "execution": {
+    "planned_slots": 93,
+    "authorized_slots": 9,
+    "attempted_slots": 4,
+    "valid_slots": 3,
+    "invalid_slots": 1,
+    "completed_task_triplets": 1,
+    "reported_outer_spend_usd": 6.411887,
+    "reported_agent_spend_usd": 6.406803,
+    "reported_judge_spend_usd": 0.005084,
+    "reported_input_tokens": 1938970,
+    "reported_output_tokens": 40343,
+    "receipts_hash": "sha256:cbd815f188af68c385db044031c9b2edc390cfbba19cac11719db77364333851",
+    "cache_isolation": {
+      "valid_receipts": 3,
+      "cross_run_cache_read_tokens": 0,
+      "cache_write_tokens": 0
+    },
+    "trace_files": [
+      "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/agent_trace.jsonl",
+      "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/agent_trace.jsonl",
+      "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/agent_trace.jsonl"
+    ]
+  },
+  "stop_trial": {
+    "trial": "rryas-headline-v5/dep-traversal-001/mcp_only/rep1/att1",
+    "phase": "mcp_infra_error",
+    "process_returncode": 2,
+    "status": "infra_invalid",
+    "failure_class": "infra_mcp_preflight",
+    "endpoint_status": 401,
+    "preflight_attempts": 5,
+    "agent_inference_started": false,
+    "agent_trace_created": false,
+    "reported_trial_cost_usd": 0.0
+  },
+  "sealed_study_files": [
+    "batch-001-terminal.json",
+    "capacity_rechecks/363e2a3a91f1babce72e4aff0c353aaf04930b2c14fd7a5f480cb4b4ec9131c7.result.json",
+    "capacity_rechecks/363e2a3a91f1babce72e4aff0c353aaf04930b2c14fd7a5f480cb4b4ec9131c7.started.json",
+    "receipts.jsonl",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/agent/stderr.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/agent/stdout.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/agent_stderr.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/agent_stdout.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/agent_trace.jsonl",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/config.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/injected_instruction.md",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/results.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/task_metrics.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/baseline/rep1/attempt1/verifier/output.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/agent/stderr.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/agent/stdout.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/agent_stderr.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/agent_stdout.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/agent_trace.jsonl",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/config.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/injected_instruction.md",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/results.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/task_metrics.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/cli/rep1/attempt1/verifier/output.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/agent/stderr.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/agent/stdout.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/agent_stderr.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/agent_stdout.log",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/agent_trace.jsonl",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/config.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/injected_instruction.md",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/results.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/task_metrics.json",
+    "runs/dep-graph-tri-tokio-hyper-tonic-001/mcp_only/rep1/attempt1/verifier/output.json",
+    "runs/dep-traversal-001/mcp_only/rep1/attempt1/config.json",
+    "runs/dep-traversal-001/mcp_only/rep1/attempt1/injected_instruction.md",
+    "runs/dep-traversal-001/mcp_only/rep1/attempt1/results.json",
+    "runs/dep-traversal-001/mcp_only/rep1/attempt1/task_metrics.json"
+  ],
+  "disposition": {
+    "headline_result": false,
+    "promotion_eligible": false,
+    "analysis_use": "operational evidence and task-level descriptive diagnostics only",
+    "continue_batch": false,
+    "retry_batch": false,
+    "new_authorization_required": true,
+    "exposed_task_ids": [
+      "dep-graph-tri-tokio-hyper-tonic-001"
+    ],
+    "unexposed_failed_task_ids": [
+      "dep-traversal-001"
+    ],
+    "reason": "Sourcegraph MCP authentication returned HTTP 401 before agent startup on the fourth attempt; the one-shot authorization and capacity recheck were consumed"
+  },
+  "recorded_at": "2026-07-29T12:16:48Z"
+}
