@@ -34,6 +34,7 @@ def render_markdown(
     _validate_console_url(console_url)
     _reject_secret_text(analysis)
     provenance, completeness, reward = _validate_publication_input(analysis)
+    trace_evidence = _object(reward, "trace_evidence", "reward")
     method = _object(
         _object(analysis, "analysis", "analysis"),
         "method",
@@ -48,6 +49,8 @@ def render_markdown(
     by_arm = _object(reward, "by_arm", "reward")
     arms = tuple(by_arm)
     per_task = _object(reward, "per_task", "reward")
+    if set(trace_evidence) != set(per_task):
+        raise ValueError("trace evidence tasks must exactly match reported tasks")
     lines = [
         f"# EnterpriseBench headline study: {_markdown(study_id)}",
         "",
@@ -179,13 +182,25 @@ def render_markdown(
     )
     for task_id, scores_value in per_task.items():
         scores = _mapping(scores_value, f"task {task_id}")
-        links = [
-            (f"[{_markdown(arm)}]({_trace_link(console_url, str(task_id), arm)})")
-            for arm in arms
-            if arm in scores
-        ]
-        if len(links) != len(arms):
+        if set(scores) != set(arms):
             raise ValueError(f"task {task_id} is missing a declared arm score")
+        task_evidence = _mapping(
+            trace_evidence.get(task_id),
+            f"trace evidence for task {task_id}",
+        )
+        if set(task_evidence) != set(arms):
+            raise ValueError(f"trace evidence for task {task_id} is incomplete")
+        links = [
+            link
+            for arm in arms
+            for link in _trace_links(
+                console_url,
+                study_id,
+                str(task_id),
+                arm,
+                task_evidence.get(arm),
+            )
+        ]
         lines.append(f"- `{_markdown(str(task_id))}`: " + " · ".join(links))
 
     lines.extend(_provenance_lines(provenance))
@@ -399,10 +414,45 @@ def _shell_path(base: str, name: str) -> str:
     return shlex.quote(f"{base}/{name}")
 
 
-def _trace_link(console_url: str, task_id: str, arm: str) -> str:
+def _trace_links(
+    console_url: str,
+    study_id: str,
+    task_id: str,
+    arm: str,
+    trial_keys_value: Any,
+) -> list[str]:
+    if not isinstance(trial_keys_value, list) or not trial_keys_value:
+        raise ValueError(f"trace evidence for {task_id}/{arm} must be non-empty")
+    if any(not isinstance(key, str) or not key for key in trial_keys_value):
+        raise ValueError(f"trace evidence for {task_id}/{arm} has an invalid trial key")
+    trial_keys = tuple(trial_keys_value)
+    if len(set(trial_keys)) != len(trial_keys):
+        raise ValueError(f"trace evidence for {task_id}/{arm} has duplicate trial keys")
+    prefix = f"{study_id}/{task_id}/{arm}/"
+    if any(
+        not key.startswith(prefix)
+        or re.fullmatch(r"rep[1-9][0-9]*/att[1-9][0-9]*", key[len(prefix) :]) is None
+        for key in trial_keys
+    ):
+        raise ValueError(f"trace evidence for {task_id}/{arm} is not in the study")
+    return [
+        (
+            f"[{_markdown(arm if len(trial_keys) == 1 else f'{arm} {key.rsplit('/', 2)[-2]}/{key.rsplit('/', 1)[-1]}')}]"
+            f"({_trace_link(console_url, task_id, arm, key)})"
+        )
+        for key in trial_keys
+    ]
+
+
+def _trace_link(
+    console_url: str,
+    task_id: str,
+    arm: str,
+    trial_key: str,
+) -> str:
     parts = urlsplit(console_url)
     query = parse_qsl(parts.query, keep_blank_values=True)
-    query.extend((("q", task_id), ("arm", arm)))
+    query.extend((("q", task_id), ("arm", arm), ("trial", trial_key)))
     return urlunsplit(
         (parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)
     )

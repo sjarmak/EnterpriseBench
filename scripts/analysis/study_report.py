@@ -205,6 +205,7 @@ def reward(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
             task_id: {arm: round(score, 4) for arm, score in arms.items()}
             for task_id, arms in sorted(per_task.items())
         },
+        "trace_evidence": trace_evidence(paired),
     }
 
 
@@ -251,6 +252,31 @@ def timing(capsule: StudyCapsule, paired: PairedValid) -> dict[str, Any]:
     return {
         "paired_valid": _timing_view(paired.trials, paired.arms),
         "all_attempts": _timing_view(capsule.receipts, capsule.spec.arm_names),
+    }
+
+
+def trace_evidence(paired: PairedValid) -> dict[str, dict[str, list[str]]]:
+    """Bind each reported task/arm measurement to immutable trial identities."""
+
+    return {
+        task_id: {
+            arm: [
+                receipt.trial.key
+                for receipt in sorted(
+                    (
+                        receipt
+                        for receipt in paired.trials
+                        if receipt.trial.task_id == task_id and receipt.trial.arm == arm
+                    ),
+                    key=lambda receipt: (
+                        receipt.trial.repetition,
+                        receipt.trial.attempt,
+                    ),
+                )
+            ]
+            for arm in paired.arms
+        }
+        for task_id in paired.task_ids
     }
 
 
@@ -301,6 +327,7 @@ def build_report(
                 "primary_contrasts": inference["primary"],
                 "descriptive_only": inference["descriptive_only"],
                 "by_task_type": inference["by_task_type"],
+                "trace_evidence": trace_evidence(paired),
             }
     return {
         "schema_version": SCHEMA_VERSION,

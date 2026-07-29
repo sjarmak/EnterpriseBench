@@ -101,6 +101,14 @@ class TestProvenance:
             "dep-traversal-002": ["baseline/rep2", "mcp_only/rep2", "cli/rep2"]
         }
 
+    def test_report_binds_every_paired_measurement_to_its_trial_key(self):
+        report = build_report(capsule())
+
+        assert report["reward"]["trace_evidence"]["dep-traversal-001"]["baseline"] == [
+            ("rryas-headline-2026-07/dep-traversal-001/baseline/rep1/att1"),
+            ("rryas-headline-2026-07/dep-traversal-001/baseline/rep2/att1"),
+        ]
+
 
 class TestReward:
     def test_every_declared_arm_gets_a_contrast(self):

@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+for import_root in (REPO_ROOT, REPO_ROOT / "lib"):
+    if str(import_root) not in sys.path:
+        sys.path.insert(0, str(import_root))
 
 try:
     from scripts.analysis.rootcause_console_claude import consume_claude_record
@@ -23,6 +24,7 @@ except ModuleNotFoundError as exc:
         raise
     from rootcause_console_claude import consume_claude_record
 from scripts.lib.attempt_policy import cache_isolation_invalid_reason  # noqa: E402
+from eb_study import strict_json_loads  # noqa: E402
 
 DATA_SCRIPT_RE = re.compile(
     r'(<script id="data" type="application/json">)(.*?)(</script>)',
@@ -497,6 +499,35 @@ def _load_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def _analysis_trial_keys(path: Path) -> tuple[str, ...]:
+    try:
+        analysis = strict_json_loads(path.read_text())
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ValueError(f"{path}: analysis must be valid duplicate-free JSON") from exc
+    if not isinstance(analysis, dict):
+        raise ValueError(f"{path}: analysis must be a JSON object")
+    reward = analysis.get("reward")
+    if not isinstance(reward, dict):
+        raise ValueError(f"{path}: reward must be an object")
+    evidence = reward.get("trace_evidence")
+    if not isinstance(evidence, dict) or not evidence:
+        raise ValueError(f"{path}: reward.trace_evidence must be a non-empty object")
+    keys: list[str] = []
+    for task_id, arms in evidence.items():
+        if not isinstance(task_id, str) or not task_id or not isinstance(arms, dict):
+            raise ValueError(f"{path}: trace evidence task entry is invalid")
+        for arm, trial_keys in arms.items():
+            if (
+                not isinstance(arm, str)
+                or not arm
+                or not isinstance(trial_keys, list)
+                or not trial_keys
+            ):
+                raise ValueError(f"{path}: trace evidence arm entry is invalid")
+            keys.extend(trial_keys)
+    return tuple(keys)
+
+
 def build_run_cell(run_dir: Path, task_dir: Path) -> dict[str, Any]:
     """Build one console cell from a persisted benchmark run."""
     result = _load_json(run_dir / "results.json")
@@ -599,6 +630,7 @@ def _run_identity(
     )
     return {
         "run_id": f"{task_id}/{mode}/{variant}{coordinate_suffix}",
+        "trial_key": _trial_key(coordinates, task_id, mode),
         "run_label": (
             f"{variant} · {coordinates['study_id']} "
             f"{coordinates['rep']}/{coordinates['attempt']}"
@@ -641,6 +673,19 @@ def _run_coordinates(run_dir: Path, task_id: str, mode: str) -> dict[str, str]:
     ):
         return {}
     return {"study_id": study_id, "rep": rep, "attempt": attempt}
+
+
+def _trial_key(
+    coordinates: dict[str, str],
+    task_id: str,
+    mode: str,
+) -> str:
+    if not coordinates:
+        return ""
+    attempt = coordinates["attempt"].removeprefix("attempt")
+    return (
+        f"{coordinates['study_id']}/{task_id}/{mode}/{coordinates['rep']}/att{attempt}"
+    )
 
 
 def _cache_isolation_state(
@@ -928,7 +973,13 @@ def apply_validity_overrides(
     return corrected
 
 
-def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> None:
+def merge_console(
+    console: Path,
+    new_cells: Sequence[dict],
+    ui_script: Path,
+    *,
+    required_trial_keys: Sequence[str] = (),
+) -> None:
     """Idempotently merge cells and inline the current console UI."""
     html = console.read_text()
     data_match = DATA_SCRIPT_RE.search(html)
@@ -937,6 +988,8 @@ def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> 
     cells = json.loads(data_match.group(2))
     if not isinstance(cells, list):
         raise ValueError(f"{console}: console data must be an array")
+    _validate_unique_run_ids(cells, require_present=False)
+    _validate_unique_run_ids(new_cells, require_present=True)
 
     replacements = {str(cell["run_id"]): redact(cell) for cell in new_cells}
     replacement_identities = {_cell_identity(cell) for cell in replacements.values()}
@@ -961,7 +1014,9 @@ def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> 
         )
     ]
     merged.extend(replacements.values())
+    merged = [_backfill_trial_key(cell) for cell in merged]
     merged = [_quarantine_untrusted_score(cell) for cell in merged]
+    _validate_unique_trial_keys(merged, required_trial_keys)
     payload = json.dumps(merged, ensure_ascii=False, separators=(",", ":")).replace(
         "</", "<\\/"
     )
@@ -978,6 +1033,102 @@ def merge_console(console: Path, new_cells: Sequence[dict], ui_script: Path) -> 
     end = tail_start + app_match.end()
     html = html[:start] + f"<script>\n{ui_script.read_text()}\n</script>" + html[end:]
     _atomic_write(console, html)
+
+
+def _backfill_trial_key(cell: dict[str, Any]) -> dict[str, Any]:
+    if cell.get("trial_key") not in (None, ""):
+        return dict(cell)
+    coordinates = {field: cell.get(field) for field in ("study_id", "rep", "attempt")}
+    if (
+        not all(isinstance(value, str) and value for value in coordinates.values())
+        or not isinstance(cell.get("task"), str)
+        or not cell["task"]
+        or not isinstance(cell.get("mode"), str)
+        or not cell["mode"]
+        or re.fullmatch(r"rep[1-9][0-9]*", coordinates["rep"]) is None
+        or re.fullmatch(r"attempt[1-9][0-9]*", coordinates["attempt"]) is None
+    ):
+        return dict(cell)
+    return {
+        **cell,
+        "trial_key": _trial_key(coordinates, cell["task"], cell["mode"]),
+    }
+
+
+def _validate_unique_trial_keys(
+    cells: Sequence[dict[str, Any]],
+    required_trial_keys: Sequence[str],
+) -> None:
+    observed: set[str] = set()
+    duplicates: set[str] = set()
+    for cell in cells:
+        trial_key = cell.get("trial_key")
+        if trial_key in (None, ""):
+            continue
+        if not _is_canonical_trial_key(trial_key):
+            raise ValueError("trial_key must use canonical study/task/arm/repN/attN form")
+        if trial_key in observed:
+            duplicates.add(trial_key)
+        observed.add(trial_key)
+    if duplicates:
+        raise ValueError(
+            "duplicate trial_key value(s): " + ", ".join(sorted(duplicates))
+        )
+    if any(not _is_canonical_trial_key(key) for key in required_trial_keys):
+        raise ValueError(
+            "required trial_key values must use canonical "
+            "study/task/arm/repN/attN form"
+        )
+    if len(set(required_trial_keys)) != len(required_trial_keys):
+        raise ValueError("required trial_key values must be unique")
+    missing = sorted(set(required_trial_keys) - observed)
+    if missing:
+        raise ValueError("missing required trial_key value(s): " + ", ".join(missing))
+
+
+def _is_canonical_trial_key(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    parts = value.split("/")
+    if len(parts) != 5:
+        return False
+    study_id, task_id, arm, repetition, attempt = parts
+    identifiers = (study_id, task_id, arm)
+    return (
+        all(
+            identifier
+            and identifier not in {".", ".."}
+            and identifier.strip() == identifier
+            and not any(ord(character) < 32 for character in identifier)
+            for identifier in identifiers
+        )
+        and re.fullmatch(r"rep[1-9][0-9]*", repetition) is not None
+        and re.fullmatch(r"att[1-9][0-9]*", attempt) is not None
+    )
+
+
+def _validate_unique_run_ids(
+    cells: Sequence[Any],
+    *,
+    require_present: bool,
+) -> None:
+    observed: set[str] = set()
+    duplicates: set[str] = set()
+    for cell in cells:
+        if not isinstance(cell, dict):
+            raise ValueError("console cells must be objects")
+        run_id = cell.get("run_id")
+        if run_id in (None, "") and not require_present:
+            continue
+        if not isinstance(run_id, str) or not run_id:
+            raise ValueError("new console cells require a non-empty run_id")
+        if run_id in observed:
+            duplicates.add(run_id)
+        observed.add(run_id)
+    if duplicates:
+        raise ValueError(
+            "duplicate run_id value(s): " + ", ".join(sorted(duplicates))
+        )
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -1010,6 +1161,11 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="post-run validity ledger; immutable run artifacts are not modified",
     )
+    parser.add_argument(
+        "--analysis",
+        type=Path,
+        help="score analysis whose trial keys must all exist exactly once",
+    )
     return parser.parse_args(argv)
 
 
@@ -1018,7 +1174,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     cells = [build_run_cell(run_dir, args.task_dir) for run_dir in args.run]
     if args.validity_overrides is not None:
         cells = apply_validity_overrides(cells, args.validity_overrides)
-    merge_console(args.console, cells, args.ui)
+    required_trial_keys = (
+        _analysis_trial_keys(args.analysis) if args.analysis is not None else ()
+    )
+    merge_console(
+        args.console,
+        cells,
+        args.ui,
+        required_trial_keys=required_trial_keys,
+    )
     print(f"Merged {len(cells)} run trace(s) into {args.console}")
     return 0
 

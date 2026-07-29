@@ -116,8 +116,15 @@ function applyUrlState() {
   setFilterFromQuery(params, "phase", "fphase");
   setFilterFromQuery(params, "flag", "fflag");
   setFilterFromQuery(params, "score", "fscore");
+  const requestedTrial = params.get("trial");
+  if (requestedTrial != null) {
+    const trialMatches = CELLS.map((cell, index) => ({ cell, index })).filter(
+      ({ cell }) => cell.trial_key === requestedTrial,
+    );
+    selectedIndex = trialMatches.length === 1 ? trialMatches[0].index : -1;
+  }
   const requestedRun = params.get("run");
-  if (requestedRun != null) {
+  if (requestedTrial == null && requestedRun != null) {
     selectedIndex = CELLS.findIndex((cell) => cell.run_id === requestedRun);
   }
 }

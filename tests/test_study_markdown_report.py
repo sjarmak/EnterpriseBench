@@ -176,6 +176,15 @@ def _complete_analysis() -> dict[str, object]:
             },
             "by_task_type": by_type,
             "per_task": per_task,
+            "trace_evidence": {
+                task_id: {
+                    arm: [
+                        f"rryas-headline-v6/{task_id}/{arm}/rep1/att1",
+                    ]
+                    for arm in per_task[task_id]
+                }
+                for task_id in per_task
+            },
             "method": method,
         },
         "economics": {
@@ -286,7 +295,10 @@ def test_render_contains_publication_results_and_trace_deep_links() -> None:
     assert "descriptive, not confirmatory" in rendered
     assert "No comparative efficiency claim is licensed" in rendered
     assert (
-        "../../../rootcause_console.html?q=dep-traversal-001&arm=mcp_only" in rendered
+        "../../../rootcause_console.html?"
+        "q=dep-traversal-001&arm=mcp_only&"
+        "trial=rryas-headline-v6%2Fdep-traversal-001%2F"
+        "mcp_only%2Frep1%2Fatt1" in rendered
     )
     assert "--analysis-plan" in rendered
     assert "--task-manifest" in rendered
@@ -299,6 +311,24 @@ def test_incomplete_inference_cannot_produce_publication_markdown() -> None:
     analysis["reward"] = None
 
     with pytest.raises(ValueError, match="complete confirmatory inference"):
+        render_markdown(analysis)
+
+
+def test_publication_refuses_ambiguous_trace_evidence() -> None:
+    analysis = _complete_analysis()
+    del analysis["reward"]["trace_evidence"]["dep-traversal-001"]["mcp_only"]
+
+    with pytest.raises(ValueError, match="trace evidence"):
+        render_markdown(analysis)
+
+
+def test_publication_refuses_unreported_cross_study_trace_evidence() -> None:
+    analysis = _complete_analysis()
+    analysis["reward"]["trace_evidence"]["unreported-task"] = {
+        "baseline": ["foreign-study/unreported-task/baseline/rep1/att1"],
+    }
+
+    with pytest.raises(ValueError, match="trace evidence tasks"):
         render_markdown(analysis)
 
 
@@ -395,8 +425,15 @@ def test_renderer_rejects_active_html_in_contract_text() -> None:
 
 def test_renderer_escapes_active_html_in_dynamic_identifiers() -> None:
     analysis = _complete_analysis()
-    task = analysis["reward"]["per_task"].pop("dep-traversal-001")
-    analysis["reward"]["per_task"]["<img src=x onerror=alert(1)>"] = task
+    old_task_id = "dep-traversal-001"
+    new_task_id = "<img src=x onerror=alert(1)>"
+    task = analysis["reward"]["per_task"].pop(old_task_id)
+    analysis["reward"]["per_task"][new_task_id] = task
+    evidence = analysis["reward"]["trace_evidence"].pop(old_task_id)
+    analysis["reward"]["trace_evidence"][new_task_id] = {
+        arm: [key.replace(f"/{old_task_id}/", f"/{new_task_id}/") for key in keys]
+        for arm, keys in evidence.items()
+    }
 
     rendered = render_markdown(analysis)
 
@@ -416,10 +453,19 @@ def test_renderer_escapes_markdown_links_in_contract_text() -> None:
 
 def test_reproduction_commands_shell_quote_the_study_identifier() -> None:
     analysis = _complete_analysis()
-    analysis["provenance"]["study_id"] = "$(touch /tmp/REPORT_PWNED)"
+    old_study_id = analysis["provenance"]["study_id"]
+    new_study_id = "$(id)"
+    analysis["provenance"]["study_id"] = new_study_id
+    analysis["reward"]["trace_evidence"] = {
+        task_id: {
+            arm: [
+                key.replace(f"{old_study_id}/", f"{new_study_id}/", 1) for key in keys
+            ]
+            for arm, keys in arms.items()
+        }
+        for task_id, arms in analysis["reward"]["trace_evidence"].items()
+    }
 
     rendered = render_markdown(analysis)
 
-    assert (
-        "--spec 'results/official_runs/$(touch /tmp/REPORT_PWNED)/study_spec.json'"
-    ) in rendered
+    assert "--spec 'results/official_runs/$(id)/study_spec.json'" in rendered

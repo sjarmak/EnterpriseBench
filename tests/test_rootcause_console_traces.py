@@ -8,9 +8,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from scripts.analysis.rootcause_console import (
     apply_validity_overrides,
     build_run_cell,
+    main,
     merge_console,
     normalize_trace,
     redact,
@@ -703,6 +706,8 @@ def test_build_run_cell_keeps_repetitions_and_attempts_distinct(
     assert rep1["run_id"].endswith("/rep1/attempt1")
     assert rep2["run_id"].endswith("/rep2/attempt1")
     assert rep1["run_id"] != rep2["run_id"]
+    assert rep1["trial_key"] == "study/task-001/mcp_code_finder/rep1/att1"
+    assert rep2["trial_key"] == "study/task-001/mcp_code_finder/rep2/att1"
 
     console = tmp_path / "rootcause_console.html"
     ui = tmp_path / "ui.js"
@@ -720,6 +725,229 @@ def test_build_run_cell_keeps_repetitions_and_attempts_distinct(
         .split("</script>", maxsplit=1)[0]
     )
     assert len(json.loads(payload)) == 2
+
+
+def test_merge_console_rejects_duplicate_trial_keys(tmp_path: Path) -> None:
+    task_dir = _make_task(tmp_path)
+    cell = build_run_cell(
+        _make_run(
+            tmp_path,
+            harness="claude",
+            model="claude-sonnet-5",
+            variant_label="claude-sonnet-5",
+            mode="baseline",
+            records=[],
+            run_relative="study/task-001/baseline/rep1/attempt1",
+        ),
+        task_dir,
+    )
+    duplicate = {**cell, "run_id": f"{cell['run_id']}/duplicate"}
+    console = tmp_path / "rootcause_console.html"
+    ui = tmp_path / "ui.js"
+    console.write_text(
+        '<script id="data" type="application/json">[]</script><script>oldUi()</script>'
+    )
+    ui.write_text("render()")
+
+    with pytest.raises(ValueError, match="duplicate trial_key"):
+        merge_console(console, [cell, duplicate], ui)
+
+
+def test_merge_console_rejects_malformed_trial_key(tmp_path: Path) -> None:
+    malformed = {
+        "run_id": "malformed-run",
+        "trial_key": "https://evil.example/not-a-trial",
+    }
+    console = tmp_path / "rootcause_console.html"
+    ui = tmp_path / "ui.js"
+    console.write_text(
+        '<script id="data" type="application/json">[]</script>'
+        "<script>oldUi()</script>"
+    )
+    ui.write_text("render()")
+
+    with pytest.raises(ValueError, match="canonical"):
+        merge_console(
+            console,
+            [malformed],
+            ui,
+            required_trial_keys=(malformed["trial_key"],),
+        )
+
+
+@pytest.mark.parametrize("location", ("existing", "new"))
+def test_merge_console_rejects_duplicate_run_ids(
+    tmp_path: Path,
+    location: str,
+) -> None:
+    cell = {"run_id": "duplicate-run"}
+    existing = [cell, cell] if location == "existing" else []
+    new = [cell, cell] if location == "new" else []
+    console = tmp_path / "rootcause_console.html"
+    ui = tmp_path / "ui.js"
+    console.write_text(
+        '<script id="data" type="application/json">'
+        f"{json.dumps(existing)}"
+        "</script><script>oldUi()</script>"
+    )
+    ui.write_text("render()")
+
+    with pytest.raises(ValueError, match="duplicate run_id"):
+        merge_console(console, new, ui)
+
+
+def test_merge_console_backfills_and_requires_locked_trial_keys(
+    tmp_path: Path,
+) -> None:
+    trial_key = "study/task-001/baseline/rep1/att1"
+    legacy = {
+        "run_id": "legacy-run",
+        "task": "task-001",
+        "mode": "baseline",
+        "harness": "claude",
+        "model": "claude-sonnet-5",
+        "study_id": "study",
+        "rep": "rep1",
+        "attempt": "attempt1",
+    }
+    console = tmp_path / "rootcause_console.html"
+    ui = tmp_path / "ui.js"
+    console.write_text(
+        '<script id="data" type="application/json">'
+        f"{json.dumps([legacy])}"
+        "</script><script>oldUi()</script>"
+    )
+    ui.write_text("render()")
+
+    merge_console(
+        console,
+        [],
+        ui,
+        required_trial_keys=(trial_key,),
+    )
+
+    payload = (
+        console.read_text()
+        .split('<script id="data" type="application/json">', maxsplit=1)[1]
+        .split("</script>", maxsplit=1)[0]
+    )
+    assert json.loads(payload)[0]["trial_key"] == trial_key
+
+
+def test_merge_console_missing_required_trial_is_atomic(tmp_path: Path) -> None:
+    console = tmp_path / "rootcause_console.html"
+    ui = tmp_path / "ui.js"
+    original = (
+        '<script id="data" type="application/json">[]</script>'
+        "<script>oldUi()</script>"
+    )
+    console.write_text(original)
+    ui.write_text("render()")
+
+    with pytest.raises(ValueError, match="missing required trial_key"):
+        merge_console(
+            console,
+            [],
+            ui,
+            required_trial_keys=("study/task-001/baseline/rep1/att1",),
+        )
+
+    assert console.read_text() == original
+
+
+def test_console_cli_requires_every_analysis_trial_key(tmp_path: Path) -> None:
+    task_dir = _make_task(tmp_path)
+    run_dir = _make_run(
+        tmp_path,
+        harness="claude",
+        model="claude-sonnet-5",
+        variant_label="claude-sonnet-5",
+        mode="baseline",
+        records=[],
+        run_relative="study/task-001/baseline/rep1/attempt1",
+    )
+    trial_key = "study/task-001/baseline/rep1/att1"
+    analysis = tmp_path / "score_analysis.json"
+    _write_json(
+        analysis,
+        {
+            "reward": {
+                "trace_evidence": {
+                    "task-001": {
+                        "baseline": [trial_key],
+                    }
+                }
+            }
+        },
+    )
+    console = tmp_path / "rootcause_console.html"
+    ui = tmp_path / "ui.js"
+    console.write_text(
+        '<script id="data" type="application/json">[]</script><script>oldUi()</script>'
+    )
+    ui.write_text("render()")
+
+    assert (
+        main(
+            [
+                "--console",
+                str(console),
+                "--ui",
+                str(ui),
+                "--task-dir",
+                str(task_dir),
+                "--run",
+                str(run_dir),
+                "--analysis",
+                str(analysis),
+            ]
+        )
+        == 0
+    )
+    assert trial_key in console.read_text()
+
+
+def test_console_cli_rejects_duplicate_analysis_json_keys(tmp_path: Path) -> None:
+    task_dir = _make_task(tmp_path)
+    run_dir = _make_run(
+        tmp_path,
+        harness="claude",
+        model="claude-sonnet-5",
+        variant_label="claude-sonnet-5",
+        mode="baseline",
+        records=[],
+        run_relative="study/task-001/baseline/rep1/attempt1",
+    )
+    analysis = tmp_path / "score_analysis.json"
+    analysis.write_text(
+        '{"reward":{"trace_evidence":{"task-001":{'
+        '"baseline":["study/task-001/baseline/rep1/att1"],'
+        '"baseline":["study/task-001/baseline/rep1/att2"]'
+        "}}}}"
+    )
+    console = tmp_path / "rootcause_console.html"
+    ui = tmp_path / "ui.js"
+    console.write_text(
+        '<script id="data" type="application/json">[]</script>'
+        "<script>oldUi()</script>"
+    )
+    ui.write_text("render()")
+
+    with pytest.raises(ValueError, match="duplicate-free JSON"):
+        main(
+            [
+                "--console",
+                str(console),
+                "--ui",
+                str(ui),
+                "--task-dir",
+                str(task_dir),
+                "--run",
+                str(run_dir),
+                "--analysis",
+                str(analysis),
+            ]
+        )
 
 
 def test_build_run_cell_extracts_study_before_runs_directory(tmp_path: Path) -> None:
