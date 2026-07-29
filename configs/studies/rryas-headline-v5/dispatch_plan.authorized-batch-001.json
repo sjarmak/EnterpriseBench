@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v5",
+  "status": "LOCKED-NO-SPEND",
+  "study_spec": "configs/studies/rryas-headline-v5/study_spec.json",
+  "study_spec_file_hash": "sha256:a85d931f1dc18274161c48bbc578e1636289690b5122033905166301c3c5283c",
+  "study_spec_hash": "sha256:8b5429dd052a08a122e38468df571823177e8a2ee1cf1528c6e8c2fbc2efe1b6",
+  "final_manifest": "configs/studies/rryas-headline-v5/final_manifest.json",
+  "final_manifest_hash": "sha256:1c73058ae1d711a7a2d54bda3b36fe97c8ab573aa69b0673e7a815a9c47ebfa3",
+  "preflight_evidence": "configs/studies/rryas-headline-v5/preflight_evidence.json",
+  "preflight_evidence_hash": "sha256:72d641d2614a4d9ee87592ee24691904ee57bcbdb81de4f6a1215604bd604ee8",
+  "cost_forecast": {
+    "basis": "All immutable v1, v2, and v3 attempts, including terminal invalid attempts, with provider-native outer-agent cost and zero cache reads/writes.",
+    "sample_receipts": [
+      {
+        "path": "results/studies/rryas-headline-v1/receipts.jsonl",
+        "sha256": "sha256:d074eee11e5b39e5f1a9584bc6ab0deff419f3ff9ba111fffe240715869144df"
+      },
+      {
+        "path": "results/studies/rryas-headline-v2/receipts.jsonl",
+        "sha256": "sha256:ffa8cac931f6fa6f2fe702719c904c7ba3c8e1121df41f14a57f60da5cae782a"
+      },
+      {
+        "path": "results/studies/rryas-headline-v3/receipts.jsonl",
+        "sha256": "sha256:d036efd7bfe402910338f2016ca24a181f09084211283d360988e9751d977b64"
+      }
+    ],
+    "sample_attempts": 31,
+    "sample_outer_spend_usd": 139.189582,
+    "mean_per_slot_usd": 4.489986516,
+    "forecast_outer_spend_usd": 417.568746,
+    "max_observed_per_slot_usd": 9.085286,
+    "empirical_slot_count_envelope_usd": 844.931598,
+    "authorization_outer_spend_ceiling_usd": 990.0,
+    "uncovered_costs": [
+      "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
+      "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "up to four one-token Haiku capacity probes per authorization are provider usage outside trial receipts",
+      "local Docker compute is not priced"
+    ]
+  },
+  "batch_policy": {
+    "max_slots_per_dispatch": 9,
+    "complete_task_triplets": true,
+    "score_independent_boundaries": true,
+    "agent_max_budget_usd_per_slot": 9.1,
+    "judge_max_budget_usd_per_call": 0.1,
+    "max_judge_calls_per_slot": 5,
+    "max_judge_attempts_per_call": 3,
+    "outer_spend_hard_cap_per_slot_usd": 10.6
+  },
+  "provider_capacity": {
+    "confirmed": true,
+    "capacity_reference": "sha256:8489fc5b3a48670fae5465bf8f1398f1d039a2771c9ed8184bfb037d87e29abb",
+    "confirmed_completed_prefix": 0,
+    "confirmed_max_slots": 9,
+    "eligibility_policy": "fresh-account-specific-utilization-below-100-percent",
+    "confound_policy": "accept-and-report-observed-nonzero-provider-utilization",
+    "evidence": {
+      "schema_version": 2,
+      "source": "anthropic-rate-limit-response-headers",
+      "eligibility_policy": "fresh-account-specific-utilization-below-100-percent",
+      "confound_policy": "accept-and-report-observed-nonzero-provider-utilization",
+      "fetched_at": "2026-07-29T11:53:03.732594+00:00",
+      "max_age_seconds": 600,
+      "accounts": {
+        "agent": {
+          "account": 3,
+          "fetched_at": "2026-07-29T11:53:03.092529+00:00",
+          "five_hour_utilization_pct": 0.0,
+          "five_hour_resets_at": "2026-07-29T16:10:00+00:00",
+          "seven_day_utilization_pct": 54.0,
+          "seven_day_resets_at": "2026-08-01T16:00:00+00:00"
+        },
+        "judge": {
+          "account": 1,
+          "fetched_at": "2026-07-29T11:53:03.732594+00:00",
+          "five_hour_utilization_pct": 4.0,
+          "five_hour_resets_at": "2026-07-29T16:10:00+00:00",
+          "seven_day_utilization_pct": 48.0,
+          "seven_day_resets_at": "2026-07-30T02:00:00+00:00"
+        }
+      }
+    }
+  },
+  "authorization": {
+    "paid_dispatch_authorized": true,
+    "authorization_reference": "user-authorized-headline-v5-batch-001-2026-07-29",
+    "authorized_completed_prefix": 0,
+    "authorized_end_prefix": 9,
+    "authorized_batch_hash": "sha256:363e2a3a91f1babce72e4aff0c353aaf04930b2c14fd7a5f480cb4b4ec9131c7",
+    "authorized_outer_spend_ceiling_usd": 95.4
+  }
+}
