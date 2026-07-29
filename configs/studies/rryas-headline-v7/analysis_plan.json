@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "status": "LOCKED-BEFORE-HEADLINE-INFERENCE",
+  "study_id": "rryas-headline-v7",
+  "claim_scope": "Claude Sonnet 5 on the 27-task EnterpriseBench markdown-report confirmatory population remaining after the disclosed v1-v3, v5, and v6 operational attempts",
+  "score": {
+    "field": "task_score",
+    "contract": "weighted-mean-v2",
+    "range": [
+      0.0,
+      1.0
+    ],
+    "unit": "task"
+  },
+  "primary_estimands": [
+    {
+      "name": "mean_paired_reward_difference_mcp_only_minus_baseline",
+      "contrast": [
+        "mcp_only",
+        "baseline"
+      ],
+      "aggregation": "unweighted mean across all 27 paired tasks"
+    },
+    {
+      "name": "mean_paired_reward_difference_cli_minus_baseline",
+      "contrast": [
+        "cli",
+        "baseline"
+      ],
+      "aggregation": "unweighted mean across all 27 paired tasks"
+    }
+  ],
+  "secondary_estimands": [
+    "per-arm mean task_score",
+    "task-type-stratified paired reward differences",
+    "reported_outer_cost_usd",
+    "combined_tokens",
+    "elapsed_seconds",
+    "retrieval activity and validity gates"
+  ],
+  "descriptive_only": {
+    "contrast": "cli_minus_mcp_only",
+    "reason": "the arms jointly change interface and local-source availability"
+  },
+  "inference": {
+    "confidence_level": 0.95,
+    "bootstrap_repetitions": 10000,
+    "bootstrap_seed": 20260728,
+    "bootstrap_unit": "paired task",
+    "stratification": "task_type with locked observed stratum sizes",
+    "interval": "percentile paired bootstrap",
+    "multiplicity": "Holm correction at familywise alpha 0.05 for the two primary contrasts"
+  },
+  "reward_parity_gate_for_efficiency_claims": {
+    "method": "two one-sided tests using a 90% paired-bootstrap interval",
+    "absolute_task_score_margin": 0.05,
+    "claim_rule": "claim cheaper or faster at parity only when the complete 90% reward-difference interval is within [-0.05, 0.05]"
+  },
+  "missing_invalid_handling": {
+    "max_attempts_per_slot": 1,
+    "retry_after_observing_output_or_score": false,
+    "incomplete_pair": "no headline promotion or confirmatory inference",
+    "all_attempts": "retain status, tokens, elapsed time, and cost",
+    "headline_requires_all_81_slots_valid": true
+  },
+  "reporting": {
+    "type_counts_and_per_type_results_required": true,
+    "absolute_arm_means_required": true,
+    "paired_differences_and_intervals_required": true,
+    "all_attempt_spend_required": true,
+    "account_order_and_revision_provenance_required": true,
+    "no_generalization_to_structured_deliverables": true
+  },
+  "protocol_amendment": {
+    "predecessor": "rryas-headline-v6",
+    "reason": "the execution harness changed after v6 batch 1 was sealed; continuing v6 would mix harness identities",
+    "selection_rule": "exclude every task with v1-v3, v5, or v6 agent output; retain all other locked candidates without inspecting reward",
+    "excluded_candidate_ids": [
+      "dep-traversal-001",
+      "dep-traversal-002",
+      "dep-traversal-004"
+    ],
+    "predecessor_terminal_evidence": "results/studies/rryas-headline-v6/batch-001-terminal.json",
+    "predecessor_terminal_evidence_sha256": "sha256:b0a2f7e2302dacc90123a90e5c978a5be0c0761b9f23eb9430414840aead9338",
+    "predecessor_receipts": "results/studies/rryas-headline-v6/receipts.jsonl",
+    "predecessor_receipts_sha256": "sha256:52f28200ea8f4fa7493045d07568f91bb6b5271abb53be2051742b91ec1c8795",
+    "predecessor_analysis_use": "operational evidence and task-level descriptive diagnostics only"
+  }
+}

@@ -19,10 +19,15 @@ for import_path in (
 
 from build_headline_v7_capsule import (  # noqa: E402
     build_core_payloads,
+    configured_revision,
+    main,
+    write_capsule,
 )
 from eb_study import file_hash  # noqa: E402
 import headline_protocol_evidence as protocol_evidence  # noqa: E402
 from headline_protocol import V6_PROTOCOL, V7_PROTOCOL  # noqa: E402
+from headline_study_dispatch import load_dispatch_plan  # noqa: E402
+from headline_study_preflight import validate_headline_study  # noqa: E402
 
 
 V6_TERMINAL = Path("results/studies/rryas-headline-v6/batch-001-terminal.json")
@@ -102,6 +107,68 @@ def test_v7_excludes_only_v6_agent_exposed_tasks() -> None:
         "path": str(V6_RECEIPTS),
         "sha256": file_hash(PROJECT_ROOT / V6_RECEIPTS),
     }
+
+
+def test_repository_v7_artifacts_are_current() -> None:
+    build = build_core_payloads(
+        PROJECT_ROOT,
+        revision=configured_revision(PROJECT_ROOT),
+    )
+
+    write_capsule(PROJECT_ROOT, build, check=True)
+
+
+def test_v7_builder_check_cli_reports_no_spend(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["--check"]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["study_id"] == V7_PROTOCOL.study_id
+    assert report["tasks"] == 27
+    assert report["slots"] == 81
+    assert report["paid_dispatch_authorized"] is False
+
+
+def test_repository_v7_dispatch_plan_is_locked_no_spend() -> None:
+    plan = load_dispatch_plan(
+        PROJECT_ROOT
+        / "configs"
+        / "studies"
+        / V7_PROTOCOL.study_id
+        / "dispatch_plan.json",
+        repo_root=PROJECT_ROOT,
+    )
+
+    assert len(plan.slots) == 81
+    assert plan.paid_dispatch_authorized is False
+    assert plan.authorization_reference is None
+    assert plan.authorization_ceiling_usd == pytest.approx(990.0)
+
+
+def test_repository_v7_passes_zero_inference_preflight() -> None:
+    study_root = (
+        PROJECT_ROOT / "configs" / "studies" / V7_PROTOCOL.study_id
+    )
+    evidence = validate_headline_study(
+        spec_path=study_root / "study_spec.json",
+        manifest_path=study_root / "final_manifest.json",
+        candidate_manifest_path=(
+            PROJECT_ROOT
+            / "results"
+            / "rryas_dataset"
+            / "candidate_manifest.json"
+        ),
+        analysis_plan_path=study_root / "analysis_plan.json",
+        repo_root=PROJECT_ROOT,
+        mirror_probe=lambda _repository: True,
+        auth_probe=lambda _credential: True,
+    )
+
+    assert evidence.study_id == V7_PROTOCOL.study_id
+    assert len(evidence.task_ids) == 27
+    assert len(evidence.slots) == 81
+    assert evidence.paid_dispatch_authorized is False
 
 
 @pytest.mark.parametrize("evidence_path", (V6_TERMINAL, V6_RECEIPTS))
