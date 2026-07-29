@@ -115,6 +115,7 @@ class TestMcpAuthHeaders:
             cmd: list[str],
             timeout: int = 120,
             workdir: str = "/workspace",
+            user: str | None = None,
         ):
             return MagicMock(returncode=0, stdout="", stderr="")
 
@@ -173,6 +174,80 @@ class TestMcpAuthHeaders:
         config = self._capture_mcp_config("hybrid")
         assert "sourcegraph" in config.get("mcpServers", {})
         assert "Authorization" in config["mcpServers"]["sourcegraph"].get("headers", {})
+
+    def test_claude_config_ownership_changes_run_as_root(self) -> None:
+        """docker cp may preserve an unrelated UID, so agent cannot chown it."""
+        calls: list[tuple[list[str], str | None]] = []
+
+        def capture_exec(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
+            calls.append((cmd, user))
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch("run_task._docker_exec", side_effect=capture_exec),
+            patch("run_task._verify_mcp_endpoint", return_value=True),
+            patch(
+                "run_task._mcp_exec",
+                return_value=MagicMock(
+                    returncode=0,
+                    stdout="sourcegraph Connected",
+                    stderr="",
+                ),
+            ),
+            patch.dict(
+                os.environ,
+                {"SOURCEGRAPH_ACCESS_TOKEN": "sgp_test_token_123"},
+            ),
+        ):
+            assert _configure_mcp("test-container", "mcp_only") is True
+
+        chowns = [(cmd, user) for cmd, user in calls if cmd and cmd[0] == "chown"]
+        assert chowns
+        assert all(user == "root" for _, user in chowns)
+
+    def test_claude_config_chown_failure_fails_closed(self) -> None:
+        """An unreadable MCP config must stop before the handshake probe."""
+        mcp_exec = MagicMock(
+            return_value=MagicMock(
+                returncode=0,
+                stdout="sourcegraph Connected",
+                stderr="",
+            )
+        )
+
+        def reject_chown(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
+            return MagicMock(
+                returncode=1 if cmd and cmd[0] == "chown" else 0,
+                stdout="",
+                stderr="operation not permitted",
+            )
+
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch("run_task._docker_exec", side_effect=reject_chown),
+            patch("run_task._verify_mcp_endpoint", return_value=True),
+            patch("run_task._mcp_exec", mcp_exec),
+            patch.dict(
+                os.environ,
+                {"SOURCEGRAPH_ACCESS_TOKEN": "sgp_test_token_123"},
+            ),
+        ):
+            assert _configure_mcp("test-container", "mcp_only") is False
+
+        mcp_exec.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -579,7 +654,13 @@ class TestVerifyMcpEndpoint:
         iterator of CompletedProcess-likes); chmod / rm return benign success."""
         it = iter(curl_results)
 
-        def _exec(container_id, cmd, timeout=120, workdir="/workspace"):
+        def _exec(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
             if cmd and cmd[0] == "curl":
                 return next(it)
             return MagicMock(returncode=0, stdout="", stderr="")
@@ -625,13 +706,33 @@ class TestVerifyMcpEndpoint:
         ):
             assert _verify_mcp_endpoint("test-container", "sgp_token") is False
 
+    def test_rejects_unapproved_http_status_even_when_curl_exits_zero(self) -> None:
+        """Transport success alone does not prove the credential was accepted."""
+        redirected = MagicMock(returncode=0, stdout="302", stderr="")
+
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch(
+                "run_task._docker_exec",
+                side_effect=self._exec_router([redirected] * 5),
+            ),
+            patch("run_task.time.sleep"),
+        ):
+            assert _verify_mcp_endpoint("test-container", "sgp_token") is False
+
     def test_token_never_appears_in_argv(self) -> None:
         """rryas.5: the raw token must not appear in ANY docker exec argv; the
         auth header is read from a file via ``-H @<path>``."""
         captured_cmds: list[list[str]] = []
         header_writes: list[tuple[str, str]] = []
 
-        def capture_exec(container_id, cmd, timeout=120, workdir="/workspace"):
+        def capture_exec(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
             captured_cmds.append(cmd)
             if cmd and cmd[0] == "curl":
                 return MagicMock(returncode=0, stdout="200", stderr="")
@@ -670,7 +771,13 @@ class TestVerifyMcpEndpoint:
         """The staged header must be locked down (0600) and scrubbed afterward."""
         cmds: list[list[str]] = []
 
-        def capture_exec(container_id, cmd, timeout=120, workdir="/workspace"):
+        def capture_exec(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
             cmds.append(cmd)
             if cmd and cmd[0] == "curl":
                 return MagicMock(returncode=0, stdout="200", stderr="")
@@ -689,6 +796,112 @@ class TestVerifyMcpEndpoint:
         # chmod target and rm target are the same staged header path.
         assert chmods[0][2] == rms[0][2]
 
+    def test_header_file_operations_run_as_root(self) -> None:
+        """docker cp may preserve a UID the agent cannot read or chmod."""
+        calls: list[tuple[list[str], str | None]] = []
+
+        def capture_exec(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
+            calls.append((cmd, user))
+            if cmd and cmd[0] == "curl":
+                return MagicMock(returncode=0, stdout="405", stderr="")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch("run_task._docker_exec", side_effect=capture_exec),
+        ):
+            assert _verify_mcp_endpoint("test-container", "sgp_token") is True
+
+        protected_commands = {"chmod", "curl", "rm"}
+        assert calls
+        assert all(
+            user == "root"
+            for cmd, user in calls
+            if cmd and cmd[0] in protected_commands
+        )
+
+    def test_header_permission_failure_stops_before_curl(self) -> None:
+        """A missing auth header must not degrade into an unauthenticated probe."""
+        calls: list[list[str]] = []
+
+        def reject_chmod(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
+            calls.append(cmd)
+            return MagicMock(
+                returncode=1 if cmd and cmd[0] == "chmod" else 0,
+                stdout="",
+                stderr="permission denied",
+            )
+
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch("run_task._docker_exec", side_effect=reject_chmod),
+        ):
+            assert _verify_mcp_endpoint("test-container", "sgp_token") is False
+
+        assert not any(cmd and cmd[0] == "curl" for cmd in calls)
+
+    def test_container_cleanup_failure_fails_the_preflight(self) -> None:
+        """A live credential file must never be left behind after a passing probe."""
+
+        def reject_remove(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
+            if cmd and cmd[0] == "curl":
+                return MagicMock(returncode=0, stdout="405", stderr="")
+            return MagicMock(
+                returncode=1 if cmd and cmd[0] == "rm" else 0,
+                stdout="",
+                stderr="permission denied",
+            )
+
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch("run_task._docker_exec", side_effect=reject_remove),
+        ):
+            assert _verify_mcp_endpoint("test-container", "sgp_token") is False
+
+    def test_host_cleanup_error_does_not_skip_container_cleanup(self) -> None:
+        """Both secret copies are scrubbed even when the first cleanup raises."""
+        commands: list[list[str]] = []
+
+        def capture_exec(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
+            commands.append(cmd)
+            if cmd and cmd[0] == "curl":
+                return MagicMock(returncode=0, stdout="405", stderr="")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("run_task._docker_cp", MagicMock()),
+            patch("run_task._docker_exec", side_effect=capture_exec),
+            patch("run_task.os.unlink", side_effect=PermissionError("host scrub")),
+            pytest.raises(PermissionError, match="host scrub"),
+        ):
+            _verify_mcp_endpoint("test-container", "sgp_token")
+
+        assert any(cmd[:2] == ["rm", "-f"] for cmd in commands)
+
 
 # ---------------------------------------------------------------------------
 # Dual config file writing
@@ -705,7 +918,13 @@ class TestMcpDualConfig:
         def mock_docker_cp(src: str, dest: str):
             cp_dests.append(dest)
 
-        def mock_docker_exec(container_id, cmd, timeout=120, workdir="/workspace"):
+        def mock_docker_exec(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
             return MagicMock(returncode=0, stdout="", stderr="")
 
         def mock_mcp_exec(container_id, cmd, timeout=30):

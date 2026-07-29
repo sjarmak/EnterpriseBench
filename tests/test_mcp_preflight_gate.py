@@ -59,7 +59,17 @@ class TestConfigureMcpReturn:
             patch.dict("os.environ", {"SOURCEGRAPH_ACCESS_TOKEN": "tok"}),
             patch.object(run_task, "_verify_mcp_endpoint", return_value=True),
             patch.object(run_task, "_docker_cp", MagicMock()),
-            patch.object(run_task, "_docker_exec", MagicMock()),
+            patch.object(
+                run_task,
+                "_docker_exec",
+                MagicMock(
+                    return_value=MagicMock(
+                        returncode=0,
+                        stdout="",
+                        stderr="",
+                    )
+                ),
+            ),
             patch.object(run_task, "_trust_project_mcp_servers", return_value=True),
             patch.object(run_task, "_mcp_exec", return_value=connected),
         ):

@@ -3049,6 +3049,8 @@ def _verify_mcp_endpoint(container_id: str, sg_token: str) -> bool:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".hdr", delete=False) as fh:
         fh.write(f"Authorization: token {sg_token}\n")
         tmp_hdr = fh.name
+    verified = False
+    cleanup_ok = True
     try:
         try:
             _docker_cp(tmp_hdr, f"{container_id}:{header_path}")
@@ -3058,62 +3060,100 @@ def _verify_mcp_endpoint(container_id: str, sg_token: str) -> bool:
                 "endpoint check; caller routes to the infra-error channel",
                 exc,
             )
-            return False
-        _docker_exec(container_id, ["chmod", "600", header_path])
-
-        max_retries = 5
-        for attempt in range(1, max_retries + 1):
-            result = _docker_exec(
+        else:
+            protected = _docker_exec(
                 container_id,
-                [
-                    "curl",
-                    "-sf",
-                    "-o",
-                    "/dev/null",
-                    "-w",
-                    "%{http_code}",
-                    # Read the Authorization header from the 0600 file — keeps the
-                    # token out of argv (rryas.5). Content-Type is not secret, so
-                    # an inline -H is fine for it.
-                    "-H",
-                    f"@{header_path}",
-                    "-H",
-                    "Content-Type: application/json",
-                    "--max-time",
-                    "10",
-                    "-k",  # skip TLS verification (matches NODE_TLS_REJECT_UNAUTHORIZED=0)
-                    SOURCEGRAPH_MCP_ENDPOINT,
-                ],
-                timeout=15,
+                ["chmod", "600", header_path],
+                user="root",
             )
-            http_code = result.stdout.strip()
-            # 200 = OK, 405 = Method Not Allowed (GET on POST-only MCP endpoint —
-            # means reachable and auth accepted, just wrong HTTP method)
-            if http_code in ("200", "405") or result.returncode == 0:
-                logger.info(
-                    "MCP endpoint HTTP check OK (attempt %d, code=%s)",
-                    attempt,
-                    http_code,
-                )
-                return True
-            backoff = min(2**attempt, 10)
-            logger.warning(
-                "MCP endpoint HTTP check attempt %d/%d failed "
-                "(code=%s, rc=%d, err=%s) — retrying in %ds",
-                attempt,
-                max_retries,
-                http_code,
-                result.returncode,
-                result.stderr.strip()[:120],
-                backoff,
-            )
-            time.sleep(backoff)
-        logger.error("MCP endpoint HTTP check FAILED after %d attempts", max_retries)
-        return False
+            if protected.returncode != 0:
+                logger.error("Could not protect MCP auth header file")
+            else:
+                max_retries = 5
+                for attempt in range(1, max_retries + 1):
+                    result = _docker_exec(
+                        container_id,
+                        [
+                            "curl",
+                            "-sf",
+                            "-o",
+                            "/dev/null",
+                            "-w",
+                            "%{http_code}",
+                            # Read the Authorization header from the 0600 file —
+                            # keeps the token out of argv (rryas.5). Content-Type
+                            # is not secret, so an inline -H is fine for it.
+                            "-H",
+                            f"@{header_path}",
+                            "-H",
+                            "Content-Type: application/json",
+                            "--max-time",
+                            "10",
+                            "-k",  # matches NODE_TLS_REJECT_UNAUTHORIZED=0
+                            SOURCEGRAPH_MCP_ENDPOINT,
+                        ],
+                        timeout=15,
+                        user="root",
+                    )
+                    http_code = result.stdout.strip()
+                    # 200 = OK; 405 = authenticated GET on a POST-only endpoint.
+                    if http_code in ("200", "405"):
+                        logger.info(
+                            "MCP endpoint HTTP check OK (attempt %d, code=%s)",
+                            attempt,
+                            http_code,
+                        )
+                        verified = True
+                        break
+                    backoff = min(2**attempt, 10)
+                    logger.warning(
+                        "MCP endpoint HTTP check attempt %d/%d failed "
+                        "(code=%s, rc=%d, err=%s) — retrying in %ds",
+                        attempt,
+                        max_retries,
+                        http_code,
+                        result.returncode,
+                        result.stderr.strip()[:120],
+                        backoff,
+                    )
+                    time.sleep(backoff)
+                if not verified:
+                    logger.error(
+                        "MCP endpoint HTTP check FAILED after %d attempts",
+                        max_retries,
+                    )
     finally:
-        os.unlink(tmp_hdr)
-        # Best-effort scrub of the in-container header file.
-        _docker_exec(container_id, ["rm", "-f", header_path])
+        active_error = sys.exception()
+        host_cleanup_error: OSError | None = None
+        try:
+            os.unlink(tmp_hdr)
+        except OSError as exc:
+            cleanup_ok = False
+            host_cleanup_error = exc
+            logger.error("Could not remove host MCP auth header file: %s", exc)
+        container_cleanup_error: BaseException | None = None
+        try:
+            removed = _docker_exec(
+                container_id,
+                ["rm", "-f", header_path],
+                user="root",
+            )
+            if removed.returncode != 0:
+                cleanup_ok = False
+                logger.error(
+                    "Could not remove in-container MCP auth header file (rc=%d)",
+                    removed.returncode,
+                )
+        except BaseException as exc:
+            cleanup_ok = False
+            container_cleanup_error = exc
+            logger.error("Could not remove in-container MCP auth header file: %s", exc)
+        if active_error is None:
+            if host_cleanup_error is not None:
+                raise host_cleanup_error
+            if container_cleanup_error is not None:
+                raise container_cleanup_error
+    return verified and cleanup_ok
 
 
 def _merge_mcp_trust(existing: dict[str, Any], server_name: str) -> dict[str, Any]:
@@ -3199,7 +3239,17 @@ def _trust_project_mcp_servers(container_id: str, server_name: str) -> bool:
             )
             return False
         _docker_cp(tmp, f"{container_id}:{settings_path}")
-        _docker_exec(container_id, ["chown", "agent:agent", settings_path])
+        owned = _docker_exec(
+            container_id,
+            ["chown", "agent:agent", settings_path],
+            user="root",
+        )
+        if owned.returncode != 0:
+            logger.error(
+                "Failed to make MCP trust settings agent-readable (rc=%d)",
+                owned.returncode,
+            )
+            return False
         logger.info(
             "Trusted MCP server %r via enabledMcpjsonServers in %s",
             server_name,
@@ -3559,19 +3609,11 @@ def _configure_claude_mcp(container_id: str, mode: str) -> bool:
     # finds auth headers regardless of which config path it resolves first.
     with tempfile.NamedTemporaryFile(mode="w", suffix=".mcp.json", delete=False) as fh:
         fh.write(mcp_config_json)
-        tmp_project = fh.name
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".mcp.json", delete=False) as fh:
-        fh.write(mcp_config_json)
-        tmp_user = fh.name
+        tmp_config = fh.name
 
     try:
         # Project-level config: /workspace/.mcp.json
-        _docker_cp(tmp_project, f"{container_id}:/workspace/.mcp.json")
-        _docker_exec(
-            container_id,
-            ["chown", "agent:agent", "/workspace/.mcp.json"],
-        )
+        _docker_cp(tmp_config, f"{container_id}:/workspace/.mcp.json")
 
         # User-level config: /home/agent/.claude/.mcp.json
         _docker_exec(
@@ -3582,25 +3624,32 @@ def _configure_claude_mcp(container_id: str, mode: str) -> bool:
                 "mkdir -p /home/agent/.claude && chown agent:agent /home/agent/.claude",
             ],
         )
-        _docker_cp(tmp_user, f"{container_id}:/home/agent/.claude/.mcp.json")
-        _docker_exec(
-            container_id,
-            ["chown", "agent:agent", "/home/agent/.claude/.mcp.json"],
-        )
+        _docker_cp(tmp_config, f"{container_id}:/home/agent/.claude/.mcp.json")
 
         # Also write to /home/agent/.mcp.json for --mcp-config flag
-        _docker_cp(tmp_project, f"{container_id}:/home/agent/.mcp.json")
-        _docker_exec(
-            container_id,
-            ["chown", "agent:agent", "/home/agent/.mcp.json"],
-        )
+        _docker_cp(tmp_config, f"{container_id}:/home/agent/.mcp.json")
+        for config_path in (
+            "/workspace/.mcp.json",
+            "/home/agent/.claude/.mcp.json",
+            "/home/agent/.mcp.json",
+        ):
+            owned = _docker_exec(
+                container_id,
+                ["chown", "agent:agent", config_path],
+                user="root",
+            )
+            if owned.returncode != 0:
+                logger.error(
+                    "Failed to make MCP config agent-readable: %s",
+                    config_path,
+                )
+                return False
         logger.info(
             "MCP config written to /workspace/.mcp.json, "
             "/home/agent/.claude/.mcp.json, and /home/agent/.mcp.json"
         )
     finally:
-        os.unlink(tmp_project)
-        os.unlink(tmp_user)
+        os.unlink(tmp_config)
 
     # Step 2b: trust the project MCP server we just wrote, or Claude Code >=2.1
     # leaves it "Pending approval" and the handshake below never reaches
@@ -3703,7 +3752,7 @@ def _install_sgx(container_id: str, mode: str) -> bool:
     _docker_cp(str(SGX_CLI_SRC), f"{container_id}:/usr/local/lib/sg_cli.py")
 
     # Step 2: ensure a python interpreter exists (apt/apk/yum fallback ladder).
-    _docker_exec(
+    interpreter = _docker_exec(
         container_id,
         [
             "sh",
@@ -3711,10 +3760,15 @@ def _install_sgx(container_id: str, mode: str) -> bool:
             "command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || { "
             "(apt-get update && apt-get install -y --no-install-recommends python3) 2>/dev/null || "
             "(apk add --no-cache python3) 2>/dev/null || "
-            "(yum install -y python3) 2>/dev/null || true; }",
+            "(yum install -y python3) 2>/dev/null || true; }; "
+            "command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1",
         ],
         timeout=300,
+        user="root",
     )
+    if interpreter.returncode != 0:
+        logger.error("sgx CLI install failed: no Python interpreter available")
+        return False
 
     # Step 3: build the /bin/sh wrapper baking SG_URL + token defaults
     # base64-encoded to sidestep shell quoting. SG_URL is not a secret, so it is
@@ -3730,7 +3784,7 @@ def _install_sgx(container_id: str, mode: str) -> bool:
         '/usr/local/lib/sg_cli.py "$@"\n'
     )
     wrapper_b64 = base64.b64encode(wrapper.encode()).decode()
-    _docker_exec(
+    installed = _docker_exec(
         container_id,
         [
             "sh",
@@ -3738,7 +3792,11 @@ def _install_sgx(container_id: str, mode: str) -> bool:
             f"echo '{wrapper_b64}' | base64 -d > /usr/local/bin/sgx && "
             "chmod 755 /usr/local/bin/sgx /usr/local/lib/sg_cli.py",
         ],
+        user="root",
     )
+    if installed.returncode != 0:
+        logger.error("sgx CLI install failed while writing the wrapper")
+        return False
 
     # Step 4: verify PATH resolves to OUR wrapper. The grep on the literal usage
     # header proves sgx is not some image-provided binary of the same name; a

@@ -71,6 +71,53 @@ class TestSgxInstallRouting:
         ):
             assert run_task._install_sgx("cid", "cli_code_finder") is True
 
+    def test_privileged_install_steps_run_as_root_but_probe_runs_as_agent(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("SOURCEGRAPH_ACCESS_TOKEN", "tok")
+        calls = []
+
+        def capture_exec(container_id, cmd, timeout=120, workdir="/workspace", user=None):
+            calls.append((cmd, user))
+            stdout = "SG_CLI_OK\n" if "SG_CLI_OK" in " ".join(cmd) else ""
+            return _completed(stdout)
+
+        with patch.object(run_task, "_docker_cp"), patch.object(
+            run_task, "_docker_exec", side_effect=capture_exec
+        ):
+            assert run_task._install_sgx("cid", "cli") is True
+
+        assert len(calls) == 3
+        assert calls[0][1] == "root"
+        assert calls[1][1] == "root"
+        assert calls[2][1] is None
+
+    def test_wrapper_install_failure_stops_before_probe(self, monkeypatch):
+        monkeypatch.setenv("SOURCEGRAPH_ACCESS_TOKEN", "tok")
+        commands = []
+
+        def reject_wrapper(
+            container_id,
+            cmd,
+            timeout=120,
+            workdir="/workspace",
+            user=None,
+        ):
+            commands.append(cmd)
+            joined = " ".join(cmd)
+            if "/usr/local/bin/sgx" in joined and "base64 -d" in joined:
+                return _completed(returncode=1)
+            if "SG_CLI_OK" in joined:
+                return _completed("SG_CLI_OK\n")
+            return _completed()
+
+        with patch.object(run_task, "_docker_cp"), patch.object(
+            run_task, "_docker_exec", side_effect=reject_wrapper
+        ):
+            assert run_task._install_sgx("cid", "cli") is False
+
+        assert not any("SG_CLI_OK" in " ".join(cmd) for cmd in commands)
+
     def test_mcp_only_does_not_install_sgx(self):
         def _boom(*a, **k):
             raise AssertionError("sgx must NOT be installed for mcp_only")
