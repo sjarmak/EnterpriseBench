@@ -22,7 +22,7 @@ except ModuleNotFoundError as exc:
     if exc.name != "scripts":
         raise
     from rootcause_console_claude import consume_claude_record
-from scripts.lib.attempt_policy import cache_isolation_invalid_reason
+from scripts.lib.attempt_policy import cache_isolation_invalid_reason  # noqa: E402
 
 DATA_SCRIPT_RE = re.compile(
     r'(<script id="data" type="application/json">)(.*?)(</script>)',
@@ -45,9 +45,20 @@ SECRET_PATTERNS = (
         (?:["'][^"']*["']|[^,}\s]+)
         """
     ),
-    re.compile(r"(?i)\b(authorization\s*:\s*bearer)\s+\S+"),
     re.compile(r"\bsk-(?:or-v1-)?[A-Za-z0-9_-]{6,}\b"),
     re.compile(r"\bsgp_(?:local_)?[A-Za-z0-9]{20,}\b"),
+)
+AUTHORIZATION_HEADER_RE = re.compile(
+    r"""(?ix)
+    (?P<key_quote>\\["']|["']|)
+    \b(?P<key>authorization)(?P=key_quote)
+    (?P<separator>\s*:\s*)
+    (?P<value_quote>\\["']|["']|)
+    (?P<scheme>bearer|token|basic)\s+
+    (?!(?:<[^>\s]+>|\$\{[^}\r\n]+\}|\$\([^)]+\)|\$[A-Za-z_][A-Za-z0-9_]*|\{[^}\r\n]+\}))
+    (?P<credential>[^\s"'},;]+)
+    (?P=value_quote)
+    """
 )
 SENSITIVE_KEYS = frozenset(
     {
@@ -87,13 +98,22 @@ def redact(value: Any) -> Any:
     if not isinstance(value, str):
         return value
 
-    redacted = value
+    redacted = AUTHORIZATION_HEADER_RE.sub(_redact_authorization_header, value)
     for pattern in SECRET_PATTERNS:
         if pattern.groups:
             redacted = pattern.sub(r"\1=[REDACTED]", redacted)
         else:
             redacted = pattern.sub("[REDACTED]", redacted)
     return redacted
+
+
+def _redact_authorization_header(match: re.Match[str]) -> str:
+    key_quote = match["key_quote"]
+    value_quote = match["value_quote"]
+    return (
+        f"{key_quote}{match['key']}{key_quote}{match['separator']}"
+        f"{value_quote}{match['scheme']}=[REDACTED]{value_quote}"
+    )
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:

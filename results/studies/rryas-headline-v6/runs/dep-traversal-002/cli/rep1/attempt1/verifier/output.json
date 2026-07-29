@@ -1,0 +1,71 @@
+{
+  "task_score": 0.725,
+  "score_contract_version": 2,
+  "all_passed": false,
+  "checkpoints_passed": 3,
+  "checkpoints_total": 4,
+  "repos": [
+    "axios",
+    "druid",
+    "grafana"
+  ],
+  "checkpoints": [
+    {
+      "name": "find_direct_deps",
+      "weight": 0.3,
+      "score": 1.0,
+      "passed": true,
+      "verifier_ran": true,
+      "detail": "Cited 1/1 non-prompt evidence tokens for find_direct_deps",
+      "duration_ms": 13,
+      "exit_code": 0,
+      "judge_score": 1.0,
+      "grep_score": 1.0
+    },
+    {
+      "name": "identify_cve",
+      "weight": 0.1,
+      "score": 0.0,
+      "passed": false,
+      "verifier_ran": true,
+      "detail": "Cited 0/1 non-prompt evidence tokens for identify_cve",
+      "duration_ms": 11,
+      "exit_code": 0,
+      "judge_score": 1.0,
+      "grep_score": 0.0
+    },
+    {
+      "name": "trace_transitive_paths",
+      "weight": 0.35,
+      "score": 0.5,
+      "passed": true,
+      "verifier_ran": true,
+      "detail": "Cited 1/1 non-prompt evidence tokens for trace_transitive_paths",
+      "duration_ms": 11,
+      "exit_code": 0,
+      "judge_score": 0.5,
+      "grep_score": 1.0
+    },
+    {
+      "name": "version_analysis",
+      "weight": 0.25,
+      "score": 1.0,
+      "passed": true,
+      "verifier_ran": true,
+      "detail": "Cited 1/1 non-prompt evidence tokens for version_analysis",
+      "duration_ms": 11,
+      "exit_code": 0,
+      "judge_score": 1.0,
+      "grep_score": 1.0
+    }
+  ],
+  "judge_provenance": {
+    "backend": "claude_code_cli",
+    "provider": "anthropic",
+    "model": "haiku",
+    "account": 1,
+    "executable": "claude-1",
+    "cli_version": "2.1.220 (Claude Code)",
+    "max_budget_usd": 0.1
+  }
+}

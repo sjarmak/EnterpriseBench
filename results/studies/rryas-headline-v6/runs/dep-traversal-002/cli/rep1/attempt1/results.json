@@ -1,0 +1,157 @@
+{
+  "task_id": "dep-traversal-002",
+  "success": true,
+  "phase": "complete",
+  "status": "",
+  "error": "",
+  "failure_class": null,
+  "started_at": "2026-07-29T14:51:12.148383+00:00",
+  "completed_at": "2026-07-29T14:55:47.365822+00:00",
+  "image_tag": "eb-dep-traversal-002-cli",
+  "scores": {
+    "task_score": 0.725,
+    "score_contract_version": 2,
+    "all_passed": false,
+    "checkpoints_passed": 3,
+    "checkpoints_total": 4,
+    "repos": [
+      "axios",
+      "druid",
+      "grafana"
+    ],
+    "checkpoints": [
+      {
+        "name": "find_direct_deps",
+        "weight": 0.3,
+        "score": 1.0,
+        "passed": true,
+        "verifier_ran": true,
+        "detail": "Cited 1/1 non-prompt evidence tokens for find_direct_deps",
+        "duration_ms": 13,
+        "exit_code": 0,
+        "judge_score": 1.0,
+        "grep_score": 1.0
+      },
+      {
+        "name": "identify_cve",
+        "weight": 0.1,
+        "score": 0.0,
+        "passed": false,
+        "verifier_ran": true,
+        "detail": "Cited 0/1 non-prompt evidence tokens for identify_cve",
+        "duration_ms": 11,
+        "exit_code": 0,
+        "judge_score": 1.0,
+        "grep_score": 0.0
+      },
+      {
+        "name": "trace_transitive_paths",
+        "weight": 0.35,
+        "score": 0.5,
+        "passed": true,
+        "verifier_ran": true,
+        "detail": "Cited 1/1 non-prompt evidence tokens for trace_transitive_paths",
+        "duration_ms": 11,
+        "exit_code": 0,
+        "judge_score": 0.5,
+        "grep_score": 1.0
+      },
+      {
+        "name": "version_analysis",
+        "weight": 0.25,
+        "score": 1.0,
+        "passed": true,
+        "verifier_ran": true,
+        "detail": "Cited 1/1 non-prompt evidence tokens for version_analysis",
+        "duration_ms": 11,
+        "exit_code": 0,
+        "judge_score": 1.0,
+        "grep_score": 1.0
+      }
+    ],
+    "judge_provenance": {
+      "backend": "claude_code_cli",
+      "provider": "anthropic",
+      "model": "haiku",
+      "account": 1,
+      "executable": "claude-1",
+      "cli_version": "2.1.220 (Claude Code)",
+      "max_budget_usd": 0.1
+    }
+  },
+  "timing": {
+    "parse": 0.0004541189409792423,
+    "build": 0.6285420970525593,
+    "setup": 0.5679289679974318,
+    "agent": 168.64854610082693,
+    "scoring": 0.495983405970037
+  },
+  "tool_usage": {
+    "total_input_tokens": 1070533,
+    "total_output_tokens": 12009,
+    "cost_usd": 3.3880239999999997,
+    "cost_usd_observed": false,
+    "num_turns": 23,
+    "mcp_tool_calls": 0,
+    "mcp_tool_breakdown": {},
+    "sgx_tool_calls": 30,
+    "sgx_tool_breakdown": {
+      "search": 10,
+      "ls": 8,
+      "read": 12
+    },
+    "cache_isolation": {
+      "schema_version": 1,
+      "harness": "claude",
+      "scope": "70c949e1a870712825dda8f4777be168",
+      "launcher_scope": "70c949e1a870712825dda8f4777be168",
+      "mechanism": "prompt-caching-disabled",
+      "configured": true,
+      "valid": true,
+      "invalid_reason": null,
+      "cross_run_cache_read_tokens": 0,
+      "total_cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "verification": "all Claude cache reads and writes are zero"
+    },
+    "provider_activity": {
+      "provider": "claude",
+      "primary_unit": "turn",
+      "primary_count": 23,
+      "work_items": 0,
+      "tool_uses": 0,
+      "agent_messages": 0,
+      "file_changes": 0
+    },
+    "sgx_used": true,
+    "trace_captured": true
+  },
+  "provenance": {
+    "image_digest": "sha256:1dd876731ec3c6af136d62a7c9ca552106f1d6acc5c2880b0f88711339f5db35",
+    "arm_gate_proof": "mode_gate:v1:cli:agent-readable,scorer-readable;repos=3",
+    "task_hash": "sha256:621f4830a4f7f94f672baac03115ba8a51acf62a7168526e37cbd27733e0379d",
+    "harness_hash": "sha256:b5c1b83b14b320d10749dccea0f8a78a997ce34deb2e77b2cad0a147fae8ea08",
+    "verifier_hash": "sha256:292a1c3e390ae1322618ba21fc69443ee50435a33919fae3a95ac7d0a132151f"
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json --max-budget-usd 9.1 -p",
+    "harness": "claude",
+    "model": "claude-sonnet-5",
+    "judge_model": "cc:haiku",
+    "judge_account": 1,
+    "judge_max_budget_usd": 0.1,
+    "timeout": 600,
+    "dry_run": false,
+    "mode": "cli"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "dependency_graph",
+    "difficulty": "medium",
+    "languages": [
+      "javascript",
+      "typescript"
+    ]
+  }
+}

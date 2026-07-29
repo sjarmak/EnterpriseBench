@@ -204,6 +204,61 @@ def test_redacts_refresh_and_id_tokens_embedded_in_trace_text() -> None:
     assert "visible" in redacted
 
 
+def test_redacts_authorization_header_schemes_used_by_sourcegraph_and_http() -> None:
+    for scheme in ("Bearer", "token", "Basic"):
+        credential = f"{scheme.lower()}-opaque-credential"
+        redacted = redact(f"Authorization: {scheme} {credential}")
+
+        assert credential not in redacted
+        assert "[REDACTED]" in redacted
+
+
+def test_redacts_quoted_authorization_headers_without_corrupting_delimiters() -> None:
+    serialized_headers = (
+        '{"Authorization": "Bearer bearer-opaque-credential"}',
+        '{"Authorization":"token token-opaque-credential"}',
+        "{'Authorization': 'Basic basic-opaque-credential'}",
+        'Authorization: "Bearer value-quoted-opaque-credential"',
+        "Authorization: 'token single-quoted-opaque-credential'",
+        r'Authorization: \"Bearer escaped-quoted-opaque-credential\"',
+        "curl -H Authorization:'Bearer split-quoted-opaque-credential' "
+        "https://example.test",
+    )
+    for raw in serialized_headers:
+        redacted = redact(raw)
+
+        assert "opaque-credential" not in redacted
+        assert "[REDACTED]" in redacted
+        assert redact(redacted) == redacted
+
+    shell_header = (
+        'curl -H "Authorization: token shell-opaque-credential" '
+        "https://example.test"
+    )
+    redacted_shell = redact(shell_header)
+    assert redacted_shell == (
+        'curl -H "Authorization: token=[REDACTED]" https://example.test'
+    )
+    assert redact(redacted_shell) == redacted_shell
+
+
+def test_authorization_redaction_preserves_non_secret_evidence() -> None:
+    evidence_samples = (
+        'curl -H "Accept: application/json" https://example.test',
+        'headers = {"Authorization": f"token {sg_token}"}',
+        'headers = {"Authorization": `token ${sgToken}`}',
+        "Authorization: token <placeholder>",
+        "Authorization: token ${SOURCEGRAPH_ACCESS_TOKEN}",
+        "Authorization: token $SOURCEGRAPH_ACCESS_TOKEN",
+        "Authorization: token $(SOURCEGRAPH_ACCESS_TOKEN)",
+        "Authorization: token $env:SOURCEGRAPH_ACCESS_TOKEN",
+        "Authorization: token {runtime_token}",
+    )
+
+    for evidence in evidence_samples:
+        assert redact(evidence) == evidence
+
+
 def test_normalizes_opencode_steps_without_calling_them_turns() -> None:
     records = [
         {"type": "step_start", "timestamp": 1, "part": {"type": "step-start"}},

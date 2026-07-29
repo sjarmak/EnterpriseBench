@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "status": "accepted",
+  "study_id": "rryas-headline-v6",
+  "authorization_reference": "user-approved-2026-07-29-v6-batch-001-capacity-refresh-001",
+  "authorized_batch_hash": "sha256:69979ae706bf9ea91a6bc1cd3617e6ac356de86e8eef9851e32f44479d509a11",
+  "capacity_evidence_hash": "sha256:fd57c551a576e4d6873646f7f7c8dcc2ee16783c9532fcd904be9205f607aae3",
+  "evidence": {
+    "schema_version": 2,
+    "source": "anthropic-rate-limit-response-headers",
+    "eligibility_policy": "fresh-account-specific-utilization-below-100-percent",
+    "confound_policy": "accept-and-report-observed-nonzero-provider-utilization",
+    "fetched_at": "2026-07-29T14:25:06.677514+00:00",
+    "max_age_seconds": 600,
+    "accounts": {
+      "agent": {
+        "account": 3,
+        "fetched_at": "2026-07-29T14:25:05.803433+00:00",
+        "five_hour_utilization_pct": 5.0,
+        "five_hour_resets_at": "2026-07-29T16:10:00+00:00",
+        "seven_day_utilization_pct": 54.0,
+        "seven_day_resets_at": "2026-08-01T16:00:00+00:00"
+      },
+      "judge": {
+        "account": 1,
+        "fetched_at": "2026-07-29T14:25:06.677514+00:00",
+        "five_hour_utilization_pct": 47.0,
+        "five_hour_resets_at": "2026-07-29T16:10:00+00:00",
+        "seven_day_utilization_pct": 56.0,
+        "seven_day_resets_at": "2026-07-30T02:00:00+00:00"
+      }
+    }
+  },
+  "invalid_reason": null
+}

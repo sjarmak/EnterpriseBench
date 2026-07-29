@@ -1,0 +1,59 @@
+{
+  "task_id": "dep-traversal-002",
+  "success": true,
+  "phase": "complete",
+  "status": "",
+  "error": "",
+  "failure_class": null,
+  "started_at": "2026-07-29T14:45:52.227867+00:00",
+  "completed_at": "2026-07-29T14:51:06.403744+00:00",
+  "timing": {
+    "parse": 0.00047192303463816643,
+    "build": 6.187823881860822,
+    "setup": 0.5638003319036216,
+    "agent": 129.55463742697611,
+    "scoring": 0.4860758481081575
+  },
+  "tool_usage": {
+    "total_input_tokens": 1370978,
+    "total_output_tokens": 10130,
+    "cost_usd": 4.261238,
+    "cost_usd_observed": false,
+    "num_turns": 44,
+    "mcp_tool_calls": 40,
+    "mcp_tool_breakdown": {
+      "read_file": 4,
+      "keyword_search": 28,
+      "list_files": 6,
+      "nls_search": 1,
+      "find_references": 1
+    },
+    "sgx_tool_calls": 0,
+    "sgx_tool_breakdown": {},
+    "cache_isolation": {
+      "schema_version": 1,
+      "harness": "claude",
+      "scope": "2f7da19096c253d424a590d8ae1967f5",
+      "launcher_scope": "2f7da19096c253d424a590d8ae1967f5",
+      "mechanism": "prompt-caching-disabled",
+      "configured": true,
+      "valid": true,
+      "invalid_reason": null,
+      "cross_run_cache_read_tokens": 0,
+      "total_cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "verification": "all Claude cache reads and writes are zero"
+    },
+    "provider_activity": {
+      "provider": "claude",
+      "primary_unit": "turn",
+      "primary_count": 44,
+      "work_items": 0,
+      "tool_uses": 0,
+      "agent_messages": 0,
+      "file_changes": 0
+    },
+    "mcp_used": true,
+    "trace_captured": true
+  }
+}
