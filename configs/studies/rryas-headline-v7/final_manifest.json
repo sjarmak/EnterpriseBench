@@ -1411,7 +1411,7 @@
     "dep-traversal-012": "sha256:085cdad181d049c36f8343755463dcf74631a75ca94867d60d7b297fa5f4cb9c",
     "dep-traversal-tri-boto3-001": "sha256:ffc7489e2d843b5ed1375251f816fde361784604c9833ab8f0fd85bd2effc012",
     "dep-traversal-tri-jackson-001": "sha256:84cac03e9d84d2764e2eebbfe7b2866652d2ae34af74b4b45dd0e2b2924782fc",
-    "dep-traversal-tri-openssl-001": "sha256:94c48a4a1ee51a927d3d996b46535d4b8df893b6d4c2004681d72dcfdab6b7fa",
+    "dep-traversal-tri-openssl-001": "sha256:f1a6f9a498e0d77f0e0c25bff193cb4880e04bfa80b22ba4d6f35b28b1234cf9",
     "error-prov-dual-netty-spring-001": "sha256:d226e649ed37b0bab59208faab8d248a58a40f9af69c9bbd944d8928ca04874c",
     "error-prov-dual-tokio-tower-001": "sha256:ac2460b2daec58fd9df581564093a1bd0e5fa893bd780e5d7165f923c36f560f",
     "error-prov-dual-urllib3-requests-001": "sha256:d290c5352890def995edad3cc63792a3bf63c65093760d922d5cf0507f755ecf",

@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-headline-v7",
   "schema_version": 1,
-  "task_manifest_hash": "sha256:8f1c12ab47cfa1746b995d025b326dc691c3ef11733b3a1283e3c3fe45e34315",
+  "task_manifest_hash": "sha256:76537101a261cf3f73aed2cd30f67200fad02f1660f0bdf10f64e3d4a8ad2526",
   "task_ids": [
     "dep-traversal-005",
     "dep-traversal-006",
@@ -51,7 +51,7 @@
   "max_attempts": 1,
   "model": "claude-sonnet-5",
   "harness": "sha256:efdd314db5fdd3803fa4ab01ac240773b5e6e1eb5996fbe8c8858318fc0921a5",
-  "revision": "a2ca0a38e3064740190d738f9b6c903ec0dceb3d",
+  "revision": "8465a6d81384327052a7a6b4557c858b8ed87d2b",
   "token_source": "sdk_model_usage",
   "score_contract": "weighted-mean-v2",
   "promotion_policy": "paired-valid-complete-arms"

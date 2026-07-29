@@ -1,7 +1,7 @@
 {
   "study_id": "rryas-headline-v7",
-  "spec_hash": "sha256:2a731769daf492705085bf761cd0bc786194b97768a4de1ee283118294ad1654",
-  "task_manifest_hash": "sha256:8f1c12ab47cfa1746b995d025b326dc691c3ef11733b3a1283e3c3fe45e34315",
+  "spec_hash": "sha256:4114053efd5de5ee52c26d15b4fd091e232a84e3719bab99a2239c2ac4b6f1c0",
+  "task_manifest_hash": "sha256:76537101a261cf3f73aed2cd30f67200fad02f1660f0bdf10f64e3d4a8ad2526",
   "analysis_plan_hash": "sha256:573ddcb88434812953f723ef35162dcf01eb4140c7df452fbad87cf14000c0ed",
   "candidate_ids": [
     "dep-traversal-005",
@@ -468,7 +468,7 @@
       1
     ]
   ],
-  "revision": "a2ca0a38e3064740190d738f9b6c903ec0dceb3d",
+  "revision": "8465a6d81384327052a7a6b4557c858b8ed87d2b",
   "mirror_repositories": [
     "github.com/sg-evals/prometheus--v2.45.0",
     "github.com/sg-evals/consul--v1.16.0",
