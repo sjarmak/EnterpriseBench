@@ -1,0 +1,45 @@
+{
+  "task_id": "dep-traversal-001",
+  "success": false,
+  "phase": "mcp_infra_error",
+  "status": "invalid",
+  "error": "MCP pre-flight failed: endpoint unreachable or token rejected/expired (mode=mcp_only). The MCP arm cannot run validly; recorded as infra error for re-run.",
+  "failure_class": "infra_mcp_preflight",
+  "started_at": "2026-07-29T12:11:44.720044+00:00",
+  "completed_at": "2026-07-29T12:12:35.070409+00:00",
+  "image_tag": "eb-dep-traversal-001-mcp_only",
+  "scores": {},
+  "timing": {
+    "parse": 0.0005367251578718424,
+    "build": 13.805516553111374,
+    "setup": 1.2191258200909942
+  },
+  "tool_usage": {},
+  "provenance": {
+    "image_digest": "sha256:d9c038cf7f417e4823bbe3a24d6581c5acef2ff33e92c051fd31f19de81aba3e",
+    "arm_gate_proof": null,
+    "task_hash": "sha256:8a80c45d6e7f667532c9dab08465b93b40506cccd3fdc56b8b4c7e1028b7478f",
+    "harness_hash": "sha256:75d099e55d6b781827fd10969bfbb53e86c237480dbd643932e04cd19c99a9c6",
+    "verifier_hash": "sha256:fe25b7c5a30bffddc5c5abcdf908cfc29d7fbb6b4b6127fd897b693841f36efd"
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json --max-budget-usd 9.1 -p",
+    "harness": "claude",
+    "model": "claude-sonnet-5",
+    "judge_model": "cc:haiku",
+    "judge_account": 1,
+    "judge_max_budget_usd": 0.1,
+    "timeout": 600,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "dependency_graph",
+    "difficulty": "medium",
+    "languages": [
+      "javascript"
+    ]
+  }
+}

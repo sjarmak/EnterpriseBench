@@ -1,0 +1,59 @@
+{
+  "task_score": 0.5,
+  "score_contract_version": 2,
+  "all_passed": true,
+  "checkpoints_passed": 3,
+  "checkpoints_total": 3,
+  "repos": [
+    "hyper",
+    "tokio",
+    "tonic"
+  ],
+  "checkpoints": [
+    {
+      "name": "identify_transitive",
+      "weight": 0.4,
+      "score": 0.5,
+      "passed": true,
+      "verifier_ran": true,
+      "detail": "Cited 2/3 non-prompt evidence tokens for identify_transitive",
+      "duration_ms": 12,
+      "exit_code": 0,
+      "judge_score": 0.5,
+      "grep_score": 0.67
+    },
+    {
+      "name": "map_dep_chain",
+      "weight": 0.3,
+      "score": 0.5,
+      "passed": true,
+      "verifier_ran": true,
+      "detail": "Cited 1/2 non-prompt evidence tokens for map_dep_chain",
+      "duration_ms": 11,
+      "exit_code": 0,
+      "judge_score": 1.0,
+      "grep_score": 0.5
+    },
+    {
+      "name": "upgrade_strategy",
+      "weight": 0.3,
+      "score": 0.5,
+      "passed": true,
+      "verifier_ran": true,
+      "detail": "Cited 1/2 non-prompt evidence tokens for upgrade_strategy",
+      "duration_ms": 11,
+      "exit_code": 0,
+      "judge_score": 1.0,
+      "grep_score": 0.5
+    }
+  ],
+  "judge_provenance": {
+    "backend": "claude_code_cli",
+    "provider": "anthropic",
+    "model": "haiku",
+    "account": 1,
+    "executable": "claude-1",
+    "cli_version": "2.1.220 (Claude Code)",
+    "max_budget_usd": 0.1
+  }
+}

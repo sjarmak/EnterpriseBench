@@ -1,0 +1,16 @@
+{
+  "task_id": "dep-traversal-001",
+  "success": false,
+  "phase": "mcp_infra_error",
+  "status": "invalid",
+  "error": "MCP pre-flight failed: endpoint unreachable or token rejected/expired (mode=mcp_only). The MCP arm cannot run validly; recorded as infra error for re-run.",
+  "failure_class": "infra_mcp_preflight",
+  "started_at": "2026-07-29T12:11:44.720044+00:00",
+  "completed_at": "2026-07-29T12:12:35.070409+00:00",
+  "timing": {
+    "parse": 0.0005367251578718424,
+    "build": 13.805516553111374,
+    "setup": 1.2191258200909942
+  },
+  "tool_usage": {}
+}

@@ -1,0 +1,57 @@
+{
+  "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+  "success": true,
+  "phase": "complete",
+  "status": "",
+  "error": "",
+  "failure_class": null,
+  "started_at": "2026-07-29T12:07:34.565714+00:00",
+  "completed_at": "2026-07-29T12:11:38.730733+00:00",
+  "timing": {
+    "parse": 0.00046079116873443127,
+    "build": 0.18746318807825446,
+    "setup": 0.7471725738141686,
+    "agent": 138.84994821203873,
+    "scoring": 0.39789403113536537
+  },
+  "tool_usage": {
+    "total_input_tokens": 552113,
+    "total_output_tokens": 13427,
+    "cost_usd": 1.8537379999999999,
+    "cost_usd_observed": false,
+    "num_turns": 21,
+    "mcp_tool_calls": 0,
+    "mcp_tool_breakdown": {},
+    "sgx_tool_calls": 18,
+    "sgx_tool_breakdown": {
+      "read": 10,
+      "search": 7,
+      "ls": 1
+    },
+    "cache_isolation": {
+      "schema_version": 1,
+      "harness": "claude",
+      "scope": "3b5801462abce547b9e4f7574d0e055e",
+      "launcher_scope": "3b5801462abce547b9e4f7574d0e055e",
+      "mechanism": "prompt-caching-disabled",
+      "configured": true,
+      "valid": true,
+      "invalid_reason": null,
+      "cross_run_cache_read_tokens": 0,
+      "total_cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "verification": "all Claude cache reads and writes are zero"
+    },
+    "provider_activity": {
+      "provider": "claude",
+      "primary_unit": "turn",
+      "primary_count": 21,
+      "work_items": 0,
+      "tool_uses": 0,
+      "agent_messages": 0,
+      "file_changes": 0
+    },
+    "sgx_used": true,
+    "trace_captured": true
+  }
+}

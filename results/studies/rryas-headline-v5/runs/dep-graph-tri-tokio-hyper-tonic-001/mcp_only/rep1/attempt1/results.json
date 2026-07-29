@@ -1,0 +1,143 @@
+{
+  "task_id": "dep-graph-tri-tokio-hyper-tonic-001",
+  "success": true,
+  "phase": "complete",
+  "status": "",
+  "error": "",
+  "failure_class": null,
+  "started_at": "2026-07-29T12:02:39.242491+00:00",
+  "completed_at": "2026-07-29T12:07:29.301527+00:00",
+  "image_tag": "eb-dep-graph-tri-tokio-hyper-tonic-001-mcp_only",
+  "scores": {
+    "task_score": 0.5680000000000001,
+    "score_contract_version": 2,
+    "all_passed": true,
+    "checkpoints_passed": 3,
+    "checkpoints_total": 3,
+    "repos": [
+      "hyper",
+      "tokio",
+      "tonic"
+    ],
+    "checkpoints": [
+      {
+        "name": "identify_transitive",
+        "weight": 0.4,
+        "score": 0.67,
+        "passed": true,
+        "verifier_ran": true,
+        "detail": "Cited 2/3 non-prompt evidence tokens for identify_transitive",
+        "duration_ms": 25,
+        "exit_code": 0,
+        "judge_score": 1.0,
+        "grep_score": 0.67
+      },
+      {
+        "name": "map_dep_chain",
+        "weight": 0.3,
+        "score": 0.5,
+        "passed": true,
+        "verifier_ran": true,
+        "detail": "Cited 1/2 non-prompt evidence tokens for map_dep_chain",
+        "duration_ms": 13,
+        "exit_code": 0,
+        "judge_score": 1.0,
+        "grep_score": 0.5
+      },
+      {
+        "name": "upgrade_strategy",
+        "weight": 0.3,
+        "score": 0.5,
+        "passed": true,
+        "verifier_ran": true,
+        "detail": "Cited 1/2 non-prompt evidence tokens for upgrade_strategy",
+        "duration_ms": 13,
+        "exit_code": 0,
+        "judge_score": 0.5,
+        "grep_score": 0.5
+      }
+    ],
+    "judge_provenance": {
+      "backend": "claude_code_cli",
+      "provider": "anthropic",
+      "model": "haiku",
+      "account": 1,
+      "executable": "claude-1",
+      "cli_version": "2.1.220 (Claude Code)",
+      "max_budget_usd": 0.1
+    }
+  },
+  "timing": {
+    "parse": 0.00043611484579741955,
+    "build": 0.10797043307684362,
+    "setup": 0.549636579118669,
+    "agent": 154.79825398512185,
+    "scoring": 0.49070781795307994
+  },
+  "tool_usage": {
+    "total_input_tokens": 718387,
+    "total_output_tokens": 14858,
+    "cost_usd": 2.374127,
+    "cost_usd_observed": false,
+    "num_turns": 21,
+    "mcp_tool_calls": 17,
+    "mcp_tool_breakdown": {
+      "read_file": 9,
+      "keyword_search": 8
+    },
+    "sgx_tool_calls": 0,
+    "sgx_tool_breakdown": {},
+    "cache_isolation": {
+      "schema_version": 1,
+      "harness": "claude",
+      "scope": "31f28303a4f9f18d2be963cf55f05660",
+      "launcher_scope": "31f28303a4f9f18d2be963cf55f05660",
+      "mechanism": "prompt-caching-disabled",
+      "configured": true,
+      "valid": true,
+      "invalid_reason": null,
+      "cross_run_cache_read_tokens": 0,
+      "total_cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "verification": "all Claude cache reads and writes are zero"
+    },
+    "provider_activity": {
+      "provider": "claude",
+      "primary_unit": "turn",
+      "primary_count": 21,
+      "work_items": 0,
+      "tool_uses": 0,
+      "agent_messages": 0,
+      "file_changes": 0
+    },
+    "mcp_used": true,
+    "trace_captured": true
+  },
+  "provenance": {
+    "image_digest": "sha256:483916d9951bf50f9b27a031f00941b0190998b0561842ee3f51907312f08016",
+    "arm_gate_proof": "mode_gate:v1:mcp_only:agent-denied,scorer-readable;repos=3",
+    "task_hash": "sha256:67ef5e2b31b8e22b26cfa699a8fa17db4044ae111a9b1c6a49f4f60ae1447ed5",
+    "harness_hash": "sha256:75d099e55d6b781827fd10969bfbb53e86c237480dbd643932e04cd19c99a9c6",
+    "verifier_hash": "sha256:d5c5d2a523f7dc1a90e77e67a874a5efe12b39917a450393ce29e2147476532a"
+  },
+  "config": {
+    "source": "mirror",
+    "agent_command": "claude --dangerously-skip-permissions --max-turns 50 --verbose --output-format stream-json --max-budget-usd 9.1 -p --mcp-config /home/agent/.mcp.json",
+    "harness": "claude",
+    "model": "claude-sonnet-5",
+    "judge_model": "cc:haiku",
+    "judge_account": 1,
+    "judge_max_budget_usd": 0.1,
+    "timeout": 600,
+    "dry_run": false,
+    "mode": "mcp_only"
+  },
+  "task_metadata": {
+    "suite": "dependency_management",
+    "task_type": "dependency_graph",
+    "difficulty": "expert",
+    "languages": [
+      "rust"
+    ]
+  }
+}
