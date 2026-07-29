@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "study_id": "rryas-headline-v5",
+  "status": "LOCKED-NO-SPEND",
+  "study_spec": "configs/studies/rryas-headline-v5/study_spec.json",
+  "study_spec_file_hash": "sha256:2f459b04fb70e578832a6a8ee4fdbf51c90c74e1164267edf2574d52fec6ff8e",
+  "study_spec_hash": "sha256:6b75d45f64d37c07996a7b16bd5e66d2724c20b91f2fd092a9d7bfcc373a6192",
+  "final_manifest": "configs/studies/rryas-headline-v5/final_manifest.json",
+  "final_manifest_hash": "sha256:a19dd9861dde935cac73f397a2ee1e425f17c2fc54f3c4efc464f4456eecf654",
+  "preflight_evidence": "configs/studies/rryas-headline-v5/preflight_evidence.json",
+  "preflight_evidence_hash": "sha256:5933b774c9cd3679f61b58c102aafb924aad52e5161b7d7cf759918ca2edabab",
+  "cost_forecast": {
+    "basis": "All immutable v1, v2, and v3 attempts, including terminal invalid attempts, with provider-native outer-agent cost and zero cache reads/writes.",
+    "sample_receipts": [
+      {
+        "path": "results/studies/rryas-headline-v1/receipts.jsonl",
+        "sha256": "sha256:d074eee11e5b39e5f1a9584bc6ab0deff419f3ff9ba111fffe240715869144df"
+      },
+      {
+        "path": "results/studies/rryas-headline-v2/receipts.jsonl",
+        "sha256": "sha256:ffa8cac931f6fa6f2fe702719c904c7ba3c8e1121df41f14a57f60da5cae782a"
+      },
+      {
+        "path": "results/studies/rryas-headline-v3/receipts.jsonl",
+        "sha256": "sha256:d036efd7bfe402910338f2016ca24a181f09084211283d360988e9751d977b64"
+      }
+    ],
+    "sample_attempts": 31,
+    "sample_outer_spend_usd": 139.189582,
+    "mean_per_slot_usd": 4.489986516,
+    "forecast_outer_spend_usd": 417.568746,
+    "max_observed_per_slot_usd": 9.085286,
+    "empirical_slot_count_envelope_usd": 844.931598,
+    "authorization_outer_spend_ceiling_usd": 990.0,
+    "uncovered_costs": [
+      "Sourcegraph MCP and CLI backend cost is not reported by the endpoint",
+      "Claude judge-account usage is not included in the agent modelUsage receipt",
+      "up to four one-token Haiku capacity probes per authorization are provider usage outside trial receipts",
+      "local Docker compute is not priced"
+    ]
+  },
+  "batch_policy": {
+    "max_slots_per_dispatch": 9,
+    "complete_task_triplets": true,
+    "score_independent_boundaries": true,
+    "agent_max_budget_usd_per_slot": 9.1,
+    "judge_max_budget_usd_per_call": 0.1,
+    "max_judge_calls_per_slot": 5,
+    "max_judge_attempts_per_call": 3,
+    "outer_spend_hard_cap_per_slot_usd": 10.6
+  },
+  "provider_capacity": {
+    "confirmed": false,
+    "capacity_reference": null,
+    "confirmed_completed_prefix": null,
+    "confirmed_max_slots": null,
+    "eligibility_policy": "fresh-account-specific-utilization-below-100-percent",
+    "confound_policy": "accept-and-report-observed-nonzero-provider-utilization"
+  },
+  "authorization": {
+    "paid_dispatch_authorized": false,
+    "authorization_reference": null,
+    "authorized_completed_prefix": null,
+    "authorized_end_prefix": null,
+    "authorized_batch_hash": null,
+    "authorized_outer_spend_ceiling_usd": null
+  }
+}
